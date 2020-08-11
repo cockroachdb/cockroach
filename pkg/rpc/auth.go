@@ -46,7 +46,9 @@ type auth interface {
 // kvAuth is the standard auth policy used for RPCs sent to an RPC server. It
 // validates that client TLS certificate provided by the incoming connection
 // contains a sufficiently privileged user.
-type kvAuth struct{}
+type kvAuth struct {
+	tenant bool
+}
 
 // kvAuth implements the auth interface.
 func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor   { return a.unaryInterceptor }
@@ -55,8 +57,12 @@ func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInter
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	if err := a.requireSuperUser(ctx); err != nil {
+	delegate, err := a.requireSuperUser(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if delegate {
+		return tenantAuth{}.unaryInterceptor(ctx, req, info, handler)
 	}
 	return handler(ctx, req)
 }
@@ -64,43 +70,57 @@ func (a kvAuth) unaryInterceptor(
 func (a kvAuth) streamInterceptor(
 	srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 ) error {
-	if err := a.requireSuperUser(ss.Context()); err != nil {
+	delegate, err := a.requireSuperUser(ss.Context())
+	if err != nil {
 		return err
+	}
+	if delegate {
+		return tenantAuth{}.streamInterceptor(srv, ss, info, handler)
 	}
 	return handler(srv, ss)
 }
 
-func (a kvAuth) requireSuperUser(ctx context.Context) error {
+func (a kvAuth) requireSuperUser(ctx context.Context) (delegate bool, _ error) {
 	// TODO(marc): grpc's authentication model (which gives credential access in
 	// the request handler) doesn't really fit with the current design of the
 	// security package (which assumes that TLS state is only given at connection
 	// time) - that should be fixed.
 	if grpcutil.IsLocalRequestContext(ctx) {
 		// This is an in-process request. Bypass authentication check.
-		return nil
+		// TODO(tbg): are we comfortable with this now that this code also applies
+		// to tenants?
+		return false, nil
 	}
 
 	peer, ok := peer.FromContext(ctx)
 	if !ok {
-		return errTLSInfoMissing
+		return false, errTLSInfoMissing
 	}
 
 	tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
 	if !ok {
-		return errTLSInfoMissing
+		return false, errTLSInfoMissing
 	}
 
 	certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
 	if err != nil {
-		return err
+		return false, err
 	}
+
+	if a.tenant {
+		// TODO(tbg): clean up.
+		if ou := tlsInfo.State.PeerCertificates[0].Subject.OrganizationalUnit; len(ou) == 1 && ou[0] == "Tenants" {
+			return true, nil
+		}
+	}
+
 	// TODO(benesch): the vast majority of RPCs should be limited to just
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
 	if !security.ContainsUser(security.NodeUser, certUsers) &&
 		!security.ContainsUser(security.RootUser, certUsers) {
-		return authErrorf("user %s is not allowed to perform this RPC", certUsers)
+		return false, authErrorf("user %s is not allowed to perform this RPC", certUsers)
 	}
-	return nil
+	return false, nil
 }

@@ -23,15 +23,12 @@ import (
 func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 
-	// Start the cluster with tenant RPC servers running on different ports
-	// on each host. Don't bind to external interfaces when running locally.
-	tenantAddr := ifLocal("127.0.0.1", "0.0.0.0") + ":0"
-	c.Start(ctx, t, c.All(), startArgs("--args=--tenant-addr="+tenantAddr))
+	c.Start(ctx, t, c.All())
 
 	_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant(123)`)
 	require.NoError(t, err)
 
-	kvAddrs := tenantAddrs(ctx, t, c)
+	kvAddrs := c.ExternalAddr(ctx, c.All())
 	errCh := make(chan error)
 	go func() {
 		errCh <- c.RunE(ctx, c.Node(1),

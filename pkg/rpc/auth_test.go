@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -91,24 +92,32 @@ func TestWrappedServerStream(t *testing.T) {
 
 func TestTenantFromCert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	correctOU := []string{security.TenantsOU}
 	for _, tc := range []struct {
+		ous        []string
 		commonName string
 		expTenID   roachpb.TenantID
 		expErr     string
 	}{
-		{commonName: "10", expTenID: roachpb.MakeTenantID(10)},
-		{commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
-		{commonName: roachpb.MaxTenantID.String(), expTenID: roachpb.MaxTenantID},
-		{commonName: roachpb.SystemTenantID.String() /* "system" */, expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{commonName: "-1", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{commonName: "0", expErr: `invalid tenant ID 0 in Common Name \(CN\)`},
-		{commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
-		{commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{ous: correctOU, commonName: "10", expTenID: roachpb.MakeTenantID(10)},
+		{ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
+		{ous: correctOU, commonName: roachpb.MaxTenantID.String(), expTenID: roachpb.MaxTenantID},
+		{ous: correctOU, commonName: roachpb.SystemTenantID.String() /* "system" */, expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{ous: correctOU, commonName: "-1", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{ous: correctOU, commonName: "0", expErr: `invalid tenant ID 0 in Common Name \(CN\)`},
+		{ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
+		{ous: correctOU, commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{ous: correctOU, commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{ous: []string{"foo"}, commonName: "other", expErr: `TLSInfo is not available`},
+		{ous: nil, commonName: "other", expErr: `TLSInfo is not available`},
+		{ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `TLSInfo is not available`},
 	} {
 		t.Run(tc.commonName, func(t *testing.T) {
 			cert := &x509.Certificate{
-				Subject: pkix.Name{CommonName: tc.commonName},
+				Subject: pkix.Name{
+					CommonName:         tc.commonName,
+					OrganizationalUnit: tc.ous,
+				},
 			}
 			tlsInfo := credentials.TLSInfo{
 				State: tls.ConnectionState{

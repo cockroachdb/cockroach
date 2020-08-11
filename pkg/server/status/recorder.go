@@ -57,7 +57,6 @@ const (
 	advertiseAddrLabelKey = "advertise-addr"
 	httpAddrLabelKey      = "http-addr"
 	sqlAddrLabelKey       = "sql-addr"
-	tenantAddrLabelKey    = "tenant-addr"
 )
 
 type quantile struct {
@@ -173,7 +172,7 @@ func (mr *MetricsRecorder) AddNode(
 	reg *metric.Registry,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
-	advertiseAddr, httpAddr, sqlAddr, tenantAddr string,
+	advertiseAddr, httpAddr, sqlAddr string,
 ) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -192,7 +191,6 @@ func (mr *MetricsRecorder) AddNode(
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
 	metadata.AddLabel(sqlAddrLabelKey, sqlAddr)
-	metadata.AddLabel(tenantAddrLabelKey, tenantAddr)
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)

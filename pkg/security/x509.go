@@ -34,7 +34,10 @@ const (
 	validFrom     = -time.Hour * 24
 	maxPathLength = 1
 	caCommonName  = "Cockroach CA"
-	tenantsOU     = "Tenants"
+
+	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
+	// certificate (as opposed to a KV node client certificate).
+	TenantsOU = "Tenants"
 )
 
 // newTemplate returns a partially-filled template.
@@ -207,7 +210,7 @@ func GenerateTenantClientCert(
 	}
 
 	// Create template for user.
-	template, err := newTemplate(fmt.Sprintf("%d", tenantID), lifetime, tenantsOU)
+	template, err := newTemplate(fmt.Sprintf("%d", tenantID), lifetime, TenantsOU)
 	if err != nil {
 		return nil, err
 	}

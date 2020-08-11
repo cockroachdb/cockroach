@@ -11,21 +11,24 @@
 package security_test
 
 import (
+	"crypto/tls"
 	"crypto/x509"
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	config, err := security.LoadServerTLSConfig(
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey))
+	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir)
+	require.NoError(t, err)
+	config, err := cm.GetServerTLSConfig()
+	require.NoError(t, err)
+	require.NotNil(t, config.GetConfigForClient)
+	config, err = config.GetConfigForClient(&tls.ClientHelloInfo{})
+	require.NoError(t, err)
 	if err != nil {
 		t.Fatalf("Failed to load TLS config: %v", err)
 	}

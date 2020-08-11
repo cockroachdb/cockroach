@@ -145,7 +145,7 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// explicit OU=Users to all client certificates and to check for match.
 		ous := tlsState.PeerCertificates[0].Subject.OrganizationalUnit
 		for _, ou := range ous {
-			if ou == tenantsOU {
+			if ou == TenantsOU {
 				return nil,
 					errors.Errorf("using tenant client certificate as user certificate is not allowed")
 			}
