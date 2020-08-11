@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -673,11 +674,31 @@ func (s *sqlServer) start(
 	}
 
 	var bootstrapVersion roachpb.Version
-	if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
-	}); err != nil {
-		return err
+	if s.execCfg.Codec.ForSystemTenant() {
+		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
+		}); err != nil {
+			return err
+		}
+	} else {
+		// We don't currently track the bootstrap version of each secondary tenant.
+		// For this to be meaningful, we'd need to record the binary version of the
+		// SQL gateway that processed the crdb_internal.create_tenant function which
+		// created the tenant, as this is what dictates the MetadataSchema that was
+		// in effect when the secondary tenant was constructed. This binary version
+		// very well may differ from the cluster-wide bootstrap version at which the
+		// system tenant was bootstrapped.
+		//
+		// Since we don't record this version anywhere, we do the next-best thing
+		// and pass a lower-bound on the bootstrap version. We know that no tenants
+		// could have been created before the start of the v20.2 dev cycle, so we
+		// pass VersionStart20_2. bootstrapVersion is only used to avoid performing
+		// superfluous but necessarily idempotent SQL migrations, so at worst, we're
+		// doing more work than strictly necessary during the first time that the
+		// migrations are run.
+		bootstrapVersion = clusterversion.VersionByKey(clusterversion.VersionStart20_2)
 	}
+
 	// Run startup migrations (note: these depend on jobs subsystem running).
 	if err := migMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		return errors.Wrap(err, "ensuring SQL migrations")
