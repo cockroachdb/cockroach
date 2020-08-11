@@ -1066,6 +1066,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
+%type <str> role_spec
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1990,7 +1991,12 @@ alter_type_stmt:
   }
 | ALTER TYPE type_name OWNER TO role_spec
   {
-    return unimplementedWithIssueDetail(sqllex, 48700, "ALTER TYPE OWNER TO")
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeOwner{
+        Owner: $6,
+      },
+    }
   }
 | ALTER TYPE type_name RENAME ATTRIBUTE column_name TO column_name opt_drop_behavior
   {

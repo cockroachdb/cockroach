@@ -13,10 +13,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -67,6 +69,8 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		err = params.p.renameType(params.ctx, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
 		err = params.p.setTypeSchema(params.ctx, n, t.Schema)
+	case *tree.AlterTypeOwner:
+		err = params.p.alterTypeOwner(params.ctx, n, t.Owner)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -243,6 +247,68 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		databaseID, desiredSchemaID, typeDesc.Name)
 
 	return p.writeNameKey(ctx, newKey, typeDesc.ID)
+}
+
+func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
+	typeDesc := n.desc
+	privs := typeDesc.GetPrivileges()
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner {
+		return nil
+	}
+
+	// Make sure the newOwner exists.
+	roleExists, err := p.RoleExists(ctx, newOwner)
+	if err != nil {
+		return err
+	}
+	if !roleExists {
+		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", newOwner)
+	}
+
+	// The user explicitly has to be owner to change the owner.
+	if ok := IsOwner(typeDesc, p.User()); !ok {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of type %s", tree.Name(typeDesc.GetName()))
+	}
+
+	// Requirements from PG:
+	// To alter the owner, you must also be a direct or indirect member of the new owning role,
+	// and that role must have CREATE privilege on the type's schema.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	if err != nil {
+		return err
+	}
+	if _, ok := memberOf[newOwner]; !ok {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege, "must be member of role %s", newOwner)
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	// We do not have to check for the public schema.
+	if typeDesc.ParentSchemaID != keys.RootNamespaceID && typeDesc.ParentSchemaID != keys.PublicSchemaID {
+		schemaDesc, err := catalogkv.MustGetSchemaDescByID(
+			ctx, p.Txn(), p.ExecCfg().Codec, typeDesc.ParentSchemaID,
+		)
+		if err != nil {
+			return err
+		}
+
+		if err := p.CheckPrivilegeForUser(ctx, schemaDesc, privilege.CREATE, newOwner); err != nil {
+			return err
+		}
+	}
+
+	privs.SetOwner(newOwner)
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (n *alterTypeNode) Next(params runParams) (bool, error) { return false, nil }
