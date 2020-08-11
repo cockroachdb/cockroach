@@ -50,6 +50,9 @@ type SearchPath struct {
 	tempSchemaName       string
 }
 
+// EmptySearchPath is a SearchPath with no schema names in it.
+var EmptySearchPath = SearchPath{}
+
 // MakeSearchPath returns a new immutable SearchPath struct. The paths slice
 // must not be modified after hand-off to MakeSearchPath.
 func MakeSearchPath(paths []string) SearchPath {
@@ -152,6 +155,16 @@ func (s SearchPath) IterWithoutImplicitPGSchemas() SearchPathIter {
 // resultant slice is not to be modified.
 func (s SearchPath) GetPathArray() []string {
 	return s.paths
+}
+
+// Contains returns true iff the SearchPath contains the given string.
+func (s SearchPath) Contains(target string) bool {
+	for _, candidate := range s.GetPathArray() {
+		if candidate == target {
+			return true
+		}
+	}
+	return false
 }
 
 // GetTemporarySchemaName returns the temporary schema specific to the current

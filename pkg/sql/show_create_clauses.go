@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -153,13 +154,15 @@ func showComments(
 }
 
 // showForeignKeyConstraint returns a valid SQL representation of a FOREIGN KEY
-// clause for a given index.
+// clause for a given index. If the table's schema name is in the searchPath, then the
+// schema name will not be included in the result.
 func showForeignKeyConstraint(
 	buf *bytes.Buffer,
 	dbPrefix string,
 	originTable *sqlbase.ImmutableTableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	lCtx simpleSchemaResolver,
+	searchPath sessiondata.SearchPath,
 ) error {
 	var refNames []string
 	var originNames []string
@@ -173,6 +176,7 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
+		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String())
 		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
 		if err != nil {
 			return err
