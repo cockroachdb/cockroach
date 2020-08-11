@@ -121,26 +121,10 @@ func (a tenantAuth) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	if tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return nil
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
 	}
-	for _, allow := range batchSpanAllowlist {
-		if rSpan.Equal(allow) {
-			return nil
-		}
-	}
-	return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-}
-
-// batchSpanAllowlist contains spans outside of a tenant's keyspace that Batch
-// RPC invocations are allowed to touch.
-var batchSpanAllowlist = []roachpb.RSpan{
-	// TODO(nvanbenschoten): Explore whether we can get rid of this by no longer
-	// reading this key in sqlServer.start.
-	{
-		Key:    roachpb.RKey(keys.BootstrapVersionKey),
-		EndKey: roachpb.RKey(keys.BootstrapVersionKey.Next()),
-	},
+	return nil
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
@@ -149,23 +133,10 @@ func (a tenantAuth) authRangeLookup(
 	tenID roachpb.TenantID, args *roachpb.RangeLookupRequest,
 ) error {
 	tenSpan := tenantPrefix(tenID)
-	if tenSpan.ContainsKey(args.Key) {
-		return nil
+	if !tenSpan.ContainsKey(args.Key) {
+		return authErrorf("requested key %s not fully contained in tenant keyspace %s", args.Key, tenSpan)
 	}
-	for _, allow := range rangeLookupKeyAllowlist {
-		if args.Key.Equal(allow) {
-			return nil
-		}
-	}
-	return authErrorf("requested key %s not fully contained in tenant keyspace %s", args.Key, tenSpan)
-}
-
-// rangeLookupKeyAllowlist contains keys outside of a tenant's keyspace that
-// RangeLookup RPC invocations are allowed to touch.
-var rangeLookupKeyAllowlist = []roachpb.Key{
-	// TODO(nvanbenschoten): Explore whether we can get rid of this by no longer
-	// reading this key in sqlServer.start.
-	keys.BootstrapVersionKey,
+	return nil
 }
 
 // authRangeFeed authorizes the provided tenant to invoke the RangeFeed RPC with
