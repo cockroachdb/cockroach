@@ -148,6 +148,10 @@ var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
 
+// DROP is required because the target table needs to be take offline during
+// IMPORT INTO.
+var importIntoRequiredPrivileges = []privilege.Kind{privilege.INSERT, privilege.DROP}
+
 func validateFormatOptions(
 	format string, specified map[string]string, formatAllowed map[string]struct{},
 ) error {
@@ -193,6 +197,22 @@ func importJobDescription(
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(&stmt, ann), nil
+}
+
+func ensureRequiredPrivileges(
+	ctx context.Context,
+	requiredPrivileges []privilege.Kind,
+	p sql.PlanHookState,
+	desc *sqlbase.MutableTableDescriptor,
+) error {
+	for _, priv := range requiredPrivileges {
+		err := p.CheckPrivilege(ctx, desc, priv)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // importPlanHook implements sql.PlanHookFn.
@@ -599,8 +619,8 @@ func importPlanHook(
 				return err
 			}
 
-			// TODO(dt): checking *CREATE* on an *existing table* is weird.
-			if err := p.CheckPrivilege(ctx, found, privilege.CREATE); err != nil {
+			err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
+			if err != nil {
 				return err
 			}
 
