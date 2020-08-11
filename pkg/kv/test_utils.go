@@ -11,7 +11,10 @@
 package kv
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -30,4 +33,27 @@ func OnlyFollowerReads(rec tracing.Recording) bool {
 		}
 	}
 	return foundFollowerRead
+}
+
+// IsExpectedRelocateError maintains an allowlist of errors related to
+// atomic-replication-changes we want to ignore / retry on for tests.
+// See:
+// https://github.com/cockroachdb/cockroach/issues/33732
+// https://github.com/cockroachdb/cockroach/issues/33708
+// https://github.cm/cockroachdb/cockroach/issues/34012
+// https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
+// for more failure modes not caught here.
+func IsExpectedRelocateError(err error) bool {
+	allowlist := []string{
+		"descriptor changed",
+		"unable to remove replica .* which is not present",
+		"unable to add replica .* which is already present",
+		"received invalid ChangeReplicasTrigger .* to remove self",
+		"failed to apply snapshot: raft group deleted",
+		"snapshot failed:",
+		"breaker open",
+		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
+	}
+	pattern := "(" + strings.Join(allowlist, "|") + ")"
+	return testutils.IsError(err, pattern)
 }
