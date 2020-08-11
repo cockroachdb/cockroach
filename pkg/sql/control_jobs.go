@@ -32,6 +32,12 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 	tree.PauseJob:  jobs.StatusPaused,
 }
 
+var jobDesiredStatusToStatementTag = map[jobs.Status]string{
+	jobs.StatusCanceled: "CANCEL JOB",
+	jobs.StatusRunning:  "RESUME JOB",
+	jobs.StatusPaused:   "PAUSE JOB",
+}
+
 // FastPathResults implements the planNodeFastPath inteface.
 func (n *controlJobsNode) FastPathResults() (int, bool) {
 	return n.numRows, true
@@ -56,6 +62,17 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+		}
+
+		// Import jobs can be owned by non super users, and so they must be allowed
+		// to control (RESUME, CANCEL, PAUSE) the job as well.
+		canControl, err := reg.CheckJobControlOwnership(params.ctx, params.p.txn, int64(jobID),
+			params.p.User())
+		if !canControl {
+			err = params.p.RequireAdminRole(params.ctx, jobDesiredStatusToStatementTag[n.desiredStatus])
+			if err != nil {
+				return err
+			}
 		}
 
 		switch n.desiredStatus {

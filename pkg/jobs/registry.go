@@ -683,6 +683,31 @@ func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, R
 	return job, resumer, nil
 }
 
+// CheckJobControlOwnership reads the "owner" of the job referred to by id, and
+// returns true if the user issuing the job control query is the same as the
+// "owner" of the job.
+func (r *Registry) CheckJobControlOwnership(
+	ctx context.Context, txn *kv.Txn, id int64, user string,
+) (bool, error) {
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
+	if err != nil {
+		return false, err
+	}
+
+	// Currently, we only want to allow a non super user to be able to control a
+	// job they own if it is an IMPORT job. For all other job types we continue to
+	// require a super user.
+	if job.mu.payload.Type() != jobspb.TypeImport {
+		return false, nil
+	}
+
+	jobOwner := job.mu.payload.Username
+	if jobOwner == "" {
+		return false, nil
+	}
+	return user == jobOwner, nil
+}
+
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
 func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
