@@ -495,16 +495,6 @@ func (n *NodeDescriptor) CheckedSQLAddress() *util.UnresolvedAddr {
 	return &n.SQLAddress
 }
 
-// CheckedTenantAddress returns the value of TenantAddress if set. If not,
-// either because the receiver is a pre-20.2 node, or because it is using the
-// same address for both Tenant KV and RPC, the Address is returned.
-func (n *NodeDescriptor) CheckedTenantAddress() *util.UnresolvedAddr {
-	if n.TenantAddress.IsEmpty() {
-		return &n.Address
-	}
-	return &n.TenantAddress
-}
-
 // String returns a string representation of the Tier.
 func (t Tier) String() string {
 	return fmt.Sprintf("%s=%s", t.Key, t.Value)

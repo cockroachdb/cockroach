@@ -106,9 +106,6 @@ func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg.SQLAddr = util.TestAddr.String()
 	baseCfg.SQLAdvertiseAddr = util.TestAddr.String()
 	baseCfg.SplitListenSQL = true
-	baseCfg.TenantAddr = util.TestAddr.String()
-	baseCfg.TenantAdvertiseAddr = util.TestAddr.String()
-	baseCfg.SplitListenTenant = true
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = security.NodeUser
@@ -207,8 +204,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.AdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
-		cfg.TenantAddr = util.IsolatedTestAddr.String()
-		cfg.TenantAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	}
 	if params.Addr != "" {
@@ -218,17 +213,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLAddr != "" {
 		cfg.SQLAddr = params.SQLAddr
 		cfg.SQLAdvertiseAddr = params.SQLAddr
-	}
-	if params.TenantAddr != nil {
-		addr := *params.TenantAddr
-		if addr == "" {
-			// Empty address disables the tenant server.
-			cfg.SplitListenTenant = false
-			cfg.TenantAddr = ""
-		} else {
-			cfg.TenantAddr = addr
-			cfg.TenantAdvertiseAddr = addr
-		}
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
@@ -624,7 +608,7 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
-	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
+	sqlCfg.TenantKVAddrs = []string{ts.ServingRPCAddr()}
 	sqlCfg.TenantIDCodecOverride = params.TenantIDCodecOverride
 	baseCfg := makeTestBaseConfig(st)
 	if params.AllowSettingClusterSettings {
@@ -772,12 +756,6 @@ func (ts *TestServer) ServingSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
-// ServingTenantAddr returns the server's Tenant address. Should be used by
-// tenant SQL processes.
-func (ts *TestServer) ServingTenantAddr() string {
-	return ts.cfg.TenantAdvertiseAddr
-}
-
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
 func (ts *TestServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
@@ -793,12 +771,6 @@ func (ts *TestServer) RPCAddr() string {
 // Note: use ServingSQLAddr() instead unless there is a specific reason not to.
 func (ts *TestServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
-}
-
-// TenantAddr returns the server's listening Tenant address.
-// Note: use ServingTenantAddr() instead unless there is a specific reason not to.
-func (ts *TestServer) TenantAddr() string {
-	return ts.cfg.TenantAddr
 }
 
 // DrainClients exports the drainClients() method for use by tests.

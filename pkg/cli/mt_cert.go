@@ -76,7 +76,7 @@ Creation fails if the CA expiration time is before the desired certificate expir
 			if err != nil {
 				return errors.Wrap(
 					err,
-					"failed to generate client certificate and key")
+					"failed to generate tenant client certificate and key")
 			}
 			return errors.Wrap(
 				security.WriteTenantClientPair(baseCfg.SSLCertsDir, cp, overwriteFiles),

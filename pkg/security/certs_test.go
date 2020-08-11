@@ -337,23 +337,6 @@ func TestUseCerts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Load TLS Configs. This is what TestServer and HTTPClient do internally.
-	if _, err := security.LoadServerTLSConfig(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey),
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-	if _, err := security.LoadClientTLSConfig(
-		filepath.Join(certsDir, security.EmbeddedCACert),
-		filepath.Join(certsDir, security.EmbeddedNodeCert),
-		filepath.Join(certsDir, security.EmbeddedNodeKey),
-	); err != nil {
-		t.Fatalf("Expected success, got %v", err)
-	}
-
 	// Start a test server and override certs.
 	// We use a real context since we want generated certs.
 	// Web session authentication is disabled in order to avoid the need to
