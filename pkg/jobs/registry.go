@@ -214,14 +214,10 @@ func MakeRegistry(
 }
 
 func (r *Registry) startUsingSQLLivenessAdoption(ctx context.Context) bool {
-	if r.settings.Version.IsActive(
+	return r.settings.Version.IsActive(
 		ctx,
 		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-	) {
-		r.sqlInstance.Start(ctx)
-		return true
-	}
-	return false
+	)
 }
 
 // SetSessionBoundInternalExecutorFactory sets the
