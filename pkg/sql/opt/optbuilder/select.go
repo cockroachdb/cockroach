@@ -28,11 +28,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	excludeMutations = false
-	includeMutations = true
-)
-
 // buildDataSource builds a set of memo groups that represent the given table
 // expression. For example, if the tree.TableExpr consists of a single table,
 // the resulting set of memo groups will consist of a single group with a
@@ -116,7 +111,14 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			return b.buildScan(tabMeta, nil /* ordinals */, indexFlags, locking, excludeMutations, inScope)
+			return b.buildScan(
+				tabMeta,
+				tableOrdinals(t, columnKinds{
+					includeMutations: false,
+					includeSystem:    true,
+				}),
+				indexFlags, locking, inScope,
+			)
 
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, &resName, inScope)
@@ -392,11 +394,16 @@ func (b *Builder) buildScanFromTableRef(
 				"an explicit list of column IDs must include at least one column"))
 		}
 		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
+	} else {
+		ordinals = tableOrdinals(tab, columnKinds{
+			includeMutations: false,
+			includeSystem:    true,
+		})
 	}
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-	return b.buildScan(tabMeta, ordinals, indexFlags, locking, excludeMutations, inScope)
+	return b.buildScan(tabMeta, ordinals, indexFlags, locking, inScope)
 }
 
 // addTable adds a table to the metadata and returns the TableMeta. The table
@@ -410,9 +417,7 @@ func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta 
 
 // buildScan builds a memo group for a ScanOp expression on the given table.
 //
-// If the ordinals slice is not nil, then only columns with ordinals in that
-// list are projected by the scan. Otherwise, all columns from the table are
-// projected.
+// The scan projects the given table ordinals.
 //
 // If scanMutationCols is true, then include columns being added or dropped from
 // the table. These are currently required by the execution engine as "fetch
@@ -430,9 +435,11 @@ func (b *Builder) buildScan(
 	ordinals []int,
 	indexFlags *tree.IndexFlags,
 	locking lockingSpec,
-	scanMutationCols bool,
 	inScope *scope,
 ) (outScope *scope) {
+	if ordinals == nil {
+		panic(errors.AssertionFailedf("no ordinals"))
+	}
 	tab := tabMeta.Table
 	tabID := tabMeta.MetaID
 
@@ -441,38 +448,24 @@ func (b *Builder) buildScan(
 	}
 
 	outScope = inScope.push()
+
 	var tabColIDs opt.ColSet
-	addCol := func(ord int) {
+	outScope.cols = make([]scopeColumn, len(ordinals))
+	for i, ord := range ordinals {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(colID)
 		name := col.ColName()
-		isMutation := cat.IsMutationColumn(tab, ord)
-		outScope.cols = append(outScope.cols, scopeColumn{
-			id:       colID,
-			name:     name,
-			table:    tabMeta.Alias,
-			typ:      col.DatumType(),
-			hidden:   col.IsHidden() || isMutation,
-			mutation: isMutation,
-			system:   cat.IsSystemColumn(tab, ord),
-		})
-	}
-
-	if ordinals == nil {
-		// If no ordinals are requested, then add in all of the table columns
-		// (including mutation columns if scanMutationCols is true).
-		outScope.cols = make([]scopeColumn, 0, tab.ColumnCount())
-		for i, n := 0, tab.ColumnCount(); i < n; i++ {
-			if scanMutationCols || !cat.IsMutationColumn(tab, i) {
-				addCol(i)
-			}
-		}
-	} else {
-		// Otherwise, just add the ordinals.
-		outScope.cols = make([]scopeColumn, 0, len(ordinals))
-		for _, ord := range ordinals {
-			addCol(ord)
+		kind := tab.ColumnKind(ord)
+		outScope.cols[i] = scopeColumn{
+			id:           colID,
+			name:         name,
+			table:        tabMeta.Alias,
+			typ:          col.DatumType(),
+			hidden:       col.IsHidden() || kind != cat.Ordinary,
+			kind:         kind,
+			mutation:     kind == cat.WriteOnly || kind == cat.DeleteOnly,
+			tableOrdinal: ord,
 		}
 	}
 
@@ -532,11 +525,7 @@ func (b *Builder) buildScan(
 			// We will track the ColumnID to Ord mapping so Ords can be added
 			// when a column is referenced.
 			for i, col := range outScope.cols {
-				if ordinals == nil {
-					dep.ColumnIDToOrd[col.id] = i
-				} else {
-					dep.ColumnIDToOrd[col.id] = ordinals[i]
-				}
+				dep.ColumnIDToOrd[col.id] = ordinals[i]
 			}
 			if private.Flags.ForceIndex {
 				dep.SpecificIndex = true

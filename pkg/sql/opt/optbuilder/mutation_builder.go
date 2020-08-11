@@ -184,6 +184,17 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
 }
 
+// setFetchColIDs sets the list of columns that are fetched in order to provide
+// values to the mutation operator. The given columns must come from buildScan.
+func (mb *mutationBuilder) setFetchColIDs(cols []scopeColumn) {
+	for i := range cols {
+		// Ensure that we don't add system columns to the fetch columns.
+		if cols[i].kind != cat.System {
+			mb.fetchColIDs[cols[i].tableOrdinal] = cols[i].id
+		}
+	}
+}
+
 // buildInputForUpdate constructs a Select expression from the fields in
 // the Update operator, similar to this:
 //
@@ -232,21 +243,18 @@ func (mb *mutationBuilder) buildInputForUpdate(
 	//       reason other than as "fetch columns". See buildScan comment.
 	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
-		nil, /* ordinals */
+		tableOrdinals(mb.tab, columnKinds{
+			includeMutations: true,
+			includeSystem:    true,
+		}),
 		indexFlags,
 		noRowLocking,
-		includeMutations,
 		inScope,
 	)
 	mb.outScope = scanScope
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !mb.outScope.cols[i].system {
-			mb.fetchColIDs[i] = mb.outScope.cols[i].id
-		}
-	}
+	mb.setFetchColIDs(mb.outScope.cols)
 
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
@@ -346,10 +354,12 @@ func (mb *mutationBuilder) buildInputForDelete(
 	// TODO(andyk): Why does execution engine need mutation columns for Delete?
 	scanScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
-		nil, /* ordinals */
+		tableOrdinals(mb.tab, columnKinds{
+			includeMutations: true,
+			includeSystem:    true,
+		}),
 		indexFlags,
 		noRowLocking,
-		includeMutations,
 		inScope,
 	)
 	mb.outScope = scanScope
@@ -372,12 +382,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !mb.outScope.cols[i].system {
-			mb.fetchColIDs[i] = mb.outScope.cols[i].id
-		}
-	}
+	mb.setFetchColIDs(mb.outScope.cols)
 
 	// Add partial index boolean columns to the input.
 	mb.projectPartialIndexDelCols(scanScope)

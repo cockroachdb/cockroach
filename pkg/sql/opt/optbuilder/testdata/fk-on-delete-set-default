@@ -30,11 +30,11 @@ root
            │    └── p_new:12 => child.p:6
            ├── input binding: &2
            ├── project
-           │    ├── columns: p_new:12!null c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+           │    ├── columns: p_new:12!null c:8!null child.p:9
            │    ├── semi-join (hash)
-           │    │    ├── columns: c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+           │    │    ├── columns: c:8!null child.p:9
            │    │    ├── scan child
-           │    │    │    └── columns: c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+           │    │    │    └── columns: c:8!null child.p:9
            │    │    ├── with-scan &1
            │    │    │    ├── columns: p:11!null
            │    │    │    └── mapping:
@@ -89,11 +89,11 @@ root
            ├── update-mapping:
            │    └── p_new:12 => child_null.p:6
            └── project
-                ├── columns: p_new:12 c:8!null child_null.p:9 child_null.crdb_internal_mvcc_timestamp:10
+                ├── columns: p_new:12 c:8!null child_null.p:9
                 ├── semi-join (hash)
-                │    ├── columns: c:8!null child_null.p:9 child_null.crdb_internal_mvcc_timestamp:10
+                │    ├── columns: c:8!null child_null.p:9
                 │    ├── scan child_null
-                │    │    └── columns: c:8!null child_null.p:9 child_null.crdb_internal_mvcc_timestamp:10
+                │    │    └── columns: c:8!null child_null.p:9
                 │    ├── with-scan &1
                 │    │    ├── columns: p:11!null
                 │    │    └── mapping:
@@ -150,15 +150,15 @@ root
            ├── check columns: check1:27
            ├── input binding: &2
            ├── project
-           │    ├── columns: check1:27!null child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20 q_new:24 r_new:25 column26:26
+           │    ├── columns: check1:27!null child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25 column26:26
            │    ├── project
-           │    │    ├── columns: column26:26 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20 q_new:24 r_new:25
+           │    │    ├── columns: column26:26 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 q_new:24 r_new:25
            │    │    ├── project
-           │    │    │    ├── columns: q_new:24 r_new:25 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+           │    │    │    ├── columns: q_new:24 r_new:25 child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    ├── semi-join (hash)
-           │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+           │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    │    ├── scan child_multicol
-           │    │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+           │    │    │    │    │    ├── columns: child_multicol.c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
            │    │    │    │    │    └── computed column expressions
            │    │    │    │    │         └── x:19
            │    │    │    │    │              └── (child_multicol.p:16 + child_multicol.q:17) + child_multicol.r:18

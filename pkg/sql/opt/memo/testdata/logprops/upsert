@@ -241,20 +241,20 @@ project
            │    ├── fd: (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11)
            │    ├── prune: (6,7,10,11)
            │    └── select
-           │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:22(int) b:23(int) c:24(int) rowid:25(int) abc.crdb_internal_mvcc_timestamp:26(decimal)
+           │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:22(int) b:23(int) c:24(int) rowid:25(int)
            │         ├── volatile
            │         ├── key: (6)
-           │         ├── fd: ()-->(22-26), (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11)
-           │         ├── prune: (22,26)
+           │         ├── fd: ()-->(22-25), (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11)
+           │         ├── prune: (22)
            │         ├── interesting orderings: (+25) (+22) (+23,+24,+25)
            │         ├── left-join (hash)
-           │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:22(int) b:23(int) c:24(int) rowid:25(int) abc.crdb_internal_mvcc_timestamp:26(decimal)
+           │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:22(int) b:23(int) c:24(int) rowid:25(int)
            │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │         │    ├── volatile
            │         │    ├── key: (6,25)
-           │         │    ├── fd: (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11), (25)-->(22-24,26), (22)-->(23-26), (23,24)~~>(22,25,26)
-           │         │    ├── prune: (22,25,26)
-           │         │    ├── reject-nulls: (22-26)
+           │         │    ├── fd: (6)-->(7,10,11), (7)-->(11), (10)~~>(6,7,11), (25)-->(22-24), (22)-->(23-25), (23,24)~~>(22,25)
+           │         │    ├── prune: (22,25)
+           │         │    ├── reject-nulls: (22-25)
            │         │    ├── interesting orderings: (+25) (+22) (+23,+24,+25)
            │         │    ├── upsert-distinct-on
            │         │    │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int)
@@ -269,20 +269,20 @@ project
            │         │    │    │    ├── fd: (6)-->(7,10), (7)-->(11), (10)~~>(6,7,11)
            │         │    │    │    ├── prune: (6,7,10,11)
            │         │    │    │    └── select
-           │         │    │    │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:17(int) b:18(int) c:19(int) rowid:20(int) abc.crdb_internal_mvcc_timestamp:21(decimal)
+           │         │    │    │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:17(int) b:18(int) c:19(int) rowid:20(int)
            │         │    │    │         ├── volatile
            │         │    │    │         ├── key: (6)
-           │         │    │    │         ├── fd: ()-->(17-21), (6)-->(7,10), (7)-->(11), (10)~~>(6,7,11)
-           │         │    │    │         ├── prune: (18-21)
+           │         │    │    │         ├── fd: ()-->(17-20), (6)-->(7,10), (7)-->(11), (10)~~>(6,7,11)
+           │         │    │    │         ├── prune: (18-20)
            │         │    │    │         ├── interesting orderings: (+20) (+17) (+18,+19,+20)
            │         │    │    │         ├── left-join (hash)
-           │         │    │    │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:17(int) b:18(int) c:19(int) rowid:20(int) abc.crdb_internal_mvcc_timestamp:21(decimal)
+           │         │    │    │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:17(int) b:18(int) c:19(int) rowid:20(int)
            │         │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
            │         │    │    │         │    ├── volatile
            │         │    │    │         │    ├── key: (6)
-           │         │    │    │         │    ├── fd: (6)-->(7,10,17-21), (7)-->(11), (10)~~>(6,7,11), (20)-->(17-19,21), (17)-->(18-21), (18,19)~~>(17,20,21)
-           │         │    │    │         │    ├── prune: (18-21)
-           │         │    │    │         │    ├── reject-nulls: (17-21)
+           │         │    │    │         │    ├── fd: (6)-->(7,10,17-20), (7)-->(11), (10)~~>(6,7,11), (20)-->(17-19), (17)-->(18-20), (18,19)~~>(17,20)
+           │         │    │    │         │    ├── prune: (18-20)
+           │         │    │    │         │    ├── reject-nulls: (17-20)
            │         │    │    │         │    ├── interesting orderings: (+20) (+17) (+18,+19,+20)
            │         │    │    │         │    ├── upsert-distinct-on
            │         │    │    │         │    │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int)
@@ -298,20 +298,20 @@ project
            │         │    │    │         │    │    │    ├── prune: (6,7,10,11)
            │         │    │    │         │    │    │    ├── interesting orderings: (+6) (+7)
            │         │    │    │         │    │    │    └── select
-           │         │    │    │         │    │    │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │         │    │    │         │    │    │         ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:12(int) b:13(int) c:14(int) rowid:15(int)
            │         │    │    │         │    │    │         ├── volatile
            │         │    │    │         │    │    │         ├── key: (6)
-           │         │    │    │         │    │    │         ├── fd: ()-->(12-16), (6)-->(7,10), (7)-->(11)
-           │         │    │    │         │    │    │         ├── prune: (6,7,11-14,16)
+           │         │    │    │         │    │    │         ├── fd: ()-->(12-15), (6)-->(7,10), (7)-->(11)
+           │         │    │    │         │    │    │         ├── prune: (6,7,11-14)
            │         │    │    │         │    │    │         ├── interesting orderings: (+6) (+7) (+15) (+12) (+13,+14,+15)
            │         │    │    │         │    │    │         ├── left-join (hash)
-           │         │    │    │         │    │    │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:12(int) b:13(int) c:14(int) rowid:15(int) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │         │    │    │         │    │    │         │    ├── columns: x:6(int!null) y:7(int) column10:10(int) column11:11(int) a:12(int) b:13(int) c:14(int) rowid:15(int)
            │         │    │    │         │    │    │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
            │         │    │    │         │    │    │         │    ├── volatile
            │         │    │    │         │    │    │         │    ├── key: (6)
-           │         │    │    │         │    │    │         │    ├── fd: (6)-->(7,10,12-16), (7)-->(11), (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16)
-           │         │    │    │         │    │    │         │    ├── prune: (6,7,11-14,16)
-           │         │    │    │         │    │    │         │    ├── reject-nulls: (12-16)
+           │         │    │    │         │    │    │         │    ├── fd: (6)-->(7,10,12-15), (7)-->(11), (15)-->(12-14), (12)-->(13-15), (13,14)~~>(12,15)
+           │         │    │    │         │    │    │         │    ├── prune: (6,7,11-14)
+           │         │    │    │         │    │    │         │    ├── reject-nulls: (12-15)
            │         │    │    │         │    │    │         │    ├── interesting orderings: (+6) (+7) (+15) (+12) (+13,+14,+15)
            │         │    │    │         │    │    │         │    ├── project
            │         │    │    │         │    │    │         │    │    ├── columns: column11:11(int) x:6(int!null) y:7(int) column10:10(int)
@@ -350,15 +350,15 @@ project
            │         │    │    │         │    │    │         │    │              ├── variable: y:7 [type=int]
            │         │    │    │         │    │    │         │    │              └── const: 1 [type=int]
            │         │    │    │         │    │    │         │    ├── scan abc
-           │         │    │    │         │    │    │         │    │    ├── columns: a:12(int!null) b:13(int) c:14(int) rowid:15(int!null) abc.crdb_internal_mvcc_timestamp:16(decimal)
+           │         │    │    │         │    │    │         │    │    ├── columns: a:12(int!null) b:13(int) c:14(int) rowid:15(int!null)
            │         │    │    │         │    │    │         │    │    ├── computed column expressions
            │         │    │    │         │    │    │         │    │    │    └── c:14
            │         │    │    │         │    │    │         │    │    │         └── plus [type=int]
            │         │    │    │         │    │    │         │    │    │              ├── variable: b:13 [type=int]
            │         │    │    │         │    │    │         │    │    │              └── const: 1 [type=int]
            │         │    │    │         │    │    │         │    │    ├── key: (15)
-           │         │    │    │         │    │    │         │    │    ├── fd: (15)-->(12-14,16), (12)-->(13-16), (13,14)~~>(12,15,16)
-           │         │    │    │         │    │    │         │    │    ├── prune: (12-16)
+           │         │    │    │         │    │    │         │    │    ├── fd: (15)-->(12-14), (12)-->(13-15), (13,14)~~>(12,15)
+           │         │    │    │         │    │    │         │    │    ├── prune: (12-15)
            │         │    │    │         │    │    │         │    │    ├── interesting orderings: (+15) (+12) (+13,+14,+15)
            │         │    │    │         │    │    │         │    │    └── unfiltered-cols: (12-16)
            │         │    │    │         │    │    │         │    └── filters
@@ -377,15 +377,15 @@ project
            │         │    │    │         │    │         └── first-agg [as=column11:11, type=int, outer=(11)]
            │         │    │    │         │    │              └── variable: column11:11 [type=int]
            │         │    │    │         │    ├── scan abc
-           │         │    │    │         │    │    ├── columns: a:17(int!null) b:18(int) c:19(int) rowid:20(int!null) abc.crdb_internal_mvcc_timestamp:21(decimal)
+           │         │    │    │         │    │    ├── columns: a:17(int!null) b:18(int) c:19(int) rowid:20(int!null)
            │         │    │    │         │    │    ├── computed column expressions
            │         │    │    │         │    │    │    └── c:19
            │         │    │    │         │    │    │         └── plus [type=int]
            │         │    │    │         │    │    │              ├── variable: b:18 [type=int]
            │         │    │    │         │    │    │              └── const: 1 [type=int]
            │         │    │    │         │    │    ├── key: (20)
-           │         │    │    │         │    │    ├── fd: (20)-->(17-19,21), (17)-->(18-21), (18,19)~~>(17,20,21)
-           │         │    │    │         │    │    ├── prune: (17-21)
+           │         │    │    │         │    │    ├── fd: (20)-->(17-19), (17)-->(18-20), (18,19)~~>(17,20)
+           │         │    │    │         │    │    ├── prune: (17-20)
            │         │    │    │         │    │    ├── interesting orderings: (+20) (+17) (+18,+19,+20)
            │         │    │    │         │    │    └── unfiltered-cols: (17-21)
            │         │    │    │         │    └── filters
@@ -404,15 +404,15 @@ project
            │         │    │         └── first-agg [as=column11:11, type=int, outer=(11)]
            │         │    │              └── variable: column11:11 [type=int]
            │         │    ├── scan abc
-           │         │    │    ├── columns: a:22(int!null) b:23(int) c:24(int) rowid:25(int!null) abc.crdb_internal_mvcc_timestamp:26(decimal)
+           │         │    │    ├── columns: a:22(int!null) b:23(int) c:24(int) rowid:25(int!null)
            │         │    │    ├── computed column expressions
            │         │    │    │    └── c:24
            │         │    │    │         └── plus [type=int]
            │         │    │    │              ├── variable: b:23 [type=int]
            │         │    │    │              └── const: 1 [type=int]
            │         │    │    ├── key: (25)
-           │         │    │    ├── fd: (25)-->(22-24,26), (22)-->(23-26), (23,24)~~>(22,25,26)
-           │         │    │    ├── prune: (22-26)
+           │         │    │    ├── fd: (25)-->(22-24), (22)-->(23-25), (23,24)~~>(22,25)
+           │         │    │    ├── prune: (22-25)
            │         │    │    ├── interesting orderings: (+25) (+22) (+23,+24,+25)
            │         │    │    └── unfiltered-cols: (22-26)
            │         │    └── filters

@@ -540,33 +540,33 @@ insert xyz
       ├── project
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    └── select
-      │         ├── columns: column1:5!null column2:6!null column3:7!null x:16 y:17 z:18 crdb_internal_mvcc_timestamp:19
+      │         ├── columns: column1:5!null column2:6!null column3:7!null x:16 y:17 z:18
       │         ├── left-join (hash)
-      │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:16 y:17 z:18 crdb_internal_mvcc_timestamp:19
+      │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:16 y:17 z:18
       │         │    ├── upsert-distinct-on
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    ├── grouping columns: column2:6!null column3:7!null
       │         │    │    ├── project
       │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │    └── select
-      │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null x:12 y:13 z:14 crdb_internal_mvcc_timestamp:15
+      │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null x:12 y:13 z:14
       │         │    │    │         ├── left-join (hash)
-      │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:12 y:13 z:14 crdb_internal_mvcc_timestamp:15
+      │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:12 y:13 z:14
       │         │    │    │         │    ├── upsert-distinct-on
       │         │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │         │    │    ├── grouping columns: column1:5!null
       │         │    │    │         │    │    ├── project
       │         │    │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │         │    │    │    └── select
-      │         │    │    │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         │    │    │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10
       │         │    │    │         │    │    │         ├── left-join (hash)
-      │         │    │    │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         │    │    │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10
       │         │    │    │         │    │    │         │    ├── values
       │         │    │    │         │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    │         │    │    │         │    │    ├── (1, 2, 3)
       │         │    │    │         │    │    │         │    │    └── (4, 5, 6)
       │         │    │    │         │    │    │         │    ├── scan xyz
-      │         │    │    │         │    │    │         │    │    └── columns: x:8!null y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         │    │    │         │    │    │         │    │    └── columns: x:8!null y:9 z:10
       │         │    │    │         │    │    │         │    └── filters
       │         │    │    │         │    │    │         │         └── column1:5 = x:8
       │         │    │    │         │    │    │         └── filters
@@ -577,7 +577,7 @@ insert xyz
       │         │    │    │         │    │         └── first-agg [as=column3:7]
       │         │    │    │         │    │              └── column3:7
       │         │    │    │         │    ├── scan xyz
-      │         │    │    │         │    │    └── columns: x:12!null y:13 z:14 crdb_internal_mvcc_timestamp:15
+      │         │    │    │         │    │    └── columns: x:12!null y:13 z:14
       │         │    │    │         │    └── filters
       │         │    │    │         │         ├── column2:6 = y:13
       │         │    │    │         │         └── column3:7 = z:14
@@ -587,7 +587,7 @@ insert xyz
       │         │    │         └── first-agg [as=column1:5]
       │         │    │              └── column1:5
       │         │    ├── scan xyz
-      │         │    │    └── columns: x:16!null y:17 z:18 crdb_internal_mvcc_timestamp:19
+      │         │    │    └── columns: x:16!null y:17 z:18
       │         │    └── filters
       │         │         ├── column3:7 = z:18
       │         │         └── column2:6 = y:17
@@ -615,15 +615,15 @@ insert xyz
       ├── project
       │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    └── select
-      │         ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10
       │         ├── left-join (hash)
-      │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         │    ├── columns: column1:5!null column2:6!null column3:7!null x:8 y:9 z:10
       │         │    ├── values
       │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │         │    │    ├── (1, 2, 3)
       │         │    │    └── (4, 5, 6)
       │         │    ├── scan xyz
-      │         │    │    └── columns: x:8!null y:9 z:10 crdb_internal_mvcc_timestamp:11
+      │         │    │    └── columns: x:8!null y:9 z:10
       │         │    └── filters
       │         │         ├── column2:6 = y:9
       │         │         └── column3:7 = z:10
@@ -1389,9 +1389,9 @@ insert checks
       │    ├── project
       │    │    ├── columns: column1:6!null column2:7!null column8:8 column9:9
       │    │    └── select
-      │    │         ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │         ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13
       │    │         ├── left-join (hash)
-      │    │         │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │         │    ├── columns: column1:6!null column2:7!null column8:8 column9:9 a:10 b:11 c:12 d:13
       │    │         │    ├── project
       │    │         │    │    ├── columns: column9:9 column1:6!null column2:7!null column8:8
       │    │         │    │    ├── project
@@ -1404,7 +1404,7 @@ insert checks
       │    │         │    │    └── projections
       │    │         │    │         └── column8:8 + 1 [as=column9:9]
       │    │         │    ├── scan checks
-      │    │         │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14
+      │    │         │    │    ├── columns: a:10!null b:11 c:12 d:13
       │    │         │    │    ├── check constraint expressions
       │    │         │    │    │    └── a:10 > 0
       │    │         │    │    └── computed column expressions
@@ -1906,23 +1906,23 @@ insert partial_indexes
       │    ├── project
       │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │    └── select
-      │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14 crdb_internal_mvcc_timestamp:15
+      │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14
       │    │         ├── left-join (hash)
-      │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14 crdb_internal_mvcc_timestamp:15
+      │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14
       │    │         │    ├── upsert-distinct-on
       │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │         │    │    ├── grouping columns: column1:5!null
       │    │         │    │    ├── project
       │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │         │    │    │    └── select
-      │    │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11
+      │    │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10
       │    │         │    │    │         ├── left-join (hash)
-      │    │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11
+      │    │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10
       │    │         │    │    │         │    ├── values
       │    │         │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
       │    │         │    │    │         │    │    └── (2, 1, 'bar')
       │    │         │    │    │         │    ├── scan partial_indexes
-      │    │         │    │    │         │    │    ├── columns: a:8!null b:9 c:10 crdb_internal_mvcc_timestamp:11
+      │    │         │    │    │         │    │    ├── columns: a:8!null b:9 c:10
       │    │         │    │    │         │    │    └── partial index predicates
       │    │         │    │    │         │    │         ├── secondary: filters
       │    │         │    │    │         │    │         │    └── c:10 = 'foo'
@@ -1939,7 +1939,7 @@ insert partial_indexes
       │    │         │    │         └── first-agg [as=column3:7]
       │    │         │    │              └── column3:7
       │    │         │    ├── scan partial_indexes
-      │    │         │    │    ├── columns: a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:15
+      │    │         │    │    ├── columns: a:12!null b:13 c:14
       │    │         │    │    └── partial index predicates
       │    │         │    │         ├── secondary: filters
       │    │         │    │         │    └── c:14 = 'foo'
