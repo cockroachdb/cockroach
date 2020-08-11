@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/biogo/store/llrb"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -177,8 +179,15 @@ func makeLookupRequestKey(
 // NewRangeDescriptorCache returns a new RangeDescriptorCache which
 // uses the given RangeDescriptorDB as the underlying source of range
 // descriptors.
+//
+// The Gossip instance, if provided, is used to update cached
+// entries when a lease is acquired on a different node.
 func NewRangeDescriptorCache(
-	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
+	st *cluster.Settings,
+	db RangeDescriptorDB,
+	size func() int64,
+	g *gossip.Gossip,
+	stopper *stop.Stopper,
 ) *RangeDescriptorCache {
 	rdc := &RangeDescriptorCache{st: st, db: db, stopper: stopper}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
@@ -187,6 +196,14 @@ func NewRangeDescriptorCache(
 			return int64(n) > size()
 		},
 	})
+
+	if g != nil {
+		// If we have a gossip instance, support updating entries from
+		// incoming gossip notifications.
+		callback := gossip.Callback(rdc.updateFromGossip)
+		g.RegisterCallback(gossip.KeyRangeLeases, callback)
+	}
+
 	return rdc
 }
 
@@ -1260,4 +1277,67 @@ func (e *rangeCacheEntry) updateLease(l *roachpb.Lease) (updated bool, newEntry 
 		desc:  e.desc,
 		lease: *l,
 	}
+}
+
+func (rdc *RangeDescriptorCache) updateFromGossip(key string, v roachpb.Value) {
+	// TODO(knz): assign a proper context. This require rehauling the gossip package.
+	ctx := context.Background()
+
+	// The range ID is in the gossip key. Extract it.
+	rangeID, err := gossip.RangeIDFromKey(key, gossip.KeyRangeLeases)
+	if err != nil {
+		log.Warningf(ctx, "can't parse gossip update: %v", err)
+	}
+	// Now the range ID is known, equip this context with the range ID,
+	// this will clarify any subsequent log entry below.
+	ctx = logtags.AddTag(ctx, "r", rangeID)
+
+	// Retrieve the lease payload.
+	b, err := v.GetBytes()
+	if err != nil {
+		log.Warningf(ctx, "no bytes in lease gossip update: %v", err)
+		return
+	}
+	var newLease roachpb.Lease
+	if err := protoutil.Unmarshal(b, &newLease); err != nil {
+		log.Warningf(ctx, "error decoding lease gossip update: %v", err)
+		return
+	}
+	if log.V(1) {
+		log.Infof(ctx, "received lease gossip update: %+v", &newLease)
+	}
+
+	// If we have an entry in the cache for this range already,
+	// then update the lease for that entry.
+	rdc.rangeCache.Lock()
+	defer rdc.rangeCache.Unlock()
+
+	// The work here is rendered a bit inefficient (linear lookup)
+	// because the cache is organized by key span, and we need to look
+	// up by Range ID.
+	//
+	// TODO(knz,andrei): If this is found to be a bottleneck, accelerate
+	// by providing by-ID lookup for cache entries.
+	rdc.rangeCache.cache.DoEntry(func(e *cache.Entry) (exit bool) {
+		cached := rdc.getValue(e)
+		if cached.desc.RangeID != rangeID {
+			// Not our range? Goto next.
+			return false
+		}
+		// Update the lease that's already there. UpdateLease() is a no-op
+		// if the lease in the cache is more recent than the one received
+		// via gossip.
+		updated, newEntry := cached.updateLease(&newLease)
+		if updated && newEntry != nil {
+			// Entry was updated. Overwrite what we have in the cache.
+			e.Value = newEntry
+			if log.V(1) {
+				log.Infof(ctx, "updated cached lease from gossip, now at n%d,s%d",
+					newLease.Replica.NodeID, newLease.Replica.StoreID)
+			}
+		}
+		// There won't be another entry in the cache with the same range
+		// ID. Stop the iteration here.
+		return true
+	})
 }

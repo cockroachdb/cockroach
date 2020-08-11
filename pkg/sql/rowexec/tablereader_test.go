@@ -134,7 +134,7 @@ func TestTableReader(t *testing.T) {
 					EvalCtx: &evalCtx,
 					Cfg: &execinfra.ServerConfig{
 						Settings:   s.ClusterSettings(),
-						RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+						RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper()),
 					},
 					Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					NodeID: evalCtx.NodeID,
@@ -330,7 +330,7 @@ func TestLimitScans(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Cfg: &execinfra.ServerConfig{
 			Settings:   s.ClusterSettings(),
-			RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+			RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper()),
 		},
 		Txn:    kv.NewTxn(ctx, kvDB, s.NodeID()),
 		NodeID: evalCtx.NodeID,
@@ -437,7 +437,7 @@ func BenchmarkTableReader(b *testing.B) {
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{
 				Settings:   s.ClusterSettings(),
-				RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, s.Stopper()),
+				RangeCache: kvcoord.NewRangeDescriptorCache(s.ClusterSettings(), nil, func() int64 { return 2 << 10 }, nil, s.Stopper()),
 			},
 			Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 			NodeID: evalCtx.NodeID,

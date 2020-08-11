@@ -51,6 +51,12 @@ const (
 	// info.
 	KeyNodeLivenessPrefix = "liveness"
 
+	// KeyRangeLeases is the key prefix for gossiping lease per range.
+	// The range ID is appended as suffix to KeyRangeLeases, see
+	// RangeIDFromKey below to get it back.
+	// The value is the acquired roachpb.Lease for that range.
+	KeyRangeLeases = "leases"
+
 	// KeySentinel is a key for gossip which must not expire or
 	// else the node considers itself partitioned and will retry with
 	// bootstrap hosts.  The sentinel is gossiped by the node that holds
@@ -106,6 +112,26 @@ func MakeKey(components ...string) string {
 // is equal to the given prefix.
 func MakePrefixPattern(prefix string) string {
 	return regexp.QuoteMeta(prefix+separator) + ".*"
+}
+
+// MakeRangeIDKey returns the gossip lease key for the range ID.
+func MakeRangeIDKey(rangeID roachpb.RangeID) string {
+	return MakeKey(KeyRangeLeases, rangeID.String())
+}
+
+// RangeIDFromKey attempts to extract a range ID from the provided key after
+// stripping the provided prefix. Returns an error if the key is not of the
+// correct type or is not parsable.
+func RangeIDFromKey(key string, prefix string) (roachpb.RangeID, error) {
+	trimmedKey, err := removePrefixFromKey(key, prefix)
+	if err != nil {
+		return 0, err
+	}
+	rangeID, err := strconv.ParseInt(trimmedKey, 10 /* base */, 64 /* bitSize */)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed parsing RangeID from key %q", key)
+	}
+	return roachpb.RangeID(rangeID), nil
 }
 
 // MakeNodeIDKey returns the gossip key for node ID info.

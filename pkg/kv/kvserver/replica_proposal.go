@@ -409,21 +409,31 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease, pe
 	expirationBasedLease := r.requiresExpiringLeaseRLocked()
 	r.mu.Unlock()
 
-	// Gossip the first range whenever its lease is acquired. We check to make
-	// sure the lease is active so that a trailing replica won't process an old
-	// lease request and attempt to gossip the first range.
-	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
-		r.gossipFirstRange(ctx)
-	}
+	if leaseChangingHands && iAmTheLeaseHolder {
+		// Gossip the first range whenever its lease is acquired. We check to make
+		// sure the lease is active so that a trailing replica won't process an old
+		// lease request and attempt to gossip the first range.
+		if r.IsFirstRange() && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
+			r.gossipFirstRange(ctx)
+		}
 
-	// Whenever we first acquire an expiration-based lease, notify the lease
-	// renewer worker that we want it to keep proactively renewing the lease
-	// before it expires.
-	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
-		r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
-		select {
-		case r.store.renewableLeasesSignal <- struct{}{}:
-		default:
+		// Gossip that we have the new lease, to
+		// update any cached entry on other nodes.
+		// FIXME(andrei): do we want to move this call under the condition
+		//   expirationBasedLease && r.IsLeaseValid below?
+		// Are there non-expiration leases we want to invalidate in other
+		// caches in this way? (my opinion: yes)
+		r.gossipLeaseAcquired(ctx, &newLease)
+
+		// Whenever we first acquire an expiration-based lease, notify the lease
+		// renewer worker that we want it to keep proactively renewing the lease
+		// before it expires.
+		if expirationBasedLease && r.IsLeaseValid(ctx, newLease, r.store.Clock().Now()) {
+			r.store.renewableLeases.Store(int64(r.RangeID), unsafe.Pointer(r))
+			select {
+			case r.store.renewableLeasesSignal <- struct{}{}:
+			default:
+			}
 		}
 	}
 

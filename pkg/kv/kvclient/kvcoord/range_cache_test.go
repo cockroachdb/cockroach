@@ -256,7 +256,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 		}
 	}
 	// TODO(andrei): don't leak this Stopper. Someone needs to Stop() it.
-	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), stop.NewStopper())
+	db.cache = NewRangeDescriptorCache(st, db, staticSize(2<<10), nil, stop.NewStopper())
 	return db
 }
 
@@ -973,7 +973,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stopper)
 	cache.rangeCache.cache.Add(rangeCacheKey(keys.RangeMetaKey(roachpb.RKeyMax)), &rangeCacheEntry{desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1149,7 +1149,7 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeDescriptorCache(st, nil /* db */, staticSize(2<<10), stopper)
+			cache := NewRangeDescriptorCache(st, nil /* db */, staticSize(2<<10), nil, stopper)
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
@@ -1201,7 +1201,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stopper)
 	cache.Insert(ctx,
 		roachpb.RangeInfo{Desc: firstDesc},
 		roachpb.RangeInfo{Desc: restDesc})
@@ -1236,7 +1236,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stopper)
 	for _, rd := range testData {
 		cache.rangeCache.cache.Add(
 			rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), &rangeCacheEntry{desc: rd})
@@ -1374,7 +1374,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+			cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stopper)
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *descAM2}, roachpb.RangeInfo{Desc: *descMZ4})
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
@@ -1445,7 +1445,7 @@ func TestRangeCacheUpdateLease(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), nil, stopper)
 
 	cache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  desc1,
