@@ -1007,7 +1007,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// We weren't able to determine whether the intent missing error is
 		// due to intent resolution or not, so it is still ambiguous whether
 		// the commit succeeded.
-		return false, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [intent missing]", pErr))
+		return false, roachpb.NewAmbiguousResultErrorf("error=%s [intent missing]", pErr)
 	}
 	respTxn := &br.Responses[0].GetQueryTxn().QueriedTxn
 	switch respTxn.Status {
@@ -1032,7 +1032,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// to further isolates the ambiguity caused by the loss of information
 		// during intent resolution. If this error becomes a problem, we can explore
 		// this option.
-		return false, roachpb.NewAmbiguousResultError("intent missing and record aborted")
+		return false, roachpb.NewAmbiguousResultErrorf("intent missing and record aborted")
 	default:
 		// The transaction has not been finalized yet, so the missing intent
 		// error must have been caused by a real missing intent. Propagate the
@@ -1433,6 +1433,9 @@ func (ds *DistSender) sendPartialBatch(
 				// We set pErr if we encountered an error getting the descriptor in
 				// order to return the most recent error when we are out of retries.
 				pErr = roachpb.NewError(err)
+				if !isRangeLookupErrorRetryable(err) {
+					return response{pErr: roachpb.NewError(err)}
+				}
 				continue
 			}
 
@@ -1676,7 +1679,7 @@ func fillSkippedResponses(
 // the error that the last attempt to execute the request returned.
 func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
-		return roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [exhausted]", ambiguousErr))
+		return roachpb.NewAmbiguousResultErrorf("error=%s [exhausted]", ambiguousErr)
 	}
 
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
@@ -1805,6 +1808,14 @@ func (ds *DistSender) sendToReplicas(
 		br, err = transport.SendNext(ctx, ba)
 
 		if err != nil {
+			if grpcutil.IsAuthenticationError(err) {
+				// Authentication error. Propagate.
+				if ambiguousError != nil {
+					return nil, roachpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+				}
+				return nil, err
+			}
+
 			// For most connection errors, we cannot tell whether or not the request
 			// may have succeeded on the remote server (exceptions are captured in the
 			// grpcutil.RequestDidNotStart function). We'll retry the request in order
@@ -1940,7 +1951,7 @@ func (ds *DistSender) sendToReplicas(
 				}
 			default:
 				if ambiguousError != nil {
-					return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [propagate]", ambiguousError))
+					return nil, roachpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
 				}
 
 				// The error received is likely not specific to this
@@ -1957,7 +1968,7 @@ func (ds *DistSender) sendToReplicas(
 			reportedErr := errors.Wrap(ctx.Err(), "context done during DistSender.Send")
 			log.Eventf(ctx, "%v", reportedErr)
 			if ambiguousError != nil {
-				return nil, roachpb.NewAmbiguousResultError(reportedErr.Error())
+				return nil, roachpb.NewAmbiguousResultErrorf(reportedErr.Error())
 			}
 			// Don't consider this a sendError, because sendErrors indicate that we
 			// were unable to reach a replica that could serve the request, and they

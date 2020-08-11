@@ -616,13 +616,14 @@ func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ 
 
 	st := cluster.MakeTestingClusterSettings()
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
+	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
+	sqlCfg.TenantIDCodecOverride = params.TenantIDCodecOverride
 	baseCfg := makeTestBaseConfig(st)
 	if params.AllowSettingClusterSettings {
 		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
 			ClusterSettingsUpdater: st.MakeUpdater(),
 		}
 	}
-	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
 	return StartTenant(
 		ctx,
 		ts.Stopper(),

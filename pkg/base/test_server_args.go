@@ -218,4 +218,8 @@ type TestTenantArgs struct {
 	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
 	// cluster settings.
 	AllowSettingClusterSettings bool
+
+	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
+	// server's codec, but nothing else (e.g. its certs). Used for testing.
+	TenantIDCodecOverride roachpb.TenantID
 }

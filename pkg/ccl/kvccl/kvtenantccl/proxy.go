@@ -25,14 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -297,7 +296,7 @@ func (p *Proxy) RangeLookup(
 		})
 		if err != nil {
 			log.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
-			if status.Code(err) == codes.Unauthenticated {
+			if grpcutil.IsAuthenticationError(err) {
 				// Authentication error. Propagate.
 				return nil, nil, err
 			}
