@@ -1156,6 +1156,24 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test DELIMITED imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "DELIMITED",
+			contents:    "hello\thello\nhi\thi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test PGCOPY imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "PGCOPY",
+			contents:    "hello\thello\nhi\thi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
 	}
 
 	// Set up a directory for the data files.
@@ -3036,6 +3054,7 @@ func TestImportDefault(t *testing.T) {
 		targetCols string
 		format     string
 		sequence   string
+		with       string
 		// We expect exactly one of expectedResults and expectedError:
 		// the latter is relevant for default expressions we don't support.
 		expectedResults [][]string
@@ -3088,6 +3107,7 @@ func TestImportDefault(t *testing.T) {
 			create:          "a INT, b INT DEFAULT 42",
 			targetCols:      "a, b",
 			format:          "CSV",
+			with:            `nullif = ''`,
 			expectedResults: [][]string{{"NULL", "36"}, {"2", "NULL"}},
 		},
 		{
@@ -3125,6 +3145,23 @@ func TestImportDefault(t *testing.T) {
 		},
 		// TODO (anzoteh96): add AVRO format, and also MySQL and PGDUMP once
 		// IMPORT INTO are supported for these file formats.
+		{
+			name:            "delimited",
+			data:            "1\t2\n3\t4",
+			create:          "a INT, b INT DEFAULT 42, c INT",
+			targetCols:      "c, a",
+			format:          "DELIMITED",
+			expectedResults: [][]string{{"2", "42", "1"}, {"4", "42", "3"}},
+		},
+		{
+			name:            "pgcopy",
+			data:            "1,2\n3,4",
+			create:          "a INT, b INT DEFAULT 42, c INT",
+			targetCols:      "c, a",
+			with:            `delimiter = ","`,
+			format:          "PGCOPY",
+			expectedResults: [][]string{{"2", "42", "1"}, {"4", "42", "3"}},
+		},
 	}
 	for _, test := range tests {
 		if test.sequence != "" {
@@ -3138,8 +3175,8 @@ func TestImportDefault(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
 			data = test.data
 			importStmt := fmt.Sprintf(`IMPORT INTO t (%s) %s DATA ("%s")`, test.targetCols, test.format, srv.URL)
-			if test.format == "CSV" {
-				importStmt = importStmt + ` WITH nullif = ''`
+			if test.with != "" {
+				importStmt = importStmt + fmt.Sprintf(` WITH %s`, test.with)
 			}
 			if test.expectedError != "" {
 				sqlDB.ExpectErr(t, test.expectedError, importStmt)
@@ -3462,7 +3499,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), &evalCtx)
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3565,7 +3602,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), &evalCtx)
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -4279,24 +4316,37 @@ func TestImportDelimited(t *testing.T) {
 					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
 				}
 			}
+			// Test if IMPORT INTO works here by testing that they produce the same
+			// results as IMPORT TABLE.
+			t.Run("import-into", func(t *testing.T) {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (i INT8 PRIMARY KEY, s text, b bytea)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) DELIMITED DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
+				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
+				require.Equal(t, importStr, intoStr)
+			})
+			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (b bytea, i INT8 PRIMARY KEY, s text)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) DELIMITED DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				colNames := []string{"i", "s", "b"}
+				for _, colName := range colNames {
+					importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM test%d ORDER BY i", colName, i))
+					intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM into%d ORDER BY i", colName, i))
+					require.Equal(t, importStr, intoStr)
+				}
+			})
 		})
 	}
-	t.Run("import-into-not-supported", func(t *testing.T) {
-		data := "1,2\n3,4"
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-		defer sqlDB.Exec(t, "DROP TABLE t")
-		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
-		sqlDB.ExpectErr(t,
-			"DELIMITED file format is currently unsupported by IMPORT INTO",
-			fmt.Sprintf(
-				`IMPORT INTO t (a, b) DELIMITED DATA (%q) WITH fields_terminated_by = ","`,
-				srv.URL))
-	})
 }
 
 func TestImportPgCopy(t *testing.T) {
@@ -4362,22 +4412,37 @@ func TestImportPgCopy(t *testing.T) {
 					}
 				}
 			}
+			// Test if IMPORT INTO works here by testing that they produce the same
+			// results as IMPORT TABLE.
+			t.Run("import-into", func(t *testing.T) {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (i INT8 PRIMARY KEY, s text, b bytea)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) PGCOPY DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
+				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
+				require.Equal(t, importStr, intoStr)
+			})
+			t.Run("import-into-target-cols-reordered", func(t *testing.T) {
+				defer sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE into%d`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (b bytea, s text, i INT8 PRIMARY KEY)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) PGCOPY DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				colNames := []string{"i", "s", "b"}
+				for _, colName := range colNames {
+					importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM test%d ORDER BY i", colName, i))
+					intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT (%s) FROM into%d ORDER BY i", colName, i))
+					require.Equal(t, importStr, intoStr)
+				}
+			})
 		})
 	}
-	t.Run("import-into-not-supported", func(t *testing.T) {
-		data := "1,2\n3,4"
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-		defer sqlDB.Exec(t, "DROP TABLE t")
-		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
-		sqlDB.ExpectErr(t,
-			"PGCOPY file format is currently unsupported by IMPORT INTO",
-			fmt.Sprintf(`IMPORT INTO t (a, b) PGCOPY DATA (%q) WITH delimiter = ","`, srv.URL))
-	})
 }
 
 func TestImportPgDump(t *testing.T) {
