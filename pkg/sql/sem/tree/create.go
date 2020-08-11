@@ -113,11 +113,12 @@ type CreateIndex struct {
 	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing      NameList
-	Interleave   *InterleaveDef
-	PartitionBy  *PartitionBy
-	Predicate    Expr
-	Concurrently bool
+	Storing       NameList
+	Interleave    *InterleaveDef
+	PartitionBy   *PartitionBy
+	StorageParams StorageParams
+	Predicate     Expr
+	Concurrently  bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -166,6 +167,11 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
 	}
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
