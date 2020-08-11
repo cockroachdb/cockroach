@@ -557,6 +557,7 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
+		debugDoctorCmd,
 		dumpCmd,
 		genHAProxyCmd,
 		initCmd,
@@ -595,6 +596,7 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
+		debugDoctorCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
