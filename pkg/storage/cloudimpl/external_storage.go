@@ -324,9 +324,10 @@ func URINeedsGlobExpansion(uri string) bool {
 	return containsGlob(parsedURI.Path)
 }
 
-// ExternalStorageRequiresAdminRole checks if the provided ExternalStorage URI
-// should only be accessed by a super-user.
-// The following scenarios are considered super-user access only:
+// AccessIsWithExplicitAuth checks if the provided ExternalStorage URI has
+// explicit authentication i.e does not rely on implicit machine credentials to
+// access the resource.
+// The following scenarios are considered implicit access:
 //
 // - implicit AUTH: access will use the node's machine account and only a
 // super user should have the authority to use these credentials.
@@ -335,37 +336,37 @@ func URINeedsGlobExpansion(uri string) bool {
 // server's network, potentially behind a firewall and only a super user should
 // be able to do this.
 //
-// - nodelocal: this is the node's shared filesytem and so only a super user
+// - nodelocal: this is the node's shared filesystem and so only a super user
 // should be able to interact with it.
-func URIRequiresAdminRole(path string) (bool, string, error) {
+func AccessIsWithExplicitAuth(path string) (bool, string, error) {
 	uri, err := url.Parse(path)
 	if err != nil {
-		return true, "", err
+		return false, "", err
 	}
-	requiresAdminRole := true
+	hasExplicitAuth := false
 	switch uri.Scheme {
 	case "s3":
 		auth := uri.Query().Get(AuthParam)
-		requiresAdminRole = auth == AuthParamImplicit
+		hasExplicitAuth = auth == AuthParamSpecified
 
-		// Check if a custom endpoint has been specified in the S3 URI.
-		requiresAdminRole = requiresAdminRole || uri.Query().Get(AWSEndpointParam) != ""
+		// If a custom endpoint has been specified in the S3 URI then this is no
+		// longer an explicit AUTH.
+		hasExplicitAuth = hasExplicitAuth && uri.Query().Get(AWSEndpointParam) == ""
 	case "gs":
 		auth := uri.Query().Get(AuthParam)
-		requiresAdminRole = auth == AuthParamImplicit
+		hasExplicitAuth = auth == AuthParamSpecified
 	case "azure":
 		// Azure does not support implicit authentication i.e. all credentials have
-		// to be specified as part of the URI. Hence, we do not need the user to be
-		// an admin.
-		requiresAdminRole = false
+		// to be specified as part of the URI.
+		hasExplicitAuth = true
 	case "http", "https", "nodelocal":
-		requiresAdminRole = true
+		hasExplicitAuth = false
 	case "experimental-workload", "workload", "userfile":
-		requiresAdminRole = false
+		hasExplicitAuth = true
 	default:
-		return requiresAdminRole, "", errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
+		return hasExplicitAuth, "", nil
 	}
-	return requiresAdminRole, uri.Scheme, nil
+	return hasExplicitAuth, uri.Scheme, nil
 }
 
 func containsGlob(str string) bool {

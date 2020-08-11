@@ -18,14 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ResetConstructors() func() {
-	old := make(map[jobspb.Type]Constructor)
-	for k, v := range constructors {
-		old[k] = v
-	}
-	return func() { constructors = old }
-}
-
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
 	OnResume     func(context.Context, chan<- tree.Datums) error
