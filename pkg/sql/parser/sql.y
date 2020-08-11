@@ -1125,7 +1125,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
-%type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
+%type <tree.Expr>  opt_cron_expr cron_expr opt_description sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
@@ -2266,16 +2266,19 @@ sconst_or_placeholder:
   }
 
 cron_expr:
-  RECURRING NEVER
-  {
-    $$.val = nil
-  }
-| RECURRING sconst_or_placeholder
+  RECURRING sconst_or_placeholder
   // Can't use string_or_placeholder here due to conflict on NEVER branch above
   // (is NEVER a keyword or a variable?).
   {
     $$.val = $2.expr()
   }
+
+opt_cron_expr:
+  RECURRING NEVER
+  {
+    $$.val = nil
+  }
+| cron_expr
 
 opt_full_backup_clause:
   FULL BACKUP sconst_or_placeholder
