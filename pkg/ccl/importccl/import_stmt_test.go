@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -3846,6 +3846,151 @@ func TestImportControlJob(t *testing.T) {
 			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
 		)
 	})
+}
+
+// FakeResumer calls optional callbacks during the job lifecycle.
+type fakeResumer struct {
+	OnResume     func(context.Context, chan<- tree.Datums) error
+	FailOrCancel func(context.Context) error
+}
+
+var _ jobs.Resumer = fakeResumer{}
+
+func (d fakeResumer) Resume(
+	ctx context.Context, _ interface{}, resultsCh chan<- tree.Datums,
+) error {
+	if d.OnResume != nil {
+		if err := d.OnResume(ctx, resultsCh); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+	if d.FailOrCancel != nil {
+		return d.FailOrCancel(ctx)
+	}
+	return nil
+}
+
+func TestImportControlJobRBAC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	rootDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+
+	// Create non-root user.
+	rootDB.Exec(t, `CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	done := make(chan struct{})
+	defer close(done)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return fakeResumer{
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-done:
+					return nil
+				}
+			},
+		}
+	})
+
+	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.Job {
+		job, _, err := registry.CreateAndStartJob(ctx, nil, record)
+		require.NoError(t, err)
+		return job
+	}
+
+	defaultRecord := jobs.Record{
+		// Job does not accept an empty Details field, so arbitrarily provide
+		// ImportDetails.
+		Details:  jobspb.ImportDetails{},
+		Progress: jobspb.ImportProgress{},
+	}
+	var testRun int
+
+	for _, tc := range []struct {
+		name           string
+		controlQuery   string
+		expectedStatus jobs.Status
+	}{
+		{
+			"pause",
+			`PAUSE JOB $1`,
+			jobs.StatusPaused,
+		},
+		{
+			"cancel",
+			`CANCEL JOB $1`,
+			jobs.StatusCancelRequested,
+		},
+		{
+			"resume",
+			`RESUME JOB $1`,
+			jobs.StatusPauseRequested,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Start import job as root.
+			rootJobRecord := defaultRecord
+			rootJobRecord.Username = "root"
+			rootJob := startLeasedJob(t, rootJobRecord)
+
+			// Test root can control root job.
+			rootDB.Exec(t, tc.controlQuery, *rootJob.ID())
+			require.NoError(t, err)
+			jobutils.VerifySystemJob(t, rootDB, testRun, jobspb.TypeImport, tc.expectedStatus,
+				rootJobRecord)
+
+			// Start import job as non-admin user.
+			nonAdminJobRecord := defaultRecord
+			nonAdminJobRecord.Username = "testuser"
+			userJob := startLeasedJob(t, nonAdminJobRecord)
+
+			// Test testuser can control testuser job.
+			_, err := testuser.Exec(tc.controlQuery, *userJob.ID())
+			require.NoError(t, err)
+			jobutils.VerifySystemJob(t, rootDB, testRun+1, jobspb.TypeImport, tc.expectedStatus,
+				nonAdminJobRecord)
+
+			// Start second import job as root.
+			rootJob2 := startLeasedJob(t, rootJobRecord)
+
+			// Start second import job as non-admin user.
+			userJob2 := startLeasedJob(t, nonAdminJobRecord)
+
+			// Test root can control testuser job.
+			rootDB.Exec(t, tc.controlQuery, *userJob2.ID())
+			require.NoError(t, err)
+			jobutils.VerifySystemJob(t, rootDB, testRun+2, jobspb.TypeImport, tc.expectedStatus,
+				nonAdminJobRecord)
+
+			// Test testuser CANNOT control root job.
+			_, err = testuser.Exec(tc.controlQuery, *rootJob2.ID())
+			require.True(t, testutils.IsError(err, "only users with the admin role are allowed"))
+
+			testRun += 1
+		})
+	}
 }
 
 // TestImportWorkerFailure tests that IMPORT can restart after the failure

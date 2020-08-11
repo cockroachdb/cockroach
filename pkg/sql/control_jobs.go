@@ -32,6 +32,12 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 	tree.PauseJob:  jobs.StatusPaused,
 }
 
+var jobDesiredStatusToStatementTag = map[jobs.Status]string{
+	jobs.StatusCanceled: "CANCEL JOB",
+	jobs.StatusRunning:  "RESUME JOB",
+	jobs.StatusPaused:   "PAUSE JOB",
+}
+
 // FastPathResults implements the planNodeFastPath inteface.
 func (n *controlJobsNode) FastPathResults() (int, bool) {
 	return n.numRows, true
@@ -56,6 +62,20 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+		}
+
+		var jobOwner string
+		if jobOwner, err = reg.JobOwner(params.ctx, params.p.txn, int64(jobID)); err != nil {
+			return err
+		}
+
+		// Check if the user who issued the job control query is the same as the job
+		// owner. If not, the job control query user must be of an ADMIN role.
+		if jobOwner != params.p.User() {
+			err = params.p.RequireAdminRole(params.ctx, jobDesiredStatusToStatementTag[n.desiredStatus])
+			if err != nil {
+				return err
+			}
 		}
 
 		switch n.desiredStatus {

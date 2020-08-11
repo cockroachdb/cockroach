@@ -683,6 +683,15 @@ func (r *Registry) getJobFn(ctx context.Context, txn *kv.Txn, id int64) (*Job, R
 	return job, resumer, nil
 }
 
+// JobOwner returns the "owner" of the job referred to by id.
+func (r *Registry) JobOwner(ctx context.Context, txn *kv.Txn, id int64) (string, error) {
+	job, err := r.LoadJobWithTxn(ctx, id, txn)
+	if err != nil {
+		return "", err
+	}
+	return job.mu.payload.Username, nil
+}
+
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
 func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id int64) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
