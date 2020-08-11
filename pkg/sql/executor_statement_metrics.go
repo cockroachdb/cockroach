@@ -165,6 +165,9 @@ func (ex *connExecutor) recordStatementSummary(
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
 
+	// Save the statement as part of the current transaction as well.
+	ex.extraTxnState.transactionStatements = append(ex.extraTxnState.transactionStatements, stmt)
+
 	if log.V(2) {
 		// ages since significant epochs
 		sessionAge := phaseTimes[plannerEndExecStmt].

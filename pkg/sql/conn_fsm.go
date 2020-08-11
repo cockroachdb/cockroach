@@ -285,7 +285,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 	},
-	// Handle the errors in implicit txns. They move us to NoTxn.
+	// Handle the errors in implicit txnCounts. They move us to NoTxn.
 	stateOpen{ImplicitTxn: fsm.True}: {
 		eventRetriableErr{CanAutoRetry: fsm.False, IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
@@ -296,7 +296,7 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			Action: cleanupAndFinishOnError,
 		},
 	},
-	// Handle the errors in explicit txns. They move us to Aborted.
+	// Handle the errors in explicit txnCounts. They move us to Aborted.
 	stateOpen{ImplicitTxn: fsm.False}: {
 		eventNonRetriableErr{IsCommit: fsm.False}: {
 			Next: stateAborted{},
@@ -479,7 +479,7 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 
 // BoundTxnStateTransitions is the state machine used by the InternalExecutor
 // when running SQL inside a higher-level txn. It's a very limited state
-// machine: it doesn't allow starting or finishing txns, auto-retries, etc.
+// machine: it doesn't allow starting or finishing txnCounts, auto-retries, etc.
 var BoundTxnStateTransitions = fsm.Compile(fsm.Pattern{
 	stateOpen{ImplicitTxn: fsm.False}: {
 		// We accept eventNonRetriableErr with both IsCommit={True, fsm.False}, even

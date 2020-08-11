@@ -794,7 +794,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
-			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txns.getStats()
+			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txnCounts.getStats()
 			err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),

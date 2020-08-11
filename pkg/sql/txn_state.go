@@ -63,7 +63,7 @@ type txnState struct {
 	Ctx context.Context
 
 	// sp is the span corresponding to the SQL txn. These are often root spans, as
-	// SQL txns are frequently the level at which we do tracing.
+	// SQL txnCounts are frequently the level at which we do tracing.
 	sp opentracing.Span
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
@@ -152,7 +152,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// will contain everything executed as part of the upcoming SQL txn, including
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
-	// into a larger discussion about how to drain SQL and rollback open txns.
+	// into a larger discussion about how to drain SQL and rollback open txnCounts.
 	var sp opentracing.Span
 	opName := sqlTxnName
 
@@ -405,7 +405,7 @@ type transitionCtx struct {
 	// connMon is the connExecutor's monitor. New transactions will create a child
 	// monitor tracking txn-scoped objects.
 	connMon *mon.BytesMonitor
-	// The Tracer used to create root spans for new txns if the parent ctx doesn't
+	// The Tracer used to create root spans for new txnCounts if the parent ctx doesn't
 	// have a span.
 	tracer opentracing.Tracer
 	// sessionTracing provides access to the session's tracing interface. The

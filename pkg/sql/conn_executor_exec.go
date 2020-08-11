@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -1002,7 +1003,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // then be executed again, but this time in the Open state (implicit txn).
 //
 // Note that eventTxnStart, which is generally returned by this method, causes
-// the state to change and previous results to be flushed, but for implicit txns
+// the state to change and previous results to be flushed, but for implicit txnCounts
 // the cursor is not advanced. This means that the statement will run again in
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
@@ -1358,23 +1359,53 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-// recordTransactionStart records the start of the transaction and returns a
-// closure to be called once the transaction finishes.
-func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
+// recordTransactionStart records the start of the transaction and returns
+// closures to be called once the transaction finishes or if they transaction
+// restarts.
+func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
 	implicit := ex.implicitTxn()
-	return func(ev txnEvent) { ex.recordTransaction(ev, implicit, txnStart) }
+	// TODO(arul): record phase times txn start time here.
+
+	onTxnFinish = func(ev txnEvent) {
+		ex.recordTransaction(ev, implicit, txnStart)
+		ex.extraTxnState.transactionStatements = nil
+	}
+	onTxnRestart = func() {
+		// TODO(arul): add entries to phase times here.
+		ex.extraTxnState.transactionStatements = nil
+	}
+	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+
+	// First we go through all the statements in the transaction and hash their
+	// queries to get their IDs.
+	var k txnKey
+	for _, stmt := range ex.extraTxnState.transactionStatements {
+		// TODO(arul): This needs to be abstracted at the appropriate place, dunno
+		//  where that is yet.
+		h := fnv.New128()
+		anonymizedStr := stmt.AnonymizedStr
+		if stmt.AnonymizedStr == "" {
+			anonymizedStr = anonymizeStmtAndConstants(stmt.AST)
+		}
+		h.Write([]byte(anonymizedStr))
+		// concatenate the hash to form the key
+		k = txnKey(fmt.Sprintf("%s%x", k, h.Sum(nil)))
+	}
+
 	ex.statsCollector.recordTransaction(
 		txnTime.Seconds(),
 		ev,
 		implicit,
+		ex.extraTxnState.autoRetryCounter,
+		k,
 	)
 }

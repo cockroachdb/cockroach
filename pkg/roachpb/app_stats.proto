@@ -109,6 +109,9 @@ message TransactionStatistics {
   // ServiceLat is the time to service the transaction, from start of parse to
   // end of execute.
   optional NumericStat service_lat = 5 [(gogoproto.nullable) = false];
+
+  // App is the name of the app which executed the transaction.
+  optional string app = 6 [(gogoproto.nullable) = false];
 }
 
 

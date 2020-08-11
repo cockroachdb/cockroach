@@ -144,7 +144,7 @@ func (sc *SchemaChanger) fixedTimestampTxn(
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely. The various
-// function that it calls make their own txns.
+// function that it calls make their own txnCounts.
 func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -779,7 +779,7 @@ func (sc *SchemaChanger) distBackfill(
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
 	readAsOf := sc.clock.Now()
-	// Index backfilling ingests SSTs that don't play nicely with running txns
+	// Index backfilling ingests SSTs that don't play nicely with running txnCounts
 	// since they just add their keys blindly. Running a Scan of the target
 	// spans at the time the SSTs' keys will be written will calcify history up
 	// to then since the scan will resolve intents and populate tscache to keep

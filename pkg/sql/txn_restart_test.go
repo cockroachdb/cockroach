@@ -367,7 +367,7 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, err erro
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
 func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
 	return &sql.ExecutorTestingKnobs{
-		// We're going to abort txns using a TxnAborter, and that's incompatible
+		// We're going to abort txnCounts using a TxnAborter, and that's incompatible
 		// with AutoCommit.
 		DisableAutoCommit: true,
 		StatementFilter:   ta.statementFilter,
@@ -439,7 +439,7 @@ func (ri *restartInfo) Verify() error {
 	return nil
 }
 
-// Test the logic in the sql executor for automatically retrying txns in case of
+// Test the logic in the sql executor for automatically retrying txnCounts in case of
 // retriable errors.
 func TestTxnAutoRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -518,8 +518,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 		t.Fatal(err)
 	}
 
-	// Test that implicit txns - txns for which we see all the statements and prefixes
-	// of txns (statements batched together with the BEGIN stmt) - are retried.
+	// Test that implicit txnCounts - txnCounts for which we see all the statements and prefixes
+	// of txnCounts (statements batched together with the BEGIN stmt) - are retried.
 	// We also exercise the SQL cluster logical timestamp in here, because
 	// this must be properly propagated across retries.
 	//
@@ -573,7 +573,7 @@ INSERT INTO t.public.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timesta
 		t.Fatal(err)
 	}
 
-	// Check that the txns succeeded by reading the rows.
+	// Check that the txnCounts succeeded by reading the rows.
 	var count int
 	if err := sqlDB.QueryRow("SELECT count(*) FROM t.public.test").Scan(&count); err != nil {
 		t.Fatal(err)
@@ -665,7 +665,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 }
 
 // rollbackStrategy is the type of statement which a client can use to
-// rollback aborted txns from retryable errors. We accept two statements
+// rollback aborted txnCounts from retryable errors. We accept two statements
 // for rolling back to the cockroach_restart savepoint. See
 // *Executor.execStmtInAbortedTxn for more about transaction retries.
 type rollbackStrategy int
@@ -687,7 +687,7 @@ func (rs rollbackStrategy) SQLCommand() string {
 
 // exec takes a closure and executes it repeatedly as long as it says it needs
 // to be retried. The function also takes a rollback strategy, which specifies
-// the statement which the client will use to rollback aborted txns from retryable
+// the statement which the client will use to rollback aborted txnCounts from retryable
 // errors.
 func retryExec(t *testing.T, sqlDB *gosql.DB, rs rollbackStrategy, fn func(*gosql.Tx) bool) {
 	tx, err := sqlDB.Begin()

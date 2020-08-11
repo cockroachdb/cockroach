@@ -1563,6 +1563,12 @@ func TestStatusAPIStatements(t *testing.T) {
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
 		},
 		{stmt: `SELECT * FROM posts`},
+		{stmt: `SELECT * FROM posts`},
+		{stmt: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{stmt: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{stmt: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{stmt: `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`},
+		{stmt: `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`},
 	}
 
 	for _, stmt := range statements {
@@ -1598,6 +1604,15 @@ func TestStatusAPIStatements(t *testing.T) {
 			continue
 		}
 		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+	}
+
+	// TODO(arul): Annotate this test
+	for _, respTransaction := range resp.Transactions {
+		if strings.HasPrefix(respTransaction.App, sqlbase.InternalAppNamePrefix) {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		fmt.Printf("!!! %v\n", respTransaction.Count)
 	}
 
 	sort.Strings(expectedStatements)

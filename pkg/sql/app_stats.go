@@ -40,15 +40,27 @@ type stmtKey struct {
 	distSQLUsed bool
 	vectorized  bool
 	implicitTxn bool
+	id          string
 }
+
+// txnKey is the concatenation of all stmtKey.id's for all the statements in the
+// transaction
+type txnKey string
 
 // appStats holds per-application statistics.
 type appStats struct {
 	syncutil.Mutex
 
-	st    *cluster.Settings
-	stmts map[stmtKey]*stmtStats
-	txns  transactionStats
+	st        *cluster.Settings
+	stmts     map[stmtKey]*stmtStats
+	txnCounts transactionCounts
+	txns      map[txnKey]*txnStats
+}
+
+type txnStats struct {
+	syncutil.Mutex
+
+	data roachpb.TransactionStatistics
 }
 
 // stmtStats holds per-statement statistics.
@@ -58,10 +70,15 @@ type stmtStats struct {
 	data roachpb.StatementStatistics
 }
 
-// transactionStats holds per-application transaction statistics.
-type transactionStats struct {
+// TODO(arul): Rename this struct to something more appropriate. This struct
+//  tracks counts/stats for all transactions by an app, disregarding individual
+//  transaction information. Hopefully that can inspire a name.
+// transactionCounts holds per-application transaction statistics.
+type transactionCounts struct {
 	mu struct {
 		syncutil.Mutex
+		// TODO(arul): rename TxnStats to TxnCounts or something less confusing now
+		// that we have roachpb.TransactionStatistics
 		roachpb.TxnStats
 	}
 }
@@ -215,6 +232,19 @@ func (a *appStats) getStatsForStmtWithKey(key stmtKey, createIfNonexistent bool)
 	return s
 }
 
+func (a *appStats) getStatsForTxnWithKey(key txnKey) *txnStats {
+	a.Lock()
+	defer a.Unlock()
+	// Retrieve the per-transaction statistic object, and create it if it doesn't
+	// exist yet.
+	s, ok := a.txns[key]
+	if !ok {
+		s = &txnStats{}
+		a.txns[key] = s
+	}
+	return s
+}
+
 // Add combines one appStats into another. Add manages locks on a, so taking
 // a lock on a will cause a deadlock.
 func (a *appStats) Add(other *appStats) {
@@ -244,21 +274,21 @@ func (a *appStats) Add(other *appStats) {
 	}
 
 	// Create a copy of the other's transactions statistics.
-	other.txns.mu.Lock()
-	txnStats := other.txns.mu.TxnStats
-	other.txns.mu.Unlock()
+	other.txnCounts.mu.Lock()
+	txnStats := other.txnCounts.mu.TxnStats
+	other.txnCounts.mu.Unlock()
 
 	// Merge the transaction stats.
-	a.txns.mu.Lock()
-	a.txns.mu.TxnStats.Add(txnStats)
-	a.txns.mu.Unlock()
+	a.txnCounts.mu.Lock()
+	a.txnCounts.mu.TxnStats.Add(txnStats)
+	a.txnCounts.mu.Unlock()
 }
 
 func anonymizeStmt(ast tree.Statement) string {
 	return tree.AsStringWithFlags(ast, tree.FmtHideConstants)
 }
 
-func (s *transactionStats) getStats() (
+func (s *transactionCounts) getStats() (
 	txnCount int64,
 	txnTimeAvg float64,
 	txnTimeVar float64,
@@ -275,7 +305,9 @@ func (s *transactionStats) getStats() (
 	return txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount
 }
 
-func (s *transactionStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
+func (s *transactionCounts) recordTransactionCounts(
+	txnTimeSec float64, ev txnEvent, implicit bool,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.TxnCount++
@@ -288,11 +320,33 @@ func (s *transactionStats) recordTransaction(txnTimeSec float64, ev txnEvent, im
 	}
 }
 
-func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
+func (a *appStats) recordTransactionCounts(txnTimeSec float64, ev txnEvent, implicit bool) {
 	if !txnStatsEnable.Get(&a.st.SV) {
 		return
 	}
-	a.txns.recordTransaction(txnTimeSec, ev, implicit)
+	a.txnCounts.recordTransactionCounts(txnTimeSec, ev, implicit)
+}
+
+// recordTransaction saves per-transaction statistics
+func (a *appStats) recordTransaction(retryCount int64, key txnKey) {
+	if !txnStatsEnable.Get(&a.st.SV) {
+		return
+	}
+	// TODO(arul): Do we need a service latency threshold here, so that we collect
+	//  stats only for transactions above that threshold, similar to statements
+	//  above? which to collect
+
+	// Get the statistics object.
+	s := a.getStatsForTxnWithKey(key)
+
+	// Collect the per-transaction statistics.
+	s.Lock()
+	defer s.Unlock()
+
+	s.data.Count++
+	if retryCount > s.data.MaxRetries {
+		s.data.MaxRetries = retryCount
+	}
 }
 
 // shouldSaveLogicalPlanDescription returns whether we should save this as a
@@ -341,6 +395,7 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	a := &appStats{
 		st:    s.st,
 		stmts: make(map[stmtKey]*stmtStats),
+		txns:  make(map[txnKey]*txnStats),
 	}
 	s.apps[appName] = a
 	return a
@@ -478,6 +533,30 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 	vt *VirtualSchemaHolder,
 ) []roachpb.CollectedStatementStatistics {
 	return s.getStmtStats(vt, false /* scrub */)
+}
+
+func (s *sqlStats) getUnscrubbedTxnStats() []roachpb.TransactionStatistics {
+	s.Lock()
+	defer s.Unlock()
+	var ret []roachpb.TransactionStatistics
+	for appName, a := range s.apps {
+		a.Lock()
+		// guesstimate that we'll need apps*(transactions-per-app)
+		if cap(ret) == 0 {
+			ret = make([]roachpb.TransactionStatistics, 0, len(a.txns)*len(s.apps))
+		}
+		for _, stats := range a.txns {
+			stats.Lock()
+			data := stats.data
+			stats.Unlock()
+
+			ret = append(ret, roachpb.TransactionStatistics{
+				Count: data.Count,
+				App:   appName,
+			})
+		}
+	}
+	return ret
 }
 
 func (s *sqlStats) getStmtStats(
