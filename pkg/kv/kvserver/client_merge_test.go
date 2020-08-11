@@ -3695,15 +3695,6 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, args)
 		return pErr.GoError()
 	}
-	checkRangeNotFound := func(err error) error {
-		if err == nil {
-			return errors.Newf("expected RangeNotFoundError, got nil")
-		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
-	}
 	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
 		return hlc.Timestamp{
 			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
@@ -3753,10 +3744,11 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 		},
 	}
 
+	numNodes, rhsReplicas := 1, 1
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
-				setupClusterWithSubsumedRange(ctx, t, maxOffset)
+				setupClusterWithSubsumedRange(ctx, t, numNodes, rhsReplicas, maxOffset)
 			defer tc.Stopper().Stop(ctx)
 			errCh := make(chan error)
 			go func() {
@@ -3768,7 +3760,7 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 				// Requests that wait for the merge must fail with a RangeNotFoundError
 				// because the RHS should cease to exist once the merge completes.
 				cleanupFunc()
-				require.NoError(t, checkRangeNotFound(<-errCh))
+				require.IsType(t, (*roachpb.RangeNotFoundError)(nil), <-errCh)
 			} else {
 				require.NoError(t, <-errCh)
 				// We cleanup *after* the non-blocking read request succeeds to prevent
@@ -3779,13 +3771,41 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	}
 }
 
+// TestStoreBlockTransferLeaseRequestAfterSubsumption tests that a
+// TransferLeaseRequest checks & waits for an ongoing merge before it can be
+// evaluated.
+// Regression test for #52517.
+func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	numNodes := 2
+	tc, store, rhsDesc, _, waitForBlocked, cleanupFunc :=
+		setupClusterWithSubsumedRange(ctx, t, numNodes, numNodes, 0 /* testMaxOffset */)
+	defer tc.Stopper().Stop(ctx)
+
+	errCh := make(chan error)
+	target := tc.Target(1)
+	go func() {
+		args := adminTransferLeaseArgs(rhsDesc.StartKey.AsRawKey(), target.StoreID)
+		_, err := kv.SendWrapped(ctx, store.TestSender(), args)
+		errCh <- err.GoError()
+	}()
+	// Expect the TransferLeaseRequest to block until we allow the merge to commit.
+	waitForBlocked()
+	// Let the merge commit
+	cleanupFunc()
+	require.IsType(t, (*roachpb.RangeNotFoundError)(nil), <-errCh)
+}
+
 // setupClusterWithSubsumedRange returns a TestCluster during an ongoing merge
 // transaction, such that the merge has been suspended right before the merge
-// trigger is evaluated. This leaves the right hand side range of the merge in
-// its subsumed state. It is the responsibility of the caller to call
-// `cleanupFunc` to unblock the merge and Stop() the tc's Stopper when done.
+// trigger is evaluated (with the RHS of the merge on the first store of the
+// first server). This leaves the right hand side range of the merge in its
+// subsumed state. It is the responsibility of the caller to call `cleanupFunc`
+// to unblock the merge and Stop() the tc's Stopper when done.
 func setupClusterWithSubsumedRange(
-	ctx context.Context, t *testing.T, testMaxOffset time.Duration,
+	ctx context.Context, t *testing.T, numNodes int, rhsReplicas int, testMaxOffset time.Duration,
 ) (
 	tc serverutils.TestClusterInterface,
 	store *kvserver.Store,
@@ -3794,6 +3814,9 @@ func setupClusterWithSubsumedRange(
 	waitForBlocked func(),
 	cleanupFunc func(),
 ) {
+	if numNodes < rhsReplicas {
+		t.Fatalf("cannot have %d replicas on a cluster with %d nodes", rhsReplicas, numNodes)
+	}
 	state := mergeFilterState{
 		blockMergeTrigger: make(chan hlc.Timestamp),
 		finishMergeTxn:    make(chan struct{}),
@@ -3817,13 +3840,20 @@ func setupClusterWithSubsumedRange(
 			},
 		},
 	}
-	tc = serverutils.StartTestCluster(t, 1, clusterArgs)
+	tc = serverutils.StartTestCluster(t, numNodes, clusterArgs)
 	ts := tc.Server(0)
 	stores, _ := ts.GetStores().(*kvserver.Stores)
 	store, err := stores.GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	require.NoError(t, err)
+	for count := 1; count < rhsReplicas; count++ {
+		_, err := tc.AddReplicas(rhsDesc.StartKey.AsRawKey(), tc.Target(count))
+		require.NoError(t, err)
+		_, err = tc.AddReplicas(lhsDesc.StartKey.AsRawKey(), tc.Target(count))
+		require.NoError(t, err)
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
+	}
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	errCh := make(chan error)
 	go func() {
