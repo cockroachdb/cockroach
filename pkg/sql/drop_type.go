@@ -115,6 +115,21 @@ func (n *dropTypeNode) startExec(params runParams) error {
 		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), true /* queueJob */); err != nil {
 			return err
 		}
+		// Log a Drop Type event.
+		if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			params.ctx,
+			params.p.txn,
+			EventLogDropType,
+			int32(typ.ID),
+			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
+			struct {
+				TypeName  string
+				Statement string
+				User      string
+			}{typ.Name, tree.AsStringWithFQNames(n.n, params.Ann()), params.SessionData().User},
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }

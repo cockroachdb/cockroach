@@ -288,13 +288,29 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	typeDesc.ArrayTypeID = arrayTypeID
 
 	// Now create the type after the implicit array type as been created.
-	return p.createDescriptorWithID(
+	if err := p.createDescriptorWithID(
 		params.ctx,
 		typeKey.Key(params.ExecCfg().Codec),
 		id,
 		typeDesc,
 		params.EvalContext().Settings,
 		tree.AsStringWithFQNames(n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Log the event.
+	return MakeEventLogger(p.ExecCfg()).InsertEventRecord(
+		params.ctx,
+		p.txn,
+		EventLogCreateType,
+		int32(typeDesc.GetID()),
+		int32(p.ExtendedEvalContext().NodeID.SQLInstanceID()),
+		struct {
+			TypeName  string
+			Statement string
+			User      string
+		}{typeName.FQString(), tree.AsStringWithFQNames(n, params.Ann()), p.User()},
 	)
 }
 
