@@ -4238,24 +4238,21 @@ func TestImportDelimited(t *testing.T) {
 					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
 				}
 			}
+			// Test if IMPORT INTO works here by testing that they produce the same
+			// results as IMPORT TABLE.
+			t.Run("import-into", func(t *testing.T) {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (i INT8 PRIMARY KEY, s text, b bytea)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) DELIMITED DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
+				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
+				require.Equal(t, importStr, intoStr)
+			})
 		})
 	}
-	t.Run("import-into-not-supported", func(t *testing.T) {
-		data := "1,2\n3,4"
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-		defer sqlDB.Exec(t, "DROP TABLE t")
-		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
-		sqlDB.ExpectErr(t,
-			"DELIMITED file format is currently unsupported by IMPORT INTO",
-			fmt.Sprintf(
-				`IMPORT INTO t (a, b) DELIMITED DATA (%q) WITH fields_terminated_by = ","`,
-				srv.URL))
-	})
 }
 
 func TestImportPgCopy(t *testing.T) {
@@ -4321,22 +4318,21 @@ func TestImportPgCopy(t *testing.T) {
 					}
 				}
 			}
+			// Test if IMPORT INTO works here by testing that they produce the same
+			// results as IMPORT TABLE.
+			t.Run("import-into", func(t *testing.T) {
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE into%d (i INT8 PRIMARY KEY, s text, b bytea)`, i))
+				intoCmd := fmt.Sprintf(`IMPORT INTO into%d (i, s, b) PGCOPY DATA ($1)`, i)
+				if len(flags) > 0 {
+					intoCmd += " WITH " + strings.Join(flags, ", ")
+				}
+				sqlDB.Exec(t, intoCmd, opts...)
+				importStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i))
+				intoStr := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM into%d ORDER BY i", i))
+				require.Equal(t, importStr, intoStr)
+			})
 		})
 	}
-	t.Run("import-into-not-supported", func(t *testing.T) {
-		data := "1,2\n3,4"
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-		defer sqlDB.Exec(t, "DROP TABLE t")
-		sqlDB.Exec(t, "CREATE TABLE t (a INT, b INT)")
-		sqlDB.ExpectErr(t,
-			"PGCOPY file format is currently unsupported by IMPORT INTO",
-			fmt.Sprintf(`IMPORT INTO t (a, b) PGCOPY DATA (%q) WITH delimiter = ","`, srv.URL))
-	})
 }
 
 func TestImportPgDump(t *testing.T) {

@@ -148,6 +148,9 @@ var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
 
+// File formats supported for IMPORT INTO
+var allowedIntoFormats = []string{"CSV", "AVRO", "DELIMITED", "PGCOPY"}
+
 func validateFormatOptions(
 	format string, specified map[string]string, formatAllowed map[string]struct{},
 ) error {
@@ -160,6 +163,15 @@ func validateFormatOptions(
 		}
 	}
 	return nil
+}
+
+func isSupportedImportInto(importStmt *tree.Import) bool {
+	for _, supportedFormat := range allowedIntoFormats {
+		if importStmt.FileFormat == supportedFormat {
+			return true
+		}
+	}
+	return false
 }
 
 func importJobDescription(
@@ -576,7 +588,7 @@ func importPlanHook(
 			// - Look at if/how cleanup/rollback works. Reconsider the cpu from the
 			//   desc version (perhaps we should be re-reading instead?).
 			// - Write _a lot_ of tests.
-			if !(importStmt.FileFormat == "CSV" || importStmt.FileFormat == "AVRO") {
+			if !isSupportedImportInto(importStmt) {
 				return errors.Newf(
 					"%s file format is currently unsupported by IMPORT INTO",
 					importStmt.FileFormat)
