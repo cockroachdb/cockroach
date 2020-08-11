@@ -532,6 +532,9 @@ const (
 	// planFlagVectorized is set if the plan is executed via the vectorized
 	// engine.
 	planFlagVectorized
+
+	// planFlagTenant is set if the plan is executed on behalf of a tenant.
+	planFlagTenant
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
