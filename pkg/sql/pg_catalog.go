@@ -2796,6 +2796,11 @@ CREATE TABLE pg_catalog.pg_type (
 
 				// Now generate rows for user defined types in this database.
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *sqlbase.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
+					schema, err := p.getSchemaNameFromID(ctx, typDesc.ParentSchemaID)
+					if err != nil {
+						return err
+					}
+					nspOid := h.NamespaceOid(db, schema)
 					typ, err := typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 					if err != nil {
 						return err
@@ -2836,6 +2841,11 @@ CREATE TABLE pg_catalog.pg_type (
 					}
 					return false, err
 				}
+				schema, err := p.getSchemaNameFromID(ctx, typDesc.ParentSchemaID)
+				if err != nil {
+					return false, err
+				}
+				nspOid = h.NamespaceOid(db, schema)
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err
