@@ -64,7 +64,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			ViewName:    &viewName,
 			IfNotExists: cv.IfNotExists,
 			Replace:     cv.Replace,
-			Temporary:   cv.Temporary,
+			Persistence: cv.Persistence,
 			ViewQuery:   tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:     p,
 			Deps:        b.viewDeps,

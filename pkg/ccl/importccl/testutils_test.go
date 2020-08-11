@@ -62,8 +62,8 @@ func descForTable(
 			id-1,
 			ts,
 			priv,
-			false, /* temporary */
-			nil,   /* params */
+			tree.PersistencePermanent,
+			nil, /* params */
 		)
 		if err != nil {
 			t.Fatal(err)

@@ -55,7 +55,7 @@ func (p *planner) addColumnImpl(
 			seqDbDesc,
 			n.tableDesc.GetParentSchemaID(),
 			seqName,
-			n.tableDesc.Temporary,
+			n.tableDesc.Persistence(),
 			seqOpts,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
