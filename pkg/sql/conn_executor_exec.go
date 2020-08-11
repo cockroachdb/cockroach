@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -1422,23 +1423,59 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-// recordTransactionStart records the start of the transaction and returns a
-// closure to be called once the transaction finishes.
-func (ex *connExecutor) recordTransactionStart() func(txnEvent) {
+// recordTransactionStart records the start of the transaction and returns
+// closures to be called once the transaction finishes or if they transaction
+// restarts.
+func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), onTxnRestart func()) {
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
 	implicit := ex.implicitTxn()
-	return func(ev txnEvent) { ex.recordTransaction(ev, implicit, txnStart) }
+
+	// Transaction received time is the time at which the statement that prompted
+	// the creation of this transaction was received.
+	ex.phaseTimes[sessionTransactionReceived] = ex.phaseTimes[sessionQueryReceived]
+	ex.phaseTimes[sessionFirstStartExecTransaction] = time.Now()
+	ex.phaseTimes[sessionMostRecentStartExecTransaction] = ex.phaseTimes[sessionFirstStartExecTransaction]
+
+	onTxnFinish = func(ev txnEvent) {
+		ex.phaseTimes[sessionEndExecTransaction] = time.Now()
+		ex.recordTransaction(ev, implicit, txnStart)
+		ex.extraTxnState.transactionStatementIDs = nil
+	}
+	onTxnRestart = func() {
+		ex.phaseTimes[sessionMostRecentStartExecTransaction] = time.Now()
+		ex.extraTxnState.transactionStatementIDs = nil
+	}
+	return onTxnFinish, onTxnRestart
 }
 
 func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart time.Time) {
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
+
+	// First we go through all the statements in the transaction and hash their
+	// queries to get their IDs.
+	h := fnv.New128()
+	for _, stmtID := range ex.extraTxnState.transactionStatementIDs {
+		// Add the current statementID to the running hash state we've been
+		// accumulating.
+		h.Write([]byte(stmtID))
+	}
+	txnKey := txnKey(fmt.Sprintf("%x", h.Sum(nil)))
+
+	txnServiceLat := ex.phaseTimes.getTransactionServiceLatency()
+	txnRetryLat := ex.phaseTimes.getTransactionRetryLatency()
+
 	ex.statsCollector.recordTransaction(
+		txnKey,
 		txnTime.Seconds(),
 		ev,
 		implicit,
+		ex.extraTxnState.autoRetryCounter,
+		ex.extraTxnState.transactionStatementIDs,
+		txnServiceLat,
+		txnRetryLat,
 	)
 }

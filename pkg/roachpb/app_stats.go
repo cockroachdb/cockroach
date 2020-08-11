@@ -11,10 +11,34 @@
 package roachpb
 
 import (
+	"fmt"
+	"hash/fnv"
 	"math"
 
 	"github.com/cockroachdb/errors"
 )
+
+type StmtID string
+
+func ConstructStatementID(
+	anonymizedStmt string, distSQLUsed bool, failed bool, implicitTxn bool, vectorized bool,
+) StmtID {
+	h := fnv.New128()
+	h.Write([]byte(anonymizedStmt))
+	if distSQLUsed {
+		h.Write([]byte("distributed"))
+	}
+	if failed {
+		h.Write([]byte("failed"))
+	}
+	if implicitTxn {
+		h.Write([]byte("implicit_txn"))
+	}
+	if vectorized {
+		h.Write([]byte("vectorized"))
+	}
+	return StmtID(fmt.Sprintf("%x", h.Sum(nil)))
+}
 
 // GetVariance retrieves the variance of the values.
 func (l *NumericStat) GetVariance(count int64) float64 {
@@ -71,6 +95,20 @@ func (s *TxnStats) Add(other TxnStats) {
 	s.TxnCount += other.TxnCount
 	s.ImplicitCount += other.ImplicitCount
 	s.CommittedCount += other.CommittedCount
+}
+
+// Add combines other into TransactionStatistics.
+func (t *TransactionStatistics) Add(other *TransactionStatistics) {
+	if other.MaxRetries > t.MaxRetries {
+		t.MaxRetries = other.MaxRetries
+	}
+
+	t.CommitLat.Add(other.CommitLat, t.Count, other.Count)
+	t.RetryLat.Add(other.RetryLat, t.Count, other.Count)
+	t.ServiceLat.Add(other.ServiceLat, t.Count, other.Count)
+	t.NumRows.Add(other.NumRows, t.Count, other.Count)
+
+	t.Count += other.Count
 }
 
 // Add combines other into this StatementStatistics.
