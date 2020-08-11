@@ -76,3 +76,13 @@ if [[ -n "${release_branch}" ]] ; then
   gcloud container images add-tag "${gcr_repository}:${build_name}" "${gcr_repository}:latest-${release_branch}-build"
 fi
 tc_end_block "Tag docker image as latest-build"
+
+
+# Make finding the tag name easy.
+cat << EOF
+
+
+Git Tag: ${build_name}
+
+
+EOF
