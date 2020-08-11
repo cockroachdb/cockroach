@@ -324,6 +324,50 @@ func URINeedsGlobExpansion(uri string) bool {
 	return containsGlob(parsedURI.Path)
 }
 
+// ExternalStorageRequiresAdminRole checks if the provided ExternalStorage URI
+// should only be accessed by a super-user.
+// The following scenarios are considered super-user access only:
+//
+// - implicit AUTH: access will use the node's machine account and only a
+// super user should have the authority to use these credentials.
+//
+// - HTTP/HTTPS/Custom endpoint: requests are made by the server, in the
+// server's network, potentially behind a firewall and only a super user should
+// be able to do this.
+//
+// - nodelocal: this is the node's shared filesytem and so only a super user
+// should be able to interact with it.
+func URIRequiresAdminRole(path string) (bool, string, error) {
+	uri, err := url.Parse(path)
+	if err != nil {
+		return true, "", err
+	}
+	requiresAdminRole := true
+	switch uri.Scheme {
+	case "s3":
+		auth := uri.Query().Get(AuthParam)
+		requiresAdminRole = auth == AuthParamImplicit
+
+		// Check if a custom endpoint has been specified in the S3 URI.
+		requiresAdminRole = requiresAdminRole || uri.Query().Get(AWSEndpointParam) != ""
+	case "gs":
+		auth := uri.Query().Get(AuthParam)
+		requiresAdminRole = auth == AuthParamImplicit
+	case "azure":
+		// Azure does not support implicit authentication i.e. all credentials have
+		// to be specified as part of the URI. Hence, we do not need the user to be
+		// an admin.
+		requiresAdminRole = false
+	case "http", "https", "nodelocal":
+		requiresAdminRole = true
+	case "experimental-workload", "workload", "userfile":
+		requiresAdminRole = false
+	default:
+		return requiresAdminRole, "", errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
+	}
+	return requiresAdminRole, uri.Scheme, nil
+}
+
 func containsGlob(str string) bool {
 	return strings.ContainsAny(str, "*?[")
 }

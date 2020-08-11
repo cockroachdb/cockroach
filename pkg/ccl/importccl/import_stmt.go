@@ -243,10 +243,6 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if err := p.RequireAdminRole(ctx, "IMPORT"); err != nil {
-			return err
-		}
-
 		if !p.ExtendedEvalContext().TxnImplicit {
 			return errors.Errorf("IMPORT cannot be used inside a transaction")
 		}
@@ -260,6 +256,23 @@ func importPlanHook(
 		if err != nil {
 			return err
 		}
+
+		// Certain ExternalStorage URIs require super-user access. Check all the
+		// URIs passed to the IMPORT command.
+		for _, file := range filenamePatterns {
+			requiresAdmin, uriScheme, err := cloudimpl.URIRequiresAdminRole(file)
+			if err != nil {
+				return err
+			}
+			if requiresAdmin {
+				err := p.RequireAdminRole(ctx,
+					fmt.Sprintf("IMPORT from the specified %s URI", uriScheme))
+				if err != nil {
+					return err
+				}
+			}
+		}
+
 		var files []string
 		if _, ok := opts[importOptionDisableGlobMatch]; ok {
 			files = filenamePatterns
@@ -949,7 +962,7 @@ func prepareNewTableDescsForIngestion(
 		return nil, err
 	}
 
-	// tableDescs constains the same slice as newMutableTableDescriptors but
+	// tableDescs contains the same slice as newMutableTableDescriptors but
 	// as sqlbase.TableDescriptor.
 	tableDescs := make([]sqlbase.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
@@ -1318,7 +1331,6 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}
-
 		return nil
 	})
 
