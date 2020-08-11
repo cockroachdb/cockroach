@@ -113,11 +113,8 @@ func vetCmd(t *testing.T, dir, name string, args []string, filters []stream.Filt
 // goroutines internally using a shared loader object).
 //
 // Performance notes: This needs a lot of memory and CPU time. As of
-// 2018-07-13, the largest consumers of memory are
-// TestMegacheck/staticcheck (9GB) and TestUnused (6GB). Memory
-// consumption of staticcheck could be reduced by running it on a
-// subset of the packages at a time, although this comes at the
-// expense of increased running time.
+// 2020-08-11, the largest consumers of memory are
+// TestLint/RoachVet.
 func TestLint(t *testing.T) {
 	crdb, err := build.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
@@ -1454,60 +1451,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestStaticCheck", func(t *testing.T) {
-		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
-		skip.UnderShort(t)
-		cmd, stderr, filter, err := dirCmd(
-			crdb.Dir,
-			"staticcheck",
-			"-unused.whole-program",
-			pkgScope,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				// Skip .pb.go and .pb.gw.go generated files.
-				stream.GrepNot(`pkg/.*\.pb(\.gw|)\.go:`),
-				// Skip generated file.
-				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
-				stream.GrepNot(`pkg/ui/distccl/bindata.go`),
-				// sql.go is the generated parser, which sets sqlDollar in all cases,
-				// even if it might not be used again.
-				stream.GrepNot(`pkg/sql/parser/sql.go:.*this value of sqlDollar is never used`),
-				// Generated file containing many unused postgres error codes.
-				stream.GrepNot(`pkg/sql/pgwire/pgcode/codes.go:.* var .* is unused`),
-				// The methods in exprgen.customFuncs are used via reflection.
-				stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
-				// Using deprecated method to COPY because the copyin driver does not
-				// implement StmtExecContext as of 07/06/2020.
-				stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
-				stream.GrepNot(`pkg/cli/userfile.go:.* stmt.Exec is deprecated: .*`),
-				// Cause is a method used by pkg/cockroachdb/errors (through an unnamed
-				// interface).
-				stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
-				// Using deprecated WireLength call.
-				stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
-			), func(s string) {
-				t.Errorf("\n%s", s)
-			}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestVectorizedPanics", func(t *testing.T) {
 		// t.Parallel() // Disabled due to CI not parsing failure from parallel tests correctly. Can be re-enabled on Go 1.15 (see: https://github.com/golang/go/issues/38458).
 		cmd, stderr, filter, err := dirCmd(
@@ -1830,6 +1773,28 @@ func TestLint(t *testing.T) {
 			// roachtest is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
+
+			// Skip .pb.go and .pb.gw.go generated files.
+			stream.GrepNot(`pkg/.*\.pb(\.gw|)\.go:`),
+			// Skip generated file.
+			stream.GrepNot(`pkg/ui/distoss/bindata.go`),
+			stream.GrepNot(`pkg/ui/distccl/bindata.go`),
+			// sql.go is the generated parser, which sets sqlDollar in all cases,
+			// even if it might not be used again.
+			stream.GrepNot(`pkg/sql/parser/sql\.(go|y):.*this value of sqlDollar is never used`),
+			// Generated file containing many unused postgres error codes.
+			stream.GrepNot(`pkg/sql/pgwire/pgcode/codes.go:.* var .* is unused`),
+			// The methods in exprgen.customFuncs are used via reflection.
+			stream.GrepNot(`pkg/sql/opt/optgen/exprgen/custom_funcs.go:.* func .* is unused`),
+			// Using deprecated method to COPY because the copyin driver does not
+			// implement StmtExecContext as of 07/06/2020.
+			stream.GrepNot(`pkg/cli/nodelocal.go:.* stmt.Exec is deprecated: .*`),
+			stream.GrepNot(`pkg/cli/userfile.go:.* stmt.Exec is deprecated: .*`),
+			// Cause is a method used by pkg/cockroachdb/errors (through an unnamed
+			// interface).
+			stream.GrepNot(`pkg/.*.go:.* func .*\.Cause is unused`),
+			// Using deprecated WireLength call.
+			stream.GrepNot(`pkg/rpc/stats_handler.go:.*v.WireLength is deprecated: This field is never set.*`),
 		}
 
 		roachlint, err := exec.LookPath("roachvet")
@@ -1837,7 +1802,7 @@ func TestLint(t *testing.T) {
 			t.Fatalf("failed to find roachvet: %v", err)
 		}
 		vetCmd(t, crdb.Dir, "go",
-			[]string{"vet", "-vettool", roachlint, "-all", "-printf.funcs", printfuncs, pkgScope},
+			[]string{"vet", "-vettool", roachlint, "-all", "-printf.funcs", printfuncs, "-unused.wholeprogram", pkgScope},
 			filters)
 
 	})

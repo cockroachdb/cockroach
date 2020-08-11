@@ -1149,10 +1149,6 @@ lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
 lint: bin/returncheck bin/roachvet bin/optfmt
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
-	@# Run 'go build -i' to ensure we have compiled object files available for all
-	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
-	@# https://groups.google.com/forum/#!msg/golang-dev/qfa3mHN4ZPA/X2UzjNV1BAAJ.
-	$(xgo) build -i -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(xgo) test $(GOTESTFLAGS) ./pkg/testutils/lint -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -timeout $(TESTTIMEOUT) -run 'Lint/$(TESTS)'
 
 .PHONY: lintshort
