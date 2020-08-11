@@ -248,8 +248,8 @@ func (u *sqlSymUnion) storageParams() []tree.StorageParam {
     }
     return nil
 }
-func (u *sqlSymUnion) persistenceType() bool {
- return u.val.(bool)
+func (u *sqlSymUnion) persistence() tree.Persistence {
+ return u.val.(tree.Persistence)
 }
 func (u *sqlSymUnion) colType() *types.T {
     if colType, ok := u.val.(*types.T); ok && colType != nil {
@@ -1121,8 +1121,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %type <tree.Expr> opt_alter_column_using
 
-%type <bool> opt_temp
-%type <bool> opt_temp_create_table
+%type <tree.Persistence> opt_temp
+%type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
 %type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
@@ -2817,7 +2817,7 @@ create_ddl_stmt:
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
-| CREATE opt_temp_create_table TABLE error   // SHOW HELP: CREATE TABLE
+| CREATE opt_persistence_temp_table TABLE error   // SHOW HELP: CREATE TABLE
 | create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
@@ -5111,7 +5111,7 @@ alter_schema_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp_create_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+  CREATE opt_persistence_temp_table TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5121,12 +5121,12 @@ create_table_stmt:
       Defs: $6.tblDefs(),
       AsSource: nil,
       PartitionBy: $9.partitionBy(),
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       StorageParams: $10.storageParams(),
       OnCommit: $11.createTableOnCommitSetting(),
     }
   }
-| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5136,7 +5136,7 @@ create_table_stmt:
       Defs: $9.tblDefs(),
       AsSource: nil,
       PartitionBy: $12.partitionBy(),
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       StorageParams: $13.storageParams(),
       OnCommit: $14.createTableOnCommitSetting(),
     }
@@ -5205,7 +5205,7 @@ storage_parameter_list:
   }
 
 create_table_as_stmt:
-  CREATE opt_temp_create_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
+  CREATE opt_persistence_temp_table TABLE table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5216,9 +5216,10 @@ create_table_as_stmt:
       AsSource: $8.slct(),
       StorageParams: $6.storageParams(),
       OnCommit: $10.createTableOnCommitSetting(),
+      Persistence: $2.persistence(),
     }
   }
-| CREATE opt_temp_create_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
+| CREATE opt_persistence_temp_table TABLE IF NOT EXISTS table_name create_as_opt_col_list opt_table_with AS select_stmt opt_create_as_data opt_create_table_on_commit
   {
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateTable{
@@ -5229,6 +5230,7 @@ create_table_as_stmt:
       AsSource: $11.slct(),
       StorageParams: $9.storageParams(),
       OnCommit: $13.createTableOnCommitSetting(),
+      Persistence: $2.persistence(),
     }
   }
 
@@ -5250,20 +5252,20 @@ opt_create_as_data:
  *
  * NOTE: PG only accepts GLOBAL/LOCAL keywords for temp tables -- not sequences
  * and views. These keywords are no-ops in PG. This behavior is replicated by
- * making the distinction between opt_temp and opt_temp_create_table.
+ * making the distinction between opt_temp and opt_persistence_temp_table.
  */
  opt_temp:
-  TEMPORARY         { $$.val = true }
-| TEMP              { $$.val = true }
-| /*EMPTY*/         { $$.val = false }
+  TEMPORARY         { $$.val = tree.PersistenceTemporary }
+| TEMP              { $$.val = tree.PersistenceTemporary }
+| /*EMPTY*/         { $$.val = tree.PersistencePermanent }
 
-opt_temp_create_table:
-   opt_temp
-|  LOCAL TEMPORARY   { $$.val = true }
-| LOCAL TEMP        { $$.val = true }
-| GLOBAL TEMPORARY  { $$.val = true }
-| GLOBAL TEMP       { $$.val = true }
-| UNLOGGED          { return unimplemented(sqllex, "create unlogged") }
+opt_persistence_temp_table:
+  opt_temp
+| LOCAL TEMPORARY   { $$.val = tree.PersistenceTemporary }
+| LOCAL TEMP        { $$.val = tree.PersistenceTemporary }
+| GLOBAL TEMPORARY  { $$.val = tree.PersistenceTemporary }
+| GLOBAL TEMP       { $$.val = tree.PersistenceTemporary }
+| UNLOGGED          { $$.val = tree.PersistenceUnlogged }
 
 opt_table_elem_list:
   table_elem_list
@@ -5945,7 +5947,7 @@ create_sequence_stmt:
     name := $4.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateSequence {
       Name: name,
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       Options: $5.seqOpts(),
     }
   }
@@ -5954,7 +5956,7 @@ create_sequence_stmt:
     name := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateSequence {
       Name: name, Options: $8.seqOpts(),
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       IfNotExists: true,
     }
   }
@@ -6083,7 +6085,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       IfNotExists: false,
       Replace: false,
     }
@@ -6097,7 +6099,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $8.nameList(),
       AsSource: $10.slct(),
-      Temporary: $4.persistenceType(),
+      Persistence: $4.persistence(),
       IfNotExists: false,
       Replace: true,
     }
@@ -6109,7 +6111,7 @@ create_view_stmt:
       Name: name,
       ColumnNames: $9.nameList(),
       AsSource: $11.slct(),
-      Temporary: $2.persistenceType(),
+      Persistence: $2.persistence(),
       IfNotExists: true,
       Replace: false,
     }

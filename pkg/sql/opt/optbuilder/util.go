@@ -446,13 +446,13 @@ func (b *Builder) resolveAndBuildScalar(
 // In Postgres, qualifying an object name with pg_temp is equivalent to explicitly
 // specifying TEMP/TEMPORARY in the CREATE syntax. resolveTemporaryStatus returns
 // true if either(or both) of these conditions are true.
-func resolveTemporaryStatus(name *tree.TableName, explicitTemp bool) bool {
+func resolveTemporaryStatus(name *tree.TableName, persistence tree.Persistence) bool {
 	// An explicit schema can only be provided in the CREATE TEMP TABLE statement
 	// iff it is pg_temp.
-	if explicitTemp && name.ExplicitSchema && name.SchemaName != sessiondata.PgTempSchemaName {
+	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != sessiondata.PgTempSchemaName {
 		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
 	}
-	return name.SchemaName == sessiondata.PgTempSchemaName || explicitTemp
+	return name.SchemaName == sessiondata.PgTempSchemaName || persistence.IsTemporary()
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created

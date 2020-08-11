@@ -182,7 +182,7 @@ func (p *planner) getSchemaIDForCreate(
 // as well as the schema id. It returns valid data in the case that
 // the desired object exists.
 func getTableCreateParams(
-	params runParams, dbID descpb.ID, isTemporary bool, tableName *tree.TableName,
+	params runParams, dbID descpb.ID, persistence tree.Persistence, tableName *tree.TableName,
 ) (tKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
@@ -193,7 +193,7 @@ func getTableCreateParams(
 		}
 	}
 
-	if isTemporary {
+	if persistence.IsTemporary() {
 		if !params.SessionData().TempTablesEnabled {
 			return nil, 0, errors.WithTelemetry(
 				pgerror.WithCandidateCode(
@@ -227,6 +227,14 @@ func getTableCreateParams(
 		tKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, dbID, schemaID, tableName.Table())
 	}
 
+	if persistence.IsUnlogged() {
+		telemetry.Inc(sqltelemetry.CreateUnloggedTableCounter)
+		params.p.SendClientNotice(
+			params.ctx,
+			pgnotice.Newf("UNLOGGED TABLE will behave as a regular table in CockroachDB"),
+		)
+	}
+
 	exists, id, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
 	if err == nil && exists {
@@ -245,9 +253,8 @@ func getTableCreateParams(
 
 func (n *createTableNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
-	isTemporary := n.n.Temporary
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, &n.n.Table)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Table)
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
@@ -258,7 +265,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	if n.n.Interleave != nil {
 		telemetry.Inc(sqltelemetry.CreateInterleavedTableCounter)
 	}
-	if isTemporary {
+	if n.n.Persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempTableCounter)
 
 		// TODO(#46556): support ON COMMIT DROP and DELETE ROWS on TEMPORARY TABLE.
@@ -322,7 +329,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		desc, err = makeTableDescIfAs(params,
-			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext(), isTemporary)
+			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext())
 		if err != nil {
 			return err
 		}
@@ -334,7 +341,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	} else {
 		affected = make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
-		desc, err = makeTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected, isTemporary)
+		desc, err = makeTableDesc(params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, privs, affected)
 		if err != nil {
 			return err
 		}
@@ -687,15 +694,15 @@ func ResolveFK(
 		return err
 	}
 	if tbl.Temporary != target.Temporary {
-		tablePersistenceType := "permanent"
+		persistenceType := "permanent"
 		if tbl.Temporary {
-			tablePersistenceType = "temporary"
+			persistenceType = "temporary"
 		}
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"constraints on %s tables may reference only %s tables",
-			tablePersistenceType,
-			tablePersistenceType,
+			persistenceType,
+			persistenceType,
 		)
 	}
 	if target.ID == tbl.ID {
@@ -1166,7 +1173,6 @@ func makeTableDescIfAs(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
-	temporary bool,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	colResIndex := 0
 	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
@@ -1203,7 +1209,6 @@ func makeTableDescIfAs(
 		creationTime,
 		privileges,
 		nil, /* affected */
-		temporary,
 	)
 	desc.CreateQuery = getFinalSourceQuery(p.AsSource, evalContext)
 	return desc, err
@@ -1247,14 +1252,14 @@ func MakeTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	sessionData *sessiondata.SessionData,
-	temporary bool,
+	persistence tree.Persistence,
 ) (sqlbase.MutableTableDescriptor, error) {
 	// Used to delay establishing Column/Sequence dependency until ColumnIDs have
 	// been populated.
 	columnDefaultExprs := make([]tree.TypedExpr, len(n.Defs))
 
 	desc := sqlbase.InitTableDescriptor(
-		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, temporary,
+		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, n.Persistence,
 	)
 
 	if err := checkStorageParameters(ctx, semaCtx, n.StorageParams, storageParamExpectedTypes); err != nil {
@@ -1807,7 +1812,6 @@ func makeTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*sqlbase.MutableTableDescriptor,
-	temporary bool,
 ) (ret sqlbase.MutableTableDescriptor, err error) {
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by MakeTableDesc.
@@ -1852,7 +1856,7 @@ func makeTableDesc(
 				seqDbDesc,
 				parentSchemaID,
 				seqName,
-				temporary,
+				n.Persistence,
 				seqOpts,
 				fmt.Sprintf("creating sequence %s for new table %s", seqName, n.Table.Table()),
 			); err != nil {
@@ -1885,7 +1889,7 @@ func makeTableDesc(
 			&params.p.semaCtx,
 			params.EvalContext(),
 			params.SessionData(),
-			temporary,
+			n.Persistence,
 		)
 	})
 

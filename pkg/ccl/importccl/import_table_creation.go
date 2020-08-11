@@ -169,7 +169,7 @@ func MakeSimpleTableDescriptor(
 		semaCtx,
 		&evalCtx,
 		&sessiondata.SessionData{}, /* sessionData */
-		false,                      /* temporary */
+		tree.PersistencePermanent,
 	)
 	if err != nil {
 		return nil, err

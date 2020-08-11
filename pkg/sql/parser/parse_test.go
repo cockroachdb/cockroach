@@ -109,6 +109,7 @@ func TestParse(t *testing.T) {
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TEMPORARY TABLE a (b INT8)`},
+		{`CREATE UNLOGGED TABLE a (b INT8)`},
 		{`EXPLAIN CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT8, c INT8)`},
@@ -2876,8 +2877,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET LOCAL foo = bar`, 32562, ``, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
-
-		{`CREATE UNLOGGED TABLE a(b INT8)`, 0, `create unlogged`, ``},
 
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},

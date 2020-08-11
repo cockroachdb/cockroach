@@ -661,6 +661,11 @@ func (h *hasher) HashMaterializeClause(val tree.MaterializeClause) {
 	h.HashBool(val.Materialize)
 }
 
+func (h *hasher) HashPersistence(val tree.Persistence) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
 // ----------------------------------------------------------------------
 //
 // Equality functions
@@ -1051,6 +1056,10 @@ func (h *hasher) IsOpaqueMetadataEqual(l, r opt.OpaqueMetadata) bool {
 
 func (h *hasher) IsMaterializeClauseEqual(l, r tree.MaterializeClause) bool {
 	return l.Set == r.Set && l.Materialize == r.Materialize
+}
+
+func (h *hasher) IsPersistenceEqual(l, r tree.Persistence) bool {
+	return l == r
 }
 
 // encodeDatum turns the given datum into an encoded string of bytes. If two
