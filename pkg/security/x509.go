@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"math/big"
 	"net"
 	"time"
@@ -33,11 +34,14 @@ const (
 	validFrom     = -time.Hour * 24
 	maxPathLength = 1
 	caCommonName  = "Cockroach CA"
+	tenantsOU     = "Tenants"
 )
 
 // newTemplate returns a partially-filled template.
 // It should be further populated based on whether the cert is for a CA or node.
-func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, error) {
+func newTemplate(
+	commonName string, lifetime time.Duration, orgUnits ...string,
+) (*x509.Certificate, error) {
 	// Generate a random serial number.
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -52,8 +56,9 @@ func newTemplate(commonName string, lifetime time.Duration) (*x509.Certificate, 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Cockroach"},
-			CommonName:   commonName,
+			Organization:       []string{"Cockroach"},
+			OrganizationalUnit: orgUnits,
+			CommonName:         commonName,
 		},
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
@@ -176,6 +181,47 @@ func GenerateUIServerCert(
 	addHostsToTemplate(template, hosts)
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, certPublicKey, caPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
+}
+
+// GenerateTenantClientCert generates a tenant client certificate and returns the cert bytes.
+// Takes in the CA cert and private key, the tenant client public key, the certificate lifetime,
+// and the tenant id.
+//
+// Tenant client certificates add OU=Tenants in the subject field to prevent
+// using them as user certificates.
+func GenerateTenantClientCert(
+	caCert *x509.Certificate,
+	caPrivateKey crypto.PrivateKey,
+	clientPublicKey crypto.PublicKey,
+	lifetime time.Duration,
+	tenantID uint64,
+) ([]byte, error) {
+
+	if tenantID == 0 {
+		return nil, errors.Errorf("tenantId %d is invalid (requires != 0)", tenantID)
+	}
+
+	// Create template for user.
+	template, err := newTemplate(fmt.Sprintf("%d", tenantID), lifetime, tenantsOU)
+	if err != nil {
+		return nil, err
+	}
+
+	// Don't issue certificates that outlast the CA cert.
+	if err := checkLifetimeAgainstCA(template, caCert); err != nil {
+		return nil, err
+	}
+
+	// Set client-specific fields.
+	// Client authentication only.
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
 	}

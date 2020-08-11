@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -98,7 +99,7 @@ var (
 // - client.node.crt    client certificate for the 'node' user. If it does not exist,
 //                      fall back on 'node.crt'.
 type CertificateManager struct {
-	tenantIdentifier string
+	tenantIdentifier uint64
 	CertsLocator
 
 	// The metrics struct is initialized at init time and metrics do their
@@ -176,7 +177,7 @@ func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager
 type cmOptions struct {
 	// tenantIdentifier, if set, specifies the tenant to use for loading tenant
 	// client certs.
-	tenantIdentifier string
+	tenantIdentifier uint64
 }
 
 // Option is an option to NewCertificateManager.
@@ -185,7 +186,7 @@ type Option func(*cmOptions)
 // ForTenant is an option to NewCertificateManager which ties the manager to
 // the provided tenant. Without this option, tenant client certs are not
 // available.
-func ForTenant(tenantIdentifier string) Option {
+func ForTenant(tenantIdentifier uint64) Option {
 	return func(opts *cmOptions) {
 		opts.tenantIdentifier = tenantIdentifier
 	}
@@ -448,7 +449,11 @@ func (cm *CertificateManager) LoadCertificates() error {
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
-			if ci.Name == cm.tenantIdentifier {
+			tenantID, err := strconv.ParseUint(ci.Name, 10, 64)
+			if err != nil {
+				return errors.Errorf("invalid tenant id %s", ci.Name)
+			}
+			if tenantID == cm.tenantIdentifier {
 				tenantClientCert = ci
 			}
 		case TenantClientCAPem:
@@ -496,8 +501,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 		}
 	}
 
-	if tenantClientCert == nil && cm.tenantIdentifier != "" {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %s", cm.tenantIdentifier)
+	if tenantClientCert == nil && cm.tenantIdentifier != 0 {
+		return makeErrorf(errors.New("tenant client cert not found"), "for %d", cm.tenantIdentifier)
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {
