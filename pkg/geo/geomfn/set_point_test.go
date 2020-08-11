@@ -14,10 +14,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
-
-	"github.com/cockroachdb/cockroach/pkg/geo"
 )
 
 func TestSetPoint(t *testing.T) {
@@ -38,6 +37,12 @@ func TestSetPoint(t *testing.T) {
 			index:      -3,
 			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
 			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 0, 0, 3, 3, 4, 4}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 4, 4}),
+			index:      -4,
+			point:      geom.NewPointFlat(geom.XY, []float64{0, 0}),
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{0, 0, 2, 2, 3, 3, 4, 4}),
 		},
 		{
 			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),

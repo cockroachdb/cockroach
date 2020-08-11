@@ -16,8 +16,7 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
-// Scale returns a modified Geometry whose coordinates are multiplied by the factors.
-// If there are missing dimensions in factors, the corresponding dimensions are not scaled.
+// SetPoint sets the point at the given index of lineString; index is 0-based.
 func SetPoint(lineString *geo.Geometry, index int, point *geo.Geometry) (*geo.Geometry, error) {
 	g, err := lineString.AsGeomT()
 	if err != nil {
@@ -53,7 +52,7 @@ func setPoint(lineString *geom.LineString, index int, point *geom.Point) (*geom.
 	coords := lineString.Coords()
 	hasNegIndex := index < 0
 
-	if index >= len(coords) || (hasNegIndex && index*-1 >= len(coords)) {
+	if index >= len(coords) || (hasNegIndex && index*-1 > len(coords)) {
 		return nil, errors.Newf("index %d out of range of lineString with %d coordinates", index, len(coords))
 	}
 
