@@ -664,3 +664,30 @@ func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
 	}
 	return -1
 }
+
+type columnKinds struct {
+	// If true, include columns being added or dropped from the table. These
+	// are currently required by the execution engine as "fetch columns", when
+	// performing mutation DML statements (INSERT, UPDATE, UPSERT, DELETE).
+	includeMutations bool
+
+	// If true, include system columns.
+	includeSystem bool
+}
+
+// tableOrdinals returns a slice of ordinals that correspond to table columns of
+// the desired kinds.
+func tableOrdinals(tab cat.Table, k columnKinds) []int {
+	n := tab.ColumnCount()
+	ordinals := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		kind := tab.ColumnKind(i)
+
+		if kind == cat.Ordinary ||
+			(k.includeMutations && (kind == cat.WriteOnly || kind == cat.DeleteOnly)) ||
+			(k.includeSystem && kind == cat.System) {
+			ordinals = append(ordinals, i)
+		}
+	}
+	return ordinals
+}

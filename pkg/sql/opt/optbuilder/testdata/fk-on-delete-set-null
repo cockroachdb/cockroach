@@ -29,11 +29,11 @@ root
            ├── update-mapping:
            │    └── p_new:12 => child.p:6
            └── project
-                ├── columns: p_new:12 c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+                ├── columns: p_new:12 c:8!null child.p:9
                 ├── semi-join (hash)
-                │    ├── columns: c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+                │    ├── columns: c:8!null child.p:9
                 │    ├── scan child
-                │    │    └── columns: c:8!null child.p:9 child.crdb_internal_mvcc_timestamp:10
+                │    │    └── columns: c:8!null child.p:9
                 │    ├── with-scan &1
                 │    │    ├── columns: p:11!null
                 │    │    └── mapping:
@@ -88,15 +88,15 @@ root
            │    └── column25:25 => x:13
            ├── check columns: check1:26
            └── project
-                ├── columns: check1:26!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20 p_new:24 column25:25
+                ├── columns: check1:26!null c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24 column25:25
                 ├── project
-                │    ├── columns: column25:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20 p_new:24
+                │    ├── columns: column25:25 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 p_new:24
                 │    ├── project
-                │    │    ├── columns: p_new:24 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+                │    │    ├── columns: p_new:24 c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
                 │    │    ├── semi-join (hash)
-                │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+                │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
                 │    │    │    ├── scan child_multicol
-                │    │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19 child_multicol.crdb_internal_mvcc_timestamp:20
+                │    │    │    │    ├── columns: c:15!null child_multicol.p:16 child_multicol.q:17 child_multicol.r:18 x:19
                 │    │    │    │    ├── check constraint expressions
                 │    │    │    │    │    └── (c:15 > 100) OR (child_multicol.p:16 IS NOT NULL)
                 │    │    │    │    └── computed column expressions

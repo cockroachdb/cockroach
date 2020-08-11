@@ -701,10 +701,12 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 		// the two tables in the self-join.
 		scanScope := mb.b.buildScan(
 			mb.b.addTable(mb.tab, &mb.alias),
-			nil, /* ordinals */
+			tableOrdinals(mb.tab, columnKinds{
+				includeMutations: false,
+				includeSystem:    false,
+			}),
 			nil, /* indexFlags */
 			noRowLocking,
-			excludeMutations,
 			inScope,
 		)
 
@@ -817,10 +819,12 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// TODO(andyk): Why does execution engine need mutation columns for Insert?
 	fetchScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
-		nil, /* ordinals */
+		tableOrdinals(mb.tab, columnKinds{
+			includeMutations: true,
+			includeSystem:    true,
+		}),
 		nil, /* indexFlags */
 		noRowLocking,
-		includeMutations,
 		inScope,
 	)
 
@@ -831,12 +835,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	mb.canaryColID = canaryScopeCol.id
 
 	// Set fetchColIDs to reference the columns created for the fetch values.
-	for i := range fetchScope.cols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !fetchScope.cols[i].system {
-			mb.fetchColIDs[i] = fetchScope.cols[i].id
-		}
-	}
+	mb.setFetchColIDs(fetchScope.cols)
 
 	// Add the fetch columns to the current scope. It's OK to modify the current
 	// scope because it contains only INSERT columns that were added by the

@@ -112,12 +112,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 	)
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !mb.outScope.cols[i].system {
-			mb.fetchColIDs[i] = mb.outScope.cols[i].id
-		}
-	}
+	mb.setFetchColIDs(mb.outScope.cols)
 	mb.buildDelete(nil /* returning */)
 	return mb.outScope.expr, nil
 }
@@ -225,12 +220,7 @@ func (cb *onDeleteSetBuilder) Build(
 	)
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range mb.outScope.cols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !mb.outScope.cols[i].system {
-			mb.fetchColIDs[i] = mb.outScope.cols[i].id
-		}
-	}
+	mb.setFetchColIDs(mb.outScope.cols)
 	// Add target columns.
 	numFKCols := fk.ColumnCount()
 	for i := 0; i < numFKCols; i++ {
@@ -294,10 +284,12 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 ) (outScope *scope) {
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
-		nil, /* ordinals */
+		tableOrdinals(childTable, columnKinds{
+			includeMutations: false,
+			includeSystem:    false,
+		}),
 		nil, /* indexFlags */
 		noRowLocking,
-		excludeMutations,
 		b.allocScope(),
 	)
 
@@ -453,12 +445,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 	newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
 
 	// Set list of columns that will be fetched by the input expression.
-	for i := range tableScopeCols {
-		// Ensure that we don't add system columns to the fetch columns.
-		if !tableScopeCols[i].system {
-			mb.fetchColIDs[i] = tableScopeCols[i].id
-		}
-	}
+	mb.setFetchColIDs(tableScopeCols)
 	// Add target columns.
 	for i := 0; i < numFKCols; i++ {
 		tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
@@ -541,10 +528,12 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 ) (outScope *scope) {
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
-		nil, /* ordinals */
+		tableOrdinals(childTable, columnKinds{
+			includeMutations: false,
+			includeSystem:    false,
+		}),
 		nil, /* indexFlags */
 		noRowLocking,
-		excludeMutations,
 		b.allocScope(),
 	)
 
