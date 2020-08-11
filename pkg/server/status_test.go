@@ -13,9 +13,11 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1536,6 +1538,109 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		if strings.Contains(event.PrettyInfo.NewDesc, "Min-System") ||
 			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {
 			t.Errorf("unexpected key value found in rangelog event info: %+v", event.PrettyInfo)
+		}
+	}
+}
+
+func TestStatusAPITransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	thirdServer := testCluster.Server(2)
+	firstServerProto := testCluster.Server(0)
+
+	testCases := map[string]struct {
+		query         string
+		fingerprinted string
+		count         int
+		shouldRetry   bool
+	}{
+		"app1": {query: `CREATE DATABASE roachblog`, count: 1},
+		"app2": {query: `SET database = roachblog`, count: 1},
+		"app3": {query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1},
+		"app4": {
+			query:         `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+			count:         1,
+		},
+		"app5": {query: `SELECT * FROM posts`, count: 2},
+		"app6": {query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3},
+		"app7": {
+			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+		},
+		"app8": {
+			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+		},
+	}
+
+	for i := 1; i <= len(testCases); i++ {
+		appName := fmt.Sprintf("app%d", i)
+		tc := testCases[appName]
+		// Create a brand new connection for each app, so that we don't pollute
+		// transaction stats collection with `SET application_name` queries.
+		pgURL, cleanupGoDB := sqlutils.PGUrl(
+			t, thirdServer.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
+			t.Fatal(err)
+		}
+		for c := 0; c < tc.count; c++ {
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+		cleanupGoDB()
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, respTransaction := range resp.Transactions {
+		appName := respTransaction.StatsData.App
+		tc, found := testCases[appName]
+		if !found {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		stats := respTransaction.StatsData.Stats
+		if tc.count != int(stats.Count) {
+			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)
+		}
+		if tc.shouldRetry && respTransaction.StatsData.Stats.MaxRetries == 0 {
+			t.Fatalf("app: %s, expected retries, got none\n", appName)
+		}
+
+		// Sanity check numeric stat values
+		if respTransaction.StatsData.Stats.CommitLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for commit latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.RetryLat.Mean <= 0 && tc.shouldRetry {
+			t.Fatalf("app: %s, expected retry latency mean to be non-zero as retries were involved\n", appName)
+		}
+		if respTransaction.StatsData.Stats.RetryLat.Mean != 0 && !tc.shouldRetry {
+			t.Fatalf("app: %s, expected retry latency mean to be zero as no retries were expected\n", appName)
+		}
+		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
 		}
 	}
 }
