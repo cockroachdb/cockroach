@@ -1250,6 +1250,9 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
+	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	DebugCmd.AddCommand(debugDoctorCmd)
+
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
 		"number of concurrent writers")
