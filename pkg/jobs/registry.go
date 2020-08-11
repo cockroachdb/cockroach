@@ -557,11 +557,11 @@ const gcInterval = 1 * time.Hour
 func (r *Registry) Start(
 	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
-	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
-	// liveness epoch before we wait out the first cancelInterval.
-	r.maybeCancelJobs(ctx, r.nl)
 
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
+		// Calling maybeCancelJobs once at the start ensures we have an up-to-date
+		// liveness epoch before we wait out the first cancelInterval.
+		r.maybeCancelJobs(ctx, r.nl)
 		for {
 			select {
 			case <-stopper.ShouldStop():
