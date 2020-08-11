@@ -37,6 +37,7 @@ func newMysqloutfileReader(
 	walltime int64,
 	parallelism int,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
+	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) (*mysqloutfileReader, error) {
 	return &mysqloutfileReader{
@@ -45,6 +46,7 @@ func newMysqloutfileReader(
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
 			tableDesc:  tableDesc,
+			targetCols: targetCols,
 			kvCh:       kvCh,
 		},
 		opts: opts,
