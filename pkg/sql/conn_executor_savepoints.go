@@ -229,7 +229,7 @@ func (ex *connExecutor) checkRollbackValidity(
 	ctx context.Context, s *tree.RollbackToSavepoint, entry *savepoint,
 ) (ev fsm.Event, payload fsm.EventPayload, ok bool) {
 	if ex.extraTxnState.numDDL <= entry.numDDL {
-		// No DDL; all the checks below only care about txns containing
+		// No DDL; all the checks below only care about txnCounts containing
 		// DDL, so we don't have anything else to do here.
 		return ev, payload, true
 	}
@@ -346,7 +346,7 @@ type savepoint struct {
 	// The number of DDL statements that had been executed in the transaction (at
 	// the time the savepoint was created). We refuse to roll back a savepoint if
 	// more DDL statements were executed since the savepoint's creation.
-	// TODO(knz): support partial DDL cancellation in pending txns.
+	// TODO(knz): support partial DDL cancellation in pending txnCounts.
 	numDDL int
 }
 

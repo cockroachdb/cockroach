@@ -691,7 +691,7 @@ func (s stmtList) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s stmtList) Less(i, j int) bool {
-	return s[i].stmt < s[j].stmt
+	return s[i].anonymizedStmt < s[j].anonymizedStmt
 }
 
 var crdbInternalStmtStatsTable = virtualSchemaTable{
@@ -766,7 +766,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
 				anonymized := tree.DNull
-				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.stmt)
+				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.anonymizedStmt)
 				if ok {
 					anonymized = tree.NewDString(anonStr)
 				}
@@ -782,7 +782,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
 					tree.NewDString(stmtKey.flags()),
-					tree.NewDString(stmtKey.stmt),
+					tree.NewDString(stmtKey.anonymizedStmt),
 					anonymized,
 					tree.NewDInt(tree.DInt(s.data.Count)),
 					tree.NewDInt(tree.DInt(s.data.FirstAttemptCount)),
@@ -854,7 +854,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
-			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txns.getStats()
+			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txnCounts.getStats()
 			err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),

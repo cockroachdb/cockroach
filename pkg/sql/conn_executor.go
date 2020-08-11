@@ -379,6 +379,10 @@ func (s *Server) GetUnscrubbedStmtStats() []roachpb.CollectedStatementStatistics
 	return s.sqlStats.getUnscrubbedStmtStats(s.cfg.VirtualSchemas)
 }
 
+func (s *Server) GetUnscrubbedTxnStats() []roachpb.TransactionStatistics {
+	return s.sqlStats.getUnscrubbedTxnStats()
+}
+
 // GetScrubbedReportingStats does the same thing as GetScrubbedStmtStats but
 // returns statistics from the reported stats pool.
 func (s *Server) GetScrubbedReportingStats() []roachpb.CollectedStatementStatistics {
@@ -1009,12 +1013,21 @@ type connExecutor struct {
 		// unset when txn is executed within another higher-level txn.
 		onTxnFinish func(txnEvent)
 
+		// onTxnRestart (if non-nil) will be called when a txn is being retried. It
+		// is set when the txn is started but can remain unset when a txn is
+		// executed within another higher-level txn.
+		onTxnRestart func()
+
 		// savepoints maintains the stack of savepoints currently open.
 		savepoints savepointStack
 		// savepointsAtTxnRewindPos is a snapshot of the savepoints stack before
 		// processing the command at position txnRewindPos. When rewinding, we're
 		// going to restore this snapshot.
 		savepointsAtTxnRewindPos savepointStack
+
+		// transactionStatements tracks all statements that make up the current
+		// transaction.
+		transactionStatements []*Statement
 	}
 
 	// sessionData contains the user-configurable connection variables.
@@ -1023,7 +1036,7 @@ type connExecutor struct {
 	// statements that manipulate session state to an internal executor.
 	dataMutator *sessionDataMutator
 	// appStats tracks per-application SQL usage statistics. It is maintained to
-	// represent statistrics for the application currently identified by
+	// represent statistics for the application currently identified by
 	// sessiondata.ApplicationName.
 	appStats *appStats
 	// applicationName is the same as sessionData.ApplicationName. It's copied
@@ -1220,6 +1233,10 @@ func (ex *connExecutor) resetExtraTxnState(
 		if ex.extraTxnState.onTxnFinish != nil {
 			ex.extraTxnState.onTxnFinish(ev)
 			ex.extraTxnState.onTxnFinish = nil
+		}
+	case txnRestart:
+		if ex.extraTxnState.onTxnRestart != nil {
+			ex.extraTxnState.onTxnRestart()
 		}
 	}
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
@@ -2173,7 +2190,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 		ex.extraTxnState.autoRetryCounter = 0
-		ex.extraTxnState.onTxnFinish = ex.recordTransactionStart()
+		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(

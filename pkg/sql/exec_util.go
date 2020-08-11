@@ -2240,9 +2240,19 @@ func (s *sqlStatsCollector) recordStatement(
 	)
 }
 
-// recordTransaction records stats for one transaction.
-func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
-	s.appStats.recordTransaction(txnTimeSec, ev, implicit)
+// recordTransaction records statistics for one transaction.
+func (s *sqlStatsCollector) recordTransaction(
+	key txnKey,
+	txnTimeSec float64,
+	ev txnEvent,
+	implicit bool,
+	retryCount int,
+	statementIDs []string,
+	serviceLat time.Duration,
+	retryLat time.Duration,
+) {
+	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
+	s.appStats.recordTransaction(key, int64(retryCount), statementIDs, serviceLat, retryLat)
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {

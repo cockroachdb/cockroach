@@ -321,7 +321,7 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.isLocal {
 		localState.IsLocal = true
 	} else if txn != nil {
-		// If the plan is not local, we will have to set up leaf txns using the
+		// If the plan is not local, we will have to set up leaf txnCounts using the
 		// txnCoordMeta.
 		tis, err := txn.GetLeafTxnInputStateOrRejectClient(ctx)
 		if err != nil {

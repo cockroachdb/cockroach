@@ -90,12 +90,12 @@ message StatementStatistics {
 }
 
 message TransactionStatistics {
-  // StatementIds is the IDs of the statements which this transaction comprises,
+  // StatementIDs is the IDs of the statements which this transaction comprises,
   // in order.
-  repeated string statement_ids = 1;
+  repeated string statement_ids = 1 [(gogoproto.customname) = "StatementIDs"] ;
 
   // Count is the total number of times this transaction was executed
-  // since the begin of the reporting period.
+  // since the beginning of the reporting period.
   optional int64 count = 2 [(gogoproto.nullable) = false];
 
   // MaxRetries collects the maximum observed number of automatic
@@ -106,9 +106,19 @@ message TransactionStatistics {
   // statements.
   optional NumericStat num_rows = 4 [(gogoproto.nullable) = false];
 
-  // ServiceLat is the time to service the transaction, from start of parse to
-  // end of execute.
+  // ServiceLat is the time to service the transaction, from the time a
+  // transaction was received to end of exection.
   optional NumericStat service_lat = 5 [(gogoproto.nullable) = false];
+
+  // App is the name of the app which executed the transaction.
+  optional string app = 6 [(gogoproto.nullable) = false];
+
+  // RetryLat is the amount of time spent retrying the transaction.
+  optional NumericStat retry_lat = 7 [(gogoproto.nullable) = false];
+
+  // CommitLat is the amount of time required to commit the transaction after
+  // all statement operations have been applied.
+  optional NumericStat commit_lat = 8 [(gogoproto.nullable) = false];
 }
 
 
@@ -147,9 +157,9 @@ message StatementStatisticsKey {
   optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
 
-  // Id is a hash of the query fingerprint which can be used to identify the
+  // ID is a hash of the query fingerprint which can be used to identify the
   // statement, for instance in transaction statistics.
-  optional string id = 8 [(gogoproto.nullable) = false];
+  optional string id = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
 }
 
 // CollectedStats wraps collected timings and metadata for some query's execution.

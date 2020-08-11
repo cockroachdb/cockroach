@@ -156,7 +156,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		evalCtx := p.ExtendedEvalContext()
 		// We need distribute = true so that executing the plan involves marshaling
-		// the root txn meta to leaf txns. Local flows can start in aborted txns
+		// the root txn meta to leaf txnCounts. Local flows can start in aborted txnCounts
 		// because they just use the root txn.
 		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil /* txn */, true /* distribute */)
 		planCtx.stmtType = recv.stmtType

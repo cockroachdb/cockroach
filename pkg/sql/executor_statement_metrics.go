@@ -39,13 +39,17 @@ const (
 	sessionInit sessionPhase = iota
 
 	// Executor phases.
-	sessionQueryReceived    // Query is received.
-	sessionStartParse       // Parse starts.
-	sessionEndParse         // Parse ends.
-	plannerStartLogicalPlan // Planning starts.
-	plannerEndLogicalPlan   // Planning ends.
-	plannerStartExecStmt    // Execution starts.
-	plannerEndExecStmt      // Execution ends.
+	sessionQueryReceived                  // Query is received.
+	sessionStartParse                     // Parse starts.
+	sessionEndParse                       // Parse ends.
+	plannerStartLogicalPlan               // Planning starts.
+	plannerEndLogicalPlan                 // Planning ends.
+	plannerStartExecStmt                  // Execution starts.
+	plannerEndExecStmt                    // Execution ends.
+	sessionTransactionReceived            // Transaction is received.
+	sessionFirstStartExecTransaction      // Transaction is started for the first time.
+	sessionMostRecentStartExecTransaction // Transaction is started for the most recent time.
+	sessionEndExecTransaction             // Transaction is committed/rolled back.
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -77,6 +81,14 @@ func (p *phaseTimes) getPlanningLatency() time.Duration {
 // getParsingLatency returns the time it takes for a query to be parsed.
 func (p *phaseTimes) getParsingLatency() time.Duration {
 	return p[sessionEndParse].Sub(p[sessionStartParse])
+}
+
+func (p *phaseTimes) getTransactionRetryLatency() time.Duration {
+	return p[sessionMostRecentStartExecTransaction].Sub(p[sessionFirstStartExecTransaction])
+}
+
+func (p *phaseTimes) getTransactionServiceLatency() time.Duration {
+	return p[sessionEndExecTransaction].Sub(p[sessionTransactionReceived])
 }
 
 // EngineMetrics groups a set of SQL metrics.
@@ -164,6 +176,9 @@ func (ex *connExecutor) recordStatementSummary(
 		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
+
+	// Save the statement as part of the current transaction as well.
+	ex.extraTxnState.transactionStatements = append(ex.extraTxnState.transactionStatements, stmt)
 
 	if log.V(2) {
 		// ages since significant epochs
