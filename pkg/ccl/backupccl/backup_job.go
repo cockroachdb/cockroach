@@ -350,7 +350,8 @@ func backup(
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
 		if tableDesc := sqlbase.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); tableDesc != nil {
-			// Collect all the table stats for this table.
+			// Invalidate the stats for this table to ensure they are up to date.
+			statsCache.InvalidateTableStats(ctx, tableDesc.GetID())
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
 			if err != nil {
 				return RowCount{}, err
