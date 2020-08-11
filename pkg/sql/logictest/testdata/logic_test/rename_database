@@ -1,4 +1,5 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(52567)
+
 query T
 SHOW DATABASES
 ----
