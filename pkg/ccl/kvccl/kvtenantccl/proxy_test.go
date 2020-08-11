@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -295,6 +296,7 @@ func TestProxyRangeLookup(t *testing.T) {
 	desc, err := p.FirstRange()
 	require.Nil(t, desc)
 	require.Regexp(t, "does not have access to FirstRange", err)
+	require.True(t, grpcutil.IsAuthenticationError(err))
 }
 
 // TestProxyRetriesUnreachable tests that Proxy iterates over each of its
