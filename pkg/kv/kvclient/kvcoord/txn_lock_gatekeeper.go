@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,6 +52,8 @@ type txnLockGatekeeper struct {
 	// requestInFlight is set while a request is being processed by the wrapped
 	// sender. Used to detect and prevent concurrent txn use.
 	requestInFlight bool
+	rdc             kvbase.RangeDescriptorCache
+	batcher         *requestbatcher.RequestBatcher
 }
 
 // SendLocked implements the lockedSender interface.
@@ -87,14 +89,15 @@ func (gs *txnLockGatekeeper) SendLocked(
 	defer gs.mu.Lock()
 
 	if len(ba.Requests) == 1 && ba.Methods()[0] == roachpb.HeartbeatTxn {
-		rb := requestbatcher.New(requestbatcher.Config{
-			Name:            "test_r_batcher",
-			MaxMsgsPerBatch: 1,
-			Stopper:         stop.NewStopper(),
-			Sender:          gs.wrapped,
-		})
-		rb.Send(ctx, 1, ba.Requests[0].GetHeartbeatTxn())
-		return rb.Br, rb.Err
+
+		rangeCacheEntry, err := gs.rdc.Lookup(ctx, ba.Txn.Key)
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		gs.batcher.Send(ctx, rangeCacheEntry.Desc().RangeID, ba.Requests[0].GetHeartbeatTxn())
+		// testing returning an empty response to check if heartbeats drop to 0
+		//return &roachpb.BatchResponse{}, nil
+		return gs.batcher.BatchResp, gs.batcher.Err
 	}
 
 	return gs.wrapped.Send(ctx, ba)

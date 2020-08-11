@@ -17,8 +17,10 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -148,7 +150,9 @@ type TxnCoordSender struct {
 
 	// typ specifies whether this transaction is the top level,
 	// or one of potentially many distributed transactions.
-	typ kv.TxnType
+	typ     kv.TxnType
+	rdc     kvbase.RangeDescriptorCache
+	batcher *requestbatcher.RequestBatcher
 }
 
 var _ kv.TxnSender = &TxnCoordSender{}
@@ -208,6 +212,8 @@ func newRootTxnCoordSender(
 	tcs := &TxnCoordSender{
 		typ:                   kv.RootTxn,
 		TxnCoordSenderFactory: tcf,
+		rdc:                   tcf.rdc,
+		batcher:               tcf.batcher,
 	}
 	tcs.mu.txnState = txnPending
 	tcs.mu.userPriority = pri
@@ -304,6 +310,8 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		wrapped:                 tc.wrapped,
 		mu:                      &tc.mu.Mutex,
 		allowConcurrentRequests: typ == kv.LeafTxn,
+		rdc:                     tc.rdc,
+		batcher:                 tc.batcher,
 	}
 	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
 }

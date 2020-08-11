@@ -177,7 +177,7 @@ type RequestBatcher struct {
 
 	requestChan  chan *request
 	sendDoneChan chan struct{}
-	Br           *roachpb.BatchResponse
+	BatchResp    *roachpb.BatchResponse
 	Err          *roachpb.Error
 }
 
@@ -275,7 +275,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		send := func(ctx context.Context) error {
 			var pErr *roachpb.Error
 			br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg))
-			b.Br = br
+			b.BatchResp = br
 			b.Err = pErr
 			if pErr != nil {
 				return pErr.GoError()
