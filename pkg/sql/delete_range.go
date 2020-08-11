@@ -131,7 +131,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		for len(spans) != 0 {
 			b := params.p.txn.NewBatch()
 			d.deleteSpans(params, b, spans)
-			b.Header.MaxSpanRequestKeys = TableTruncateChunkSize
+			b.Header.MaxSpanRequestKeys = row.TableTruncateChunkSize
 			if err := params.p.txn.Run(ctx, b); err != nil {
 				return err
 			}

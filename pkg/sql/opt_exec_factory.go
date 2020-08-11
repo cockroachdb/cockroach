@@ -38,21 +38,15 @@ import (
 )
 
 type execFactory struct {
-	planner         *planner
-	allowAutoCommit bool
+	planner *planner
 }
 
 var _ exec.Factory = &execFactory{}
 
 func newExecFactory(p *planner) *execFactory {
 	return &execFactory{
-		planner:         p,
-		allowAutoCommit: p.autoCommit,
+		planner: p,
 	}
-}
-
-func (ef *execFactory) disableAutoCommit() {
-	ef.allowAutoCommit = false
 }
 
 // ConstructValues is part of the exec.Factory interface.
@@ -1183,7 +1177,7 @@ func (ef *execFactory) ConstructInsert(
 	insertColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
-	allowAutoCommit bool,
+	autoCommit bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1226,7 +1220,7 @@ func (ef *execFactory) ConstructInsert(
 		ins.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.allowAutoCommit {
+	if autoCommit {
 		ins.enableAutoCommit()
 	}
 
@@ -1249,6 +1243,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checkOrdSet exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathFKCheck,
+	autoCommit bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1304,7 +1299,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 		return &zeroNode{columns: ins.columns}, nil
 	}
 
-	if ef.allowAutoCommit {
+	if autoCommit {
 		ins.enableAutoCommit()
 	}
 
@@ -1328,7 +1323,7 @@ func (ef *execFactory) ConstructUpdate(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough sqlbase.ResultColumns,
-	allowAutoCommit bool,
+	autoCommit bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1414,7 +1409,7 @@ func (ef *execFactory) ConstructUpdate(
 		upd.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.allowAutoCommit {
+	if autoCommit {
 		upd.enableAutoCommit()
 	}
 
@@ -1439,7 +1434,7 @@ func (ef *execFactory) ConstructUpsert(
 	updateColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
-	allowAutoCommit bool,
+	autoCommit bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1524,7 +1519,7 @@ func (ef *execFactory) ConstructUpsert(
 		ups.run.tw.collectRows = true
 	}
 
-	if allowAutoCommit && ef.allowAutoCommit {
+	if autoCommit {
 		ups.enableAutoCommit()
 	}
 
@@ -1545,7 +1540,7 @@ func (ef *execFactory) ConstructDelete(
 	table cat.Table,
 	fetchColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
-	allowAutoCommit bool,
+	autoCommit bool,
 ) (exec.Node, error) {
 	ctx := ef.planner.extendedEvalCtx.Context
 
@@ -1599,7 +1594,7 @@ func (ef *execFactory) ConstructDelete(
 		del.run.rowsNeeded = true
 	}
 
-	if allowAutoCommit && ef.allowAutoCommit {
+	if autoCommit {
 		del.enableAutoCommit()
 	}
 
@@ -1620,8 +1615,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	needed exec.TableColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	interleavedTables []cat.Table,
-	maxReturnedKeys int,
-	allowAutoCommit bool,
+	autoCommit bool,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := &tabDesc.PrimaryIndex
@@ -1638,29 +1632,11 @@ func (ef *execFactory) ConstructDeleteRange(
 		return nil, err
 	}
 
-	// Permitting autocommit in DeleteRange is very important, because DeleteRange
-	// is used for simple deletes from primary indexes like
-	// DELETE FROM t WHERE key = 1000
-	// When possible, we need to make this a 1pc transaction for performance
-	// reasons. At the same time, we have to be careful, because DeleteRange
-	// returns all of the keys that it deleted - so we have to set a limit on the
-	// DeleteRange request. But, trying to set autocommit and a limit on the
-	// request doesn't work properly if the limit is hit. So, we permit autocommit
-	// here if we can guarantee that the number of returned keys is finite and
-	// relatively small.
-	autoCommitEnabled := allowAutoCommit && ef.allowAutoCommit
-	// If maxReturnedKeys is 0, it indicates that we weren't able to determine
-	// the maximum number of returned keys, so we'll give up and not permit
-	// autocommit.
-	if maxReturnedKeys == 0 || maxReturnedKeys > TableTruncateChunkSize {
-		autoCommitEnabled = false
-	}
-
 	dr := &deleteRangeNode{
 		interleavedFastPath: false,
 		spans:               spans,
 		desc:                tabDesc,
-		autoCommitEnabled:   autoCommitEnabled,
+		autoCommitEnabled:   autoCommit,
 	}
 
 	if len(interleavedTables) > 0 {

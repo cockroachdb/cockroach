@@ -66,6 +66,10 @@ type Builder struct {
 	// mutation itself. See canAutoCommit().
 	allowAutoCommit bool
 
+	// initialAllowAutoCommit saves the allowAutoCommit value passed to New; used
+	// for EXPLAIN.
+	initialAllowAutoCommit bool
+
 	allowInsertFastPath bool
 
 	allowInterleavedJoins bool
@@ -87,16 +91,27 @@ type Builder struct {
 // node tree from the given optimized expression tree.
 //
 // catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
+//
+// If allowAutoCommit is true, mutation operators can pass the auto commit flag
+// to the factory (when the optimizer determines it is correct to do so). It
+// should be false if the statement is executed as part of an explicit
+// transaction.
 func New(
-	factory exec.Factory, mem *memo.Memo, catalog cat.Catalog, e opt.Expr, evalCtx *tree.EvalContext,
+	factory exec.Factory,
+	mem *memo.Memo,
+	catalog cat.Catalog,
+	e opt.Expr,
+	evalCtx *tree.EvalContext,
+	allowAutoCommit bool,
 ) *Builder {
 	b := &Builder{
-		factory:         factory,
-		mem:             mem,
-		catalog:         catalog,
-		e:               e,
-		evalCtx:         evalCtx,
-		allowAutoCommit: true,
+		factory:                factory,
+		mem:                    mem,
+		catalog:                catalog,
+		e:                      e,
+		evalCtx:                evalCtx,
+		allowAutoCommit:        allowAutoCommit,
+		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
 		if evalCtx.SessionData.SaveTablesPrefix != "" {
@@ -140,7 +155,14 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 		)
 	}
 
-	b.allowAutoCommit = b.allowAutoCommit && b.canAutoCommit(rel)
+	canAutoCommit := b.canAutoCommit(rel)
+	b.allowAutoCommit = b.allowAutoCommit && canAutoCommit
+
+	// First condition from ConstructFastPathInsert:
+	//  - there are no other mutations in the statement, and the output of the
+	//    insert is not processed through side-effecting expressions (i.e. we can
+	//    auto-commit).
+	b.allowInsertFastPath = b.allowInsertFastPath && canAutoCommit
 
 	return b.buildRelational(rel)
 }

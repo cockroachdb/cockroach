@@ -159,8 +159,11 @@ func (cb *cascadeBuilder) setupCascade(cascade *memo.FKCascade) exec.Cascade {
 			execFactory exec.Factory,
 			bufferRef exec.Node,
 			numBufferedRows int,
+			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			return cb.planCascade(ctx, semaCtx, evalCtx, execFactory, cascade, bufferRef, numBufferedRows)
+			return cb.planCascade(
+				ctx, semaCtx, evalCtx, execFactory, cascade, bufferRef, numBufferedRows, allowAutoCommit,
+			)
 		},
 	}
 }
@@ -179,6 +182,7 @@ func (cb *cascadeBuilder) planCascade(
 	cascade *memo.FKCascade,
 	bufferRef exec.Node,
 	numBufferedRows int,
+	allowAutoCommit bool,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var o xform.Optimizer
@@ -253,7 +257,7 @@ func (cb *cascadeBuilder) planCascade(
 	}
 
 	// 4. Execbuild the optimized expression.
-	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx)
+	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx, allowAutoCommit)
 	// Set up the With binding.
 	eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
 	plan, err := eb.Build()

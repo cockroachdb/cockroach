@@ -430,12 +430,12 @@ func (b *Builder) getColumns(
 }
 
 // indexConstraintMaxResults returns the maximum number of results for a scan;
-// the scan is guaranteed never to return more results than this. Iff this hint
-// is invalid, 0 is returned.
-func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
+// if successful (ok=true), the scan is guaranteed never to return more results
+// than maxRows.
+func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) (maxRows uint64, ok bool) {
 	c := scan.Constraint
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
-		return 0
+		return 0, false
 	}
 
 	numCols := c.Columns.Count()
@@ -445,7 +445,7 @@ func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
 	}
 	rel := scan.Relational()
 	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
-		return 0
+		return 0, false
 	}
 
 	return c.CalculateMaxResults(b.evalCtx, indexCols, rel.NotNullCols)
@@ -506,8 +506,8 @@ func (b *Builder) scanParams(
 
 	parallelize := false
 	if hardLimit == 0 && softLimit == 0 {
-		maxResults := b.indexConstraintMaxResults(scan)
-		if maxResults != 0 && maxResults < ParallelScanResultThreshold {
+		maxResults, ok := b.indexConstraintMaxResults(scan)
+		if ok && maxResults < ParallelScanResultThreshold {
 			// Don't set the flag when we have a single span which returns a single
 			// row: it does nothing in this case except litter EXPLAINs.
 			// There are still cases where the flag doesn't do anything when the spans
@@ -735,7 +735,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			return nil, err
 		}
 
-		eb := New(b.factory, f.Memo(), b.catalog, newRightSide, b.evalCtx)
+		eb := New(b.factory, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
 		plan, err := eb.Build()
 		if err != nil {
