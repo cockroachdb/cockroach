@@ -1478,6 +1478,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TYPE t RENAME VALUE 'value1' TO 'value2'`},
 		{`ALTER TYPE t RENAME TO t2`},
 		{`ALTER TYPE t SET SCHEMA newschema`},
+		{`ALTER TYPE t OWNER TO foo`},
 
 		{`COMMENT ON COLUMN a.b IS 'a'`},
 		{`COMMENT ON COLUMN a.b IS NULL`},
