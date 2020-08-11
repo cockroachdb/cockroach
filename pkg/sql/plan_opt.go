@@ -211,7 +211,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		if p.Descriptors().HasUncommittedTypes() {
 			planningMode = distSQLLocalOnlyPlanning
 		}
-		bld = execbuilder.New(newDistSQLSpecExecFactory(p, planningMode), execMemo, &opc.catalog, root, p.EvalContext())
+		bld = execbuilder.New(
+			newDistSQLSpecExecFactory(p, planningMode), execMemo, &opc.catalog, root,
+			p.EvalContext(), p.autoCommit,
+		)
 		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
@@ -240,7 +243,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// that forces local planning.
 				// TODO(yuzefovich): remove this logic when deleting old
 				// execFactory.
-				bld = execbuilder.New(newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning), execMemo, &opc.catalog, root, p.EvalContext())
+				bld = execbuilder.New(
+					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning), execMemo, &opc.catalog, root,
+					p.EvalContext(), p.autoCommit,
+				)
 				plan, err = bld.Build()
 			}
 		}
@@ -255,7 +261,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	if bld == nil {
 		// If bld is non-nil, then experimental planning has succeeded and has
 		// already created a plan.
-		bld = execbuilder.New(newExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext())
+		bld = execbuilder.New(
+			newExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext(), p.autoCommit,
+		)
 		plan, err = bld.Build()
 		if err != nil {
 			return err

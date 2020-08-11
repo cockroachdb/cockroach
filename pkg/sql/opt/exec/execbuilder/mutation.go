@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -119,16 +120,14 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 // tryBuildFastPathInsert attempts to construct an insert using the fast path,
 // checking all required conditions. See exec.Factory.ConstructInsertFastPath.
 func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok bool, _ error) {
-	if !b.allowInsertFastPath {
-		return execPlan{}, false, nil
-	}
-
 	// Conditions from ConstructFastPathInsert:
 	//
 	//  - there are no other mutations in the statement, and the output of the
 	//    insert is not processed through side-effecting expressions (i.e. we can
 	//    auto-commit);
-	if !b.allowAutoCommit {
+	//
+	// This condition was taken into account in build().
+	if !b.allowInsertFastPath {
 		return execPlan{}, false, nil
 	}
 
@@ -250,6 +249,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		b.allowAutoCommit,
 	)
 	if err != nil {
 		return execPlan{}, false, err
@@ -639,27 +639,41 @@ func (b *Builder) buildDeleteRange(
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
 	needed, _ := b.getColumns(scan.Cols, scan.Table)
-	maxKeys := 0
-	if len(interleavedTables) == 0 {
-		// Calculate the maximum number of keys that the scan could return by
-		// multiplying the number of possible result rows by the number of column
-		// families of the table. The factory uses this information to determine
-		// whether to allow autocommit.
-		// We don't do this if there are interleaved children, as we don't know how
-		// many children rows may be in range.
-		maxKeys = int(b.indexConstraintMaxResults(scan)) * tab.FamilyCount()
+
+	autoCommit := false
+	if b.allowAutoCommit {
+		// Permitting autocommit in DeleteRange is very important, because DeleteRange
+		// is used for simple deletes from primary indexes like
+		// DELETE FROM t WHERE key = 1000
+		// When possible, we need to make this a 1pc transaction for performance
+		// reasons. At the same time, we have to be careful, because DeleteRange
+		// returns all of the keys that it deleted - so we have to set a limit on the
+		// DeleteRange request. But, trying to set autocommit and a limit on the
+		// request doesn't work properly if the limit is hit. So, we permit autocommit
+		// here if we can guarantee that the number of returned keys is finite and
+		// relatively small.
+
+		// We can't calculate the maximum number of keys if there are interleaved
+		// children, as we don't know how many children rows may be in range.
+		if len(interleavedTables) == 0 {
+			if maxRows, ok := b.indexConstraintMaxResults(scan); ok {
+				if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
+					// Other mutations only allow auto-commit if there are no FK checks or
+					// cascades. In this case, we won't actually execute anything for the
+					// checks or cascades - if we got this far, we determined that the FKs
+					// match the interleaving hierarchy and a delete range is sufficient.
+					autoCommit = true
+				}
+			}
+		}
 	}
-	// Other mutations only allow auto-commit if there are no FK checks or
-	// cascades. In this case, we won't actually execute anything for the checks
-	// or cascades - if we got this far, we determined that the FKs match the
-	// interleaving hierarchy and a delete range is sufficient.
+
 	root, err := b.factory.ConstructDeleteRange(
 		tab,
 		needed,
 		scan.Constraint,
 		interleavedTables,
-		maxKeys,
-		b.allowAutoCommit,
+		autoCommit,
 	)
 	if err != nil {
 		return execPlan{}, err
