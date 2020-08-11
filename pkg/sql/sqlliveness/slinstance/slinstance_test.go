@@ -83,7 +83,7 @@ func TestSQLInstance(t *testing.T) {
 
 	// Force next call to Session to fail.
 	stopper.Stop(ctx)
-	sqlInstance.(*slinstance.SQLInstance).ClearSession()
+	sqlInstance.(*slinstance.Instance).ClearSession()
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
 }

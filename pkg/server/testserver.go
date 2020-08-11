@@ -339,7 +339,7 @@ func (ts *TestServer) Clock() *hlc.Clock {
 // SQLLivenessStorage returns the *sqlliveness.Storage as an interface{}.
 func (ts *TestServer) SQLLivenessStorage() interface{} {
 	if ts != nil {
-		return ts.sqlServer.execCfg.SQLLivenessStorage
+		return ts.sqlServer.execCfg.SQLLivenessReader
 	}
 	return nil
 }

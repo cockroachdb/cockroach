@@ -104,7 +104,7 @@ type Registry struct {
 	planFn      planHookMaker
 	metrics     Metrics
 	adoptionCh  chan struct{}
-	sqlInstance sqlliveness.SQLInstance
+	sqlInstance sqlliveness.Instance
 
 	// sessionBoundInternalExecutorFactory provides a way for jobs to create
 	// internal executors. This is rarely needed, and usually job resumers should
@@ -186,7 +186,7 @@ func MakeRegistry(
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.SQLIDContainer,
-	sqlInstance sqlliveness.SQLInstance,
+	sqlInstance sqlliveness.Instance,
 	settings *cluster.Settings,
 	histogramWindowInterval time.Duration,
 	planFn planHookMaker,
@@ -218,7 +218,6 @@ func (r *Registry) startUsingSQLLivenessAdoption(ctx context.Context) bool {
 		ctx,
 		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
 	) {
-		r.sqlInstance.Start(ctx)
 		return true
 	}
 	return false
@@ -422,7 +421,7 @@ func (r *Registry) CreateJobWithTxn(ctx context.Context, record Record, txn *kv.
 	}
 	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
 INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
-VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID(), r.ID(),
+VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
 	); err != nil {
 		return nil, err
 	}
@@ -561,9 +560,6 @@ const gcInterval = 1 * time.Hour
 func (r *Registry) Start(
 	ctx context.Context, stopper *stop.Stopper, cancelInterval, adoptInterval time.Duration,
 ) error {
-	if r.startUsingSQLLivenessAdoption(ctx) {
-		r.sqlInstance.Start(ctx)
-	}
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
 	// liveness epoch before we wait out the first cancelInterval.
 	r.maybeCancelJobs(ctx, r.nl)
@@ -697,7 +693,7 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNode
 			return
 		}
 		for id, aj := range r.mu.adoptedJobs {
-			if !aj.sid.Equals(s.ID()) {
+			if aj.sid != s.ID() {
 				log.Warningf(ctx, "job %d: running without having a live claim; killed.", id)
 				aj.cancel()
 				delete(r.mu.adoptedJobs, id)

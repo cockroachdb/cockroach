@@ -60,7 +60,7 @@ type Metrics struct {
 	WriteFailures        *metric.Counter
 }
 
-// Metrics is a metric.Struct.
+// MetricStruct make Metrics a metric.Struct.
 func (m Metrics) MetricStruct() {}
 
 var _ metric.Struct = (*Metrics)(nil)

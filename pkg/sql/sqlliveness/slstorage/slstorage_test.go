@@ -66,9 +66,8 @@ func TestSQLStorage(t *testing.T) {
 	ie := s.InternalExecutor().(tree.InternalExecutor)
 	slStorage := slstorage.NewStorage(s.Stopper(), s.Clock(), s.DB(), ie, settings)
 
-	sid := []byte{'1'}
-	session := &session{id: sid, exp: s.Clock().Now()}
-	err := slStorage.Insert(ctx, session)
+	const sid = "1"
+	err := slStorage.Insert(ctx, sid, s.Clock().Now())
 	require.NoError(t, err)
 	metrics := slStorage.Metrics()
 	require.Equal(t, int64(1), metrics.WriteSuccesses.Count())
@@ -77,7 +76,7 @@ func TestSQLStorage(t *testing.T) {
 	// immediately.
 	slStorage.Start(ctx)
 	require.Eventually(t, func() bool {
-		a, err := slStorage.IsAlive(ctx, nil, sid)
+		a, err := slStorage.IsAlive(ctx, sid)
 		return !a && err == nil
 	}, 2*time.Second, 10*time.Millisecond)
 	log.Infof(ctx, "wtf mate")
@@ -88,7 +87,7 @@ func TestSQLStorage(t *testing.T) {
 		metrics.SessionDeletionsRuns.Count())
 
 	// Ensure that the update to the session failed.
-	found, err := slStorage.Update(ctx, session)
+	found, err := slStorage.Update(ctx, sid, s.Clock().Now())
 	require.NoError(t, err)
 	require.False(t, found)
 	require.Equal(t, int64(1), metrics.WriteFailures.Count())
