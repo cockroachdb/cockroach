@@ -11,6 +11,15 @@
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
 /pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
+/pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
+/pkg/sql/parser/             @cockroachdb/sql-syntax-prs
+/pkg/sql/lex/                @cockroachdb/sql-syntax-prs
+/pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
+
+/pkg/sql/crdb_internal.go    @cockroachdb/sql-api-prs
+/pkg/sql/pg_catalog.go       @cockroachdb/sql-api-prs
+/pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
+
 /pkg/cli/                    @cockroachdb/cli-prs
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
