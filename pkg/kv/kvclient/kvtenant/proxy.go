@@ -89,6 +89,6 @@ func AddressResolver(p Proxy) nodedialer.AddressResolver {
 		if err != nil {
 			return nil, err
 		}
-		return nd.CheckedTenantAddress(), nil
+		return nd.CheckedSQLAddress(), nil
 	}
 }

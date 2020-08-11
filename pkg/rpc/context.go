@@ -116,26 +116,7 @@ type serverOpts struct {
 	ServerOptions
 }
 
-// ServeMode determines which clients a Server serves.
-type ServeMode byte
-
-const (
-	// ServeNode indicates that the created server will serve internal cluster
-	// traffic, i.e. whether it will allow incoming connections to authenticate
-	// via node certs.
-	ServeNode ServeMode = iota
-	// ServeTenant indicates that the created server will serve tenants, i.e.
-	// whether it will allow authenticate and authorize incoming requests using
-	// tenant client certs.
-	ServeTenant
-	// ServeNodeAndTenant indicates that the server will accept connections both
-	// from nodes and tenants.
-	ServeNodeAndTenant
-)
-
 type ServerOptions struct {
-	ServeMode   ServeMode
-	ServeTenant bool
 	// Interceptor is an additional request interceptor that gets to inspect the
 	// method being invoked on both streaming and unary RPCs, and may inject an
 	// error.
@@ -183,17 +164,7 @@ func NewServer(ctx *Context, opts ServerOptions) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		var a auth
-		switch opts.ServeMode {
-		case ServeNode:
-			a = kvAuth{}
-		case ServeTenant:
-			a = tenantAuth{}
-		case ServeNodeAndTenant:
-			a = kvAuth{tenant: true}
-		default:
-			panic(errors.Errorf("unknown ServeMode %v", opts.ServeMode))
-		}
+		var a auth = kvAuth{tenant: true}
 
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
