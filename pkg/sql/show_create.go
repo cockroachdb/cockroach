@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -114,7 +115,14 @@ func ShowCreateTable(
 			fkCtx.WriteString(",\n\tCONSTRAINT ")
 			fkCtx.FormatNameP(&fk.Name)
 			fkCtx.WriteString(" ")
-			if err := showForeignKeyConstraint(&fkCtx.Buffer, dbPrefix, desc, fk, lCtx); err != nil {
+			if err := showForeignKeyConstraint(
+				&fkCtx.Buffer,
+				dbPrefix,
+				desc,
+				fk,
+				lCtx,
+				sessiondata.EmptySearchPath,
+			); err != nil {
 				if displayOptions.FKDisplayMode == OmitMissingFKClausesFromCreate {
 					continue
 				} else { // When FKDisplayMode == IncludeFkClausesInCreate.

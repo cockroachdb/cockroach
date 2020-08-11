@@ -928,7 +928,12 @@ func populateTableConstraints(
 				return err
 			}
 			var buf bytes.Buffer
-			if err := showForeignKeyConstraint(&buf, db.GetName(), table, con.FK, tableLookup); err != nil {
+			if err := showForeignKeyConstraint(
+				&buf, db.GetName(),
+				table, con.FK,
+				tableLookup,
+				p.extendedEvalCtx.SessionData.SearchPath,
+			); err != nil {
 				return err
 			}
 			condef = tree.NewDString(buf.String())

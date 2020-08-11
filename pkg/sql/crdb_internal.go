@@ -1610,7 +1610,14 @@ func showAlterStatementWithInterleave(
 		f.WriteString(" ADD CONSTRAINT ")
 		f.FormatNameP(&fk.Name)
 		f.WriteByte(' ')
-		if err := showForeignKeyConstraint(&f.Buffer, contextName, table, fk, lCtx); err != nil {
+		if err := showForeignKeyConstraint(
+			&f.Buffer,
+			contextName,
+			table,
+			fk,
+			lCtx,
+			sessiondata.EmptySearchPath,
+		); err != nil {
 			return err
 		}
 		if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
