@@ -147,6 +147,21 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
+// TODO (lucy-zhang): This API should be removed and moved into the descs.Collection.
+// TODO (rohany): This API doesn't yet support the temporary schema. Checking
+//  against the session's temporary schema information should be implemented
+//  when this is moved into the descs.Collection.
+func (p *planner) getSchemaNameFromID(ctx context.Context, id descpb.ID) (string, error) {
+	if id == keys.PublicSchemaID {
+		return tree.PublicSchema, nil
+	}
+	sc, err := catalogkv.MustGetSchemaDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
+	if err != nil {
+		return "", err
+	}
+	return sc.GetName(), nil
+}
+
 // GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.
 func (p *planner) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
