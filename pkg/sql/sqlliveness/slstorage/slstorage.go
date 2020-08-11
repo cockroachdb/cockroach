@@ -48,14 +48,13 @@ var CacheSize = settings.RegisterIntSetting(
 	"number of session entries to store in the LRU",
 	1024)
 
-// TODO(ajwerner): Add metrics.
-
 // Storage implements sqlliveness.Storage.
 type Storage struct {
 	stopper    *stop.Stopper
 	clock      *hlc.Clock
 	db         *kv.DB
 	ex         tree.InternalExecutor
+	metrics    Metrics
 	gcInterval func() time.Duration
 	g          singleflight.Group
 
@@ -80,12 +79,13 @@ func NewStorage(
 	db *kv.DB,
 	ie tree.InternalExecutor,
 	settings *cluster.Settings,
-) sqlliveness.Storage {
+) *Storage {
 	s := &Storage{
 		stopper: stopper, clock: clock, db: db, ex: ie,
 		gcInterval: func() time.Duration {
 			return DefaultGCInterval.Get(&settings.SV)
 		},
+		metrics: makeMetrics(),
 	}
 	cacheConfig := cache.Config{
 		Policy: cache.CacheLRU,
@@ -98,6 +98,11 @@ func NewStorage(
 	return s
 }
 
+// Metrics returns the associated metrics struct.
+func (s *Storage) Metrics() *Metrics {
+	return &s.metrics
+}
+
 // Start runs the delete sessions loop.
 func (s *Storage) Start(ctx context.Context) {
 	s.mu.Lock()
@@ -105,8 +110,7 @@ func (s *Storage) Start(ctx context.Context) {
 	if s.mu.started {
 		return
 	}
-	log.Infof(ctx, "starting SQL liveness storage")
-	s.stopper.RunWorker(ctx, s.deleteSessions)
+	s.stopper.RunWorker(ctx, s.deleteSessionsLoop)
 	s.mu.started = true
 }
 
@@ -119,6 +123,7 @@ func (s *Storage) IsAlive(
 	s.mu.RLock()
 	if _, ok := s.mu.deadSessions.Get(sidKey); ok {
 		s.mu.RUnlock()
+		s.metrics.IsAliveCacheHits.Inc(1)
 		return false, nil
 	}
 	if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
@@ -130,10 +135,11 @@ func (s *Storage) IsAlive(
 		// cache entries and always rely on the currently cached value. This
 		// approach may lead to lots of request in the period of time when a
 		// session is expired but has not yet been removed. Alternatively, this
-		// code could trigger deleteSessions or could use some other mechanism
-		// to wait for deleteSessions.
+		// code could trigger deleteSessionsLoop or could use some other mechanism
+		// to wait for deleteSessionsLoop.
 		if s.clock.Now().Less(expiration) {
 			s.mu.RUnlock()
+			s.metrics.IsAliveCacheHits.Inc(1)
 			return true, nil
 		}
 	}
@@ -155,6 +161,7 @@ func (s *Storage) IsAlive(
 		} else {
 			s.mu.deadSessions.Add(sidKey, nil)
 		}
+		log.Infof(ctx, "feteched %s %v", sidKey, live)
 		return live, nil
 	})
 	s.mu.RUnlock()
@@ -162,6 +169,7 @@ func (s *Storage) IsAlive(
 	if res.Err != nil {
 		return false, err
 	}
+	s.metrics.IsAliveCacheMisses.Inc(1)
 	return res.Val.(bool), nil
 }
 
@@ -192,14 +200,14 @@ SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid,
 	return true, exp, nil
 }
 
-func (s *Storage) deleteSessions(ctx context.Context) {
-	defer func() {
-		log.Warning(ctx, "exiting delete sessions loop")
-	}()
+// deleteSessionsLoop is launched in start and periodically deletes sessions.
+func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
 		if t.Read {
+			intv := s.gcInterval()
+			log.Infof(ctx, "reset iwht %v", intv)
 			t.Reset(s.gcInterval())
 		}
 		select {
@@ -210,32 +218,51 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 		case <-t.C:
 			t.Read = true
 			now := s.clock.Now()
-			var n int
-			err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				rows, err := s.ex.QueryRow(
-					ctx, "delete-sessions", txn,
-					`DELETE FROM system.sqlliveness WHERE expiration < $1 RETURNING session_id`,
-					tree.TimestampToDecimalDatum(now),
-				)
-				n = len(rows)
-				return err
-			})
-			if err != nil {
-				log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
-				continue
-			}
-			if log.V(2) {
-				log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
-			}
+			s.deleteExpiredSessions(ctx, now)
 		}
 	}
+}
+
+func (s *Storage) deleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
+	var n int64
+	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		row, err := s.ex.QueryRow(
+			ctx, "delete-sessions", txn,
+			`
+  WITH deleted_sessions AS (
+                            DELETE FROM system.sqlliveness
+                                  WHERE expiration < $1
+                              RETURNING session_id
+                        )
+SELECT count(*)
+  FROM deleted_sessions;`,
+			tree.TimestampToDecimalDatum(now),
+		)
+		if err != nil {
+			return err
+		}
+		n = int64(*row[0].(*tree.DInt))
+		return nil
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
+		}
+		return
+	}
+	s.metrics.SessionDeletionsRuns.Inc(1)
+	s.metrics.SessionsDeleted.Inc(n)
+	//if log.V(2) {
+	log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n, s.metrics.SessionsDeleted.Count())
+	//}
+
 }
 
 // Insert inserts the input Session in table `system.sqlliveness`.
 // A client must never call this method with a session which was previously
 // used! The contract of IsAlive is that once a session becomes not alive, it
 // must never become alive again.
-func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) error {
+func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) (err error) {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := s.ex.QueryRow(
 			ctx, "insert-session", txn,
@@ -244,16 +271,20 @@ func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) error
 		)
 		return err
 	}); err != nil {
+		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "Could not insert session %s", session.ID())
 	}
+	log.Infof(ctx, "inserted sqlliveness session %s", session.ID())
+	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }
 
 // Update updates the row in table `system.sqlliveness` with the given input if
 // if the row exists and in that case returns true. Otherwise it returns false.
-func (s *Storage) Update(ctx context.Context, session sqlliveness.Session) (bool, error) {
-	var sessionExists bool
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+func (s *Storage) Update(
+	ctx context.Context, session sqlliveness.Session,
+) (sessionExists bool, err error) {
+	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		data, err := s.ex.QueryRow(
 			ctx, "update-session", txn, `
 UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
@@ -264,8 +295,13 @@ UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING se
 		}
 		sessionExists = data != nil
 		return nil
-	}); err != nil {
+	})
+	if err != nil || !sessionExists {
+		s.metrics.WriteFailures.Inc(1)
+	}
+	if err != nil {
 		return false, errors.Wrapf(err, "Could not update session %s", session.ID())
 	}
+	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil
 }
