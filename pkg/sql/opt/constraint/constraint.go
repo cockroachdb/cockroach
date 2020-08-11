@@ -628,10 +628,10 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
-// CalculateMaxResults returns a non-zero integer indicating the maximum number
-// of results that can be read from indexCols by using c.Spans. The indexCols
+// CalculateMaxResults returns an integer indicating the maximum number of
+// results that can be read from indexCols by using c.Spans. The indexCols
 // are assumed to form at least a weak key.
-// If 0 is returned, the maximum number of results could not be deduced.
+// If ok is false, the maximum number of results could not be deduced.
 // We can calculate the maximum number of results when both of the following
 // are satisfied:
 //  1. The index columns form a weak key (assumption), and the spans do not
@@ -643,12 +643,12 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 // mutations. Once the optimizer plans mutations, this method can go away.
 func (c *Constraint) CalculateMaxResults(
 	evalCtx *tree.EvalContext, indexCols opt.ColSet, notNullCols opt.ColSet,
-) uint64 {
+) (_ uint64, ok bool) {
 	// Ensure that if we have nullable columns, we are only reading non-null
 	// values, given that a unique index allows an arbitrary number of duplicate
 	// entries if they have NULLs.
 	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(evalCtx))) {
-		return 0
+		return 0, false
 	}
 
 	numCols := c.Columns.Count()
@@ -658,8 +658,9 @@ func (c *Constraint) CalculateMaxResults(
 	prefix := c.Prefix(evalCtx)
 	var distinctVals uint64
 	if prefix < numCols-1 {
-		return 0
-	} else if prefix == numCols-1 {
+		return 0, false
+	}
+	if prefix == numCols-1 {
 		// If the prefix does not include the last column, calculate the number of
 		// distinct values possible in the span. This is only supported for int
 		// and date types.
@@ -670,7 +671,7 @@ func (c *Constraint) CalculateMaxResults(
 
 			// Ensure that the keys specify the last column.
 			if start.Length() != numCols || end.Length() != numCols {
-				return 0
+				return 0, false
 			}
 
 			// TODO(asubiotto): This logic is very similar to
@@ -691,12 +692,12 @@ func (c *Constraint) CalculateMaxResults(
 				if !startDate.IsFinite() || !endDate.IsFinite() {
 					// One of the boundaries is not finite, so we can't determine the
 					// distinct count for this column.
-					return 0
+					return 0, false
 				}
 				startIntVal = int64(startDate.PGEpochDays())
 				endIntVal = int64(endDate.PGEpochDays())
 			} else {
-				return 0
+				return 0, false
 			}
 
 			if c.Columns.Get(colIdx).Ascending() {
@@ -712,5 +713,5 @@ func (c *Constraint) CalculateMaxResults(
 	} else {
 		distinctVals = uint64(c.Spans.Count())
 	}
-	return distinctVals
+	return distinctVals, true
 }

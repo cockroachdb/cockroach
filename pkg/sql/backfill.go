@@ -56,7 +56,7 @@ const (
 	// per chunk during an index truncation. This value is larger than the
 	// other chunk constants because the operation involves only running a
 	// DeleteRange().
-	indexTruncateChunkSize = 600
+	indexTruncateChunkSize = row.TableTruncateChunkSize
 
 	// indexTxnBackfillChunkSize is the maximum number index entries backfilled
 	// per chunk during an index backfill done in a txn. The index backfill
