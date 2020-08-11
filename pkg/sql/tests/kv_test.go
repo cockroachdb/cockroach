@@ -108,16 +108,13 @@ func (kv *kvNative) Delete(rows, run int) error {
 }
 
 func (kv *kvNative) Scan(rows, run int) error {
-	var kvs []kv2.KeyValue
-	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
-		var err error
-		kvs, err = txn.Scan(ctx, fmt.Sprintf("%s%08d", kv.prefix, 0), fmt.Sprintf("%s%08d", kv.prefix, rows), int64(rows))
-		return err
+	return kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
+		b := txn.NewBatch()
+		for i := 0; i < rows; i++ {
+			b.Scan(fmt.Sprintf("%s%08d", kv.prefix, i), fmt.Sprintf("%s%08d_next", kv.prefix, i))
+		}
+		return txn.Run(ctx, b)
 	})
-	if len(kvs) != rows {
-		return errors.Errorf("expected %d rows; got %d", rows, len(kvs))
-	}
-	return err
 }
 
 func (kv *kvNative) prep(rows int, initData bool) error {
