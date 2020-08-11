@@ -1784,6 +1784,7 @@ information about the resources on a node used by that table.
 | statements | [StatementsResponse.CollectedStatementStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.CollectedStatementStatistics) | repeated |  |
 | last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementsResponse-google.protobuf.Timestamp) |  | Timestamp of the last stats reset. |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. |
+| transactions | [StatementsResponse.ExtendedCollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics) | repeated | Transactions is transaction-level statistics for the collection of statements in this response. |
 
 
 
@@ -1808,6 +1809,18 @@ information about the resources on a node used by that table.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | key_data | [cockroach.sql.StatementStatisticsKey](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.StatementStatisticsKey) |  |  |
+| node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementsResponse-cockroach.server.serverpb.StatementsResponse.ExtendedCollectedTransactionStatistics"></a>
+#### StatementsResponse.ExtendedCollectedTransactionStatistics
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| stats_data | [cockroach.sql.CollectedTransactionStatistics](#cockroach.server.serverpb.StatementsResponse-cockroach.sql.CollectedTransactionStatistics) |  |  |
 | node_id | [int32](#cockroach.server.serverpb.StatementsResponse-int32) |  |  |
 
 
