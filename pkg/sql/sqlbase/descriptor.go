@@ -235,8 +235,8 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 		// are some cases where system tables lack this timestamp and then when they
 		// are rendered in some other downstream setting we expect the timestamp to
 		// be read. This is a hack we shouldn't need to do.
-		log.Fatalf(context.TODO(), "read table descriptor for %q (%d) without ModificationTime "+
-			"with zero MVCC timestamp", GetDescriptorName(desc), GetDescriptorID(desc))
+		log.Errorf(context.TODO(), "read table descriptor for %q (%d) without ModificationTime "+
+			"with zero MVCC timestamp; full descriptor:\n%s", GetDescriptorName(desc), GetDescriptorID(desc), desc.String())
 	} else if modTime.IsEmpty() {
 		setDescriptorModificationTime(desc, ts)
 	} else if !ts.IsEmpty() && ts.Less(modTime) {

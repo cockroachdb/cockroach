@@ -257,6 +257,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 
 	sqlConn, err := makeSQLClient("cockroach zip", useSystemDb)
+
 	if err != nil {
 		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
 	}
