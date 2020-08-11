@@ -234,6 +234,7 @@ type Cascade struct {
 		execFactory Factory,
 		bufferRef Node,
 		numBufferedRows int,
+		allowAutoCommit bool,
 	) (Plan, error)
 }
 

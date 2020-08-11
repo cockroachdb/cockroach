@@ -205,7 +205,7 @@ count           ·             ·           ()      ·
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY)
 
-# Delete range operates in chunks of 600 (defined by sql.TableTruncateChunkSize).
+# Delete range operates in chunks of 600 (defined by row.TableTruncateChunkSize).
 statement ok
 INSERT INTO a SELECT * FROM generate_series(1,1000)
 

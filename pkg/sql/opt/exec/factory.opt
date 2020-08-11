@@ -362,18 +362,18 @@ define ShowTrace {
 # of columns in the table into which values are inserted. All columns are
 # expected to be present except delete-only mutation columns, since those do not
 # need to participate in an insert operation.
-#
-# If allowAutoCommit is set, the operator is allowed to commit the
-# transaction (if appropriate, i.e. if it is in an implicit transaction).
-# This is false if there are multiple mutations in a statement, or the output
-# of the mutation is processed through side-effecting expressions.
 define Insert {
     Input exec.Node
     Table cat.Table
     InsertCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
-    AllowAutoCommit bool
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions.
+    AutoCommit bool
 }
 
 # InsertFastPath implements a special (but very common) case of insert,
@@ -381,8 +381,7 @@ define Insert {
 #  - the input is Values with at most InsertFastPathMaxRows, and there are no
 #    subqueries;
 #  - there are no other mutations in the statement, and the output of the
-#    insert is not processed through side-effecting expressions (see
-#    allowAutoCommit flag for ConstructInsert);
+#    insert is not processed through side-effecting expressions.
 #  - there are no self-referencing foreign keys;
 #  - all FK checks can be performed using direct lookups into unique indexes.
 #
@@ -396,6 +395,10 @@ define InsertFastPath {
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
     FkChecks []exec.InsertFastPathFKCheck
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction.
+    AutoCommit bool
 }
 
 # Update implements an UPDATE statement. The input contains columns that were
@@ -427,7 +430,9 @@ define Update {
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
     Passthrough sqlbase.ResultColumns
-    AllowAutoCommit bool
+
+    # If set, the operator will commit the transaction as part of its execution.
+    AutoCommit bool
 }
 
 # Upsert implements an INSERT..ON CONFLICT DO UPDATE or UPSERT statement.
@@ -454,11 +459,6 @@ define Update {
 # columns {0, 1, 2} of the table. The next 3 columns contain the existing
 # values of columns {0, 1, 2} of the table. The last column contains the
 # new value for column {1} of the table.
-#
-# If allowAutoCommit is set, the operator is allowed to commit the
-# transaction (if appropriate, i.e. if it is in an implicit transaction).
-# This is false if there are multiple mutations in a statement, or the output
-# of the mutation is processed through side-effecting expressions.
 define Upsert {
     Input exec.Node
     Table cat.Table
@@ -468,7 +468,12 @@ define Upsert {
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     Checks exec.CheckOrdinalSet
-    AllowAutoCommit bool
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions.
+    AutoCommit bool
 }
 
 # Delete implements a DELETE statement. The input contains columns that were
@@ -477,17 +482,17 @@ define Upsert {
 # The fetchCols set contains the ordinal positions of the fetch columns in
 # the target table. The input must contain those columns in the same order
 # as they appear in the table schema.
-#
-# If allowAutoCommit is set, the operator is allowed to commit the
-# transaction (if appropriate, i.e. if it is in an implicit transaction).
-# This is false if there are multiple mutations in a statement, or the output
-# of the mutation is processed through side-effecting expressions.
 define Delete {
     Input exec.Node
     Table cat.Table
     FetchCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
-    AllowAutoCommit bool
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions.
+    AutoCommit bool
 }
 
 # DeleteRange efficiently deletes contiguous rows stored in the given table's
@@ -512,8 +517,13 @@ define DeleteRange {
     Needed exec.TableColumnOrdinalSet
     IndexConstraint *constraint.Constraint
     InterleavedTables []cat.Table
-    MaxReturnedKeys int
-    AllowAutoCommit bool
+
+    # If set, the operator will commit the transaction as part of its execution.
+    # This is false when executing inside an explicit transaction, or there are
+    # multiple mutations in a statement, or the output of the mutation is
+    # processed through side-effecting expressions, or the operation might
+    # process too many rows.
+    AutoCommit bool
 }
 
 # CreateTable implements a CREATE TABLE statement.
