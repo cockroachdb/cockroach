@@ -41,39 +41,9 @@ var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
 
 // Embedded certificates specific to multi-tenancy testing.
 const (
-	EmbeddedTenantClientCACert = "ca-client-tenant.crt"        // CA for client connections (auth broker)
-	EmbeddedTenantClientCAKey  = "ca-client-tenant.key"        // CA for client connections (auth broker)
-	EmbeddedTenantClientCert   = "client-tenant.123456789.crt" // tenant client cert (SQL server)
-	EmbeddedTenantClientKey    = "client-tenant.123456789.key" // tenant client key (SQL server)
+	EmbeddedTenantClientCACert = "ca-client-tenant.crt" // CA for client connections
+	EmbeddedTenantClientCAKey  = "ca-client-tenant.key" // CA for client connections
 )
-
-// LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
-// The following paths must be passed:
-// - sslCA: path to the CA certificate
-// - sslClientCA: path to the CA certificate to verify client certificates,
-//                can be the same as sslCA
-// - sslCert: path to the server certificate
-// - sslCertKey: path to the server key
-// If the path is prefixed with "embedded=", load the embedded certs.
-func LoadServerTLSConfig(sslCA, sslClientCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
-	if err != nil {
-		return nil, err
-	}
-	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
-	if err != nil {
-		return nil, err
-	}
-	clientCAPEM, err := assetLoaderImpl.ReadFile(sslClientCA)
-	if err != nil {
-		return nil, err
-	}
-	return newServerTLSConfig(certPEM, keyPEM, caPEM, clientCAPEM)
-}
 
 // newServerTLSConfig creates a server TLSConfig from the supplied byte strings containing
 // - the certificate of this node (should be signed by the CA),
@@ -81,19 +51,23 @@ func LoadServerTLSConfig(sslCA, sslClientCA, sslCert, sslCertKey string) (*tls.C
 // - the certificate of the cluster CA, used to verify other server certificates
 // - the certificate of the client CA, used to verify client certificates
 //
-// caClientPEM can be equal to caPEM (shared CA) or nil (use system CA pool).
-func newServerTLSConfig(certPEM, keyPEM, caPEM, caClientPEM []byte) (*tls.Config, error) {
+// caPEM and caClientPEMs can be equal to caPEM (shared CA) or nil (use system CA
+// pool).
+func newServerTLSConfig(
+	certPEM, keyPEM, caPEM []byte, caClientPEMs ...[]byte,
+) (*tls.Config, error) {
 	cfg, err := newBaseTLSConfigWithCertificate(certPEM, keyPEM, caPEM)
 	if err != nil {
 		return nil, err
 	}
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
 
-	if caClientPEM != nil {
+	if len(caClientPEMs) != 0 {
 		certPool := x509.NewCertPool()
-
-		if !certPool.AppendCertsFromPEM(caClientPEM) {
-			return nil, errors.Errorf("failed to parse client CA PEM data to pool")
+		for _, pem := range caClientPEMs {
+			if !certPool.AppendCertsFromPEM(pem) {
+				return nil, errors.Errorf("failed to parse client CA PEM data to pool")
+			}
 		}
 		cfg.ClientCAs = certPool
 	}
@@ -123,29 +97,6 @@ func newUIServerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
 	// Should we disable session resumption? This may break forward secrecy.
 	// cfg.SessionTicketsDisabled = true
 	return cfg, nil
-}
-
-// LoadClientTLSConfig creates a client TLSConfig by loading the CA and client certs.
-// The following paths must be passed:
-// - sslCA: path to the CA certificate
-// - sslCert: path to the client certificate
-// - sslCertKey: path to the client key
-// If the path is prefixed with "embedded=", load the embedded certs.
-func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
-	certPEM, err := assetLoaderImpl.ReadFile(sslCert)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM, err := assetLoaderImpl.ReadFile(sslCertKey)
-	if err != nil {
-		return nil, err
-	}
-	caPEM, err := assetLoaderImpl.ReadFile(sslCA)
-	if err != nil {
-		return nil, err
-	}
-
-	return newClientTLSConfig(certPEM, keyPEM, caPEM)
 }
 
 // newClientTLSConfig creates a client TLSConfig from the supplied byte strings containing:

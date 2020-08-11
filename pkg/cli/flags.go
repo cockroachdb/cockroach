@@ -51,8 +51,6 @@ var serverListenPort, serverSocketDir string
 var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
 var serverSQLAdvertiseAddr, serverSQLAdvertisePort string
-var serverTenantAddr, serverTenantPort string
-var serverTenantAdvertiseAddr, serverTenantAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
 var localityAdvertiseHosts localityList
 var sqlAuditLogDir log.DirName
@@ -72,11 +70,6 @@ func initPreFlagsDefaults() {
 	serverSQLPort = ""
 	serverSQLAdvertiseAddr = ""
 	serverSQLAdvertisePort = ""
-
-	serverTenantAddr = ""
-	serverTenantPort = ""
-	serverTenantAdvertiseAddr = ""
-	serverTenantAdvertisePort = ""
 
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
@@ -351,8 +344,6 @@ func init() {
 		varFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
-		varFlag(f, addrSetter{&serverTenantAddr, &serverTenantPort}, cliflags.ListenTenantAddr)
-		varFlag(f, addrSetter{&serverTenantAdvertiseAddr, &serverTenantAdvertisePort}, cliflags.TenantAdvertiseAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
 		// --socket is deprecated as of 20.1.
@@ -360,10 +351,6 @@ func init() {
 		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket)
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
-
-		// Hide tenant-related flags.
-		_ = f.MarkHidden(cliflags.ListenTenantAddr.Name)
-		_ = f.MarkHidden(cliflags.TenantAdvertiseAddr.Name)
 
 		// Backward-compatibility flags.
 
@@ -986,36 +973,6 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		}
 	}
 	serverCfg.SQLAdvertiseAddr = net.JoinHostPort(serverSQLAdvertiseAddr, serverSQLAdvertisePort)
-
-	// Fill in the defaults for --tenant-addr.
-	if serverTenantAddr == "" {
-		serverTenantAddr = startCtx.serverListenAddr
-	}
-	if serverTenantPort == "" {
-		serverTenantPort = serverListenPort
-	}
-	serverCfg.TenantAddr = net.JoinHostPort(serverTenantAddr, serverTenantPort)
-	// NOTE: multi-tenancy commands don't register this flag.
-	if f := fs.Lookup(cliflags.ListenTenantAddr.Name); f != nil {
-		serverCfg.SplitListenTenant = f.Changed
-	}
-
-	// Fill in the defaults for --advertise-tenant-addr, if the flag exists on `cmd`.
-	if serverTenantAdvertiseAddr == "" {
-		if advSpecified {
-			serverTenantAdvertiseAddr = serverAdvertiseAddr
-		} else {
-			serverTenantAdvertiseAddr = serverTenantAddr
-		}
-	}
-	if serverTenantAdvertisePort == "" {
-		if advSpecified && !serverCfg.SplitListenTenant {
-			serverTenantAdvertisePort = serverAdvertisePort
-		} else {
-			serverTenantAdvertisePort = serverTenantPort
-		}
-	}
-	serverCfg.TenantAdvertiseAddr = net.JoinHostPort(serverTenantAdvertiseAddr, serverTenantAdvertisePort)
 
 	// Fill in the defaults for --http-addr.
 	if serverHTTPAddr == "" {

@@ -56,9 +56,6 @@ type TestServerInterface interface {
 	// ServingSQLAddr returns the server's advertised SQL address.
 	ServingSQLAddr() string
 
-	// ServingTenantAddr returns the server's advertised Tenant address.
-	ServingTenantAddr() string
-
 	// HTTPAddr returns the server's http address.
 	HTTPAddr() string
 
@@ -69,10 +66,6 @@ type TestServerInterface interface {
 	// SQLAddr returns the server's SQL address.
 	// Note: use ServingSQLAddr() instead unless specific reason not to.
 	SQLAddr() string
-
-	// TenantAddr returns the server's Tenant address.
-	// Note: use ServingTenantAddr() instead unless specific reason not to.
-	TenantAddr() string
 
 	// DB returns a *client.DB instance for talking to this KV server.
 	DB() *kv.DB

@@ -101,11 +101,10 @@ func GetCertificateUsers(tlsState *tls.ConnectionState) ([]string, error) {
 	return getCertificatePrincipals(peerCert), nil
 }
 
-// ContainsUser returns true if the specified user is present in the list of
-// users.
-func ContainsUser(user string, users []string) bool {
-	for i := range users {
-		if user == users[i] {
+// Contains returns true if the specified string is present in the given slice.
+func Contains(sl []string, s string) bool {
+	for i := range sl {
+		if sl[i] == s {
 			return true
 		}
 	}
@@ -144,17 +143,15 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		// check that it doesn't have OU=Tenants. It would make sense to add
 		// explicit OU=Users to all client certificates and to check for match.
 		ous := tlsState.PeerCertificates[0].Subject.OrganizationalUnit
-		for _, ou := range ous {
-			if ou == tenantsOU {
-				return nil,
-					errors.Errorf("using tenant client certificate as user certificate is not allowed")
-			}
+		if Contains(ous, TenantsOU) {
+			return nil,
+				errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
 		// The client certificate user must match the requested user,
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
-		if !ContainsUser(requestedUser, certUsers) && !ContainsUser(NodeUser, certUsers) {
+		if !Contains(certUsers, requestedUser) && !Contains(certUsers, NodeUser) {
 			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 

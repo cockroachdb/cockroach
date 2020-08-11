@@ -624,6 +624,12 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
+	tenantClientCA, err := cm.getTenantClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+	cfg.ClientCAs.AppendCertsFromPEM(tenantClientCA.FileContents)
+
 	cm.serverConfig = cfg
 	return cfg, nil
 }
@@ -654,6 +660,9 @@ func (cm *CertificateManager) GetTenantServerTLSConfig() (*tls.Config, error) {
 
 // getEmbeddedTenantServerTLSConfig is like getEmbeddedServerTLSConfig, but
 // for serving tenants.
+//
+// TODO(tbg): remove this and its transitive callers. We do not use dedicated
+// tenant server certs any more.
 func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 	_ *tls.ClientHelloInfo,
 ) (*tls.Config, error) {
@@ -662,11 +671,6 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 
 	if cm.tenantServerConfig != nil {
 		return cm.tenantServerConfig, nil
-	}
-
-	serverCA, err := cm.getCACertLocked()
-	if err != nil {
-		return nil, err
 	}
 
 	serverCert, err := cm.getNodeCertLocked()
@@ -682,7 +686,7 @@ func (cm *CertificateManager) getEmbeddedTenantServerTLSConfig(
 	cfg, err := newServerTLSConfig(
 		serverCert.FileContents,
 		serverCert.KeyFileContents,
-		serverCA.FileContents,
+		nil, // caPEM
 		tenantCA.FileContents)
 	if err != nil {
 		return nil, err
@@ -824,9 +828,12 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 }
 
 // getTenantClientCACertLocked returns the CA cert used to verify tenant client
-// certificates. Use the client CA if it exists, otherwise fall back on the
-// general CA. cm.mu must be held.
+// certificates. Use the tenant client CA if it exists, otherwise fall back to
+// client CA. cm.mu must be held.
 func (cm *CertificateManager) getTenantClientCACertLocked() (*CertInfo, error) {
+	if cm.tenantClientCACert == nil {
+		return cm.getClientCACertLocked()
+	}
 	c := cm.tenantClientCACert
 	if err := checkCertIsValid(c); err != nil {
 		return nil, makeError(err, "problem with tenant client CA certificate")

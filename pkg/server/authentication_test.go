@@ -793,7 +793,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	for _, subsystem := range subsystems {
 		t.Run(fmt.Sprintf("no-cert/%s", subsystem.name), func(t *testing.T) {
 			err := subsystem.sendRPC(ctx, conn)
-			if exp := "no client certificates in request"; !testutils.IsError(err, exp) {
+			if exp := "TLSInfo is not available in request context"; !testutils.IsError(err, exp) {
 				t.Errorf("expected %q error, but got %v", exp, err)
 			}
 		})
