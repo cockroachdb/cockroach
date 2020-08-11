@@ -35,11 +35,13 @@ func (*AlterTypeAddValue) alterTypeCmd()    {}
 func (*AlterTypeRenameValue) alterTypeCmd() {}
 func (*AlterTypeRename) alterTypeCmd()      {}
 func (*AlterTypeSetSchema) alterTypeCmd()   {}
+func (*AlterTypeOwner) alterTypeCmd()       {}
 
 var _ AlterTypeCmd = &AlterTypeAddValue{}
 var _ AlterTypeCmd = &AlterTypeRenameValue{}
 var _ AlterTypeCmd = &AlterTypeRename{}
 var _ AlterTypeCmd = &AlterTypeSetSchema{}
+var _ AlterTypeCmd = &AlterTypeOwner{}
 
 // AlterTypeAddValue represents an ALTER TYPE ADD VALUE command.
 type AlterTypeAddValue struct {
@@ -106,4 +108,15 @@ type AlterTypeSetSchema struct {
 func (node *AlterTypeSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(node.Schema)
+}
+
+// AlterTypeOwner represents an ALTER TYPE OWNER TO command.
+type AlterTypeOwner struct {
+	Owner string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTypeOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString(" OWNER TO ")
+	ctx.FormatNameP(&node.Owner)
 }
