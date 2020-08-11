@@ -30,10 +30,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TableTruncateChunkSize is the maximum number of keys deleted per chunk
-// during a table truncation.
-const TableTruncateChunkSize = indexTruncateChunkSize
-
 type truncateNode struct {
 	n *tree.Truncate
 }
@@ -413,7 +409,7 @@ func ClearTableDataInChunks(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
-	const chunkSize = TableTruncateChunkSize
+	const chunkSize = row.TableTruncateChunkSize
 	var resume roachpb.Span
 	alloc := &sqlbase.DatumAlloc{}
 	for rowIdx, done := 0, false; !done; rowIdx += chunkSize {

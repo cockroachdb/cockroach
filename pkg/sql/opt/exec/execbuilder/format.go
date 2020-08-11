@@ -35,7 +35,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 	}
 
 	// Build the scalar expression and format it as a single string.
-	bld := New(nil /* factory */, f.Memo, nil /* catalog */, scalar, nil /* evalCtx */)
+	bld := New(nil /* factory */, f.Memo, nil /* catalog */, scalar, nil /* evalCtx */, false /* allowAutoCommit */)
 	md := f.Memo.Metadata()
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, md.NumColumns())
 	expr, err := bld.BuildScalar(&ivh)

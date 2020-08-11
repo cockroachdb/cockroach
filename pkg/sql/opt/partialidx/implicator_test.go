@@ -118,7 +118,10 @@ func TestImplicator(t *testing.T) {
 			if remainingFilters.IsTrue() {
 				buf.WriteString("none")
 			} else {
-				execBld := execbuilder.New(nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters, &evalCtx)
+				execBld := execbuilder.New(
+					nil /* factory */, f.Memo(), nil /* catalog */, &remainingFilters,
+					&evalCtx, false, /* allowAutoCommit */
+				)
 				expr, err := execBld.BuildScalar(&iVarHelper)
 				if err != nil {
 					d.Fatalf(t, "unexpected error: %v\n", err)

@@ -1722,8 +1722,8 @@ func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
 		return
 	}
 
-	count := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
-	if count != 0 && count < math.MaxUint32 {
+	count, ok := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
+	if ok && count < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
 	}
 }
