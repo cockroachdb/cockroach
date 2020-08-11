@@ -1540,6 +1540,84 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	}
 }
 
+func TestStatusAPITransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	testCases := []struct {
+		query         string
+		fingerprinted string
+	}{
+		{query: `CREATE DATABASE roachblog`},
+		{query: `SET database = roachblog`},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`},
+		{
+			query:         `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+		},
+		{query: `SELECT * FROM posts`},
+		{query: `SELECT * FROM posts`},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+		},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+		},
+	}
+
+	for _, tc := range testCases {
+		thirdServerSQL.Exec(t, tc.query)
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// Count the expected transaction counts.
+	expectedTxnCounts := make(map[string]int)
+	for _, tc := range testCases {
+		txn := tc.query
+		if tc.fingerprinted != "" {
+			txn = tc.fingerprinted
+		}
+		expectedTxnCounts[txn]++
+	}
+	var expectedCounts []int
+	for _, count := range expectedTxnCounts {
+		expectedCounts = append(expectedCounts, count)
+	}
+
+	var respCounts []int
+	for _, respTransaction := range resp.Transactions {
+		if strings.HasPrefix(respTransaction.StatsData.App, catconstants.InternalAppNamePrefix) {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		respCounts = append(respCounts, int(respTransaction.StatsData.Stats.Count))
+	}
+
+	sort.Ints(respCounts)
+	sort.Ints(expectedCounts)
+
+	if !reflect.DeepEqual(respCounts, expectedCounts) {
+		t.Fatalf("expected Counts\n\n%v\n\ngot Counts\n\n%v\n%s",
+			expectedCounts, respCounts, pretty.Sprint(resp))
+	}
+}
+
 func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
