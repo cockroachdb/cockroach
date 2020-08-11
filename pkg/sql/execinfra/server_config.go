@@ -136,7 +136,8 @@ type ServerConfig struct {
 
 	Metrics *DistSQLMetrics
 
-	SQLLivenessStorage sqlliveness.Storage
+	// SQLLivenessReader provides access to reading the liveness of sessions.
+	SQLLivenessReader sqlliveness.Reader
 
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
