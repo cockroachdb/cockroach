@@ -1983,7 +1983,7 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
 	}
-	if node.Options != nil {
+	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
 	}
 	return p.rlTable(items...)

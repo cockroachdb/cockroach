@@ -143,11 +143,8 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 		Targets: targets,
 		From:    []tree.StringOrPlaceholderOptList{{tree.NewStrVal(name)}},
 		AsOf:    makeAsOf(s),
-		Options: tree.KVOptions{
-			tree.KVOption{
-				Key:   "into_db",
-				Value: tree.NewStrVal(string(db)),
-			},
+		Options: tree.RestoreOptions{
+			IntoDB: tree.NewDString("into_db"),
 		},
 	}, true
 }
