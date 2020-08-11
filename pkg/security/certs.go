@@ -457,7 +457,7 @@ type TenantClientPair struct {
 //
 // To write the returned TenantClientPair to disk, use WriteTenantClientPair.
 func CreateTenantClientPair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, tenantIdentifier string,
+	certsDir, caKeyPath string, keySize int, lifetime time.Duration, tenantIdentifier uint64,
 ) (*TenantClientPair, error) {
 	if len(caKeyPath) == 0 {
 		return nil, errors.New("the path to the CA key is required")
@@ -490,7 +490,7 @@ func CreateTenantClientPair(
 		return nil, errors.Errorf("could not generate new tenant key: %v", err)
 	}
 
-	clientCert, err := GenerateClientCert(
+	clientCert, err := GenerateTenantClientCert(
 		caCert, caPrivateKey, clientKey.Public(), lifetime, tenantIdentifier,
 	)
 	if err != nil {
