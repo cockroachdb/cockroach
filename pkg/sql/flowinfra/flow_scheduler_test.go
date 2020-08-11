@@ -96,8 +96,8 @@ func (m *mockFlow) GetID() execinfrapb.FlowID {
 
 func (m *mockFlow) Cleanup(_ context.Context) {}
 
-func (m *mockFlow) ConcurrentExecution() bool {
-	panic("not implemented")
+func (m *mockFlow) ConcurrentTxnUse() bool {
+	return false
 }
 
 func TestFlowScheduler(t *testing.T) {

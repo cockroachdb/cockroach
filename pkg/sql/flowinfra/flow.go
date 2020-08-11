@@ -114,10 +114,11 @@ type Flow interface {
 	// mailboxes exited).
 	Cleanup(context.Context)
 
-	// ConcurrentExecution returns true if multiple processors/operators in the
-	// flow will execute concurrently (i.e. if not all of them have been fused).
+	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
+	// will execute concurrently (i.e. if not all of them have been fused) and
+	// more than one goroutine will be using a txn.
 	// Can only be called after Setup().
-	ConcurrentExecution() bool
+	ConcurrentTxnUse() bool
 }
 
 // FlowBase is the shared logic between row based and vectorized flows. It
@@ -186,9 +187,18 @@ func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.EvalCtx.Txn = txn
 }
 
-// ConcurrentExecution is part of the Flow interface.
-func (f *FlowBase) ConcurrentExecution() bool {
-	return len(f.processors) > 1
+// ConcurrentTxnUse is part of the Flow interface.
+func (f *FlowBase) ConcurrentTxnUse() bool {
+	numProcessorsThatMightUseTxn := 0
+	for _, proc := range f.processors {
+		if txnUser, ok := proc.(execinfra.DoesNotUseTxn); !ok || !txnUser.DoesNotUseTxn() {
+			numProcessorsThatMightUseTxn++
+			if numProcessorsThatMightUseTxn > 1 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 var _ Flow = &FlowBase{}
