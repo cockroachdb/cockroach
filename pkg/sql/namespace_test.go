@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -138,7 +139,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		"rel",
 		hlc.Timestamp{},
 		&descpb.PrivilegeDescriptor{},
-		false,
+		tree.PersistencePermanent,
 	)
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
