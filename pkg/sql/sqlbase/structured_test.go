@@ -920,7 +920,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	{
 		var v roachpb.Value
-		desc := &descpb.Descriptor{Union: &descpb.Descriptor_Database{}}
+		desc := &descpb.Descriptor{
+			Union: &descpb.Descriptor_Database{Database: &descpb.DatabaseDescriptor{}},
+		}
 		if err := v.SetProto(desc); err != nil {
 			t.Fatal(err)
 		}
