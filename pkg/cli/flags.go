@@ -538,6 +538,7 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
+		doctorClusterCmd,
 		dumpCmd,
 		genHAProxyCmd,
 		initCmd,
@@ -576,6 +577,7 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
+		doctorClusterCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
@@ -659,7 +661,7 @@ func init() {
 	boolFlag(dumpCmd.Flags(), &dumpCtx.dumpAll, cliflags.DumpAll)
 
 	// Commands that establish a SQL connection.
-	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd}
+	sqlCmds := []*cobra.Command{sqlShellCmd, dumpCmd, demoCmd, doctorClusterCmd}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
 	sqlCmds = append(sqlCmds, stmtDiagCmds...)
