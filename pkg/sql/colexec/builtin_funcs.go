@@ -59,7 +59,7 @@ func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
 	b.allocator.PerformOperation(
 		[]coldata.Vec{output},
 		func() {
-			b.toDatumConverter.convertBatch(batch)
+			b.toDatumConverter.convertBatchAndDeselect(batch)
 			for i := 0; i < n; i++ {
 				hasNulls := false
 

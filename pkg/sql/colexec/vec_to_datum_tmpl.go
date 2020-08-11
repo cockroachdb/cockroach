@@ -59,8 +59,14 @@ func newVecToDatumConverter(batchWidth int, vecIdxsToConvert []int) *vecToDatumC
 	}
 }
 
-// convertBatch converts the selected vectors from the batch.
-func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
+// convertBatchAndDeselect converts the selected vectors from the batch while
+// performing a deselection step.
+// NOTE: converted columns are "dense" in regards to the selection vector - if
+// there was a selection vector on the batch, only elements that were selected
+// are converted, so in order to access the tuple at position tupleIdx, use
+// getDatumColumn(colIdx)[tupleIdx] and *NOT*
+// getDatumColumn(colIdx)[sel[tupleIdx]].
+func (c *vecToDatumConverter) convertBatchAndDeselect(batch coldata.Batch) {
 	if len(c.vecIdxsToConvert) == 0 {
 		// No vectors were selected for conversion, so there is nothing to do.
 		return
@@ -82,7 +88,49 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 	sel := batch.Selection()
 	vecs := batch.ColVecs()
 	for _, vecIdx := range c.vecIdxsToConvert {
-		PhysicalTypeColVecToDatum(
+		ColVecToDatumAndDeselect(
+			c.convertedVecs[vecIdx], vecs[vecIdx], batchLength, sel, &c.da,
+		)
+	}
+}
+
+// convertBatch converts the selected vectors from the batch *without*
+// performing a deselection step.
+// NOTE: converted columns are "sparse" in regards to the selection vector - if
+// there was a selection vector on the batch, only elements that were selected
+// are converted, but the results are put at position sel[tupleIdx], so use
+// getDatumColumn(colIdx)[sel[tupleIdx]] and *NOT*
+// getDatumColumn(colIdx)[tupleIdx].
+func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
+	if len(c.vecIdxsToConvert) == 0 {
+		// No vectors were selected for conversion, so there is nothing to do.
+		return
+	}
+	batchLength := batch.Length()
+	sel := batch.Selection()
+	// Ensure that convertedVecs are of sufficient length.
+	requiredLength := batchLength
+	if sel != nil {
+		// When sel is non-nil, it might be something like sel = [1023], so we
+		// need to allocate up to the full coldata.BatchSize(), regardless of
+		// the length of the batch.
+		requiredLength = coldata.BatchSize()
+	}
+	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
+		for _, vecIdx := range c.vecIdxsToConvert {
+			c.convertedVecs[vecIdx] = make([]tree.Datum, requiredLength)
+		}
+		// Adjust the datum alloc according to the length of the batch since
+		// this batch is the longest we've seen so far.
+		c.da.AllocSize = requiredLength
+	} else {
+		for _, vecIdx := range c.vecIdxsToConvert {
+			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
+		}
+	}
+	vecs := batch.ColVecs()
+	for _, vecIdx := range c.vecIdxsToConvert {
+		ColVecToDatum(
 			c.convertedVecs[vecIdx], vecs[vecIdx], batchLength, sel, &c.da,
 		)
 	}
@@ -90,43 +138,73 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 
 // getDatumColumn returns the converted column of tree.Datum of the vector on
 // position colIdx from the last converted batch.
-// NOTE: this column is "dense" in regards to the selection vector - if there
-// was a selection vector on the batch, only elements that were selected are
-// converted, so in order to access the tuple at position tupleIdx, use
-// getDatumColumn(colIdx)[tupleIdx] and *NOT*
-// getDatumColumn(colIdx)[sel[tupleIdx]].
 func (c *vecToDatumConverter) getDatumColumn(colIdx int) tree.Datums {
 	return c.convertedVecs[colIdx]
 }
 
-func PhysicalTypeColVecToDatum(
+// ColVecToDatumAndDeselect converts a vector of coldata-represented values in
+// col into tree.Datum representation while performing a deselection step.
+// length specifies the number of values to be converted and sel is an optional
+// selection vector.
+func ColVecToDatumAndDeselect(
+	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
+) {
+	if sel == nil {
+		ColVecToDatum(converted, col, length, sel, da)
+		return
+	}
+	if col.MaybeHasNulls() {
+		nulls := col.Nulls()
+		_VEC_TO_DATUM(converted, col, length, sel, da, true, true, true)
+	} else {
+		_VEC_TO_DATUM(converted, col, length, sel, da, false, true, true)
+	}
+}
+
+// ColVecToDatum converts a vector of coldata-represented values in col into
+// tree.Datum representation *without* performing a deselection step.
+func ColVecToDatum(
 	converted []tree.Datum, col coldata.Vec, length int, sel []int, da *sqlbase.DatumAlloc,
 ) {
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
-			_VEC_TO_DATUM(converted, col, length, sel, da, true, true)
+			_VEC_TO_DATUM(converted, col, length, sel, da, true, true, false)
 		} else {
-			_VEC_TO_DATUM(converted, col, length, sel, da, true, false)
+			_VEC_TO_DATUM(converted, col, length, sel, da, true, false, false)
 		}
 	} else {
 		if sel != nil {
-			_VEC_TO_DATUM(converted, col, length, sel, da, false, true)
+			_VEC_TO_DATUM(converted, col, length, sel, da, false, true, false)
 		} else {
-			_VEC_TO_DATUM(converted, col, length, sel, da, false, false)
+			_VEC_TO_DATUM(converted, col, length, sel, da, false, false, false)
 		}
 	}
 }
 
 // {{/*
-// This code snippet is a small helper that updates tupleIdx based on the fact
-// whether there is a selection vector or not.
-func _SET_TUPLE_IDX(tupleIdx, idx int, sel []int, _HAS_SEL bool) { // */}}
-	// {{define "setTupleIdx" -}}
-	// {{if .HasSel}}
-	tupleIdx = sel[idx]
+// This code snippet is a small helper that updates destIdx based on the fact
+// whether we want the deselection behavior.
+func _SET_DEST_IDX(destIdx, idx int, sel []int, _HAS_SEL bool, _DESELECT bool) { // */}}
+	// {{define "setDestIdx" -}}
+	// {{if and (.HasSel) (not .Deselect)}}
+	destIdx = sel[idx]
 	// {{else}}
-	tupleIdx = idx
+	destIdx = idx
+	// {{end}}
+	// {{end}}
+	// {{/*
+} // */}}
+
+// {{/*
+// This code snippet is a small helper that updates srcIdx based on the fact
+// whether there is a selection vector or not.
+func _SET_SRC_IDX(srcIdx, idx int, sel []int, _HAS_SEL bool) { // */}}
+	// {{define "setSrcIdx" -}}
+	// {{if .HasSel}}
+	srcIdx = sel[idx]
+	// {{else}}
+	srcIdx = idx
 	// {{end}}
 	// {{end}}
 	// {{/*
@@ -137,10 +215,10 @@ func _SET_TUPLE_IDX(tupleIdx, idx int, sel []int, _HAS_SEL bool) { // */}}
 // tree.Datum representation that is assigned to converted. length determines
 // how many columnar values need to be converted and sel is an optional
 // selection vector.
-// NOTE: if sel is non-nil, this code snippet performs the deselection step
-// meaning that it densely populates converted with only values that are
-// selected according to sel.
-// Note: len(converted) must be no less than length.
+// NOTE: if sel is non-nil, this code snippet might perform the deselection
+// step meaning (that it will densely populate converted with only values that
+// are selected according to sel) based on _DESELECT value.
+// Note: len(converted) must be of sufficient length.
 func _VEC_TO_DATUM(
 	converted []tree.Datum,
 	col coldata.Vec,
@@ -149,12 +227,13 @@ func _VEC_TO_DATUM(
 	da *sqlbase.DatumAlloc,
 	_HAS_NULLS bool,
 	_HAS_SEL bool,
+	_DESELECT bool,
 ) { // */}}
 	// {{define "vecToDatum" -}}
 	// {{if .HasSel}}
 	sel = sel[:length]
 	// {{end}}
-	var idx, tupleIdx int
+	var idx, destIdx, srcIdx int
 	switch ct := col.Type(); ct.Family() {
 	// {{/*
 	//     String family is handled separately because the conversion changes
@@ -170,26 +249,28 @@ func _VEC_TO_DATUM(
 		bytes := col.Bytes()
 		if ct.Oid() == oid.T_name {
 			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
+				_SET_DEST_IDX(destIdx, idx, sel, _HAS_SEL, _DESELECT)
+				_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 				// {{if .HasNulls}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
+				if nulls.NullAt(srcIdx) {
+					converted[destIdx] = tree.DNull
 					continue
 				}
 				// {{end}}
-				converted[idx] = da.NewDName(tree.DString(bytes.Get(tupleIdx)))
+				converted[destIdx] = da.NewDName(tree.DString(bytes.Get(srcIdx)))
 			}
 			return
 		}
 		for idx = 0; idx < length; idx++ {
-			_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
+			_SET_DEST_IDX(destIdx, idx, sel, _HAS_SEL, _DESELECT)
+			_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 			// {{if .HasNulls}}
-			if nulls.NullAt(tupleIdx) {
-				converted[idx] = tree.DNull
+			if nulls.NullAt(srcIdx) {
+				converted[destIdx] = tree.DNull
 				continue
 			}
 			// {{end}}
-			converted[idx] = da.NewDString(tree.DString(bytes.Get(tupleIdx)))
+			converted[destIdx] = da.NewDString(tree.DString(bytes.Get(srcIdx)))
 		}
 	// {{range .Global}}
 	case _TYPE_FAMILY:
@@ -198,14 +279,15 @@ func _VEC_TO_DATUM(
 		case _TYPE_WIDTH:
 			typedCol := col._VEC_METHOD()
 			for idx = 0; idx < length; idx++ {
-				_SET_TUPLE_IDX(tupleIdx, idx, sel, _HAS_SEL)
+				_SET_DEST_IDX(destIdx, idx, sel, _HAS_SEL, _DESELECT)
+				_SET_SRC_IDX(srcIdx, idx, sel, _HAS_SEL)
 				// {{if _HAS_NULLS}}
-				if nulls.NullAt(tupleIdx) {
-					converted[idx] = tree.DNull
+				if nulls.NullAt(srcIdx) {
+					converted[destIdx] = tree.DNull
 					continue
 				}
 				// {{end}}
-				_ASSIGN_CONVERTED(converted[idx], typedCol, tupleIdx, da)
+				_ASSIGN_CONVERTED(converted[destIdx], typedCol, srcIdx, da)
 			}
 			// {{end}}
 		}

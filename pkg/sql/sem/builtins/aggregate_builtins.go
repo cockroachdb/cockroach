@@ -291,8 +291,7 @@ var aggregates = map[string]builtinDefinition{
 
 	"final_stddev": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload(
-			[]*types.T{types.Decimal,
-				types.Decimal, types.Int},
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",

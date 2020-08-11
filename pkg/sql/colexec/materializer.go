@@ -226,7 +226,7 @@ func (m *Materializer) next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadat
 				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
-			m.converter.convertBatch(m.batch)
+			m.converter.convertBatchAndDeselect(m.batch)
 		}
 
 		for colIdx := range m.typs {

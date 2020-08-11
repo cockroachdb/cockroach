@@ -33,7 +33,7 @@ type projectSetProcessor struct {
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
 	// (anything that is "function-like" including COALESCE, NULLIF) not just
 	// SRFs.
-	exprHelpers []*execinfra.ExprHelper
+	exprHelpers []*execinfrapb.ExprHelper
 
 	// funcs contains a valid pointer to a SRF FuncExpr for every entry
 	// in `exprHelpers` that is actually a SRF function application.
@@ -77,7 +77,7 @@ func newProjectSetProcessor(
 	ps := &projectSetProcessor{
 		input:       input,
 		spec:        spec,
-		exprHelpers: make([]*execinfra.ExprHelper, len(spec.Exprs)),
+		exprHelpers: make([]*execinfrapb.ExprHelper, len(spec.Exprs)),
 		funcs:       make([]*tree.FuncExpr, len(spec.Exprs)),
 		rowBuffer:   make(sqlbase.EncDatumRow, len(outputTypes)),
 		gens:        make([]tree.ValueGenerator, len(spec.Exprs)),
@@ -99,7 +99,7 @@ func newProjectSetProcessor(
 	// Initialize exprHelpers.
 	semaCtx := ps.FlowCtx.TypeResolverFactory.NewSemaContext(ps.EvalCtx.Txn)
 	for i, expr := range ps.spec.Exprs {
-		var helper execinfra.ExprHelper
+		var helper execinfrapb.ExprHelper
 		err := helper.Init(expr, ps.input.OutputTypes(), semaCtx, ps.EvalCtx)
 		if err != nil {
 			return nil, err

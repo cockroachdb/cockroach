@@ -25,7 +25,7 @@ type joinerBase struct {
 	execinfra.ProcessorBase
 
 	joinType    descpb.JoinType
-	onCond      execinfra.ExprHelper
+	onCond      execinfrapb.ExprHelper
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow

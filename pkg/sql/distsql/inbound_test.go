@@ -85,6 +85,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()
+	defer outboxStopper.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:   st,
