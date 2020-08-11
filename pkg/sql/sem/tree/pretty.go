@@ -1197,14 +1197,17 @@ func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
 func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// CREATE [TEMP] TABLE [IF NOT EXISTS] name ( .... ) [AS]
+	// CREATE [TEMP | UNLOGGED] TABLE [IF NOT EXISTS] name ( .... ) [AS]
 	//     [SELECT ...] - for CREATE TABLE AS
 	//     [INTERLEAVE ...]
 	//     [PARTITION BY ...]
 	//
 	title := pretty.Keyword("CREATE")
-	if node.Temporary {
+	switch node.Persistence {
+	case PersistenceTemporary:
 		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
+	case PersistenceUnlogged:
+		title = pretty.ConcatSpace(title, pretty.Keyword("UNLOGGED"))
 	}
 	title = pretty.ConcatSpace(title, pretty.Keyword("TABLE"))
 	if node.IfNotExists {
@@ -1250,7 +1253,7 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 	if node.Replace {
 		title = pretty.ConcatSpace(title, pretty.Keyword("OR REPLACE"))
 	}
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		title = pretty.ConcatSpace(title, pretty.Keyword("TEMPORARY"))
 	}
 	title = pretty.ConcatSpace(title, pretty.Keyword("VIEW"))

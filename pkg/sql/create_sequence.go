@@ -56,9 +56,8 @@ func (n *createSequenceNode) ReadingOwnWrites() {}
 
 func (n *createSequenceNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
-	isTemporary := n.n.Temporary
 
-	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, &n.n.Name)
+	_, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.n.Persistence, &n.n.Name)
 	if err != nil {
 		if sqlbase.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
 			return nil
@@ -67,7 +66,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	return doCreateSequence(
-		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, isTemporary, n.n.Options,
+		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }
@@ -80,7 +79,7 @@ func doCreateSequence(
 	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
 	schemaID descpb.ID,
 	name *TableName,
-	isTemporary bool,
+	persistence tree.Persistence,
 	opts tree.SequenceOptions,
 	jobDesc string,
 ) error {
@@ -91,7 +90,7 @@ func doCreateSequence(
 
 	privs := createInheritedPrivilegesFromDBDesc(dbDesc, params.SessionData().User)
 
-	if isTemporary {
+	if persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempSequenceCounter)
 	}
 
@@ -109,7 +108,7 @@ func doCreateSequence(
 		id,
 		creationTime,
 		privs,
-		isTemporary,
+		persistence,
 		&params,
 	)
 	if err != nil {
@@ -173,7 +172,7 @@ func MakeSequenceTableDesc(
 	id descpb.ID,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
-	isTemporary bool,
+	persistence tree.Persistence,
 	params *runParams,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := sqlbase.InitTableDescriptor(
@@ -183,7 +182,7 @@ func MakeSequenceTableDesc(
 		sequenceName,
 		creationTime,
 		privileges,
-		isTemporary,
+		persistence,
 	)
 
 	// Mimic a table with one column, "value".

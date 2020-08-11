@@ -1136,12 +1136,12 @@ create_schema_stmt ::=
 	| 'CREATE' 'SCHEMA' 'IF' 'NOT' 'EXISTS' schema_name
 
 create_table_stmt ::=
-	'CREATE' opt_temp_create_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
-	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
 
 create_table_as_stmt ::=
-	'CREATE' opt_temp_create_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
-	| 'CREATE' opt_temp_create_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
+	'CREATE' opt_persistence_temp_table 'TABLE' table_name create_as_opt_col_list 'AS' select_stmt
+	| 'CREATE' opt_persistence_temp_table 'TABLE' 'IF' 'NOT' 'EXISTS' table_name create_as_opt_col_list 'AS' select_stmt
 
 create_type_stmt ::=
 	'CREATE' 'TYPE' type_name 'AS' 'ENUM' '(' opt_enum_val_list ')'
@@ -1598,12 +1598,13 @@ opt_partition_by ::=
 	partition_by
 	| 
 
-opt_temp_create_table ::=
+opt_persistence_temp_table ::=
 	opt_temp
 	| 'LOCAL' 'TEMPORARY'
 	| 'LOCAL' 'TEMP'
 	| 'GLOBAL' 'TEMPORARY'
 	| 'GLOBAL' 'TEMP'
+	| 'UNLOGGED'
 
 opt_table_elem_list ::=
 	table_elem_list
