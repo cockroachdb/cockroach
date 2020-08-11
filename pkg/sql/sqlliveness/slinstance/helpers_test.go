@@ -11,6 +11,6 @@
 package slinstance
 
 // ClearSession is used in test to immediately delete the current session.
-func (l *SQLInstance) ClearSession() {
+func (l *Instance) ClearSession() {
 	l.clearSession()
 }

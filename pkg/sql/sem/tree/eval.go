@@ -3140,7 +3140,7 @@ type EvalContext struct {
 	// significantly overestimating the memory usage.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
-	SQLLivenessStorage sqlliveness.Storage
+	SQLLivenessReader sqlliveness.Reader
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
