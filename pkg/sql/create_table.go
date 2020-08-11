@@ -84,11 +84,11 @@ const (
 	storageParamUnimplemented
 )
 
-var storageParamExpectedTypes = map[string]storageParamType{
+var tableStorageParams = map[string]storageParamType{
 	`fillfactor`:                                  storageParamInt,
+	`autovacuum_enabled`:                          storageParamUnimplemented,
 	`toast_tuple_target`:                          storageParamUnimplemented,
 	`parallel_workers`:                            storageParamUnimplemented,
-	`autovacuum_enabled`:                          storageParamUnimplemented,
 	`toast.autovacuum_enabled`:                    storageParamUnimplemented,
 	`autovacuum_vacuum_threshold`:                 storageParamUnimplemented,
 	`toast.autovacuum_vacuum_threshold`:           storageParamUnimplemented,
@@ -1262,7 +1262,7 @@ func MakeTableDesc(
 		id, parentID, parentSchemaID, n.Table.Table(), creationTime, privileges, n.Persistence,
 	)
 
-	if err := checkStorageParameters(ctx, semaCtx, n.StorageParams, storageParamExpectedTypes); err != nil {
+	if err := checkStorageParameters(ctx, semaCtx, evalCtx, n.StorageParams, tableStorageParams); err != nil {
 		return desc, err
 	}
 
@@ -1773,6 +1773,7 @@ func MakeTableDesc(
 func checkStorageParameters(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 	params tree.StorageParams,
 	expectedTypes map[string]storageParamType,
 ) error {
@@ -1794,6 +1795,13 @@ func checkStorageParameters(
 			expectedType = types.Float
 		} else {
 			return unimplemented.NewWithIssuef(43299, "storage parameter %q", k)
+		}
+
+		if evalCtx != nil {
+			evalCtx.ClientNoticeSender.SendClientNotice(
+				ctx,
+				pgnotice.Newf("storage parameter %q is ignored", k),
+			)
 		}
 
 		_, err := tree.TypeCheckAndRequire(ctx, sp.Value, semaCtx, expectedType, k)

@@ -877,7 +877,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <tree.StorageParam> storage_parameter
-%type <[]tree.StorageParam> storage_parameter_list opt_table_with
+%type <[]tree.StorageParam> storage_parameter_list opt_table_with opt_with_storage_parameter_list
 
 %type <*tree.Select> select_no_parens
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
@@ -5213,24 +5213,27 @@ create_table_stmt:
   }
 
 opt_table_with:
-  /* EMPTY */
-  {
-    $$.val = nil
-  }
+  opt_with_storage_parameter_list
 | WITHOUT OIDS
   {
     /* SKIP DOC */
     /* this is also the default in CockroachDB */
     $$.val = nil
   }
+| WITH OIDS error
+  {
+    return unimplemented(sqllex, "create table with oids")
+  }
+
+opt_with_storage_parameter_list:
+  /* EMPTY */
+  {
+    $$.val = nil
+  }
 | WITH '(' storage_parameter_list ')'
   {
     /* SKIP DOC */
     $$.val = $3.storageParams()
-  }
-| WITH OIDS error
-  {
-    return unimplemented(sqllex, "create table with oids")
   }
 
 opt_create_table_on_commit:
@@ -6294,6 +6297,8 @@ enum_val_list:
 // CREATE [UNIQUE | INVERTED] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
 //        [USING HASH WITH BUCKET_COUNT = <shard_buckets>] [STORING ( <colnames...> )] [<interleave>]
+//        [PARTITION BY <partition params>]
+//        [WITH <storage_parameter_list] [WHERE <where_conds...>]
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
@@ -6301,72 +6306,76 @@ enum_val_list:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+  CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $7.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
-      Name:    tree.Name($5),
-      Table:   table,
-      Unique:  $2.bool(),
-      Columns: $10.idxElems(),
-      Sharded: $12.shardedIndexDef(),
-      Storing: $13.nameList(),
-      Interleave: $14.interleave(),
-      PartitionBy: $15.partitionBy(),
-      Predicate: $16.expr(),
-      Inverted: $8.bool(),
-      Concurrently: $4.bool(),
+      Name:          tree.Name($5),
+      Table:         table,
+      Unique:        $2.bool(),
+      Columns:       $10.idxElems(),
+      Sharded:       $12.shardedIndexDef(),
+      Storing:       $13.nameList(),
+      Interleave:    $14.interleave(),
+      PartitionBy:   $15.partitionBy(),
+      StorageParams: $16.storageParams(),
+      Predicate:     $17.expr(),
+      Inverted:      $8.bool(),
+      Concurrently:  $4.bool(),
     }
   }
-| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+| CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $10.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
-      Name:        tree.Name($8),
-      Table:       table,
-      Unique:      $2.bool(),
-      IfNotExists: true,
-      Columns:     $13.idxElems(),
-      Sharded:     $15.shardedIndexDef(),
-      Storing:     $16.nameList(),
-      Interleave:  $17.interleave(),
-      PartitionBy: $18.partitionBy(),
-      Inverted:    $11.bool(),
-      Predicate:   $19.expr(),
-      Concurrently: $4.bool(),
+      Name:          tree.Name($8),
+      Table:         table,
+      Unique:        $2.bool(),
+      IfNotExists:   true,
+      Columns:       $13.idxElems(),
+      Sharded:       $15.shardedIndexDef(),
+      Storing:       $16.nameList(),
+      Interleave:    $17.interleave(),
+      PartitionBy:   $18.partitionBy(),
+      Inverted:      $11.bool(),
+      StorageParams: $19.storageParams(),
+      Predicate:     $20.expr(),
+      Concurrently:  $4.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
+| CREATE opt_unique INVERTED INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $8.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
-      Name:       tree.Name($6),
-      Table:      table,
-      Unique:     $2.bool(),
-      Inverted:   true,
-      Columns:    $10.idxElems(),
-      Storing:     $12.nameList(),
-      Interleave:  $13.interleave(),
-      PartitionBy: $14.partitionBy(),
-      Predicate:   $15.expr(),
-      Concurrently: $5.bool(),
+      Name:          tree.Name($6),
+      Table:         table,
+      Unique:        $2.bool(),
+      Inverted:      true,
+      Columns:       $10.idxElems(),
+      Storing:       $12.nameList(),
+      Interleave:    $13.interleave(),
+      PartitionBy:   $14.partitionBy(),
+      StorageParams: $15.storageParams(),
+      Predicate:     $16.expr(),
+      Concurrently:  $5.bool(),
     }
   }
-| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_where_clause
+| CREATE opt_unique INVERTED INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     table := $11.unresolvedObjectName().ToTableName()
     $$.val = &tree.CreateIndex{
-      Name:        tree.Name($9),
-      Table:       table,
-      Unique:      $2.bool(),
-      Inverted:    true,
-      IfNotExists: true,
-      Columns:     $13.idxElems(),
-      Storing:     $15.nameList(),
-      Interleave:  $16.interleave(),
-      PartitionBy: $17.partitionBy(),
-      Predicate:   $18.expr(),
-      Concurrently: $5.bool(),
+      Name:          tree.Name($9),
+      Table:         table,
+      Unique:        $2.bool(),
+      Inverted:      true,
+      IfNotExists:   true,
+      Columns:       $13.idxElems(),
+      Storing:       $15.nameList(),
+      Interleave:    $16.interleave(),
+      PartitionBy:   $17.partitionBy(),
+      StorageParams: $18.storageParams(),
+      Predicate:     $19.expr(),
+      Concurrently:  $5.bool(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
