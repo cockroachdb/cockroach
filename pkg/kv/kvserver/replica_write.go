@@ -157,7 +157,8 @@ func (r *Replica) executeWriteBatch(
 			// a serializability violation.
 			//
 			// See comment block in Subsume() in cmd_subsume.go for details.
-			log.Fatalf(ctx, "lease applied index bumped while the range was subsumed")
+			log.Fatalf(ctx,
+				"lease applied index bumped by %v while the range was subsumed", ba)
 		}
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}

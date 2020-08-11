@@ -3693,15 +3693,6 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, args)
 		return pErr.GoError()
 	}
-	checkRangeNotFound := func(err error) error {
-		if err == nil {
-			return errors.Newf("expected RangeNotFoundError, got nil")
-		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
-	}
 	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
 		return hlc.Timestamp{
 			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
@@ -3754,7 +3745,7 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
-				setupClusterWithSubsumedRange(ctx, t, maxOffset)
+				setupClusterWithSubsumedRange(ctx, t, 1 /* numNodes */, maxOffset)
 			defer tc.Stopper().Stop(ctx)
 			errCh := make(chan error)
 			go func() {
@@ -3766,7 +3757,7 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 				// Requests that wait for the merge must fail with a RangeNotFoundError
 				// because the RHS should cease to exist once the merge completes.
 				cleanupFunc()
-				require.NoError(t, checkRangeNotFound(<-errCh))
+				require.IsType(t, (*roachpb.RangeNotFoundError)(nil), <-errCh)
 			} else {
 				require.NoError(t, <-errCh)
 				// We cleanup *after* the non-blocking read request succeeds to prevent
@@ -3777,13 +3768,41 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	}
 }
 
+// TestStoreBlockTransferLeaseRequestAfterSubsumption tests that a
+// TransferLeaseRequest checks & waits for an ongoing merge before it can be
+// evaluated.
+// Regression test for #52517.
+func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	numNodes := 2
+	tc, store, rhsDesc, _, waitForBlocked, cleanupFunc :=
+		setupClusterWithSubsumedRange(ctx, t, numNodes, 0 /* testMaxOffset */)
+	defer tc.Stopper().Stop(ctx)
+
+	errCh := make(chan error)
+	target := tc.Target(1)
+	go func() {
+		args := adminTransferLeaseArgs(rhsDesc.StartKey.AsRawKey(), target.StoreID)
+		_, err := kv.SendWrapped(ctx, store.TestSender(), args)
+		errCh <- err.GoError()
+	}()
+	// Expect the TransferLeaseRequest to block until we allow the merge to commit.
+	waitForBlocked()
+	// Let the merge commit
+	cleanupFunc()
+	require.IsType(t, (*roachpb.RangeNotFoundError)(nil), <-errCh)
+}
+
 // setupClusterWithSubsumedRange returns a TestCluster during an ongoing merge
 // transaction, such that the merge has been suspended right before the merge
-// trigger is evaluated. This leaves the right hand side range of the merge in
-// its subsumed state. It is the responsibility of the caller to call
-// `cleanupFunc` to unblock the merge and Stop() the tc's Stopper when done.
+// trigger is evaluated (with the RHS of the merge on the first store of the
+// first server). This leaves the right hand side range of the merge in its
+// subsumed state. It is the responsibility of the caller to call `cleanupFunc`
+// to unblock the merge and Stop() the tc's Stopper when done.
 func setupClusterWithSubsumedRange(
-	ctx context.Context, t *testing.T, testMaxOffset time.Duration,
+	ctx context.Context, t *testing.T, numNodes int, testMaxOffset time.Duration,
 ) (
 	tc serverutils.TestClusterInterface,
 	store *kvserver.Store,
@@ -3792,18 +3811,24 @@ func setupClusterWithSubsumedRange(
 	waitForBlocked func(),
 	cleanupFunc func(),
 ) {
-	state := mergeFilterState{
-		blockMergeTrigger: make(chan hlc.Timestamp),
-		finishMergeTxn:    make(chan struct{}),
-	}
 	var blockedRequestCount int32
+	var mergeFilter atomic.Value
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					DisableMergeQueue:    true,
-					MaxOffset:            testMaxOffset,
-					TestingRequestFilter: state.suspendMergeTrigger,
+					DisableMergeQueue:         true,
+					RangeFeedPushTxnsInterval: 5 * time.Second,
+					RangeFeedPushTxnsAge:      60 * time.Second,
+					MergeRangesAtMaxPriority:  true,
+					MaxOffset:                 testMaxOffset,
+					TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+						fn := mergeFilter.Load()
+						if fn == nil {
+							return nil
+						}
+						return fn.(func(context.Context, roachpb.BatchRequest) *roachpb.Error)(ctx, ba)
+					},
 					TestingConcurrencyRetryFilter: func(
 						ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
 					) {
@@ -3815,18 +3840,48 @@ func setupClusterWithSubsumedRange(
 			},
 		},
 	}
-	tc = serverutils.StartTestCluster(t, 1, clusterArgs)
+	tc = serverutils.StartTestCluster(t, numNodes, clusterArgs)
 	ts := tc.Server(0)
 	stores, _ := ts.GetStores().(*kvserver.Stores)
 	store, err := stores.GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	require.NoError(t, err)
-	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	add := func(desc *roachpb.RangeDescriptor) {
+		for {
+			*desc, err = tc.AddReplicas(desc.StartKey.AsRawKey(), tc.Target(1))
+			if kv.IsExpectedRelocateError(err) {
+				// Retry.
+				continue
+			}
+			break
+		}
+		require.NoError(t, err)
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
+		testutils.SucceedsSoon(t, func() error {
+			if count := len(desc.Replicas().Voters()); count != 2 {
+				return errors.Newf("expected 2 voter replicas, found %d", count)
+			}
+			return nil
+		})
+	}
+	if numNodes > 1 {
+		// Replicate the involved ranges to at least one other node in case the
+		// TestCluster is a multi-node cluster.
+		add(rhsDesc)
+		add(lhsDesc)
+	}
 	errCh := make(chan error)
+	state := mergeFilterState{
+		blockMergeTrigger: make(chan hlc.Timestamp),
+		finishMergeTxn:    make(chan struct{}),
+	}
+	mergeFilter.Store(state.suspendMergeTrigger)
 	go func() {
-		_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
-		errCh <- err.GoError()
+		defer mergeFilter.Store(func(_ context.Context, _ roachpb.BatchRequest) *roachpb.Error {
+			return nil
+		})
+		errCh <- mergeTxn(ctx, store, *lhsDesc)
 	}()
 	freezeStart = <-state.blockMergeTrigger
 	cleanupFunc = func() {
@@ -3836,8 +3891,8 @@ func setupClusterWithSubsumedRange(
 	}
 	waitForBlocked = func() {
 		testutils.SucceedsSoon(t, func() error {
-			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked != 1 {
-				return errors.Newf("expected 1 blocked request but found %d", actualBlocked)
+			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked < 1 {
+				return errors.Newf("expected at least 1 blocked request but found none")
 			}
 			return nil
 		})
