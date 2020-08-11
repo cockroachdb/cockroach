@@ -38,7 +38,7 @@ define CreateViewPrivate {
     # Schema is the ID of the catalog schema into which the new table goes.
     Schema SchemaID
     ViewName TableName
-    Temporary bool
+    Persistence Persistence
     IfNotExists bool
     Replace bool
 

@@ -55,7 +55,7 @@ func CreateTestTableDescriptor(
 			&semaCtx,
 			&evalCtx,
 			&sessiondata.SessionData{}, /* sessionData */
-			false,                      /* temporary */
+			tree.PersistencePermanent,
 		)
 		return &desc, err
 	case *tree.CreateSequence:
@@ -65,8 +65,8 @@ func CreateTestTableDescriptor(
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
-			false, /* temporary */
-			nil,   /* params */
+			tree.PersistencePermanent,
+			nil, /* params */
 		)
 		return &desc, err
 	default:

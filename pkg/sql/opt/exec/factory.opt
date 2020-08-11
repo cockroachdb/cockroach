@@ -529,7 +529,7 @@ define CreateView {
     ViewName *cat.DataSourceName
     IfNotExists bool
     Replace bool
-    Temporary bool
+    Persistence tree.Persistence
     ViewQuery string
     Columns sqlbase.ResultColumns
     deps opt.ViewDeps

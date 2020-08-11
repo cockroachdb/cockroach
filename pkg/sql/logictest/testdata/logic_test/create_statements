@@ -73,6 +73,20 @@ COMMENT ON TABLE public.c IS 'table';
 COMMENT ON COLUMN public.c.a IS 'column';
 COMMENT ON INDEX public.c@c_a_b_idx IS 'index'  {}  {}
 
+query T noticetrace
+CREATE UNLOGGED TABLE unlogged_tbl (col int PRIMARY KEY)
+----
+NOTICE: UNLOGGED TABLE will behave as a regular table in CockroachDB
+
+query TT
+SHOW CREATE TABLE unlogged_tbl
+----
+unlogged_tbl  CREATE TABLE public.unlogged_tbl (
+              col INT8 NOT NULL,
+              CONSTRAINT "primary" PRIMARY KEY (col ASC),
+              FAMILY "primary" (col)
+)
+
 statement error invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
 

@@ -557,7 +557,7 @@ func InitTableDescriptor(
 	name string,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
-	temporary bool,
+	persistence tree.Persistence,
 ) MutableTableDescriptor {
 	return MutableTableDescriptor{
 		ImmutableTableDescriptor: ImmutableTableDescriptor{
@@ -571,7 +571,7 @@ func InitTableDescriptor(
 				ModificationTime:        creationTime,
 				Privileges:              privileges,
 				CreateAsOfTime:          creationTime,
-				Temporary:               temporary,
+				Temporary:               persistence.IsTemporary(),
 			},
 		},
 	}

@@ -37,7 +37,7 @@ type createViewNode struct {
 	viewQuery   string
 	ifNotExists bool
 	replace     bool
-	temporary   bool
+	persistence tree.Persistence
 	dbDesc      *sqlbase.ImmutableDatabaseDescriptor
 	columns     sqlbase.ResultColumns
 
@@ -56,7 +56,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("view"))
 
 	viewName := n.viewName.Object()
-	isTemporary := n.temporary
+	persistence := n.persistence
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// First check the backrefs and see if any of them are temporary.
@@ -67,20 +67,20 @@ func (n *createViewNode) startExec(params runParams) error {
 		if backRefMutable == nil {
 			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
 		}
-		if !isTemporary && backRefMutable.Temporary {
+		if !persistence.IsTemporary() && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
 			params.p.SendClientNotice(
 				params.ctx,
 				pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
 			)
-			isTemporary = true
+			persistence = tree.PersistenceTemporary
 		}
 		backRefMutables[id] = backRefMutable
 	}
 
 	var replacingDesc *sqlbase.MutableTableDescriptor
 
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), isTemporary, n.viewName)
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName)
 	if err != nil {
 		switch {
 		case !sqlbase.IsRelationAlreadyExistsError(err):
@@ -110,7 +110,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if isTemporary {
+	if n.persistence.IsTemporary() {
 		telemetry.Inc(sqltelemetry.CreateTempViewCounter)
 	}
 
@@ -150,7 +150,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			privs,
 			&params.p.semaCtx,
 			params.p.EvalContext(),
-			isTemporary,
+			n.persistence,
 		)
 		if err != nil {
 			return err
@@ -255,7 +255,7 @@ func makeViewTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	temporary bool,
+	persistence tree.Persistence,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := sqlbase.InitTableDescriptor(
 		id,
@@ -264,7 +264,7 @@ func makeViewTableDesc(
 		viewName,
 		creationTime,
 		privileges,
-		temporary,
+		persistence,
 	)
 	desc.ViewQuery = viewQuery
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {

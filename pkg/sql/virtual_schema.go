@@ -167,7 +167,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,                        /* semaCtx */
 		nil,                        /* evalCtx */
 		&sessiondata.SessionData{}, /* sessionData */
-		false,                      /* temporary */
+		tree.PersistencePermanent,
 	)
 	if err != nil {
 		return mutDesc.TableDescriptor, err
@@ -241,9 +241,9 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		columns,
 		startTime, /* creationTime */
 		publicSelectPrivileges,
-		nil,   /* semaCtx */
-		nil,   /* evalCtx */
-		false, /* temporary */
+		nil, /* semaCtx */
+		nil, /* evalCtx */
+		tree.PersistencePermanent,
 	)
 	return mutDesc.TableDescriptor, err
 }

@@ -253,7 +253,7 @@ func readPostgresCreateTable(
 					id,
 					hlc.Timestamp{WallTime: walltime},
 					descpb.NewDefaultPrivilegeDescriptor(owner),
-					false, /* temporary */
+					tree.PersistencePermanent,
 					&params,
 				)
 				if err != nil {
