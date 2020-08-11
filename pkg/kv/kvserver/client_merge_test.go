@@ -3676,6 +3676,19 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	}
 }
 
+func sendWithTxn(
+	store *kvserver.Store,
+	desc *roachpb.RangeDescriptor,
+	ts hlc.Timestamp,
+	maxOffset time.Duration,
+	args roachpb.Request,
+) error {
+	txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(),
+		0, ts, maxOffset.Nanoseconds())
+	_, pErr := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: &txn}, args)
+	return pErr.GoError()
+}
+
 // TestHistoricalReadsAfterSubsume tests that a subsumed right hand side range
 // can only serve read-only traffic for timestamps that precede the subsumption
 // time, but don't contain the subsumption time in their uncertainty interval.
@@ -3684,24 +3697,6 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	ctx := context.Background()
 
 	maxOffset := 100 * time.Millisecond
-	send := func(store *kvserver.Store,
-		desc *roachpb.RangeDescriptor,
-		ts hlc.Timestamp,
-		args roachpb.Request) error {
-		txn := roachpb.MakeTransaction("test txn", desc.StartKey.AsRawKey(),
-			0, ts, maxOffset.Nanoseconds())
-		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: &txn}, args)
-		return pErr.GoError()
-	}
-	checkRangeNotFound := func(err error) error {
-		if err == nil {
-			return errors.Newf("expected RangeNotFoundError, got nil")
-		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
-	}
 	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
 		return hlc.Timestamp{
 			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
@@ -3754,19 +3749,22 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
-				setupClusterWithSubsumedRange(ctx, t, maxOffset)
+				setupClusterWithSubsumedRange(ctx, t, 1 /* numNodes */, maxOffset)
 			defer tc.Stopper().Stop(ctx)
 			errCh := make(chan error)
 			go func() {
-				errCh <- send(store, rhsDesc, test.queryTsFunc(freezeStart),
+				errCh <- sendWithTxn(store, rhsDesc, test.queryTsFunc(freezeStart), maxOffset,
 					test.queryArgsFunc(rhsDesc.StartKey.AsRawKey()))
 			}()
 			if test.shouldBlock {
 				waitForBlocked()
-				// Requests that wait for the merge must fail with a RangeNotFoundError
-				// because the RHS should cease to exist once the merge completes.
 				cleanupFunc()
-				require.NoError(t, checkRangeNotFound(<-errCh))
+				// RHS should cease to exist once the merge completes but we cannot
+				// guarantee that the merge wasn't internally retried before it was able
+				// to successfully commit. If it did, requests blocked on the previous
+				// merge attempt might go through successfully. Thus, we cannot make any
+				// assertions about the result of these blocked requests.
+				<-errCh
 			} else {
 				require.NoError(t, <-errCh)
 				// We cleanup *after* the non-blocking read request succeeds to prevent
@@ -3777,13 +3775,46 @@ func TestHistoricalReadsAfterSubsume(t *testing.T) {
 	}
 }
 
+// TestStoreBlockTransferLeaseRequestAfterSubsumption tests that a
+// TransferLeaseRequest checks & waits for an ongoing merge before it can be
+// evaluated.
+// Regression test for #52517.
+func TestStoreBlockTransferLeaseRequestAfterSubsumption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	numNodes := 2
+	maxOffset := 0 * time.Second
+	tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
+		setupClusterWithSubsumedRange(ctx, t, numNodes, maxOffset)
+	defer tc.Stopper().Stop(ctx)
+
+	errCh := make(chan error)
+	target := tc.Target(1)
+	go func() {
+		args := adminTransferLeaseArgs(rhsDesc.StartKey.AsRawKey(), target.StoreID)
+		errCh <- sendWithTxn(store, rhsDesc, freezeStart.Prev(), maxOffset, args)
+	}()
+	// Expect the TransferLeaseRequest to block until we allow the merge to commit.
+	waitForBlocked()
+	// Let the merge commit.
+	cleanupFunc()
+	// RHS should cease to exist once the merge completes but we cannot guarantee
+	// that the merge wasn't internally retried before it was able to successfully
+	// commit. If it did, this blocked transfer lease request might go through
+	// successfully. Thus, we cannot make any assertions about the result of such
+	// blocked requests.
+	<-errCh
+}
+
 // setupClusterWithSubsumedRange returns a TestCluster during an ongoing merge
 // transaction, such that the merge has been suspended right before the merge
-// trigger is evaluated. This leaves the right hand side range of the merge in
-// its subsumed state. It is the responsibility of the caller to call
-// `cleanupFunc` to unblock the merge and Stop() the tc's Stopper when done.
+// trigger is evaluated (with the RHS of the merge on the first store of the
+// first server). This leaves the right hand side range of the merge in its
+// subsumed state. It is the responsibility of the caller to call `cleanupFunc`
+// to unblock the merge and Stop() the tc's Stopper when done.
 func setupClusterWithSubsumedRange(
-	ctx context.Context, t *testing.T, testMaxOffset time.Duration,
+	ctx context.Context, t *testing.T, numNodes int, testMaxOffset time.Duration,
 ) (
 	tc serverutils.TestClusterInterface,
 	store *kvserver.Store,
@@ -3795,6 +3826,7 @@ func setupClusterWithSubsumedRange(
 	filter := mergeFilter{}
 	var blockedRequestCount int32
 	clusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -3812,21 +3844,57 @@ func setupClusterWithSubsumedRange(
 			},
 		},
 	}
-	tc = serverutils.StartTestCluster(t, 1, clusterArgs)
+	tc = serverutils.StartTestCluster(t, numNodes, clusterArgs)
 	ts := tc.Server(0)
 	stores, _ := ts.GetStores().(*kvserver.Stores)
 	store, err := stores.GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store)
 	require.NoError(t, err)
-	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	add := func(desc *roachpb.RangeDescriptor) {
+		testutils.SucceedsSoon(t, func() error {
+			*desc, err = tc.AddReplicas(desc.StartKey.AsRawKey(), tc.Target(1))
+			if kv.IsExpectedRelocateError(err) {
+				// Retry.
+				return errors.Newf("ChangeReplicas: received error %s", err)
+			}
+			return nil
+		})
+		require.NoError(t, err)
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
+		testutils.SucceedsSoon(t, func() error {
+			if count := len(replsForRange(ctx, t, tc, *desc, numNodes)); count != 2 {
+				return errors.Newf("expected %d replicas for range %d; found %d", 2, desc.RangeID, count)
+			}
+			return nil
+		})
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(desc.StartKey.AsRawKey(), tc.Target(1)))
+		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(desc.StartKey.AsRawKey(), tc.Target(0)))
+	}
+	if numNodes > 1 {
+		// Replicate the involved ranges to at least one other node in case the
+		// TestCluster is a multi-node cluster.
+		add(rhsDesc)
+		add(lhsDesc)
+	}
 	errCh := make(chan error)
 	blocker := filter.BlockNextMerge()
 	go func() {
-		_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
-		errCh <- err.GoError()
+		errCh <- mergeTxn(ctx, store, *lhsDesc)
 	}()
-	freezeStart = <-blocker.WaitCh()
+	defer func() {
+		// Ensure that the request doesn't stay blocked if we fail.
+		if t.Failed() {
+			blocker.Unblock()
+		}
+	}()
+	select {
+	case freezeStart = <-blocker.WaitCh():
+	case err := <-errCh:
+		t.Fatal(err)
+	case <-time.After(45 * time.Second):
+		t.Fatal("did not receive the merge commit trigger as expected")
+	}
 	cleanupFunc = func() {
 		// Let the merge commit.
 		blocker.Unblock()
@@ -3834,8 +3902,8 @@ func setupClusterWithSubsumedRange(
 	}
 	waitForBlocked = func() {
 		testutils.SucceedsSoon(t, func() error {
-			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked != 1 {
-				return errors.Newf("expected 1 blocked request but found %d", actualBlocked)
+			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked < 1 {
+				return errors.Newf("expected at least 1 blocked request but found none")
 			}
 			return nil
 		})
