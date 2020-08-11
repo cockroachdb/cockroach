@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,6 +38,8 @@ type TxnCoordSenderFactory struct {
 	metrics           TxnMetrics
 
 	testingKnobs ClientTestingKnobs
+	rdc          kvbase.RangeDescriptorCache
+	batcher      *requestbatcher.RequestBatcher
 }
 
 var _ kv.TxnSenderFactory = &TxnCoordSenderFactory{}
@@ -59,7 +63,7 @@ type TxnCoordSenderFactoryConfig struct {
 // NewTxnCoordSenderFactory creates a new TxnCoordSenderFactory. The
 // factory creates new instances of TxnCoordSenders.
 func NewTxnCoordSenderFactory(
-	cfg TxnCoordSenderFactoryConfig, wrapped kv.Sender,
+	cfg TxnCoordSenderFactoryConfig, wrapped kv.Sender, rangeCache kvbase.RangeDescriptorCache,
 ) *TxnCoordSenderFactory {
 	tcf := &TxnCoordSenderFactory{
 		AmbientContext:    cfg.AmbientCtx,
@@ -71,6 +75,13 @@ func NewTxnCoordSenderFactory(
 		heartbeatInterval: cfg.HeartbeatInterval,
 		metrics:           cfg.Metrics,
 		testingKnobs:      cfg.TestingKnobs,
+		rdc:               rangeCache,
+		batcher: requestbatcher.New(requestbatcher.Config{
+			Name:            "test_r_batcher",
+			MaxMsgsPerBatch: 1,
+			Stopper:         cfg.Stopper,
+			Sender:          wrapped,
+		}),
 	}
 	if tcf.st == nil {
 		tcf.st = cluster.MakeTestingClusterSettings()

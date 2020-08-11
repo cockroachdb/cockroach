@@ -395,7 +395,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Metrics:      txnMetrics,
 		TestingKnobs: clientTestingKnobs,
 	}
-	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender, distSender.RangeDescriptorCache())
 
 	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer

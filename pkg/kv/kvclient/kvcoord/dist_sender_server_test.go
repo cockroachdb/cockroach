@@ -101,6 +101,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 			Stopper:    s.Stopper(),
 		},
 		ds,
+		ds.RangeDescriptorCache(),
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 
