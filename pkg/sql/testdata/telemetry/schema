@@ -65,3 +65,12 @@ table:_
  └── columns
       ├── _:int default: _
       └── _:int default: _
+
+feature-allowlist
+sql.schema.create_unlogged_table
+----
+
+feature-usage
+CREATE UNLOGGED TABLE unlogged_tbl(col int PRIMARY KEY)
+----
+sql.schema.create_unlogged_table

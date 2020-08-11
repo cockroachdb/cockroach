@@ -1067,7 +1067,7 @@ type CreateTable struct {
 	Table         TableName
 	Interleave    *InterleaveDef
 	PartitionBy   *PartitionBy
-	Temporary     bool
+	Persistence   Persistence
 	StorageParams StorageParams
 	OnCommit      CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
@@ -1101,8 +1101,11 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 // Format implements the NodeFormatter interface.
 func (node *CreateTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
-	if node.Temporary {
+	switch node.Persistence {
+	case PersistenceTemporary:
 		ctx.WriteString("TEMPORARY ")
+	case PersistenceUnlogged:
+		ctx.WriteString("UNLOGGED ")
 	}
 	ctx.WriteString("TABLE ")
 	if node.IfNotExists {
@@ -1218,7 +1221,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 type CreateSequence struct {
 	IfNotExists bool
 	Name        TableName
-	Temporary   bool
+	Persistence Persistence
 	Options     SequenceOptions
 }
 
@@ -1226,7 +1229,7 @@ type CreateSequence struct {
 func (node *CreateSequence) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 
@@ -1526,7 +1529,7 @@ type CreateView struct {
 	ColumnNames NameList
 	AsSource    *Select
 	IfNotExists bool
-	Temporary   bool
+	Persistence Persistence
 	Replace     bool
 }
 
@@ -1538,7 +1541,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteString("OR REPLACE ")
 	}
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 
