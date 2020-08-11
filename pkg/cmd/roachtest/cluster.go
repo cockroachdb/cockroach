@@ -1497,6 +1497,38 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 	})
 }
 
+// FetchDiskUsage collects a summary of the disk usage on nodes.
+func (c *cluster) FetchDiskUsage(ctx context.Context) error {
+	// TODO(jackson): This is temporary for debugging out-of-disk-space
+	// failures like #44845.
+	if c.spec.NodeCount == 0 || c.isLocal() {
+		// No nodes can happen during unit tests and implies nothing to do.
+		// Also, don't grab disk usage on local runs.
+		return nil
+	}
+
+	c.l.Printf("fetching disk usage\n")
+	c.status("fetching disk usage")
+
+	// Don't hang forever.
+	return contextutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
+		const name = "diskusage.txt"
+		path := filepath.Join(c.t.ArtifactsDir(), name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		if err := execCmd(
+			ctx, c.l, roachprod, "ssh", c.name, "--",
+			"/bin/bash", "-c", "'du -c /mnt/data1 > "+name+"'",
+		); err != nil {
+			// Don't error out because it might've worked on some nodes. Fetching will
+			// error out below but will get everything it can first.
+			c.l.Printf("during disk usage fetching: %s", err)
+		}
+		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+	})
+}
+
 // CopyRoachprodState copies the roachprod state directory in to the test
 // artifacts.
 func (c *cluster) CopyRoachprodState(ctx context.Context) error {
