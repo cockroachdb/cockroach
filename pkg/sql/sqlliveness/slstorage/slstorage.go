@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +37,19 @@ var DefaultGCInterval = settings.RegisterNonNegativeDurationSetting(
 	time.Second,
 )
 
+// CacheSize is the size of the entries to store in the cache.
+// In general this should be larger than the number of nodes in the cluster.
+//
+// TODO(ajwerner): thread memory monitoring to this level and consider
+// increasing the cache size dynamically. The entries are just bytes each so
+// this should not be a big deal.
+var CacheSize = settings.RegisterIntSetting(
+	"server.sqlliveness.storage_session_cache_size",
+	"number of session entries to store in the LRU",
+	1024)
+
+// TODO(ajwerner): Add metrics.
+
 // Storage implements sqlliveness.Storage.
 type Storage struct {
 	stopper    *stop.Stopper
@@ -42,9 +57,19 @@ type Storage struct {
 	db         *kv.DB
 	ex         tree.InternalExecutor
 	gcInterval func() time.Duration
-	mu         struct {
-		syncutil.Mutex
+	g          singleflight.Group
+
+	mu struct {
+		syncutil.RWMutex
 		started bool
+		// liveSessions caches the current view of expirations of live sessions.
+		liveSessions *cache.UnorderedCache
+		// deadSessions caches the IDs of sessions which have not been found. This
+		// package makes an assumption that a session which is queried at some
+		// point was alive (otherwise, how would one know the ID to query?).
+		// Furthermore, this package assumes that once a sessions no longer exists,
+		// it will never exist again in the future.
+		deadSessions *cache.UnorderedCache
 	}
 }
 
@@ -62,6 +87,14 @@ func NewStorage(
 			return DefaultGCInterval.Get(&settings.SV)
 		},
 	}
+	cacheConfig := cache.Config{
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return size > int(CacheSize.Get(&settings.SV))
+		},
+	}
+	s.mu.liveSessions = cache.NewUnorderedCache(cacheConfig)
+	s.mu.deadSessions = cache.NewUnorderedCache(cacheConfig)
 	return s
 }
 
@@ -77,20 +110,86 @@ func (s *Storage) Start(ctx context.Context) {
 	s.mu.started = true
 }
 
-// IsAlive returns whether the query session is currently alive. It may return
-// true for a session which is no longer alive but will never return false for
-// a session which is alive.
 func (s *Storage) IsAlive(
-	ctx context.Context, txn *kv.Txn, sid sqlliveness.SessionID,
+	ctx context.Context, _ *kv.Txn, sid sqlliveness.SessionID,
 ) (alive bool, err error) {
-	row, err := s.ex.QueryRow(
-		ctx, "expire-single-session", txn, `
-SELECT session_id FROM system.sqlliveness WHERE session_id = $1`, sid,
-	)
-	if err != nil {
-		return true, errors.Wrapf(err, "Could not query session id: %s", sid)
+	// TODO(ajwerner): consider creating a zero-allocation cache key by converting
+	// the bytes to a string using unsafe.
+	sidKey := string(sid)
+	s.mu.RLock()
+	if _, ok := s.mu.deadSessions.Get(sidKey); ok {
+		s.mu.RUnlock()
+		return false, nil
 	}
-	return row != nil, nil
+	if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
+		expiration := expiration.(hlc.Timestamp)
+		// The record exists but is expired. If we returned that the session was
+		// alive regardless of the expiration then we'd never update the cache.
+		//
+		// TODO(ajwerner): Utilize a rangefeed for the session state to update
+		// cache entries and always rely on the currently cached value. This
+		// approach may lead to lots of request in the period of time when a
+		// session is expired but has not yet been removed. Alternatively, this
+		// code could trigger deleteSessions or could use some other mechanism
+		// to wait for deleteSessions.
+		if s.clock.Now().Less(expiration) {
+			s.mu.RUnlock()
+			return true, nil
+		}
+	}
+
+	// Launch singleflight to go read from the database. If it is found, we
+	// can add it and its expiration to the liveSessions cache. If it isn't
+	// found, we know it's dead and we can add that to the deadSessions cache.
+	resChan, _ := s.g.DoChan(sidKey, func() (interface{}, error) {
+		// store the result underneath the singleflight to avoid the need
+		// for additional synchronization.
+		live, expiration, err := s.fetchSession(ctx, sid)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if live {
+			s.mu.liveSessions.Add(sidKey, expiration)
+		} else {
+			s.mu.deadSessions.Add(sidKey, nil)
+		}
+		return live, nil
+	})
+	s.mu.RUnlock()
+	res := <-resChan
+	if res.Err != nil {
+		return false, err
+	}
+	return res.Val.(bool), nil
+}
+
+// fetchSessions returns whether the query session currently exists by reading
+// from the database. If the record exists, the associated expiration will be
+// returned.
+func (s *Storage) fetchSession(
+	ctx context.Context, sid sqlliveness.SessionID,
+) (alive bool, expiration hlc.Timestamp, err error) {
+	var row tree.Datums
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		row, err = s.ex.QueryRow(
+			ctx, "expire-single-session", txn, `
+SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid,
+		)
+		return errors.Wrapf(err, "Could not query session id: %s", sid)
+	}); err != nil {
+		return false, hlc.Timestamp{}, err
+	}
+	if row == nil {
+		return false, hlc.Timestamp{}, nil
+	}
+	ts := row[0].(*tree.DDecimal)
+	exp, err := tree.DecimalToHLC(&ts.Decimal)
+	if err != nil {
+		return false, hlc.Timestamp{}, errors.Wrapf(err, "failed to parse expiration for session")
+	}
+	return true, exp, nil
 }
 
 func (s *Storage) deleteSessions(ctx context.Context) {
@@ -133,6 +232,9 @@ func (s *Storage) deleteSessions(ctx context.Context) {
 }
 
 // Insert inserts the input Session in table `system.sqlliveness`.
+// A client must never call this method with a session which was previously
+// used! The contract of IsAlive is that once a session becomes not alive, it
+// must never become alive again.
 func (s *Storage) Insert(ctx context.Context, session sqlliveness.Session) error {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := s.ex.QueryRow(
