@@ -64,17 +64,4 @@ func TestSQLStorage(t *testing.T) {
 	found, err := sqlStorage.Update(ctx, session)
 	require.NoError(t, err)
 	require.False(t, found)
-
-	session.exp = s.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-	err = sqlStorage.Insert(ctx, session)
-	require.NoError(t, err)
-
-	found, err = sqlStorage.Update(ctx, session)
-	require.NoError(t, err)
-	require.True(t, found)
-
-	time.Sleep(50 * time.Millisecond)
-	a, err := sqlStorage.IsAlive(ctx, nil, sid)
-	require.NoError(t, err)
-	require.True(t, a)
 }
