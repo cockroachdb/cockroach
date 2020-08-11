@@ -34,9 +34,6 @@ func NewFakeStorage() *FakeStorage {
 	return fs
 }
 
-// Start implements the sqlliveness.Storage interface.
-func (s *FakeStorage) Start(_ context.Context) {}
-
 // IsAlive implements the sqlliveness.Storage interface.
 func (s *FakeStorage) IsAlive(
 	_ context.Context, _ *kv.Txn, sid sqlliveness.SessionID,
