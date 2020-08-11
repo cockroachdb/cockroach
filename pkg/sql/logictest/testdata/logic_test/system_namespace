@@ -1,4 +1,7 @@
-# LogicTest: !3node-tenant(48778)
+# system_namespace fails when run as a tenant because of the absence of the
+# tenants table. This is expected.
+# LogicTest: !3node-tenant
+
 # When run with a tenant, system.namespace has an extra entry for
 # descriptor_id_seq.
 query IITI rowsort
