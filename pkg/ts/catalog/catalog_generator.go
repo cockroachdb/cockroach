@@ -44,6 +44,7 @@ const (
 	ReplicationLayer   = `Replication Layer`
 	StorageLayer       = `Storage Layer`
 	Timeseries         = `Timeseries`
+	Jobs               = `Jobs`
 )
 
 // sectionDescription describes either a section or subsection of the chart.
@@ -190,6 +191,13 @@ var chartCatalog = []ChartSection{
 		power the very charts you\'re using, among other things.`,
 		Level: 0,
 	},
+	{
+		Title:           Jobs,
+		LongTitle:       Jobs,
+		CollectionTitle: "jobs-all",
+		Description:     `Your cluster executes various background jobs, as well as scheduled jobs`,
+		Level:           0,
+	},
 }
 
 var catalogGenerated = false
@@ -204,6 +212,7 @@ var catalogKey = map[string]int{
 	ReplicationLayer:   4,
 	StorageLayer:       5,
 	Timeseries:         6,
+	Jobs:               7,
 }
 
 // unitsKey converts between metric.Unit and catalog.AxisUnits which is

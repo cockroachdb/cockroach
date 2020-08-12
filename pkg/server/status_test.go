@@ -905,8 +905,8 @@ func TestChartCatalogGen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure each of the 7 constant sections of the chart catalog exist.
-	if len(chartCatalog) != 7 {
+	// Ensure each of the 8 constant sections of the chart catalog exist.
+	if len(chartCatalog) != 8 {
 		t.Fatal("Chart catalog failed to generate.")
 	}
 
