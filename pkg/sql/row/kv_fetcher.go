@@ -48,7 +48,7 @@ func NewKVFetcher(
 	mon *mon.BytesMonitor,
 ) (*KVFetcher, error) {
 	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon, true,
 	)
 	return newKVFetcher(&kvBatchFetcher, mon), err
 }

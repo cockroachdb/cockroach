@@ -23,7 +23,7 @@ import (
 const existenceCacheSize = 64
 
 var existenceCacheEnabled = settings.RegisterBoolSetting(
-	"kv.transaction.existence_cache_enabled",
+	"kv.transaction.existence_cache.enabled",
 	"if enabled, key range existence knowledge is maintained for each transaction",
 	true,
 )

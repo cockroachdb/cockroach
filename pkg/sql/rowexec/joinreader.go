@@ -472,7 +472,7 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
-		jr.FlowCtx.TraceKV); err != nil {
+		jr.FlowCtx.TraceKV, jr.joinType.ShouldIncludeRightColsInOutput()); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, jr.DrainHelper()
 	}

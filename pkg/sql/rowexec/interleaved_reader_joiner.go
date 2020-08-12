@@ -91,7 +91,7 @@ func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
 	ctx = irj.StartInternal(ctx, interleavedReaderJoinerProcName)
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := irj.fetcher.StartScan(
-		irj.Ctx, irj.FlowCtx.Txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false, /* traceKV */
+		irj.Ctx, irj.FlowCtx.Txn, irj.allSpans, true /* limitBatches */, irj.limitHint, false /* traceKV */, true,
 	); err != nil {
 		irj.MoveToDraining(err)
 	}
