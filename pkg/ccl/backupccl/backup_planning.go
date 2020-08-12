@@ -206,34 +206,6 @@ func spansForAllTableIndexes(
 	return spans
 }
 
-// resolveOptionsForRestoreJobDescription is primarily responsible for redacting
-// the passphrase and if need be, resolving the into_db placeholder, before the
-// description is written into the RESTORE job record.
-func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string,
-) tree.RestoreOptions {
-	if opts.IsDefault() {
-		return opts
-	}
-
-	newOpts := tree.RestoreOptions{
-		SkipMissingFKs:            opts.SkipMissingFKs,
-		SkipMissingSequences:      opts.SkipMissingSequences,
-		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
-		SkipMissingViews:          opts.SkipMissingViews,
-	}
-
-	if opts.EncryptionPassphrase != nil {
-		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
-	}
-
-	if opts.IntoDB != nil {
-		newOpts.IntoDB = tree.NewDString(intoDB)
-	}
-
-	return newOpts
-}
-
 func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	parsedURI, err := url.Parse(uri)
 	if err != nil {
@@ -304,7 +276,9 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 	return defaultURI, urisByLocalityKV, nil
 }
 
-func resolveOptionsForBackupJobDescription(opts tree.BackupOptions) (tree.BackupOptions, error) {
+func resolveOptionsForBackupJobDescription(
+	opts tree.BackupOptions, kmsURIs []string,
+) (tree.BackupOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
 	}
@@ -318,11 +292,19 @@ func resolveOptionsForBackupJobDescription(opts tree.BackupOptions) (tree.Backup
 		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
 	}
 
+	for _, uri := range kmsURIs {
+		redactedURI, err := cloudimpl.RedactKMSURI(uri)
+		if err != nil {
+			return tree.BackupOptions{}, err
+		}
+		newOpts.EncryptionKMSURI = append(newOpts.EncryptionKMSURI, tree.NewDString(redactedURI))
+	}
+
 	return newOpts, nil
 }
 
 func backupJobDescription(
-	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string,
+	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string, kmsURIs []string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
@@ -345,7 +327,7 @@ func backupJobDescription(
 		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
 
-	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options)
+	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs)
 	if err != nil {
 		return "", err
 	}
@@ -929,7 +911,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, kmsURIs)
 		if err != nil {
 			return err
 		}

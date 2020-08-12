@@ -2420,6 +2420,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{EncryptionPassphrase: $3.expr()}
   }
+| KMS '=' string_or_placeholder_opt_list
+	{
+    $$.val = &tree.RestoreOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
+	}
 | INTO_DB '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{IntoDB: $3.expr()}
