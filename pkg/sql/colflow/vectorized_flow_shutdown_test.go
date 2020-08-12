@@ -258,7 +258,15 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					require.NoError(t, err)
 					wg.Add(1)
 					go func(id int) {
-						outbox.Run(ctx, dialer, execinfra.StaticNodeID, flowID, execinfrapb.StreamID(id), cancelFn)
+						outbox.Run(
+							ctx,
+							dialer,
+							execinfra.StaticNodeID,
+							flowID,
+							execinfrapb.StreamID(id),
+							cancelFn,
+							0, /* connectionTimeout */
+						)
 						wg.Done()
 					}(id)
 
