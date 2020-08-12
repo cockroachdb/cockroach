@@ -12,14 +12,27 @@ package delegate
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-func (d *delegator) delegateShowEnums(n *tree.ShowEnums) (tree.Statement, error) {
+func (d *delegator) delegateShowEnums() (tree.Statement, error) {
 	query := `
-  SELECT type.typname AS name,
-         string_agg(enum.enumlabel, '|') AS value
-    FROM pg_enum AS enum
-    JOIN pg_type AS type ON (type.oid = enum.enumtypid)
-GROUP BY type.typname
-ORDER BY type.typname`
-
+SELECT
+	schema, name, string_agg(label, '|') AS value
+FROM
+	(
+		SELECT
+			nsp.nspname AS schema,
+			type.typname AS name,
+			enum.enumlabel AS label
+		FROM
+			pg_catalog.pg_enum AS enum
+			JOIN pg_catalog.pg_type AS type ON (type.oid = enum.enumtypid)
+			JOIN pg_catalog.pg_namespace AS nsp ON (type.typnamespace = nsp.oid)
+		ORDER BY
+			(enumtypid, enumsortorder)
+	)
+GROUP BY
+	(schema, name)
+ORDER BY
+	(schema, name);
+`
 	return parse(query)
 }
