@@ -49,6 +49,8 @@ func buildOpaque(
 	var plan planNode
 	var err error
 	switch n := stmt.(type) {
+	case *tree.AlterDatabaseOwner:
+		plan, err = p.AlterDatabaseOwner(ctx, n)
 	case *tree.AlterIndex:
 		plan, err = p.AlterIndex(ctx, n)
 	case *tree.AlterSchema:
@@ -177,6 +179,7 @@ func buildOpaque(
 
 func init() {
 	for _, stmt := range []tree.Statement{
+		&tree.AlterDatabaseOwner{},
 		&tree.AlterIndex{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},

@@ -715,6 +715,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
 %type <tree.Statement> alter_zone_database_stmt
+%type <tree.Statement> alter_database_owner
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1380,13 +1381,21 @@ alter_sequence_options_stmt:
 // %Category: DDL
 // %Text:
 // ALTER DATABASE <name> RENAME TO <newname>
+// ALTER DATABASE <name> OWNER TO <newowner>
 // %SeeAlso: WEBDOCS/alter-database.html
 alter_database_stmt:
   alter_rename_database_stmt
 |  alter_zone_database_stmt
+|  alter_database_owner
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
+
+alter_database_owner:
+	ALTER DATABASE database_name OWNER TO role_spec
+	{
+		$$.val = &tree.AlterDatabaseOwner{Name: tree.Name($3), Owner: $6}
+	}
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL

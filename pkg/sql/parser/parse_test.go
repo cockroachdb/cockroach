@@ -1268,6 +1268,8 @@ func TestParse(t *testing.T) {
 		{`ALTER DATABASE a RENAME TO b`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
+		{`ALTER DATABASE a OWNER TO foo`},
+
 		{`ALTER INDEX b RENAME TO b`},
 		{`EXPLAIN ALTER INDEX b RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},

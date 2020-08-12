@@ -1158,33 +1158,8 @@ func (p *planner) alterTableOwner(
 	desc := n.tableDesc
 	privs := desc.GetPrivileges()
 
-	// Make sure the newOwner exists.
-	roleExists, err := p.RoleExists(ctx, newOwner)
-	if err != nil {
+	if err := p.checkCanAlterToNewOwner(ctx, desc, privs, newOwner, n.hasOwnership); err != nil {
 		return false, err
-	}
-	if !roleExists {
-		return false, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
-	}
-
-	// Make sure the user has ownership on the table
-	// and not just create privilege.
-	if !n.hasOwnership {
-		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of table %s", tree.Name(desc.GetName()))
-	}
-
-	// Requirements from PG:
-	// To alter the owner, you must also be a direct or indirect member of the
-	// new owning role, and that role must have CREATE privilege on the
-	// table's schema.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
-	if err != nil {
-		return false, err
-	}
-	if _, ok := memberOf[newOwner]; !ok {
-		return false, pgerror.Newf(
-			pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
 	}
 
 	// Ensure the new owner has CREATE privilege on the table's schema.

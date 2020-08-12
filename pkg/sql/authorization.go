@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -125,9 +126,6 @@ func (p *planner) CheckPrivilege(
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-// TODO(richardjcai): Add checks for if the user owns the parent of the object.
-// Ie, being the owner of a database gives access to all tables in the db.
-// Issue #51931.
 func IsOwner(desc sqlbase.Descriptor, role string) bool {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner
@@ -506,4 +504,60 @@ func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, use
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
 	}
+}
+
+// checkCanAlterToNewOwner checks if the new owner exists, the current user
+// has privileges to alter the owner of the object and the current user is a
+//  member of the new owner role.
+func (p *planner) checkCanAlterToNewOwner(
+	ctx context.Context,
+	desc catalog.MutableDescriptor,
+	privs *descpb.PrivilegeDescriptor,
+	newOwner string,
+	hasOwnership bool,
+) error {
+	// Make sure the newOwner exists.
+	roleExists, err := p.RoleExists(ctx, newOwner)
+	if err != nil {
+		return err
+	}
+	if !roleExists {
+		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+	}
+
+	var objType string
+	switch desc.(type) {
+	case *MutableTypeDescriptor:
+		objType = "type"
+	case *MutableTableDescriptor:
+		objType = "table"
+	case *MutableSchemaDescriptor:
+		objType = "schema"
+	case *MutableDatabaseDescriptor:
+		objType = "database"
+	default:
+		return errors.AssertionFailedf("unknown object descriptor type %v", desc)
+	}
+
+	// Make sure the user has ownership on the table
+	// and not just create privilege.
+	if !hasOwnership {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of %s %s", tree.Name(objType), tree.Name(desc.GetName()))
+	}
+
+	// Requirements from PG:
+	// To alter the owner, you must also be a direct or indirect member of the
+	// new owning role, and that role must have CREATE privilege on the
+	// table's schema.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	if err != nil {
+		return err
+	}
+	if _, ok := memberOf[newOwner]; !ok {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	}
+
+	return nil
 }
