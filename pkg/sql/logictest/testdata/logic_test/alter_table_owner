@@ -1,0 +1,94 @@
+statement ok
+CREATE TABLE t()
+
+# Ensure user must exist for set owner.
+statement error pq: role/user fake_user does not exist
+ALTER TABLE t OWNER TO fake_user
+
+# Ensure user the current user is a member of the role we're setting to.
+statement error pq: must be member of role testuser
+ALTER TABLE t OWNER TO testuser
+
+user testuser
+
+# Ensure the user has to be an owner alter the owner.
+statement error pq: must be owner of table t
+ALTER TABLE t OWNER TO testuser
+
+user root
+
+statement ok
+GRANT testuser TO root
+
+# Test set owner for a table in the public schema.
+statement ok
+ALTER TABLE t OWNER TO testuser
+
+user testuser
+
+statement ok
+SET experimental_enable_user_defined_schemas = true
+
+statement ok
+CREATE SCHEMA s
+
+user root
+
+# testuser2 does not have owner/create privilege on schema s.
+statement ok
+CREATE USER testuser2
+
+statement ok
+CREATE TABLE s.t()
+
+statement ok
+GRANT testuser2 TO root
+
+# Ensure the new owner has create privilege on the schema.
+statement error pq: user testuser2 does not have CREATE privilege on schema s
+ALTER TABLE s.t OWNER TO testuser2
+
+statement ok
+GRANT testuser TO root
+
+# testuser satisfies all the conditions to become the new owner.
+statement ok
+ALTER TABLE s.t OWNER TO testuser
+
+statement ok
+GRANT testuser TO testuser2
+
+user testuser2
+
+# Even though testuser2 is a member of testuser, testuser2 cannot alter the
+# owner without being the explicit owner.
+statement error pq: must be owner of table t
+ALTER TABLE s.t OWNER TO testuser2
+
+user testuser
+
+# Ensure testuser is owner by dropping the table.
+statement ok
+DROP TABLE s.t
+
+# Test ALTER TABLE OWNER in a combined statement.
+
+user testuser2
+
+statement ok
+CREATE TABLE t2()
+
+statement ok
+ALTER TABLE t2 ADD COLUMN x INT, OWNER TO testuser
+
+user root
+
+statement ok
+SET experimental_enable_temp_tables = on
+
+statement ok
+CREATE TEMP TABLE temp()
+
+# Should not be able to alter the owner of a temporary table.
+statement error pq: cannot CREATE on schema with id 57
+ALTER TABLE temp OWNER TO testuser

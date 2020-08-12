@@ -274,6 +274,47 @@ func ResolveSchemaNameByID(
 	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
 }
 
+// ResolveSchemaDescByID resolves a schema based on it's ID.
+func ResolveSchemaDescByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, schemaID descpb.ID,
+) (sqlbase.ResolvedSchema, error) {
+	if schemaID == keys.PublicSchemaID {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaPublic,
+			ID:   schemaID,
+		}, nil
+	}
+
+	// We have already considered public and virtual schemas don't have ids.
+	// The schema must be user-defined or temporary.
+	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, schemaID, catalogkv.Immutable,
+		catalogkv.SchemaDescriptorKind, false)
+	if err != nil {
+		return sqlbase.ResolvedSchema{}, err
+	}
+
+	// TODO(richardjcai): We should store temp schema IDs when we create it in
+	// the session data.
+	// For now assume a nil descriptor corresponds to a temp table.
+	if desc == nil {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaTemporary,
+			ID:   schemaID,
+		}, nil
+	}
+
+	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	if !ok {
+		return sqlbase.ResolvedSchema{}, errors.AssertionFailedf("could not get ImmutableSchemaDescriptor from %v", schemaDesc)
+	}
+
+	return sqlbase.ResolvedSchema{
+		Kind: sqlbase.SchemaUserDefined,
+		ID:   schemaID,
+		Desc: schemaDesc,
+	}, nil
+}
+
 // ResolveTypeDescByID resolves a TypeDescriptor and fully qualified name
 // from an ID.
 // TODO (rohany): Once we start to cache type descriptors, this needs to
