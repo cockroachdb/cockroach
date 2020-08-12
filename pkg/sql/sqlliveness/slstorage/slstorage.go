@@ -242,14 +242,16 @@ SELECT count(*)
 		return nil
 	})
 	if err != nil {
-		if ctx.Err() != nil {
-			log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
+		if ctx.Err() == nil {
+			log.Errorf(ctx, "could not delete expired sessions: %+v", err)
 		}
 		return
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
 	s.metrics.SessionsDeleted.Inc(n)
-	log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
+	if n > 0 {
+		log.Warningf(ctx, "deleted %d expired SQL liveness sessions", n)
+	}
 }
 
 // Insert inserts the input Session in table `system.sqlliveness`.
