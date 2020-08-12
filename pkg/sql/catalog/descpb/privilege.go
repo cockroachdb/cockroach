@@ -248,12 +248,12 @@ func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 	return modified
 }
 
-// Validate is called when writing a database or table descriptor.
+// Validate is called when writing a database, table or type descriptor.
 // It takes the descriptor ID which is used to determine if
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
-func (p PrivilegeDescriptor) Validate(id ID) error {
-	allowedPrivileges := privilege.List{privilege.ALL}
+func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
+	allowedPrivileges := DefaultSuperuserPrivileges
 
 	if IsReservedID(id) {
 		var ok bool
@@ -279,13 +279,10 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 		}
 	}
 
-	allowedPrivilegesBits := allowedPrivileges.ToBitField()
-	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
-		// ALL privileges allowed, we can skip regular users.
-		return nil
-	}
+	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
 
 	// For all non-super users, privileges must not exceed the allowed privileges.
+	// Also the privileges must be valid on the object type.
 	for _, u := range p.Users {
 		if u.User == security.RootUser || u.User == security.AdminRole {
 			// We've already checked super users.
@@ -295,6 +292,14 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
 			return fmt.Errorf("user %s must not have %s privileges on system object with ID=%d",
 				u.User, privilege.ListFromBitField(remaining, privilege.Any), id)
+		}
+
+		// Get all the privilege bits set on the descriptor even if they're not valid.
+		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
+		if err := privilege.ValidatePrivileges(
+			privs, objectType,
+		); err != nil {
+			return err
 		}
 	}
 

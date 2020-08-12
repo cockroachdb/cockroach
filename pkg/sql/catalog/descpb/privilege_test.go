@@ -234,31 +234,113 @@ func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	id := ID(keys.MinUserDescID)
 	descriptor := NewDefaultPrivilegeDescriptor(security.AdminRole)
-	if err := descriptor.Validate(id); err != nil {
+	if err := descriptor.Validate(id, privilege.Table); err != nil {
 		t.Fatal(err)
 	}
 	descriptor.Grant("foo", privilege.List{privilege.ALL})
-	if err := descriptor.Validate(id); err != nil {
+	if err := descriptor.Validate(id, privilege.Table); err != nil {
 		t.Fatal(err)
 	}
 	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(id); err != nil {
+	if err := descriptor.Validate(id, privilege.Table); err != nil {
 		t.Fatal(err)
 	}
-	descriptor.Revoke(
-		security.RootUser, privilege.List{privilege.SELECT}, privilege.Table)
-	if err := descriptor.Validate(id); err == nil {
+	descriptor.Revoke(security.RootUser, privilege.List{privilege.SELECT},
+		privilege.Table)
+	if err := descriptor.Validate(id, privilege.Table); err == nil {
 		t.Fatal("unexpected success")
 	}
 	// TODO(marc): validate fails here because we do not aggregate
 	// privileges into ALL when all are set.
 	descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT})
-	if err := descriptor.Validate(id); err == nil {
+	if err := descriptor.Validate(id, privilege.Table); err == nil {
 		t.Fatal("unexpected success")
 	}
 	descriptor.Revoke(security.RootUser, privilege.List{privilege.ALL}, privilege.Table)
-	if err := descriptor.Validate(id); err == nil {
+	if err := descriptor.Validate(id, privilege.Table); err == nil {
 		t.Fatal("unexpected success")
+	}
+}
+
+func TestTableDBPrivilegeValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	id := ID(keys.MinUserDescID)
+
+	// USAGE should not be valid on a table or a database.
+	mockTableDBPrivDesc := NewDefaultPrivilegeDescriptor(security.AdminRole)
+	mockTableDBPrivDesc.Grant("foo", privilege.List{privilege.USAGE})
+	err := mockTableDBPrivDesc.Validate(id, privilege.Table)
+	if err == nil {
+		t.Fatalf("unexpected success, %s should not be a valid privilege for a table",
+			privilege.USAGE)
+	}
+	err = mockTableDBPrivDesc.Validate(id, privilege.Database)
+	if err == nil {
+		t.Fatalf("unexpected success, %s should not be a valid privilege for a database",
+			privilege.USAGE)
+	}
+
+	// Ensure all DBTablePrivileges can be granted on a table or database.
+	for _, priv := range privilege.DBTablePrivileges {
+		mockTableDBPrivDesc := NewDefaultPrivilegeDescriptor(security.AdminRole)
+		mockTableDBPrivDesc.Grant("foo", privilege.List{priv})
+		err := mockTableDBPrivDesc.Validate(id, privilege.Table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = mockTableDBPrivDesc.Validate(id, privilege.Database)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestTypePrivilegeValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	id := ID(keys.MinUserDescID)
+
+	invalidPrivilegesOnType := privilege.List{
+		privilege.CREATE,
+		privilege.DROP,
+		privilege.SELECT,
+		privilege.INSERT,
+		privilege.DELETE,
+		privilege.UPDATE,
+		privilege.ZONECONFIG,
+	}
+
+	for _, priv := range invalidPrivilegesOnType {
+		mockTypePrivDesc := NewDefaultPrivilegeDescriptor(security.AdminRole)
+		mockTypePrivDesc.Grant("foo", privilege.List{priv})
+		err := mockTypePrivDesc.Validate(id, privilege.Type)
+		if err == nil {
+			t.Fatalf("unexpected success, %s should not be a valid privilege for a type", priv)
+		}
+	}
+
+	// Ensure all TypePrivileges can be granted on a type.
+	for _, priv := range privilege.TypePrivileges {
+		mockTypePrivDesc := NewDefaultPrivilegeDescriptor(security.AdminRole)
+		mockTypePrivDesc.Grant("foo", privilege.List{priv})
+		err := mockTypePrivDesc.Validate(id, privilege.Type)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSchemaPrivilegeValidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	id := ID(keys.MinUserDescID)
+
+	// Ensure all SchemaPrivileges can be granted on a schema.
+	for _, priv := range privilege.SchemaPrivileges {
+		mockSchemaPrivDesc := NewDefaultPrivilegeDescriptor(security.AdminRole)
+		mockSchemaPrivDesc.Grant("foo", privilege.List{priv})
+		err := mockSchemaPrivDesc.Validate(id, privilege.Schema)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -289,19 +371,19 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 			privilege.List{privilege.SELECT, privilege.GRANT},
 			security.AdminRole,
 		)
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has a subset of the allowed privileges.
 		descriptor.Grant("foo", privilege.List{privilege.SELECT})
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has exactly the allowed privileges.
 		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -315,20 +397,20 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 		// Valid: foo has a subset of the allowed privileges.
 		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo can have privileges revoked, including privileges it doesn't currently have.
 		descriptor.Revoke(
 			"foo", privilege.List{privilege.GRANT, privilege.UPDATE, privilege.ALL}, privilege.Table)
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 
 		// Invalid: root user has too many privileges.
 		descriptor.Grant(security.RootUser, privilege.List{privilege.UPDATE})
-		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
+		if err := descriptor.Validate(id, privilege.Table); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
 	}
@@ -337,7 +419,7 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		// Invalid: root has a non-allowable privilege set.
 		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE},
 			security.AdminRole)
-		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
+		if err := descriptor.Validate(id, privilege.Table); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
 
@@ -345,20 +427,20 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 		// but admin is still wrong.
 		descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE}, privilege.Table)
 		descriptor.Grant(security.RootUser, privilege.List{privilege.SELECT, privilege.GRANT})
-		if err := descriptor.Validate(id); !testutils.IsError(err, adminWrongPrivilegesErr) {
+		if err := descriptor.Validate(id, privilege.Table); !testutils.IsError(err, adminWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", adminWrongPrivilegesErr, err)
 		}
 
 		// Valid: admin's invalid privileges are revoked and replaced with allowable privileges.
 		descriptor.Revoke(security.AdminRole, privilege.List{privilege.UPDATE}, privilege.Table)
 		descriptor.Grant(security.AdminRole, privilege.List{privilege.SELECT, privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 
 		// Valid: foo has less privileges than root.
 		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); err != nil {
+		if err := descriptor.Validate(id, privilege.Table); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -530,7 +612,7 @@ func TestValidateOwnership(t *testing.T) {
 				Privileges: DefaultSuperuserPrivileges.ToBitField(),
 			},
 		}}
-	err := privs.Validate(id)
+	err := privs.Validate(id, privilege.Table)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +633,7 @@ func TestValidateOwnership(t *testing.T) {
 		Version: OwnerVersion,
 	}
 
-	err = privs.Validate(id)
+	err = privs.Validate(id, privilege.Table)
 	if err == nil {
 		t.Fatal("unexpected success")
 	}
@@ -571,7 +653,7 @@ func TestValidateOwnership(t *testing.T) {
 		Version: OwnerVersion,
 	}
 
-	err = privs.Validate(id)
+	err = privs.Validate(id, privilege.Table)
 	if err != nil {
 		t.Fatal(err)
 	}
