@@ -15,21 +15,21 @@ import (
 	"context"
 	"io"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"google.golang.org/grpc"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -37,13 +37,6 @@ type flowStreamClient interface {
 	Send(*execinfrapb.ProducerMessage) error
 	Recv() (*execinfrapb.ConsumerSignal, error)
 	CloseSend() error
-}
-
-// Dialer is used for dialing based on node IDs. It extracts out the single
-// method that Outbox.Run needs from nodedialer.Dialer so that we can mock it
-// in tests outside of this package.
-type Dialer interface {
-	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
 }
 
 // Outbox is used to push data from local flows to a remote endpoint. Run may
@@ -130,11 +123,12 @@ func (o *Outbox) close(ctx context.Context) {
 //    Outbox goes through the same steps as 1).
 func (o *Outbox) Run(
 	ctx context.Context,
-	dialer Dialer,
+	dialer execinfra.Dialer,
 	nodeID roachpb.NodeID,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
 	cancelFn context.CancelFunc,
+	connectionTimeout time.Duration,
 ) {
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
@@ -142,7 +136,7 @@ func (o *Outbox) Run(
 
 	var stream execinfrapb.DistSQL_FlowStreamClient
 	if err := func() error {
-		conn, err := dialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		conn, err := execinfra.GetConnForOutbox(ctx, dialer, nodeID, connectionTimeout)
 		if err != nil {
 			log.Warningf(
 				ctx,
