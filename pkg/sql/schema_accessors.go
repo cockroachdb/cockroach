@@ -42,6 +42,9 @@ type (
 	// UncachedDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	UncachedDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
+	// MutableDatabaseDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	MutableDatabaseDescriptor = sqlbase.MutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor
@@ -66,4 +69,7 @@ type (
 	// TableNames is provided for convenience and to make the interface
 	// definitions below more intuitive.
 	TableNames = tree.TableNames
+	// MutableSchemaDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	MutableSchemaDescriptor = sqlbase.MutableSchemaDescriptor
 )
