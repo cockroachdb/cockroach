@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"math/rand"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -28,17 +27,11 @@ func runDecommissionMixedVersions(
 		t.Fatal(err)
 	}
 
-	var nodeIDs []int
-	for i := 1; i <= c.spec.NodeCount; i++ {
-		nodeIDs = append(nodeIDs, i)
-	}
-	getRandNode := func() int {
-		return nodeIDs[rand.Intn(len(nodeIDs))]
-	}
+	h := newDecommTestHelper(t, c)
 
 	// The v20.2 CLI can only be run against servers running v20.2. For this
 	// reason, we grab a handle on a specific server slated for an upgrade.
-	pinnedUpgrade := getRandNode()
+	pinnedUpgrade := h.getRandNode()
 	t.l.Printf("pinned n%d for upgrade", pinnedUpgrade)
 
 	// An empty string means that the cockroach binary specified by flag
@@ -53,74 +46,73 @@ func runDecommissionMixedVersions(
 
 		startVersion(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
-		preventAutoUpgradeStep(nodeIDs[0]),
+		preventAutoUpgradeStep(h.nodeIDs[0]),
 
-		// We upgrade a subset of the cluster to v20.2 (these may end up
-		// resolving to the same node).
+		// We upgrade a subset of the cluster to v20.2.
 		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
-		binaryUpgradeStep(c.Node(getRandNode()), mainVersion),
+		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), mainVersion),
 		checkAllMembership(pinnedUpgrade, "active"),
 
 		// 1. Partially decommission a random node from another random node. We
 		// use the v20.1 CLI to do so.
-		partialDecommissionStep(getRandNode(), getRandNode(), predecessorVersion),
-		checkOneDecommissioning(getRandNode()),
+		partialDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
+		checkOneDecommissioning(h.getRandNode()),
 		checkOneMembership(pinnedUpgrade, "decommissioning"),
 
 		// 2. Recommission all nodes, including the partially decommissioned
 		// one, from a random node. Use the v20.1 CLI to do so.
-		recommissionAllStep(getRandNode(), predecessorVersion),
-		checkNoDecommissioning(getRandNode()),
+		recommissionAllStep(h.getRandNode(), predecessorVersion),
+		checkNoDecommissioning(h.getRandNode()),
 		checkAllMembership(pinnedUpgrade, "active"),
 		//
 		// 3. Attempt to fully decommission a from a random node, again using
 		// the v20.1 CLI.
-		fullyDecommissionStep(getRandNode(), getRandNode(), predecessorVersion),
-		checkOneDecommissioning(getRandNode()),
+		fullyDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
+		checkOneDecommissioning(h.getRandNode()),
 		checkOneMembership(pinnedUpgrade, "decommissioning"),
 
 		// Roll back, which should to be fine because the cluster upgrade was
 		// not finalized.
 		binaryUpgradeStep(allNodes, predecessorVersion),
-		checkOneDecommissioning(getRandNode()),
+		checkOneDecommissioning(h.getRandNode()),
 
 		// Repeat similar recommission/decommission cycles as above. We can no
 		// longer assert against the `membership` column as none of the servers
 		// are running v20.2.
-		recommissionAllStep(getRandNode(), predecessorVersion),
-		checkNoDecommissioning(getRandNode()),
+		recommissionAllStep(h.getRandNode(), predecessorVersion),
+		checkNoDecommissioning(h.getRandNode()),
 
-		partialDecommissionStep(getRandNode(), getRandNode(), predecessorVersion),
-		checkOneDecommissioning(getRandNode()),
+		partialDecommissionStep(h.getRandNode(), h.getRandNode(), predecessorVersion),
+		checkOneDecommissioning(h.getRandNode()),
 
 		// Roll all nodes forward, and finalize upgrade.
 		binaryUpgradeStep(allNodes, mainVersion),
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(allNodes),
 
-		checkOneMembership(getRandNode(), "decommissioning"),
+		checkOneMembership(h.getRandNode(), "decommissioning"),
 
 		// Use the v20.2 CLI here on forth. Lets start with recommissioning all
 		// the nodes in the cluster.
-		recommissionAllStep(getRandNode(), mainVersion),
-		checkNoDecommissioning(getRandNode()),
-		checkAllMembership(getRandNode(), "active"),
+		recommissionAllStep(h.getRandNode(), mainVersion),
+		checkNoDecommissioning(h.getRandNode()),
+		checkAllMembership(h.getRandNode(), "active"),
 
 		// We partially decommission a random node.
-		partialDecommissionStep(getRandNode(), getRandNode(), mainVersion),
-		checkOneDecommissioning(getRandNode()),
-		checkOneMembership(getRandNode(), "decommissioning"),
+		partialDecommissionStep(h.getRandNode(), h.getRandNode(), mainVersion),
+		checkOneDecommissioning(h.getRandNode()),
+		checkOneMembership(h.getRandNode(), "decommissioning"),
 
 		// We check that recommissioning is still functional.
-		recommissionAllStep(getRandNode(), mainVersion),
-		checkNoDecommissioning(getRandNode()),
-		checkAllMembership(getRandNode(), "active"),
+		recommissionAllStep(h.getRandNode(), mainVersion),
+		checkNoDecommissioning(h.getRandNode()),
+		checkAllMembership(h.getRandNode(), "active"),
 
 		// We fully decommission a random node. We need to use the v20.2 CLI to
 		// do so.
-		fullyDecommissionStep(getRandNode(), getRandNode(), mainVersion),
-		checkOneDecommissioning(getRandNode()),
-		checkOneMembership(getRandNode(), "decommissioned"),
+		fullyDecommissionStep(h.getRandNode(), h.getRandNode(), mainVersion),
+		checkOneDecommissioning(h.getRandNode()),
+		checkOneMembership(h.getRandNode(), "decommissioned"),
 	)
 
 	u.run(ctx, t)
