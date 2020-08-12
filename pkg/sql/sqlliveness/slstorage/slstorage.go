@@ -242,15 +242,15 @@ SELECT count(*)
 		return nil
 	})
 	if err != nil {
-		if ctx.Err() != nil {
-			log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
+		if ctx.Err() == nil {
+			log.Errorf(ctx, "could not delete expired sessions: %+v", err)
 		}
 		return
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
 	s.metrics.SessionsDeleted.Inc(n)
 	if log.V(2) || n > 0 {
-		log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
+		log.Infof(ctx, "deleted %d expired SQL liveness sessions", n)
 	}
 }
 
