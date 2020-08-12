@@ -388,7 +388,7 @@ func NewTestWithLocality(
 // AssertNotStarted fatals if the Gossip instance was already started.
 func (g *Gossip) AssertNotStarted(ctx context.Context) {
 	if g.started {
-		log.Fatalf(ctx, "Gossip instance was already started")
+		log.Fatalf(ctx, "gossip instance was already started")
 	}
 }
 

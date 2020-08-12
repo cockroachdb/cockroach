@@ -82,5 +82,5 @@ func ReadTestdataBytes(r *rand.Rand, arr []byte) {
 func SeedForTests() {
 	seed := envutil.EnvOrDefaultInt64("COCKROACH_RANDOM_SEED", NewPseudoSeed())
 	rand.Seed(seed)
-	log.Printf("Random seed: %v", seed)
+	log.Printf("random seed: %v", seed)
 }

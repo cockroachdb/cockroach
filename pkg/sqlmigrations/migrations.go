@@ -857,7 +857,7 @@ func (m *Manager) migrateSystemNamespace(
 			if err != nil {
 				return err
 			}
-			log.Infof(ctx, "Migrating system.namespace chunk with %d rows", len(rows))
+			log.Infof(ctx, "migrating system.namespace chunk with %d rows", len(rows))
 			for i, row := range rows {
 				workLeft = false
 				// We found some rows from the query, which means that we can't quit
@@ -878,7 +878,7 @@ func (m *Manager) migrateSystemNamespace(
 					}
 					// Also create a 'public' schema for this database.
 					schemaKey := sqlbase.NewSchemaKey(id, "public")
-					log.VEventf(ctx, 2, "Migrating system.namespace entry for database %s", name)
+					log.VEventf(ctx, 2, "migrating system.namespace entry for database %s", name)
 					if err := txn.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
 						return err
 					}
@@ -892,7 +892,7 @@ func (m *Manager) migrateSystemNamespace(
 						continue
 					}
 					tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
-					log.VEventf(ctx, 2, "Migrating system.namespace entry for table %s", name)
+					log.VEventf(ctx, 2, "migrating system.namespace entry for table %s", name)
 					if err := txn.Put(ctx, tableKey.Key(r.codec), id); err != nil {
 						return err
 					}

@@ -372,9 +372,9 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, false /* showInputTypes */)
 		if err != nil {
-			log.Infof(ctx, "Error generating diagram: %s", err)
+			log.Infof(ctx, "error generating diagram: %s", err)
 		} else {
-			log.Infof(ctx, "Plan diagram URL:\n%s", url.String())
+			log.Infof(ctx, "plan diagram URL:\n%s", url.String())
 		}
 	}
 
@@ -419,7 +419,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	// TODO(radu): this should go through the flow scheduler.
 	if err := flow.Run(ctx, func() {}); err != nil {
-		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
+		log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %v\n"+
 			"The error should have gone to the consumer.", err)
 	}
 

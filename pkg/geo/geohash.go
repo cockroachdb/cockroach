@@ -19,7 +19,7 @@ import (
 // using a Lng/Lat Point representation of the GeoHash.
 func NewGeometryPointFromGeoHash(g string, precision int) (*Geometry, error) {
 	if len(g) == 0 {
-		return nil, errors.Newf("Length of geohash must be greater than 0")
+		return nil, errors.Newf("length of geohash must be greater than 0")
 	}
 
 	// If precision is more than the length of the geohash

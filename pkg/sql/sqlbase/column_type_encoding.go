@@ -1318,7 +1318,7 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.INetFamily:
 		return encoding.IPAddr, nil
 	default:
-		return 0, errors.Errorf("Don't know encoding type for %s", t)
+		return 0, errors.AssertionFailedf("no known encoding type for %s", t)
 	}
 }
 

@@ -255,7 +255,7 @@ func (n *scrubNode) startScrubTable(
 			}
 			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 		default:
-			panic(errors.AssertionFailedf("Unhandled SCRUB option received: %+v", v))
+			panic(errors.AssertionFailedf("unhandled SCRUB option received: %+v", v))
 		}
 	}
 

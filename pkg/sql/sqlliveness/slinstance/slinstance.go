@@ -131,7 +131,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Errorf(ctx, "Failed to create a session at %d-th attempt: %v", i, err.Error())
+				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err.Error())
 			}
 			continue
 		}
@@ -140,7 +140,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "Created new SQL liveness session %s", s.ID())
+	log.Infof(ctx, "created new SQL liveness session %s", s.ID())
 	return s, nil
 }
 
@@ -214,7 +214,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 				continue
 			}
 			if log.V(2) {
-				log.Infof(ctx, "Extended SQL liveness session %s", s.ID())
+				log.Infof(ctx, "extended SQL liveness session %s", s.ID())
 			}
 			t.Reset(l.hb())
 		}

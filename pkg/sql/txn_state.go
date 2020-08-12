@@ -227,7 +227,7 @@ func (ts *txnState) finishSQLTxn() {
 		ts.cancel = nil
 	}
 	if ts.sp == nil {
-		panic("No span in context? Was resetForNewSQLTxn() called previously?")
+		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
 	}
 
 	if ts.recordingThreshold > 0 {
@@ -240,7 +240,7 @@ func (ts *txnState) finishSQLTxn() {
 				}
 			}
 		} else {
-			log.Warning(ts.Ctx, "Missing trace when sampled was enabled.")
+			log.Warning(ts.Ctx, "missing trace when sampled was enabled")
 		}
 	}
 

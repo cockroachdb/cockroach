@@ -57,7 +57,7 @@ func makeLocalStorage(
 	ioConf base.ExternalIODirConfig,
 ) (cloud.ExternalStorage, error) {
 	if cfg.Path == "" {
-		return nil, errors.Errorf("Local storage requested but path not provided")
+		return nil, errors.Errorf("local storage requested but path not provided")
 	}
 	client, err := blobClientFactory(ctx, cfg.NodeID)
 	if err != nil {

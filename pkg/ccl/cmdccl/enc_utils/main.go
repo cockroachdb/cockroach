@@ -90,7 +90,7 @@ func loadFileRegistry() {
 
 func loadStoreKey() {
 	if len(*storeKeyPath) == 0 || *storeKeyPath == "plain" {
-		log.Infof(context.Background(), "No store key specified")
+		log.Infof(context.Background(), "no store key specified")
 		return
 	}
 
