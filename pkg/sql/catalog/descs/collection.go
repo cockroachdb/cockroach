@@ -307,7 +307,9 @@ func (tc *Collection) ResolveSchema(
 ) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, sqlbase.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: tree.PublicSchema,
+		}, nil
 	}
 
 	type schemaCacheKey struct {

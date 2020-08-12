@@ -79,7 +79,9 @@ func (a UncachedPhysicalAccessor) GetSchema(
 ) (bool, sqlbase.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if scName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic}, nil
+		return true, sqlbase.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: scName,
+		}, nil
 	}
 
 	// Lookup the schema ID.
@@ -92,7 +94,9 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	// Note that just performing this string check on the schema name is safe
 	// because no user defined schemas can have the prefix "pg_".
 	if strings.HasPrefix(scName, sessiondata.PgTempSchemaName) {
-		return true, sqlbase.ResolvedSchema{ID: schemaID, Kind: sqlbase.SchemaTemporary}, nil
+		return true, sqlbase.ResolvedSchema{
+			ID: schemaID, Kind: sqlbase.SchemaTemporary, Name: scName,
+		}, nil
 	}
 
 	// Get the descriptor from disk.
@@ -104,6 +108,7 @@ func (a UncachedPhysicalAccessor) GetSchema(
 		ID:   sc.GetID(),
 		Kind: sqlbase.SchemaUserDefined,
 		Desc: sc,
+		Name: scName,
 	}, nil
 }
 

@@ -144,7 +144,6 @@ var (
 	ignoreStatements = []*regexp.Regexp{
 		regexp.MustCompile("(?i)^alter function"),
 		regexp.MustCompile("(?i)^alter sequence .* owned by"),
-		regexp.MustCompile("(?i)^alter table .* owner to"),
 		regexp.MustCompile("(?i)^comment on"),
 		regexp.MustCompile("(?i)^create extension"),
 		regexp.MustCompile("(?i)^create function"),
@@ -401,6 +400,8 @@ func readPostgresStmt(
 					create.Defs[i] = def
 				}
 			case *tree.AlterTableValidateConstraint:
+				// ignore
+			case *tree.AlterTableOwner:
 				// ignore
 			default:
 				return errors.Errorf("unsupported statement: %s", stmt)
