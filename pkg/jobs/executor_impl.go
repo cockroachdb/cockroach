@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
@@ -75,6 +76,11 @@ func (e *inlineScheduledJobExecutor) NotifyJobTermination(
 	if jobStatus == StatusFailed {
 		DefaultHandleFailedRun(schedule, jobID, nil)
 	}
+	return nil
+}
+
+// Metrics implements ScheduledJobExecutor interface
+func (e *inlineScheduledJobExecutor) Metrics() metric.Struct {
 	return nil
 }
 

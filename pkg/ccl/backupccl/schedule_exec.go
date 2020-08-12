@@ -22,21 +22,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
-type scheduledBackupExecutor struct{}
+type scheduledBackupExecutor struct {
+	metrics jobs.ExecutorMetrics
+}
 
 var _ jobs.ScheduledJobExecutor = &scheduledBackupExecutor{}
 
 // ExecuteJob implements jobs.ScheduledJobExecutor interface.
-func (se *scheduledBackupExecutor) ExecuteJob(
+func (e *scheduledBackupExecutor) ExecuteJob(
 	ctx context.Context,
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
+) error {
+	if err := e.executeBackup(ctx, cfg, sj, txn); err != nil {
+		e.metrics.NumFailed.Inc(1)
+		return err
+	}
+	e.metrics.NumStarted.Inc(1)
+	return nil
+}
+
+func (e *scheduledBackupExecutor) executeBackup(
+	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn *kv.Txn,
 ) error {
 	backupStmt, err := extractBackupStatement(sj)
 	if err != nil {
@@ -105,18 +119,29 @@ func (se *scheduledBackupExecutor) ExecuteJob(
 		return nil
 	})
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	return nil
+	return g.Wait()
 }
 
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
-func (se *scheduledBackupExecutor) NotifyJobTermination(
-	ctx context.Context, jobID int64, jobStatus jobs.Status, schedule *jobs.ScheduledJob, txn *kv.Txn,
+func (e *scheduledBackupExecutor) NotifyJobTermination(
+	ctx context.Context, jobID int64, jobStatus jobs.Status, schedule *jobs.ScheduledJob, _ *kv.Txn,
 ) error {
-	return errors.New("unimplemented yet")
+	if jobStatus == jobs.StatusSucceeded {
+		e.metrics.NumSucceeded.Inc(1)
+	} else {
+		err := errors.Errorf(
+			"backup job %d scheduled by %d failed with status %s",
+			jobID, schedule.ScheduleID(), jobStatus)
+		log.Errorf(ctx, "backup error: %v	", err)
+		e.metrics.NumFailed.Inc(1)
+		jobs.DefaultHandleFailedRun(schedule, jobID, err)
+	}
+	return nil
+}
+
+// Metrics implements ScheduledJobExecutor interface
+func (e *scheduledBackupExecutor) Metrics() metric.Struct {
+	return &e.metrics
 }
 
 // extractBackupStatement returns tree.Backup node encoded inside scheduled job.
@@ -148,6 +173,8 @@ func init() {
 	jobs.RegisterScheduledJobExecutorFactory(
 		tree.ScheduledBackupExecutor.InternalName(),
 		func() (jobs.ScheduledJobExecutor, error) {
-			return &scheduledBackupExecutor{}, nil
+			return &scheduledBackupExecutor{
+				metrics: jobs.MakeExecutorMetrics(tree.ScheduledBackupExecutor.UserName()),
+			}, nil
 		})
 }
