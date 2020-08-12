@@ -155,10 +155,9 @@ func (im *Implicator) Init(f *norm.Factory, md *opt.Metadata, evalCtx *tree.Eval
 func (im *Implicator) FiltersImplyPredicate(
 	filters memo.FiltersExpr, pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
-	// An empty FiltersExpr is equivalent to True, which is only implied by
-	// True.
-	if len(pred) == 0 {
-		return filters, len(filters) == 0
+	// True is only implied by true.
+	if pred.IsTrue() {
+		return filters, filters.IsTrue()
 	}
 
 	// Check for exact matches for all FiltersItems in pred. This check is not
