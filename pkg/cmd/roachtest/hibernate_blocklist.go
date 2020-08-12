@@ -25,7 +25,9 @@ var hibernateBlocklists = blocklistsForVersion{
 // in the test log.
 var hibernateBlockList20_2 = blocklist{}
 
-var hibernateBlockList20_1 = blocklist{}
+var hibernateBlockList20_1 = blocklist{
+	"org.hibernate.test.typedescriptor.CharInNativeQueryTest.testNativeQuery": "48563",
+}
 
 var hibernateBlockList19_2 = blocklist{}
 

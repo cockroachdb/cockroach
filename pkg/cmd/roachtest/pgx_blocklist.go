@@ -22,9 +22,7 @@ var pgxBlocklists = blocklistsForVersion{
 var pgxBlocklist20_2 = blocklist{
 	"v4.Example_CustomType":                                        "27796",
 	"v4.TestConnBeginBatchDeferredError":                           "31632",
-	"v4.TestConnCopyFromJSON":                                      "19603",
-	"v4.TestConnCopyFromLarge":                                     "19603",
-	"v4.TestConnCopyFromSmall":                                     "19603",
+	"v4.TestConnCopyFromLarge":                                     "52722",
 	"v4.TestConnQueryDeferredError":                                "31632",
 	"v4.TestConnQueryErrorWhileReturningRows":                      "26925",
 	"v4.TestConnQueryReadRowMultipleTimes":                         "26925",
