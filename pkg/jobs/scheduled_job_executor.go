@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,6 +46,9 @@ type ScheduledJobExecutor interface {
 		schedule *ScheduledJob,
 		txn *kv.Txn,
 	) error
+
+	// Metrics returns optional metric.Struct object for this executor.
+	Metrics() metric.Struct
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

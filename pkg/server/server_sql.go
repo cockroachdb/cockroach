@@ -90,6 +90,7 @@ type sqlServer struct {
 	sqlMemMetrics           sql.MemoryMetrics
 	stmtDiagnosticsRegistry *stmtdiagnostics.Registry
 	sqlLivenessProvider     sqlliveness.Provider
+	metricsRegistry         *metric.Registry
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -617,6 +618,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		sqlMemMetrics:           sqlMemMetrics,
 		stmtDiagnosticsRegistry: stmtDiagnosticsRegistry,
 		sqlLivenessProvider:     cfg.sqlLivenessProvider,
+		metricsRegistry:         cfg.registry,
 	}, nil
 }
 
@@ -747,6 +749,7 @@ func (s *sqlServer) start(
 	jobs.StartJobSchedulerDaemon(
 		ctx,
 		stopper,
+		s.metricsRegistry,
 		&scheduledjobs.JobExecutionConfig{
 			Settings:         s.execCfg.Settings,
 			InternalExecutor: s.internalExecutor,

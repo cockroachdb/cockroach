@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +42,10 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 	ctx context.Context, jobID int64, jobStatus Status, schedule *ScheduledJob, txn *kv.Txn,
 ) error {
 	s.counts[jobStatus]++
+	return nil
+}
+
+func (s *statusTrackingExecutor) Metrics() metric.Struct {
 	return nil
 }
 
