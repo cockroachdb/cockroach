@@ -352,10 +352,6 @@ func init() {
 		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
-		// Hide tenant-related flags.
-		_ = f.MarkHidden(cliflags.ListenTenantAddr.Name)
-		_ = f.MarkHidden(cliflags.TenantAdvertiseAddr.Name)
-
 		// Backward-compatibility flags.
 
 		// These are deprecated but until we have qualitatively new

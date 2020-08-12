@@ -41,10 +41,9 @@ const (
 	DefaultHTTPPort = "8080"
 
 	// NB: net.JoinHostPort is not a constant.
-	defaultAddr       = ":" + DefaultPort
-	defaultSQLAddr    = ":" + DefaultPort
-	defaultTenantAddr = ":" + DefaultPort
-	defaultHTTPAddr   = ":" + DefaultHTTPPort
+	defaultAddr     = ":" + DefaultPort
+	defaultSQLAddr  = ":" + DefaultPort
+	defaultHTTPAddr = ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
 	NetworkTimeout = 3 * time.Second

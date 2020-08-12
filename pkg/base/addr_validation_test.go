@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-type addrs struct{ listen, adv, http, advhttp, sql, advsql, ten, advten string }
+type addrs struct{ listen, adv, http, advhttp, sql, advsql string }
 
 func (a *addrs) String() string {
 	return fmt.Sprintf(""+
@@ -157,14 +157,12 @@ func TestValidateAddrs(t *testing.T) {
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d/%s", i, test.in), func(t *testing.T) {
 			cfg := base.Config{
-				Addr:                test.in.listen,
-				AdvertiseAddr:       test.in.adv,
-				HTTPAddr:            test.in.http,
-				HTTPAdvertiseAddr:   test.in.advhttp,
-				SQLAddr:             test.in.sql,
-				SQLAdvertiseAddr:    test.in.advsql,
-				TenantAddr:          test.in.ten,
-				TenantAdvertiseAddr: test.in.advten,
+				Addr:              test.in.listen,
+				AdvertiseAddr:     test.in.adv,
+				HTTPAddr:          test.in.http,
+				HTTPAdvertiseAddr: test.in.advhttp,
+				SQLAddr:           test.in.sql,
+				SQLAdvertiseAddr:  test.in.advsql,
 			}
 
 			if err := cfg.ValidateAddrs(context.Background()); err != nil {
@@ -184,8 +182,6 @@ func TestValidateAddrs(t *testing.T) {
 				advhttp: cfg.HTTPAdvertiseAddr,
 				sql:     cfg.SQLAddr,
 				advsql:  cfg.SQLAdvertiseAddr,
-				ten:     cfg.TenantAddr,
-				advten:  cfg.TenantAdvertiseAddr,
 			}
 			gotStr := got.String()
 			expStr := test.expected.String()
