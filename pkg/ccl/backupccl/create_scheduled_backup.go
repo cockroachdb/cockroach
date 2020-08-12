@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/gorhill/cronexpr"
 )
 
 const (
@@ -43,14 +45,13 @@ var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
 type scheduledBackupEval struct {
 	*tree.ScheduledBackup
 
-	// Schedule specific properties that get evaluated.
-	scheduleName func() (string, error)
-	recurrence   func() (string, error)
-	scheduleOpts func() (map[string]string, error)
+	isEnterpriseUser bool
 
-	// TODO(yevgeniy): Support full backup recurrence. For now, assume recurrence is
-	// the full backup.
-	// fullBackupRecurrence func() (string, error)
+	// Schedule specific properties that get evaluated.
+	scheduleName         func() (string, error)
+	recurrence           func() (string, error)
+	fullBackupRecurrence func() (string, error)
+	scheduleOpts         func() (map[string]string, error)
 
 	// Backup specific properties that get evaluated.
 	// We need to evaluate anything in the tree.Backup node that allows
@@ -93,13 +94,8 @@ func parseWaitBehavior(wait string, details *jobspb.ScheduleDetails) error {
 }
 
 func setScheduleOptions(
-	eval *scheduledBackupEval, evalCtx *tree.EvalContext, sj *jobs.ScheduledJob,
+	evalCtx *tree.EvalContext, opts map[string]string, sj *jobs.ScheduledJob,
 ) error {
-	opts, err := eval.scheduleOpts()
-	if err != nil {
-		return err
-	}
-
 	if v, ok := opts[optFirstRun]; ok {
 		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
 		if err != nil {
@@ -128,9 +124,73 @@ func setScheduleOptions(
 	return nil
 }
 
+type scheduleRecurrence struct {
+	cron      string
+	frequency time.Duration
+}
+
+var neverRecurs *scheduleRecurrence
+
+func computeScheduleRecurrence(
+	now time.Time, evalFn func() (string, error),
+) (*scheduleRecurrence, error) {
+	if evalFn == nil {
+		return neverRecurs, nil
+	}
+	cron, err := evalFn()
+	if err != nil {
+		return nil, err
+	}
+	expr, err := cronexpr.Parse(cron)
+	if err != nil {
+		return nil, err
+	}
+	nextRun := expr.Next(now)
+	frequency := expr.Next(nextRun).Sub(nextRun)
+	return &scheduleRecurrence{cron, frequency}, nil
+}
+
+var humanDurations = map[time.Duration]string{
+	time.Hour:          "hour",
+	24 * time.Hour:     "day",
+	7 * 24 * time.Hour: "week",
+}
+
+func (r *scheduleRecurrence) Humanize() string {
+	if d, ok := humanDurations[r.frequency]; ok {
+		return "every " + d
+	}
+	return "every " + r.frequency.String()
+}
+
+var forceFullBackup *scheduleRecurrence
+
+func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurrence {
+	if inc.frequency <= time.Hour {
+		// If incremental is faster than once an hour, take fulls every day,
+		// some time between midnight and 1 am.
+		return &scheduleRecurrence{
+			cron:      "@daily",
+			frequency: 24 * time.Hour,
+		}
+	}
+
+	if inc.frequency <= 24*time.Hour {
+		// If incremental is less than a day, take full weekly;  some day
+		// between 0 and 1 am.
+		return &scheduleRecurrence{
+			cron:      "@weekly",
+			frequency: 7 * 24 * time.Hour,
+		}
+	}
+
+	// Incremental period too large.
+	return forceFullBackup
+}
+
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
-func doCreateBackupSchedule(
+func doCreateBackupSchedules(
 	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupEval, resultsCh chan<- tree.Datums,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -139,56 +199,60 @@ func doCreateBackupSchedule(
 			env = knobs.JobSchedulerEnv
 		}
 	}
-	sj := jobs.NewScheduledJob(env)
 
-	// Prepare arguments for scheduled backup execution.
-	args := &ScheduledBackupExecutionArgs{}
-	// TODO(yevgeniy): Support incremental backup
-	args.BackupType = ScheduledBackupExecutionArgs_FULL
-
-	// Set schedule name; if one was not provided, assign default value
-	if eval.scheduleName != nil {
-		name, err := eval.scheduleName()
-		if err != nil {
-			return err
-		}
-		sj.SetScheduleName(name)
-	} else {
-		fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-		fmt.Fprintf(fmtCtx, "%s BACKUP OF ", args.BackupType)
-		if eval.Targets == nil {
-			fmtCtx.WriteString("CLUSTER")
-		} else {
-			eval.Targets.Format(fmtCtx)
-		}
-		sj.SetScheduleName(fmtCtx.String())
+	// Evaluate incremental and full recurrence.
+	incRecurrence, err := computeScheduleRecurrence(env.Now(), eval.recurrence)
+	if err != nil {
+		return err
 	}
-
-	if eval.recurrence != nil {
-		recurrence, err := eval.recurrence()
-		if err != nil {
-			return err
-		}
-		err = sj.SetSchedule(recurrence)
-		if err != nil {
-			return err
-		}
-	}
-
-	if err := setScheduleOptions(eval, &p.ExtendedEvalContext().EvalContext, sj); err != nil {
+	fullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
+	if err != nil {
 		return err
 	}
 
-	// Prepare backup statement.
+	if incRecurrence != nil && fullRecurrence == nil {
+		// It's an enterprise user; let's see if we can pick a reasonable
+		// full  backup recurrence based on requested incremental recurrence.
+		fullRecurrence = pickFullRecurrenceFromIncremental(incRecurrence)
+
+		if fullRecurrence == forceFullBackup {
+			fullRecurrence = incRecurrence
+			incRecurrence = nil
+		}
+	}
+
+	if fullRecurrence == nil {
+		return errors.AssertionFailedf(" full backup recurrence should be set")
+	}
+
+	// Prepare backup statement (full).
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
 			CaptureRevisionHistory: eval.BackupOptions.CaptureRevisionHistory,
 			Detached:               true,
 		},
+		Nested:         true,
+		AppendToLatest: false,
+	}
+
+	if backupNode.Options.CaptureRevisionHistory && !eval.isEnterpriseUser {
+		// TODO(yevgeniy): Pull license check logic into a common helper.
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+			"revision_history"); err != nil {
+			return err
+		}
 	}
 
 	// Evaluate encryption passphrase if set.
 	if eval.encryptionPassphrase != nil {
+		if !eval.isEnterpriseUser {
+			if err := utilccl.CheckEnterpriseEnabled(
+				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+				"encryption"); err != nil {
+				return err
+			}
+		}
 		pw, err := eval.encryptionPassphrase()
 		if err != nil {
 			return errors.Wrapf(err, "failed to evaluate backup encryption_passphrase")
@@ -201,11 +265,93 @@ func doCreateBackupSchedule(
 	if err != nil {
 		return errors.Wrapf(err, "failed to evaluate backup destination paths")
 	}
+
+	if len(destinations) > 1 {
+		if !eval.isEnterpriseUser {
+			if err := utilccl.CheckEnterpriseEnabled(
+				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+				"partitioned destinations"); err != nil {
+				return err
+			}
+		}
+	}
 	for _, dest := range destinations {
 		backupNode.To = append(backupNode.To, tree.NewDString(dest))
 	}
 
 	backupNode.Targets = eval.Targets
+
+	var fullScheduleName string
+	if eval.scheduleName != nil {
+		scheduleName, err := eval.scheduleName()
+		if err != nil {
+			return err
+		}
+		fullScheduleName = scheduleName
+	} else {
+		fullScheduleName = fmt.Sprintf("BACKUP %d", env.Now().Unix())
+	}
+
+	scheduleOptions, err := eval.scheduleOpts()
+	if err != nil {
+		return err
+	}
+
+	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Create FULL backup schedule.
+		if err := createBackupSchedule(
+			ctx, p, env, fullScheduleName, fullRecurrence,
+			scheduleOptions, backupNode, resultsCh, txn,
+		); err != nil {
+			return err
+		}
+
+		// If needed, create incremental.
+		if incRecurrence != nil {
+			backupNode.AppendToLatest = true
+
+			if err := createBackupSchedule(
+				ctx, p, env, fullScheduleName+": CHANGES", incRecurrence,
+				scheduleOptions, backupNode, resultsCh, txn,
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+}
+
+func createBackupSchedule(
+	ctx context.Context,
+	p sql.PlanHookState,
+	env scheduledjobs.JobSchedulerEnv,
+	name string,
+	recurrence *scheduleRecurrence,
+	scheduleOpts map[string]string,
+	backupNode *tree.Backup,
+	resultsCh chan<- tree.Datums,
+	txn *kv.Txn,
+) error {
+	sj := jobs.NewScheduledJob(env)
+	sj.SetScheduleName(name)
+
+	// Prepare arguments for scheduled backup execution.
+	args := &ScheduledBackupExecutionArgs{}
+	if backupNode.AppendToLatest {
+		args.BackupType = ScheduledBackupExecutionArgs_INCREMENTAL
+	} else {
+		args.BackupType = ScheduledBackupExecutionArgs_FULL
+	}
+
+	if err := sj.SetSchedule(recurrence.cron); err != nil {
+		return err
+	}
+
+	if err := setScheduleOptions(&p.ExtendedEvalContext().EvalContext, scheduleOpts, sj); err != nil {
+		return err
+	}
 
 	// TODO(yevgeniy): Validate backup schedule:
 	//  * Verify targets exist.  Provide a way for user to override this via option.
@@ -224,9 +370,7 @@ func doCreateBackupSchedule(
 	)
 
 	// Create the schedule.
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return sj.Create(ctx, p.ExecCfg().InternalExecutor, txn)
-	}); err != nil {
+	if err := sj.Create(ctx, p.ExecCfg().InternalExecutor, txn); err != nil {
 		return err
 	}
 
@@ -243,8 +387,10 @@ func doCreateBackupSchedule(
 
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(sj.ScheduleID())),
+		tree.NewDString(name),
 		nextRun,
-		tree.NewDString(tree.AsString(eval.ScheduledBackup)),
+		tree.NewDString(recurrence.Humanize()),
+		tree.NewDString(tree.AsString(backupNode)),
 	}
 	return nil
 }
@@ -266,10 +412,40 @@ func makeScheduledBackupEval(
 		}
 	}
 
-	if schedule.Recurrence != nil {
-		eval.recurrence, err = p.TypeAsString(ctx, schedule.Recurrence, scheduleBackupOp)
-		if err != nil {
-			return nil, err
+	if schedule.Recurrence == nil {
+		// Sanity check: recurrence must be specified.
+		return nil, errors.New("RECURRING clause required")
+	}
+
+	eval.recurrence, err = p.TypeAsString(ctx, schedule.Recurrence, scheduleBackupOp)
+	if err != nil {
+		return nil, err
+	}
+
+	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
+		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
+		"BACKUP INTO LATEST")
+	eval.isEnterpriseUser = enterpriseCheckErr == nil
+
+	if eval.isEnterpriseUser && schedule.FullBackup != nil {
+		if schedule.FullBackup.AlwaysFull {
+			eval.fullBackupRecurrence = eval.recurrence
+			eval.recurrence = nil
+		} else {
+			eval.fullBackupRecurrence, err = p.TypeAsString(
+				ctx, schedule.FullBackup.Recurrence, scheduleBackupOp)
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else if !eval.isEnterpriseUser {
+		if schedule.FullBackup == nil || schedule.FullBackup.AlwaysFull {
+			// All backups are full cluster backups for free users.
+			eval.fullBackupRecurrence = eval.recurrence
+			eval.recurrence = nil
+		} else {
+			// Cannot use incremental backup w/out enterprise license.
+			return nil, enterpriseCheckErr
 		}
 	}
 
@@ -296,8 +472,10 @@ func makeScheduledBackupEval(
 // scheduledBackupHeader is the header for "CREATE SCHEDULE..." statements results.
 var scheduledBackupHeader = sqlbase.ResultColumns{
 	{Name: "schedule_id", Typ: types.Int},
+	{Name: "name", Typ: types.String},
 	{Name: "next_run", Typ: types.TimestampTZ},
-	{Name: "description", Typ: types.String},
+	{Name: "frequency", Typ: types.String},
+	{Name: "backup_stmt", Typ: types.String},
 }
 
 func createBackupScheduleHook(
@@ -313,7 +491,7 @@ func createBackupScheduleHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		return doCreateBackupSchedule(ctx, p, eval, resultsCh)
+		return doCreateBackupSchedules(ctx, p, eval, resultsCh)
 	}
 	return fn, scheduledBackupHeader, nil, false, nil
 }
