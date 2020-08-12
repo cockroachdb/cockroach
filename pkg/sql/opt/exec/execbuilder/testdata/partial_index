@@ -32,12 +32,12 @@ CREATE TABLE u (
 query T kvtrace
 SELECT a FROM t WHERE a > b AND c = 'foo'
 ----
-Scan /Table/53/{4-5}
+Scan /Table/53/4/"foo"{-/PrefixEnd}
 
 query T kvtrace
 SELECT a FROM t@c_partial WHERE a > b AND c = 'foo'
 ----
-Scan /Table/53/{4-5}
+Scan /Table/53/4/"foo"{-/PrefixEnd}
 
 statement error index "c_partial" is a partial index that does not contain all the rows needed to execute this query
 SELECT a FROM t@c_partial WHERE a > b AND c = 'bar'

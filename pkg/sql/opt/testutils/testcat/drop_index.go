@@ -46,9 +46,10 @@ func (tc *Catalog) DropIndex(stmt *tree.DropIndex) {
 		}
 
 		// Delete the index from the table.
-		idxLen := len(foundTab.Indexes)
-		foundTab.Indexes[idxOrd] = foundTab.Indexes[idxLen-1]
-		foundTab.Indexes = foundTab.Indexes[:idxLen-1]
+		numIndexes := len(foundTab.Indexes)
+		foundTab.Indexes[idxOrd] = foundTab.Indexes[numIndexes-1]
+		foundTab.Indexes[idxOrd].ordinal = idxOrd
+		foundTab.Indexes = foundTab.Indexes[:numIndexes-1]
 	}
 }
 
