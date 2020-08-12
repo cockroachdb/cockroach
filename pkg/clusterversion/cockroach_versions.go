@@ -74,6 +74,7 @@ const (
 	VersionRangeStatsRespHasDesc
 	VersionMinPasswordLength
 	VersionAbortSpanBytes
+	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	// Add new versions here (step one of two).
 )
 
@@ -558,6 +559,12 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionAbortSpanBytes,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
 	},
+	{
+		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
+		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 15},
+	},
+
 	// Add new versions here (step two of two).
 
 })
