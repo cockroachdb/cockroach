@@ -642,7 +642,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 			roachpb.NodeID(0),
 			execinfrapb.FlowID{UUID: uuid.MakeV4()},
 			outboxStreamID,
-			nil,
+			nil, /* cancelFn */
+			0,   /* connectionTimeout */
 		)
 		outboxDone <- struct{}{}
 	}()
