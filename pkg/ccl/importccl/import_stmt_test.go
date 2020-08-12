@@ -1869,15 +1869,9 @@ IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 		sqlDB.Exec(t, `USE uds`)
 		sqlDB.Exec(t, `CREATE SCHEMA sc`)
 		// Now import into a table under sc.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE uds.sc.t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0]))
-		// Verify that the table was created and has the right number of rows.
-		var result int
-		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
-		require.Equal(t, rowsPerFile, result)
-		// Try the same thing, but with IMPORT INTO.
-		sqlDB.Exec(t, `DROP TABLE uds.sc.t`)
 		sqlDB.Exec(t, `CREATE TABLE uds.sc.t (a INT8 PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO uds.sc.t (a, b) CSV DATA (%s)`, testFiles.files[0]))
+		var result int
 		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
 		require.Equal(t, rowsPerFile, result)
 	})
@@ -4843,15 +4837,9 @@ func TestImportAvro(t *testing.T) {
 	t.Run("user-defined-schemas", func(t *testing.T) {
 		sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true`)
 		sqlDB.Exec(t, `CREATE SCHEMA myschema`)
-		// Test with normal IMPORT.
-		sqlDB.Exec(t, `IMPORT TABLE myschema.simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`, simpleOcf)
-		var numRows int
-		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
-		require.True(t, numRows > 0)
-		// Test with IMPORT INTO.
-		sqlDB.Exec(t, `DROP TABLE myschema.simple`)
 		sqlDB.Exec(t, `CREATE TABLE myschema.simple (i INT8 PRIMARY KEY, s text, b bytea)`)
 		sqlDB.Exec(t, `IMPORT INTO myschema.simple (i, s, b) AVRO DATA ($1)`, simpleOcf)
+		var numRows int
 		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
 		require.True(t, numRows > 0)
 	})
