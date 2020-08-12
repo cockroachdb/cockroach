@@ -59,6 +59,7 @@ func MatchesDE9IM(relation string, pattern string) (bool, error) {
 // against the DE-9IM pattern.
 // Pattern matches are as follows:
 // * '*': allow anything.
+// * '0' / '1' / '2': match exactly.
 // * 't'/'T': allow only if the relation is true. This means the relation must be
 //   '0' (point), '1' (line) or '2' (area) - which is the dimensionality of the
 //   intersection.
@@ -75,6 +76,8 @@ func relationByteMatchesPatternByte(r byte, p byte) (bool, error) {
 		if util.ToLowerSingleByte(r) != 'f' {
 			return false, nil
 		}
+	case '0', '1', '2':
+		return r == p, nil
 	default:
 		return false, errors.Newf("unrecognized pattern character: %s", string(p))
 	}
