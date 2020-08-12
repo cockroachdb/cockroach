@@ -214,13 +214,13 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			now := s.clock.Now()
-			s.deleteExpiredSessions(ctx, now)
+			s.deleteExpiredSessions(ctx)
 		}
 	}
 }
 
-func (s *Storage) deleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
+func (s *Storage) deleteExpiredSessions(ctx context.Context) {
+	now := s.clock.Now()
 	var n int64
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		row, err := s.ex.QueryRow(
