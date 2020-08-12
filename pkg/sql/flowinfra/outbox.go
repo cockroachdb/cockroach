@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
-	"google.golang.org/grpc"
 )
 
 const outboxBufRows = 16
@@ -221,9 +219,9 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	}()
 
 	if m.stream == nil {
-		var conn *grpc.ClientConn
-		var err error
-		conn, err = m.flowCtx.Cfg.NodeDialer.DialNoBreaker(ctx, m.nodeID, rpc.DefaultClass)
+		conn, err := execinfra.GetConnForOutbox(
+			ctx, m.flowCtx.Cfg.NodeDialer, m.nodeID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+		)
 		if err != nil {
 			// Log any Dial errors. This does not have a verbosity check due to being
 			// a critical part of query execution: if this step doesn't work, the
