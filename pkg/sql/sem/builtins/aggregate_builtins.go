@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 func initAggregateBuiltins() {
@@ -356,6 +358,23 @@ var aggregates = map[string]builtinDefinition{
 			"Aggregates values as a JSON or JSONB object.", tree.VolatilityStable),
 	),
 
+	"st_makeline": makeBuiltin(
+		aggPropsNullableArgs(),
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Geometry,
+			func(
+				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+			) tree.AggregateFunc {
+				return &stMakeLineAgg{}
+			},
+			infoBuilder{
+				info: "Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
+
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
 			[]*types.T{types.Any},
@@ -546,6 +565,66 @@ func makeStdDevBuiltin() builtinDefinition {
 	)
 }
 
+type stMakeLineAgg struct {
+	flatCoords []float64
+	layout     geom.Layout
+}
+
+// Add implements the AggregateFunc interface.
+func (agg *stMakeLineAgg) Add(
+	_ context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	if firstArg == tree.DNull {
+		return nil
+	}
+	geomArg := tree.MustBeDGeometry(firstArg)
+
+	g, err := geomArg.AsGeomT()
+	if err != nil {
+		return err
+	}
+
+	if len(agg.flatCoords) == 0 {
+		agg.layout = g.Layout()
+	} else if agg.layout != g.Layout() {
+		return errors.Newf(
+			"mixed dimensionality not allowed (adding dimension %s to dimension %s)",
+			g.Layout(),
+			agg.layout,
+		)
+	}
+	switch g.(type) {
+	case *geom.Point, *geom.LineString, *geom.MultiPoint:
+		agg.flatCoords = append(agg.flatCoords, g.FlatCoords()...)
+	}
+	return nil
+}
+
+// Result implements the AggregateFunc interface.
+func (agg *stMakeLineAgg) Result() (tree.Datum, error) {
+	if len(agg.flatCoords) == 0 {
+		return tree.DNull, nil
+	}
+	g, err := geo.NewGeometryFromGeomT(geom.NewLineStringFlat(agg.layout, agg.flatCoords))
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDGeometry(g), nil
+}
+
+// Reset implements the AggregateFunc interface.
+func (agg *stMakeLineAgg) Reset(context.Context) {
+	agg.flatCoords = agg.flatCoords[:0]
+}
+
+// Close implements the AggregateFunc interface.
+func (agg *stMakeLineAgg) Close(context.Context) {}
+
+// Size implements the AggregateFunc interface.
+func (agg *stMakeLineAgg) Size() int64 {
+	return sizeOfSTMakeLineAggregate
+}
+
 func makeVarianceBuiltin() builtinDefinition {
 	return makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
@@ -596,6 +675,7 @@ var _ tree.AggregateFunc = &intBitOrAggregate{}
 var _ tree.AggregateFunc = &bitBitOrAggregate{}
 var _ tree.AggregateFunc = &percentileDiscAggregate{}
 var _ tree.AggregateFunc = &percentileContAggregate{}
+var _ tree.AggregateFunc = &stMakeLineAgg{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -634,6 +714,7 @@ const sizeOfIntBitOrAggregate = int64(unsafe.Sizeof(intBitOrAggregate{}))
 const sizeOfBitBitOrAggregate = int64(unsafe.Sizeof(bitBitOrAggregate{}))
 const sizeOfPercentileDiscAggregate = int64(unsafe.Sizeof(percentileDiscAggregate{}))
 const sizeOfPercentileContAggregate = int64(unsafe.Sizeof(percentileContAggregate{}))
+const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
 
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
 // that store a single datum internally track their memory usage related to
