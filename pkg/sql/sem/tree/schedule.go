@@ -44,7 +44,7 @@ func (node *ScheduledBackup) Format(ctx *FmtCtx) {
 		node.Targets.Format(ctx)
 	}
 
-	ctx.WriteString(" TO ")
+	ctx.WriteString(" INTO ")
 	ctx.FormatNode(&node.To)
 
 	if !node.BackupOptions.IsDefault() {
