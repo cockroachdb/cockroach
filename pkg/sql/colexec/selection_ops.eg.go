@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/errors"
 )
 
 // selConstOpBase contains all of the fields for binary selections with a
@@ -57691,16 +57690,118 @@ func (p *selGEDatumDatumOp) Init() {
 	p.input.Init()
 }
 
+type defaultCmpConstSelOp struct {
+	selConstOpBase
+
+	adapter          comparisonExprAdapter
+	constArg         tree.Datum
+	toDatumConverter *vecToDatumConverter
+}
+
+var _ colexecbase.Operator = &defaultCmpConstSelOp{}
+
+func (d *defaultCmpConstSelOp) Init() {
+	d.input.Init()
+}
+
+func (d *defaultCmpConstSelOp) Next(ctx context.Context) coldata.Batch {
+	for {
+		batch := d.input.Next(ctx)
+		n := batch.Length()
+		if n == 0 {
+			return coldata.ZeroBatch
+		}
+		var idx int
+		hasSel := batch.Selection() != nil
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		d.toDatumConverter.convertBatchAndDeselect(batch)
+		leftColumn := d.toDatumConverter.getDatumColumn(d.colIdx)
+		for i := 0; i < n; i++ {
+			// Note that we performed a conversion with deselection, so there
+			// is no need to check whether sel is non-nil.
+			res, err := d.adapter.eval(leftColumn[i], d.constArg)
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			if res == tree.DBoolTrue {
+				rowIdx := i
+				if hasSel {
+					rowIdx = sel[i]
+				}
+				sel[idx] = rowIdx
+				idx++
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
+type defaultCmpSelOp struct {
+	selOpBase
+
+	adapter          comparisonExprAdapter
+	toDatumConverter *vecToDatumConverter
+}
+
+var _ colexecbase.Operator = &defaultCmpSelOp{}
+
+func (d *defaultCmpSelOp) Init() {
+	d.input.Init()
+}
+
+func (d *defaultCmpSelOp) Next(ctx context.Context) coldata.Batch {
+	for {
+		batch := d.input.Next(ctx)
+		n := batch.Length()
+		if n == 0 {
+			return coldata.ZeroBatch
+		}
+		var idx int
+		hasSel := batch.Selection() != nil
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		d.toDatumConverter.convertBatchAndDeselect(batch)
+		leftColumn := d.toDatumConverter.getDatumColumn(d.col1Idx)
+		rightColumn := d.toDatumConverter.getDatumColumn(d.col2Idx)
+		for i := 0; i < n; i++ {
+			// Note that we performed a conversion with deselection, so there
+			// is no need to check whether sel is non-nil.
+			res, err := d.adapter.eval(leftColumn[i], rightColumn[i])
+			if err != nil {
+				colexecerror.ExpectedError(err)
+			}
+			if res == tree.DBoolTrue {
+				rowIdx := i
+				if hasSel {
+					rowIdx = sel[i]
+				}
+				sel[idx] = rowIdx
+				idx++
+			}
+		}
+		if idx > 0 {
+			batch.SetLength(idx)
+			return batch
+		}
+	}
+}
+
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	leftType *types.T,
-	constType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
 		OneInputNode: NewOneInputNode(input),
@@ -58938,19 +59039,26 @@ func GetSelectionConstOperator(
 			}
 		}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, constType.Name())
+	return &defaultCmpConstSelOp{
+		selConstOpBase:   selConstOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		constArg:         constArg,
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+	}, nil
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	leftType *types.T,
-	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
 		OneInputNode: NewOneInputNode(input),
 		col1Idx:      col1Idx,
@@ -60188,5 +60296,9 @@ func GetSelectionOperator(
 			}
 		}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, rightType.Name())
+	return &defaultCmpSelOp{
+		selOpBase:        selOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+	}, nil
 }

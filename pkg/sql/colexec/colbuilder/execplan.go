@@ -1468,38 +1468,41 @@ func planSelectionOperators(
 		}
 		lTyp := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
-			if t.Operator == tree.Like || t.Operator == tree.NotLike {
-				negate := t.Operator == tree.NotLike
+			switch cmpOp {
+			case tree.Like, tree.NotLike:
+				negate := cmpOp == tree.NotLike
 				op, err = colexec.GetLikeOperator(
-					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate)
-				return op, resultIdx, ct, internalMemUsedLeft, err
-			}
-			if t.Operator == tree.In || t.Operator == tree.NotIn {
-				negate := t.Operator == tree.NotIn
+					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), negate,
+				)
+			case tree.In, tree.NotIn:
+				negate := cmpOp == tree.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
 				if !ok {
-					err = errors.Errorf("IN is only supported for constant expressions")
-					return nil, resultIdx, ct, internalMemUsed, err
+					// Optimized IN operator is supported only on constant
+					// expressions, so we fallback to the default comparison
+					// operator.
+					break
 				}
 				op, err = colexec.GetInOperator(lTyp, leftOp, leftIdx, datumTuple, negate)
-				return op, resultIdx, ct, internalMemUsedLeft, err
-			}
-			if t.Operator == tree.IsDistinctFrom || t.Operator == tree.IsNotDistinctFrom {
-				if t.Right != tree.DNull {
-					err = errors.Errorf("IS DISTINCT FROM and IS NOT DISTINCT FROM are supported only with NULL argument")
-					return nil, resultIdx, ct, internalMemUsed, err
+			case tree.IsDistinctFrom, tree.IsNotDistinctFrom:
+				if constArg != tree.DNull {
+					// Optimized IsDistinctFrom and IsNotDistinctFrom are
+					// supported only with NULL argument, so we fallback to the
+					// default comparison operator.
+					break
 				}
-				// IS NOT DISTINCT FROM NULL is synonymous with IS NULL and IS
-				// DISTINCT FROM NULL is synonymous with IS NOT NULL (except for
-				// tuples). Therefore, negate when the operator is IS DISTINCT
-				// FROM NULL.
-				negate := t.Operator == tree.IsDistinctFrom
+				// IS NULL is replaced with IS NOT DISTINCT FROM NULL, so we want to
+				// negate when IS DISTINCT FROM is used.
+				negate := cmpOp == tree.IsDistinctFrom
 				op = colexec.NewIsNullSelOp(leftOp, leftIdx, negate)
-				return op, resultIdx, ct, internalMemUsedLeft, err
 			}
-			op, err := colexec.GetSelectionConstOperator(
-				lTyp, t.TypedRight().ResolvedType(), cmpOp, leftOp, leftIdx, constArg,
-			)
+			if op == nil {
+				// op hasn't been created yet, so let's try the constructor for
+				// all other projection operators.
+				op, err = colexec.GetSelectionConstOperator(
+					cmpOp, leftOp, ct, leftIdx, constArg, evalCtx, t,
+				)
+			}
 			return op, resultIdx, ct, internalMemUsedLeft, err
 		}
 		rightOp, rightIdx, ct, internalMemUsedRight, err := planProjectionOperators(
@@ -1509,7 +1512,7 @@ func planSelectionOperators(
 			return nil, resultIdx, ct, internalMemUsed, err
 		}
 		op, err := colexec.GetSelectionOperator(
-			lTyp, ct[rightIdx], cmpOp, rightOp, leftIdx, rightIdx,
+			cmpOp, rightOp, ct, leftIdx, rightIdx, evalCtx, t,
 		)
 		return op, resultIdx, ct, internalMemUsedLeft + internalMemUsedRight, err
 	default:
