@@ -433,7 +433,7 @@ func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtS
 		}
 		fmt.Fprintf(&buf, "%q: %s\n", key.String(), json)
 	}
-	log.Infof(ctx, "Statistics for %q:\n%s", appName, buf.String())
+	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
 func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {

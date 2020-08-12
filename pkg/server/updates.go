@@ -227,7 +227,7 @@ func (s *Server) checkForUpdates(ctx context.Context) bool {
 
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
-		log.Warningf(ctx, "Error decoding updates info: %v", err)
+		log.Warningf(ctx, "error decoding updates info: %v", err)
 		return false
 	}
 
@@ -238,7 +238,7 @@ func (s *Server) checkForUpdates(ctx context.Context) bool {
 		r.Details = r.Details[len(r.Details)-updateMaxVersionsToReport:]
 	}
 	for _, v := range r.Details {
-		log.Infof(ctx, "A new version is available: %s, details: %s", v.Version, v.Details)
+		log.Infof(ctx, "a new version is available: %s, details: %s", v.Version, v.Details)
 	}
 	return true
 }

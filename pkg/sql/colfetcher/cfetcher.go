@@ -684,7 +684,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			var foundNull bool
 			if rf.mustDecodeIndexKey || rf.traceKV {
 				if debugState {
-					log.Infof(ctx, "Decoding first key %s", rf.machine.nextKV.Key)
+					log.Infof(ctx, "decoding first key %s", rf.machine.nextKV.Key)
 				}
 				var (
 					key     []byte
@@ -713,7 +713,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 					// We found an interleave. Set our skip prefix.
 					seekPrefix := rf.machine.nextKV.Key[:len(key)+rf.table.knownPrefixLength]
 					if debugState {
-						log.Infof(ctx, "Setting seek prefix to %s", seekPrefix)
+						log.Infof(ctx, "setting seek prefix to %s", seekPrefix)
 					}
 					rf.machine.seekPrefix = seekPrefix
 					rf.machine.state[0] = stateSeekPrefix
@@ -840,7 +840,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			// prefix and indicate that it needs decoding.
 			rf.machine.nextKV = kv
 			if debugState {
-				log.Infof(ctx, "Decoding next key %s", rf.machine.nextKV.Key)
+				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
 			}
 
 			// TODO(jordan): optimize this prefix check by skipping span prefix.
@@ -1277,7 +1277,7 @@ func (rf *cFetcher) fillNulls() error {
 					indexColValues = append(indexColValues, "?")
 				}
 				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.Name, table.cols[i].Name, table.index.Name,
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}

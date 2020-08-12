@@ -155,13 +155,13 @@ func gc(ctx context.Context, dir string, sizeLimit int64) {
 			}
 			if totalSize > sizeLimit {
 				if err := os.Remove(path); err != nil {
-					log.Warningf(ctx, "Cannot remove dump file %s, err: %s", path, err)
+					log.Warningf(ctx, "cannot remove dump file %s, err: %s", path, err)
 				}
 			}
 		} else {
-			log.Infof(ctx, "Removing unknown file %s in goroutine dump dir %s", f.Name(), dir)
+			log.Infof(ctx, "removing unknown file %s in goroutine dump dir %s", f.Name(), dir)
 			if err := os.Remove(path); err != nil {
-				log.Warningf(ctx, "Cannot remove file %s, err: %s", path, err)
+				log.Warningf(ctx, "cannot remove file %s, err: %s", path, err)
 			}
 		}
 	}

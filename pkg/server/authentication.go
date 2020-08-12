@@ -394,7 +394,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
 		req = req.WithContext(ctx)
 	} else if !am.allowAnonymous {
-		log.Infof(req.Context(), "Web session error: %s", err)
+		log.Infof(req.Context(), "web session error: %s", err)
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
