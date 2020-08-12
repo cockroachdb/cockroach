@@ -249,7 +249,9 @@ SELECT count(*)
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
 	s.metrics.SessionsDeleted.Inc(n)
-	log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
+	if log.V(2) || n > 0 {
+		log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
+	}
 }
 
 // Insert inserts the input Session in table `system.sqlliveness`.
