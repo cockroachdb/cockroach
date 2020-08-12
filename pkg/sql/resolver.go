@@ -671,7 +671,8 @@ func getParentAsTableName(
 	return parentName, nil
 }
 
-// getTableNameFromTableDescriptor returns a TableName object for a given TableDescriptor.
+// getTableNameFromTableDescriptor returns a TableName object for a given
+// TableDescriptor.
 func getTableNameFromTableDescriptor(
 	l simpleSchemaResolver, table sqlbase.TableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {

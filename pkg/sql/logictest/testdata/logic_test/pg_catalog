@@ -795,20 +795,20 @@ user root
 ## These order of this virtual table is non-deterministic, so all queries must
 ## explicitly add an ORDER BY clause.
 
-query OTOT colnames
-SELECT con.oid, conname, connamespace, contype
+query OTOTT colnames
+SELECT con.oid, conname, connamespace, contype, condef
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY con.oid
 ----
-oid         conname    connamespace  contype
-2143281868  fk         2332901747    f
-2792001267  check_b    2332901747    c
-3572320190  primary    2332901747    p
-4089604113  fk         2332901747    f
-4243354484  t1_a_key   2332901747    u
-4243354485  index_key  2332901747    u
+oid         conname    connamespace  contype  condef
+2143281868  fk         2332901747    f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
+2792001267  check_b    2332901747    c        CHECK ((b > 11:::INT8))
+3572320190  primary    2332901747    p        PRIMARY KEY (p ASC)
+4089604113  fk         2332901747    f        FOREIGN KEY (t1_id) REFERENCES t1(a)
+4243354484  t1_a_key   2332901747    u        UNIQUE (a ASC)
+4243354485  index_key  2332901747    u        UNIQUE (b ASC, c ASC)
 
 query TTBBBOOO colnames
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid

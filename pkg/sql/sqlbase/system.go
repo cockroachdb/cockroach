@@ -1154,8 +1154,9 @@ var (
 			ColumnIDs:        []descpb.ColumnID{1, 2, 3},
 			Version:          descpb.SecondaryIndexFamilyFormatVersion,
 		},
-		NextIndexID:    2,
-		Privileges:     newCommentPrivilegeDescriptor(descpb.SystemAllowedPrivileges[keys.CommentsTableID]),
+		NextIndexID: 2,
+		Privileges: newCommentPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.CommentsTableID], security.NodeUser),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})
@@ -1830,9 +1831,10 @@ func addSystemDatabaseToSchema(
 }
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
-func newCommentPrivilegeDescriptor(priv privilege.List) *descpb.PrivilegeDescriptor {
+func newCommentPrivilegeDescriptor(priv privilege.List, owner string) *descpb.PrivilegeDescriptor {
 	selectPriv := privilege.List{privilege.SELECT}
 	return &descpb.PrivilegeDescriptor{
+		Owner: owner,
 		Users: []descpb.UserPrivileges{
 			{
 				User:       security.AdminRole,
@@ -1847,5 +1849,6 @@ func newCommentPrivilegeDescriptor(priv privilege.List) *descpb.PrivilegeDescrip
 				Privileges: priv.ToBitField(),
 			},
 		},
+		Version: descpb.OwnerVersion,
 	}
 }

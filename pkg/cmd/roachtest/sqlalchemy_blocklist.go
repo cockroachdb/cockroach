@@ -18,9 +18,7 @@ var sqlAlchemyBlocklists = blocklistsForVersion{
 	{"v20.2", "sqlAlchemyBlocklist20_2", sqlAlchemyBlocklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
 }
 
-var sqlAlchemyBlocklist20_2 = blocklist{
-	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_get_foreign_keys": "52356",
-}
+var sqlAlchemyBlocklist20_2 = blocklist{}
 
 var sqlAlchemyBlocklist20_1 = blocklist{
 	"test/dialect/test_suite.py::ExpandingBoundInTest_cockroachdb+psycopg2_9_5_0::test_null_in_empty_set_is_false": "41596",
