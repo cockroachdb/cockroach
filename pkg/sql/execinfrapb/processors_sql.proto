@@ -618,6 +618,7 @@ message AggregatorSpec {
     JSONB_OBJECT_AGG = 28;
     VAR_POP = 29;
     STDDEV_POP = 30;
+    ST_MAKELINE = 31;
   }
 
   enum Type {

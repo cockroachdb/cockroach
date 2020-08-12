@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -184,6 +185,28 @@ func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExp
 		return "", newSingleArgVarError(name)
 	}
 	return datumAsString(evalCtx, name, values[0])
+}
+
+func datumAsFloat(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (float64, error) {
+	val, err := value.Eval(evalCtx)
+	if err != nil {
+		return 0, err
+	}
+	switch v := tree.UnwrapDatum(evalCtx, val).(type) {
+	case *tree.DString:
+		return strconv.ParseFloat(string(*v), 64)
+	case *tree.DInt:
+		return float64(*v), nil
+	case *tree.DFloat:
+		return float64(*v), nil
+	case *tree.DDecimal:
+		return v.Decimal.Float64()
+	}
+	err = pgerror.Newf(pgcode.InvalidParameterValue,
+		"parameter %q requires an float value", name)
+	err = errors.WithDetailf(err,
+		"%s is a %s", value, errors.Safe(val.ResolvedType()))
+	return 0, err
 }
 
 func datumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (int64, error) {
