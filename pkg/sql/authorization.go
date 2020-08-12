@@ -561,3 +561,42 @@ func (p *planner) checkCanAlterToNewOwner(
 
 	return nil
 }
+
+// HasOwnershipOnSchema checks if the current user has ownership on the schema.
+// For schemas, we cannot always use HasOwnership as not every schema has a
+// descriptor.
+func (p *planner) HasOwnershipOnSchema(ctx context.Context, schemaID descpb.ID) (bool, error) {
+	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(
+		ctx, p.Txn(), schemaID,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	hasOwnership := false
+	switch resolvedSchema.Kind {
+	case sqlbase.SchemaPublic:
+		// admin is the owner of the public schema.
+		hasOwnership, err = p.UserHasAdminRole(ctx, p.User())
+		if err != nil {
+			return false, err
+		}
+	case sqlbase.SchemaVirtual:
+		// Cannot drop on virtual schemas.
+	case sqlbase.SchemaTemporary:
+		// The user only owns the temporary schema that corresponds to the
+		// TemporarySchemaID in the sessionData.
+		hasOwnership = p.SessionData() != nil &&
+			p.SessionData().TemporarySchemaID == uint32(resolvedSchema.ID)
+	case sqlbase.SchemaUserDefined:
+		fmt.Println(resolvedSchema.Desc)
+		hasOwnership, err = p.HasOwnership(ctx, resolvedSchema.Desc)
+		if err != nil {
+			return false, err
+		}
+	default:
+		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+	}
+
+	return hasOwnership, nil
+}
