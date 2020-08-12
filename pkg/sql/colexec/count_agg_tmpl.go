@@ -74,34 +74,55 @@ func (a *count_COUNTKIND_AGGKINDAgg) Reset() {
 func (a *count_COUNTKIND_AGGKINDAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	var i int
-
 	// {{if not (eq .CountKind "Rows")}}
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
+	// {{end}}
+	// {{if eq "_AGGKIND" "Ordered"}}
+	groups := a.groups
+	// {{/*
+	// We don't need to check whether sel is non-nil when performing
+	// hash aggregation because the hash aggregator always uses non-nil
+	// sel to specify the tuples to be aggregated.
+	// */}}
+	if sel == nil {
+		_ = groups[inputLen-1]
+		// {{if not (eq .CountKind "Rows")}}
+		if nulls.MaybeHasNulls() {
+			for i := 0; i < inputLen; i++ {
 				_ACCUMULATE_COUNT(a, nulls, i, true)
 			}
-		} else {
-			for i = 0; i < inputLen; i++ {
-				_ACCUMULATE_COUNT(a, nulls, i, true)
+		} else
+		// {{end}}
+		{
+			for i := 0; i < inputLen; i++ {
+				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
 		}
 	} else
 	// {{end}}
 	{
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
+		// {{if not (eq .CountKind "Rows")}}
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel[:inputLen] {
+				_ACCUMULATE_COUNT(a, nulls, i, true)
+			}
+		} else
+		// {{end}}
+		{
+			// {{if eq "_AGGKIND" "Hash"}}
+			// We don't need to pay attention to nulls (either because it's a
+			// COUNT_ROWS aggregate or because there are no nulls), and we're
+			// performing a hash aggregation (meaning there is a single group),
+			// so all inputLen tuples contribute to the count.
+			a.curAgg += int64(inputLen)
+			// {{else}}
+			for _, i := range sel[:inputLen] {
 				_ACCUMULATE_COUNT(a, nulls, i, false)
 			}
-		} else {
-			for i = 0; i < inputLen; i++ {
-				_ACCUMULATE_COUNT(a, nulls, i, false)
-			}
+			// {{end}}
 		}
 	}
 }
@@ -148,7 +169,7 @@ func _ACCUMULATE_COUNT(a *countAgg, nulls *coldata.Nulls, i int, _COL_WITH_NULLS
 	// {{define "accumulateCount" -}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		a.vec[a.curIdx] = a.curAgg
 		a.curIdx++
 		a.curAgg = int64(0)

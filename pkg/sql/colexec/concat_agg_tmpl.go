@@ -56,25 +56,34 @@ func (a *concat_AGGKINDAgg) Compute(
 		[]coldata.Vec{a.vec},
 		func() {
 			previousAggValMemoryUsage := a.aggValMemoryUsage()
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
+			// {{if eq "_AGGKIND" "Ordered"}}
+			groups := a.groups
+			// {{/*
+			// We don't need to check whether sel is non-nil when performing
+			// hash aggregation because the hash aggregator always uses non-nil
+			// sel to specify the tuples to be aggregated.
+			// */}}
+			if sel == nil {
+				_ = groups[inputLen-1]
+				if nulls.MaybeHasNulls() {
+					for i := 0; i < inputLen; i++ {
 						_ACCUMULATE_CONCAT(a, nulls, i, true)
 					}
 				} else {
 					for i := 0; i < inputLen; i++ {
-						_ACCUMULATE_CONCAT(a, nulls, i, true)
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
-					for _, i := range sel {
 						_ACCUMULATE_CONCAT(a, nulls, i, false)
 					}
+				}
+			} else
+			// {{end}}
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
+					for _, i := range sel {
+						_ACCUMULATE_CONCAT(a, nulls, i, true)
+					}
 				} else {
-					for i := 0; i < inputLen; i++ {
+					for _, i := range sel {
 						_ACCUMULATE_CONCAT(a, nulls, i, false)
 					}
 				}
@@ -156,7 +165,7 @@ type concat_AGGKINDAgg struct {
 func _ACCUMULATE_CONCAT(a *concat_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 	// {{define "accumulateConcat" }}
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
 		if !a.foundNonNullForCurrentGroup {

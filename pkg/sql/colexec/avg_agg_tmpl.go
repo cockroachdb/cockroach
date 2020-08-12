@@ -144,27 +144,35 @@ func (a *avg_TYPE_AGGKINDAgg) Compute(
 	// {{end}}
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
-				_ACCUMULATE_AVG(a, nulls, i, true)
-			}
-		} else {
-			col = col[:inputLen]
+	// {{if eq "_AGGKIND" "Ordered"}}
+	groups := a.groups
+	// {{/*
+	// We don't need to check whether sel is non-nil when performing
+	// hash aggregation because the hash aggregator always uses non-nil
+	// sel to specify the tuples to be aggregated.
+	// */}}
+	if sel == nil {
+		_ = groups[inputLen-1]
+		col = col[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for i := range col {
 				_ACCUMULATE_AVG(a, nulls, i, true)
 			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
-			for _, i := range sel {
+		} else {
+			for i := range col {
 				_ACCUMULATE_AVG(a, nulls, i, false)
 			}
+		}
+	} else
+	// {{end}}
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
+				_ACCUMULATE_AVG(a, nulls, i, true)
+			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
+			for _, i := range sel {
 				_ACCUMULATE_AVG(a, nulls, i, false)
 			}
 		}
@@ -216,7 +224,7 @@ func _ACCUMULATE_AVG(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_
 	// {{define "accumulateAvg"}}
 
 	// {{if eq "_AGGKIND" "Ordered"}}
-	if a.groups[i] {
+	if groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
 		// current group, the output for this group should be null.
 		if !a.scratch.foundNonNullForCurrentGroup {

@@ -86,9 +86,9 @@ func (a *sumInt16HashAgg) Compute(
 	_overloadHelper := a.overloadHelper
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int16(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -108,50 +108,7 @@ func (a *sumInt16HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -239,9 +196,9 @@ func (a *sumInt32HashAgg) Compute(
 	_overloadHelper := a.overloadHelper
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int32(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -261,50 +218,7 @@ func (a *sumInt32HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -392,9 +306,9 @@ func (a *sumInt64HashAgg) Compute(
 	_overloadHelper := a.overloadHelper
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Int64(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -414,50 +328,7 @@ func (a *sumInt64HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						tmpDec := &_overloadHelper.tmpDec1
-						tmpDec.SetInt64(int64(col[i]))
-						if _, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, tmpDec); err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -541,9 +412,9 @@ func (a *sumDecimalHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Decimal(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -562,48 +433,7 @@ func (a *sumDecimalHashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						_, err := tree.ExactCtx.Add(&a.scratch.curAgg, &a.scratch.curAgg, &col[i])
-						if err != nil {
-							colexecerror.ExpectedError(err)
-						}
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -686,9 +516,9 @@ func (a *sumFloat64HashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Float64(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -704,42 +534,7 @@ func (a *sumFloat64HashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-
-					{
-
-						a.scratch.curAgg = float64(a.scratch.curAgg) + float64(col[i])
-					}
-
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false
@@ -819,9 +614,9 @@ func (a *sumIntervalHashAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Interval(), vec.Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			sel = sel[:inputLen]
+	{
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
 			for _, i := range sel {
 
 				var isNull bool
@@ -832,32 +627,7 @@ func (a *sumIntervalHashAgg) Compute(
 				}
 			}
 		} else {
-			col = col[:inputLen]
-			for i := range col {
-
-				var isNull bool
-				isNull = nulls.NullAt(i)
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		}
-	} else {
-		if sel != nil {
-			sel = sel[:inputLen]
 			for _, i := range sel {
-
-				var isNull bool
-				isNull = false
-				if !isNull {
-					a.scratch.curAgg = a.scratch.curAgg.Add(col[i])
-					a.scratch.foundNonNullForCurrentGroup = true
-				}
-			}
-		} else {
-			col = col[:inputLen]
-			for i := range col {
 
 				var isNull bool
 				isNull = false

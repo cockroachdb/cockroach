@@ -38,9 +38,9 @@ func (a *concatHashAgg) Compute(
 		[]coldata.Vec{a.vec},
 		func() {
 			previousAggValMemoryUsage := a.aggValMemoryUsage()
-			if nulls.MaybeHasNulls() {
-				if sel != nil {
-					sel = sel[:inputLen]
+			{
+				sel = sel[:inputLen]
+				if nulls.MaybeHasNulls() {
 					for _, i := range sel {
 
 						var isNull bool
@@ -51,30 +51,7 @@ func (a *concatHashAgg) Compute(
 						}
 					}
 				} else {
-					for i := 0; i < inputLen; i++ {
-
-						var isNull bool
-						isNull = nulls.NullAt(i)
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
-					}
-				}
-			} else {
-				if sel != nil {
-					sel = sel[:inputLen]
 					for _, i := range sel {
-
-						var isNull bool
-						isNull = false
-						if !isNull {
-							a.curAgg = append(a.curAgg, col.Get(i)...)
-							a.foundNonNullForCurrentGroup = true
-						}
-					}
-				} else {
-					for i := 0; i < inputLen; i++ {
 
 						var isNull bool
 						isNull = false

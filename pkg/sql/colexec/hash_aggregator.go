@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // hashAggregatorState represents the state of the hash aggregator operator.
@@ -55,11 +55,11 @@ type hashAggregator struct {
 	OneInputNode
 
 	allocator *colmem.Allocator
+	spec      *execinfrapb.AggregatorSpec
 
-	aggCols [][]uint32
-
-	inputTypes  []*types.T
-	outputTypes []*types.T
+	inputTypes         []*types.T
+	outputTypes        []*types.T
+	inputArgsConverter *vecToDatumConverter
 
 	// buckets contains all aggregation groups that we have so far. There is
 	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
@@ -95,18 +95,12 @@ type hashAggregator struct {
 		numOfHashBuckets uint64
 	}
 
-	// groupCols stores the indices of the grouping columns.
-	groupCols []uint32
-
 	aggFnsAlloc *aggregateFuncsAlloc
 	hashAlloc   hashAggFuncsAlloc
+	toClose     Closers
 }
 
-// Remove unused warning.
-// TODO(yuzefovich): remove this once it is used by the hash aggregator.
-var _ = (&vecToDatumConverter{}).convertBatch
-
-var _ colexecbase.Operator = &hashAggregator{}
+var _ closableOperator = &hashAggregator{}
 
 // hashAggregatorAllocSize determines the allocation size used by the hash
 // aggregator's allocators. This number was chosen after running benchmarks of
@@ -120,32 +114,28 @@ const hashAggregatorAllocSize = 128
 func NewHashAggregator(
 	allocator *colmem.Allocator,
 	input colexecbase.Operator,
-	typs []*types.T,
-	aggFns []execinfrapb.AggregatorSpec_Func,
-	groupCols []uint32,
-	aggCols [][]uint32,
+	inputTypes []*types.T,
+	spec *execinfrapb.AggregatorSpec,
+	evalCtx *tree.EvalContext,
+	constructors []execinfrapb.AggregateConstructor,
+	constArguments []tree.Datums,
+	outputTypes []*types.T,
 ) (colexecbase.Operator, error) {
-	aggTyps := extractAggTypes(aggCols, typs)
-	outputTypes, err := MakeAggregateFuncsOutputTypes(aggTyps, aggFns)
-	if err != nil {
-		return nil, errors.AssertionFailedf(
-			"this error should have been checked in isAggregateSupported\n%+v", err,
-		)
-	}
-
-	aggFnsAlloc, err := newAggregateFuncsAlloc(
-		allocator, aggTyps, aggFns, hashAggregatorAllocSize, true, /* isHashAgg */
+	aggFnsAlloc, inputArgsConverter, toClose, err := newAggregateFuncsAlloc(
+		allocator, inputTypes, spec, evalCtx, constructors, constArguments,
+		outputTypes, hashAggregatorAllocSize, true, /* isHashAgg */
 	)
 	hashAgg := &hashAggregator{
-		OneInputNode: NewOneInputNode(input),
-		allocator:    allocator,
-		aggCols:      aggCols,
-		state:        hashAggregatorAggregating,
-		inputTypes:   typs,
-		outputTypes:  outputTypes,
-		groupCols:    groupCols,
-		aggFnsAlloc:  aggFnsAlloc,
-		hashAlloc:    hashAggFuncsAlloc{allocator: allocator},
+		OneInputNode:       NewOneInputNode(input),
+		allocator:          allocator,
+		spec:               spec,
+		state:              hashAggregatorAggregating,
+		inputTypes:         inputTypes,
+		outputTypes:        outputTypes,
+		inputArgsConverter: inputArgsConverter,
+		toClose:            toClose,
+		aggFnsAlloc:        aggFnsAlloc,
+		hashAlloc:          hashAggFuncsAlloc{allocator: allocator},
 	}
 	return hashAgg, err
 }
@@ -165,7 +155,7 @@ func (op *hashAggregator) Init() {
 		op.allocator,
 		numOfHashBuckets,
 		op.inputTypes,
-		op.groupCols,
+		op.spec.GroupCols,
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,
@@ -186,6 +176,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			// TODO(yuzefovich): benchmark whether it is beneficial to buffer
 			// up several batches from the input before proceeding to online
 			// aggregation.
+			op.inputArgsConverter.convertBatch(b)
 			op.onlineAgg(ctx, b)
 		case hashAggregatorOutputting:
 			op.output.ResetInternalBatch()
@@ -312,7 +303,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				// group.
 				eqChain := op.scratch.eqChains[eqChainsSlot]
 				bucket := op.buckets[headID-1]
-				bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
+				bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
@@ -339,7 +330,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			// bucket knows that all selected tuples in b belong to the same
 			// single group, so we can pass 'nil' for the first argument.
 			bucket.init(nil /* group */, op.output)
-			bucket.compute(inputVecs, op.aggCols, len(eqChain), eqChain)
+			bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
@@ -371,6 +362,10 @@ func (op *hashAggregator) reset(ctx context.Context) {
 	op.output.SetLength(0)
 }
 
+func (op *hashAggregator) Close(ctx context.Context) error {
+	return op.toClose.Close(ctx)
+}
+
 // hashAggFuncs stores the aggregation functions for the corresponding
 // aggregation group.
 type hashAggFuncs struct {
@@ -385,9 +380,11 @@ func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
 	}
 }
 
-func (v *hashAggFuncs) compute(vecs []coldata.Vec, aggCols [][]uint32, inputLen int, sel []int) {
+func (v *hashAggFuncs) compute(
+	vecs []coldata.Vec, spec *execinfrapb.AggregatorSpec, inputLen int, sel []int,
+) {
 	for fnIdx, fn := range v.fns {
-		fn.Compute(vecs, aggCols[fnIdx], inputLen, sel)
+		fn.Compute(vecs, spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
 	}
 }
 

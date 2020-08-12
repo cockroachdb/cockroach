@@ -58,49 +58,97 @@ func (a *boolAndOrderedAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			if a.groups[i] {
-				if !a.sawNonNull {
-					a.nulls.SetNull(a.curIdx)
-				} else {
-					a.vec[a.curIdx] = a.curAgg
+	groups := a.groups
+	if sel == nil {
+		_ = groups[inputLen-1]
+		col = col[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for i := range col {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = true
+					a.sawNonNull = false
 				}
-				a.curIdx++
-				a.curAgg = true
-				a.sawNonNull = false
-			}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg && col[i]
-				a.sawNonNull = true
-			}
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
 
+			}
+		} else {
+			for i := range col {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = true
+					a.sawNonNull = false
+				}
+
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
+
+			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			if a.groups[i] {
-				if !a.sawNonNull {
-					a.nulls.SetNull(a.curIdx)
-				} else {
-					a.vec[a.curIdx] = a.curAgg
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = true
+					a.sawNonNull = false
 				}
-				a.curIdx++
-				a.curAgg = true
-				a.sawNonNull = false
-			}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg && col[i]
-				a.sawNonNull = true
-			}
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
 
+			}
+		} else {
+			for _, i := range sel {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = true
+					a.sawNonNull = false
+				}
+
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg && col[i]
+					a.sawNonNull = true
+				}
+
+			}
 		}
 	}
 }
@@ -172,49 +220,97 @@ func (a *boolOrOrderedAgg) Compute(
 ) {
 	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.Bool(), vec.Nulls()
-	if sel != nil {
-		sel = sel[:inputLen]
-		for _, i := range sel {
-			if a.groups[i] {
-				if !a.sawNonNull {
-					a.nulls.SetNull(a.curIdx)
-				} else {
-					a.vec[a.curIdx] = a.curAgg
+	groups := a.groups
+	if sel == nil {
+		_ = groups[inputLen-1]
+		col = col[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for i := range col {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = false
+					a.sawNonNull = false
 				}
-				a.curIdx++
-				a.curAgg = false
-				a.sawNonNull = false
-			}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg || col[i]
-				a.sawNonNull = true
-			}
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
 
+			}
+		} else {
+			for i := range col {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = false
+					a.sawNonNull = false
+				}
+
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
+
+			}
 		}
 	} else {
-		col = col[:inputLen]
-		for i := range col {
-			if a.groups[i] {
-				if !a.sawNonNull {
-					a.nulls.SetNull(a.curIdx)
-				} else {
-					a.vec[a.curIdx] = a.curAgg
+		sel = sel[:inputLen]
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = false
+					a.sawNonNull = false
 				}
-				a.curIdx++
-				a.curAgg = false
-				a.sawNonNull = false
-			}
 
-			// TODO(yuzefovich): template out has nulls vs no nulls cases.
-			isNull := nulls.NullAt(i)
-			if !isNull {
-				a.curAgg = a.curAgg || col[i]
-				a.sawNonNull = true
-			}
+				var isNull bool
+				isNull = nulls.NullAt(i)
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
 
+			}
+		} else {
+			for _, i := range sel {
+				if groups[i] {
+					if !a.sawNonNull {
+						a.nulls.SetNull(a.curIdx)
+					} else {
+						a.vec[a.curIdx] = a.curAgg
+					}
+					a.curIdx++
+					a.curAgg = false
+					a.sawNonNull = false
+				}
+
+				var isNull bool
+				isNull = false
+				if !isNull {
+					a.curAgg = a.curAgg || col[i]
+					a.sawNonNull = true
+				}
+
+			}
 		}
 	}
 }

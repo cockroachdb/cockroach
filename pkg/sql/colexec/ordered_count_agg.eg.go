@@ -50,12 +50,12 @@ func (a *countRowsOrderedAgg) Reset() {
 func (a *countRowsOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	var i int
-
-	{
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
-				if a.groups[i] {
+	groups := a.groups
+	if sel == nil {
+		_ = groups[inputLen-1]
+		{
+			for i := 0; i < inputLen; i++ {
+				if groups[i] {
 					a.vec[a.curIdx] = a.curAgg
 					a.curIdx++
 					a.curAgg = int64(0)
@@ -65,9 +65,11 @@ func (a *countRowsOrderedAgg) Compute(
 				y = int64(1)
 				a.curAgg += y
 			}
-		} else {
-			for i = 0; i < inputLen; i++ {
-				if a.groups[i] {
+		}
+	} else {
+		{
+			for _, i := range sel[:inputLen] {
+				if groups[i] {
 					a.vec[a.curIdx] = a.curAgg
 					a.curIdx++
 					a.curAgg = int64(0)
@@ -146,16 +148,16 @@ func (a *countOrderedAgg) Reset() {
 func (a *countOrderedAgg) Compute(
 	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
 ) {
-	var i int
-
 	// If this is a COUNT(col) aggregator and there are nulls in this batch,
 	// we must check each value for nullity. Note that it is only legal to do a
 	// COUNT aggregate on a single column.
 	nulls := vecs[inputIdxs[0]].Nulls()
-	if nulls.MaybeHasNulls() {
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
-				if a.groups[i] {
+	groups := a.groups
+	if sel == nil {
+		_ = groups[inputLen-1]
+		if nulls.MaybeHasNulls() {
+			for i := 0; i < inputLen; i++ {
+				if groups[i] {
 					a.vec[a.curIdx] = a.curAgg
 					a.curIdx++
 					a.curAgg = int64(0)
@@ -169,25 +171,8 @@ func (a *countOrderedAgg) Compute(
 				a.curAgg += y
 			}
 		} else {
-			for i = 0; i < inputLen; i++ {
-				if a.groups[i] {
-					a.vec[a.curIdx] = a.curAgg
-					a.curIdx++
-					a.curAgg = int64(0)
-				}
-
-				var y int64
-				y = int64(0)
-				if !nulls.NullAt(i) {
-					y = 1
-				}
-				a.curAgg += y
-			}
-		}
-	} else {
-		if sel != nil {
-			for _, i = range sel[:inputLen] {
-				if a.groups[i] {
+			for i := 0; i < inputLen; i++ {
+				if groups[i] {
 					a.vec[a.curIdx] = a.curAgg
 					a.curIdx++
 					a.curAgg = int64(0)
@@ -197,9 +182,26 @@ func (a *countOrderedAgg) Compute(
 				y = int64(1)
 				a.curAgg += y
 			}
+		}
+	} else {
+		if nulls.MaybeHasNulls() {
+			for _, i := range sel[:inputLen] {
+				if groups[i] {
+					a.vec[a.curIdx] = a.curAgg
+					a.curIdx++
+					a.curAgg = int64(0)
+				}
+
+				var y int64
+				y = int64(0)
+				if !nulls.NullAt(i) {
+					y = 1
+				}
+				a.curAgg += y
+			}
 		} else {
-			for i = 0; i < inputLen; i++ {
-				if a.groups[i] {
+			for _, i := range sel[:inputLen] {
+				if groups[i] {
 					a.vec[a.curIdx] = a.curAgg
 					a.curIdx++
 					a.curAgg = int64(0)
