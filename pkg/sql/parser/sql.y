@@ -5258,11 +5258,11 @@ opt_create_table_on_commit:
   }
 
 storage_parameter:
-  name '=' d_expr
+  name '=' var_value
   {
     $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
   }
-|  SCONST '=' d_expr
+|  SCONST '=' var_value
   {
     $$.val = tree.StorageParam{Key: tree.Name($1), Value: $3.expr()}
   }
