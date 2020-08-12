@@ -37,14 +37,15 @@ type ReplicaMetrics struct {
 
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	RangeCounter    bool
-	Unavailable     bool
-	Underreplicated bool
-	Overreplicated  bool
-	BehindCount     int64
-	LatchInfoLocal  storagepb.LatchManagerInfo
-	LatchInfoGlobal storagepb.LatchManagerInfo
-	RaftLogTooLarge bool
+	RangeCounter             bool
+	Unavailable              bool
+	Underreplicated          bool
+	UnderreplicatedForConfig bool
+	Overreplicated           bool
+	BehindCount              int64
+	LatchInfoLocal           storagepb.LatchManagerInfo
+	LatchInfoGlobal          storagepb.LatchManagerInfo
+	RaftLogTooLarge          bool
 }
 
 // Metrics returns the current metrics for the replica.
@@ -119,7 +120,7 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated =
+	m.RangeCounter, m.Unavailable, m.Underreplicated, m.UnderreplicatedForConfig, m.Overreplicated =
 		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
@@ -159,7 +160,7 @@ func calcRangeCounter(
 	livenessMap IsLiveMap,
 	numReplicas int32,
 	clusterNodes int,
-) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
+) (rangeCounter, unavailable, underreplicated, underreplicatedForConfig, overreplicated bool) {
 	// It seems unlikely that a learner replica would be the first live one, but
 	// there's no particular reason to exclude them. Note that `All` returns the
 	// voters first.
@@ -175,12 +176,17 @@ func calcRangeCounter(
 		unavailable = !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		})
+		needed := GetNeededReplicas(numReplicas, clusterNodes)
 		liveVoterReplicas := calcLiveVoterReplicas(desc, livenessMap)
-		// using the num_replicas of zone configuration for comparison
-		if int(numReplicas) > liveVoterReplicas {
+		if needed > liveVoterReplicas {
 			underreplicated = true
-		} else if int(numReplicas) < liveVoterReplicas {
+		} else if needed < liveVoterReplicas {
 			overreplicated = true
+		}
+		if int(numReplicas) > liveVoterReplicas {
+			underreplicatedForConfig = true
+		} else if int(numReplicas) < liveVoterReplicas {
+			underreplicatedForConfig = true
 		}
 	}
 	return

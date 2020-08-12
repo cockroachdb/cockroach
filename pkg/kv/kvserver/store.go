@@ -2369,11 +2369,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageQueriesPerSecond       float64
 		averageWritesPerSecond        float64
 
-		rangeCount                int64
-		unavailableRangeCount     int64
-		underreplicatedRangeCount int64
-		overreplicatedRangeCount  int64
-		behindCount               int64
+		rangeCount                         int64
+		unavailableRangeCount              int64
+		underreplicatedRangeCount          int64
+		underreplicatedForConfigRangeCount int64
+		overreplicatedRangeCount           int64
+		behindCount                        int64
 	)
 
 	timestamp := s.cfg.Clock.Now()
@@ -2413,6 +2414,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Underreplicated {
 				underreplicatedRangeCount++
 			}
+			if metrics.UnderreplicatedForConfig {
+				underreplicatedForConfigRangeCount++
+			}
 			if metrics.Overreplicated {
 				overreplicatedRangeCount++
 			}
@@ -2444,6 +2448,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
+	s.metrics.UnderReplicatedForConfigRangeCount.Update(underreplicatedForConfigRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 
