@@ -704,53 +704,109 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 }
 
+func redactTestKMSURI(path string) (string, error) {
+	var redactedQueryParams = map[string]struct{}{
+		cloudimpl.AWSSecretParam: {},
+	}
+
+	uri, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+	params := uri.Query()
+	for param := range params {
+		if _, ok := redactedQueryParams[param]; ok {
+			params.Set(param, "redacted")
+		}
+	}
+	uri.Path = "/redacted"
+	uri.RawQuery = params.Encode()
+	return uri.String(), nil
+}
+
 // TestEncryptedBackupRestoreSystemJobs ensures that the system jobs entry for encrypted BACKUPs
-// have the passphrase sanitized.
+// have the passphrase or the KMS URI sanitized.
 func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
-	conn := sqlDB.DB.(*gosql.DB)
-	defer cleanupFn()
-	backupLoc1 := LocalFoo + "/x"
+	regionEnvVariable := "AWS_REGION"
+	keyIDEnvVariable := "AWS_KEY_ARN"
 
-	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-	backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
-	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
-	restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
-
-	// Take an encrypted BACKUP.
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH encryption_passphrase='abcdefg'`,
-		backupLoc1)
-
-	// Verify the BACKUP job description is sanitized.
-	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
-		jobs.Record{
-			Username: security.RootUser,
-			Description: fmt.Sprintf(
-				`BACKUP DATABASE data TO '%s' WITH encryption_passphrase='redacted'`, backupLoc1),
-			DescriptorIDs: descpb.IDs{
-				descpb.ID(backupDatabaseID),
-				descpb.ID(backupTableID),
-			},
-		}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Perform an encrypted RESTORE.
-	sqlDB.Exec(t, `RESTORE TABLE data.bank FROM $1 WITH OPTIONS (into_db='restoredb', encryption_passphrase='abcdefg')`, backupLoc1)
-
-	// Verify the RESTORE job description is sanitized.
-	if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
-		Username: security.RootUser,
-		Description: fmt.Sprintf(
-			`RESTORE TABLE data.bank FROM '%s' WITH encryption_passphrase='redacted', into_db='restoredb'`, backupLoc1),
-		DescriptorIDs: descpb.IDs{
-			descpb.ID(restoreDatabaseID + 1),
+	for _, tc := range []struct {
+		name   string
+		useKMS bool
+	}{
+		{
+			"encrypted-with-kms",
+			true,
 		},
-	}); err != nil {
-		t.Fatal(err)
+		{
+			"encrypted-with-passphrase",
+			false,
+		},
+	} {
+		var encryptionOption string
+		var sanitizedEncryptionOption string
+		if tc.useKMS {
+			correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
+			encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
+			sanitizedURI, err := redactTestKMSURI(correctKMSURI)
+			require.NoError(t, err)
+			sanitizedEncryptionOption = fmt.Sprintf("kms='%s'", sanitizedURI)
+		} else {
+			encryptionOption = "encryption_passphrase='abcdefg'"
+			sanitizedEncryptionOption = fmt.Sprintf("encryption_passphrase='redacted'")
+		}
+
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+			conn := sqlDB.DB.(*gosql.DB)
+			defer cleanupFn()
+			backupLoc1 := LocalFoo + "/x"
+
+			sqlDB.Exec(t, `CREATE DATABASE restoredb`)
+			backupDatabaseID := sqlutils.QueryDatabaseID(t, conn, "data")
+			backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
+			restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
+
+			// Take an encrypted BACKUP.
+			sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data TO $1 WITH %s`, encryptionOption),
+				backupLoc1)
+
+			// Verify the BACKUP job description is sanitized.
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeBackup, jobs.StatusSucceeded,
+				jobs.Record{
+					Username: security.RootUser,
+					Description: fmt.Sprintf(
+						`BACKUP DATABASE data TO '%s' WITH %s`,
+						backupLoc1, sanitizedEncryptionOption),
+					DescriptorIDs: descpb.IDs{
+						descpb.ID(backupDatabaseID),
+						descpb.ID(backupTableID),
+					},
+				}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Perform an encrypted RESTORE.
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE data.bank FROM $1 WITH OPTIONS (
+into_db='restoredb', %s)`, encryptionOption), backupLoc1)
+
+			// Verify the RESTORE job description is sanitized.
+			if err := jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
+				Username: security.RootUser,
+				Description: fmt.Sprintf(
+					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db='restoredb'`,
+					backupLoc1, sanitizedEncryptionOption,
+				),
+				DescriptorIDs: descpb.IDs{
+					descpb.ID(restoreDatabaseID + 1),
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -3233,7 +3289,7 @@ func checkBackupFilesEncrypted(t *testing.T, rawDir string) {
 	}
 }
 
-func getAWSKMSURI(t *testing.T) (string, string) {
+func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (string, string) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
@@ -3246,7 +3302,7 @@ func getAWSKMSURI(t *testing.T) (string, string) {
 	expect := map[string]string{
 		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
 		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
-		"AWS_REGION":            cloudimpl.KMSRegionParam,
+		regionEnvVariable:       cloudimpl.KMSRegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -3259,13 +3315,13 @@ func getAWSKMSURI(t *testing.T) (string, string) {
 	// Get AWS Key ARN from env variable.
 	// TODO(adityamaru): Check if there is a way to specify this in the default
 	// role and if we can derive it from there instead?
-	keyARN := os.Getenv("AWS_KEY_ARN")
+	keyARN := os.Getenv(keyIDEnvVariable)
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+		skip.IgnoreLint(t, fmt.Sprintf("%s env var must be set", keyIDEnvVariable))
 	}
 
 	// Set AUTH to implicit
-	q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+	q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
 	correctURI := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	incorrectURI := fmt.Sprintf("aws:///%s?%s", "gibberish", q.Encode())
 
@@ -3275,6 +3331,9 @@ func getAWSKMSURI(t *testing.T) (string, string) {
 func TestEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	regionEnvVariable := "AWS_REGION"
+	keyIDEnvVariable := "AWS_KEY_ARN"
 
 	for _, tc := range []struct {
 		name   string
@@ -3292,7 +3351,7 @@ func TestEncryptedBackup(t *testing.T) {
 		var encryptionOption string
 		var incorrectEncryptionOption string
 		if tc.useKMS {
-			correctKMSURI, incorrectKeyARNURI := getAWSKMSURI(t)
+			correctKMSURI, incorrectKeyARNURI := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
 			encryptionOption = fmt.Sprintf("kms='%s'", correctKMSURI)
 			incorrectEncryptionOption = fmt.Sprintf("kms='%s'", incorrectKeyARNURI)
 		} else {
@@ -3350,16 +3409,82 @@ func TestEncryptedBackup(t *testing.T) {
 			sqlDB.ExpectErr(t, `could not find or read encryption information`,
 				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), plainBackupLoc1)
 
-			// TODO(adityamaru): Delete if condition once RESTORE is taught about KMS.
-			if !tc.useKMS {
-				sqlDB.Exec(t, `RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH encryption_passphrase=$5`,
-					backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc, "abcdefg")
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM ($1, $2), ($3, $4) WITH %s`,
+				encryptionOption), backupLoc1, backupLoc2, backupLoc1inc, backupLoc2inc)
 
-				sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
-			}
+			sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
 		})
 	}
+}
 
+func concatMultiRegionKMSURIs(uris []string) string {
+	var multiRegionKMSURIs string
+	for i, uri := range uris {
+		if i == 0 {
+			multiRegionKMSURIs = "KMS=("
+		}
+
+		multiRegionKMSURIs += fmt.Sprintf("'%s'", uri)
+		if i != len(uris)-1 {
+			multiRegionKMSURIs += ", "
+		}
+	}
+	multiRegionKMSURIs += ")"
+
+	return multiRegionKMSURIs
+}
+
+// This test performs an encrypted BACKUP using a set of regional AWS KMSs and
+// then attempts to RESTORE the BACKUP using each one of the regional AWS KMSs
+// separately.
+func TestRegionalKMSEncryptedBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	regionEnvVariables := []string{"AWS_REGION", "AWS_REGION_2"}
+	keyIDEnvVariables := []string{"AWS_KEY_ARN", "AWS_KEY_ARN_2"}
+
+	var multiRegionKMSURIs []string
+	for i := range regionEnvVariables {
+		kmsURI, _ := getAWSKMSURI(t, regionEnvVariables[i], keyIDEnvVariables[i])
+		multiRegionKMSURIs = append(multiRegionKMSURIs, kmsURI)
+	}
+
+	t.Run("multi-region-kms", func(t *testing.T) {
+		ctx, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, 3, InitNone)
+		defer cleanupFn()
+
+		setupBackupEncryptedTest(ctx, t, sqlDB)
+
+		// Full cluster-backup to capture all possible metadata.
+		backupLoc1 := LocalFoo + "/x?COCKROACH_LOCALITY=default"
+		backupLoc2 := LocalFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
+
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) WITH %s`,
+			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1,
+			backupLoc2)
+
+		t.Run("check-stats-encrypted", func(t *testing.T) {
+			checkBackupStatsEncrypted(t, rawDir)
+		})
+
+		before := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`)
+
+		checkBackupFilesEncrypted(t, rawDir)
+
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
+			backupLoc1)
+
+		// Attempt to RESTORE using each of the regional KMSs independently.
+		for _, uri := range multiRegionKMSURIs {
+			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
+
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM ($1, $2) WITH %s`,
+				concatMultiRegionKMSURIs([]string{uri})), backupLoc1, backupLoc2)
+
+			sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
+		}
+	})
 }
 
 type testKMSEnv struct {

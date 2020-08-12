@@ -47,7 +47,6 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	expect := map[string]string{
 		"AWS_ACCESS_KEY_ID":     cloudimpl.AWSAccessKeyParam,
 		"AWS_SECRET_ACCESS_KEY": cloudimpl.AWSSecretParam,
-		"AWS_REGION":            cloudimpl.KMSRegionParam,
 	}
 	for env, param := range expect {
 		v := os.Getenv(env)
@@ -57,58 +56,72 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	// Get AWS Key ARN from env variable.
-	// TODO(adityamaru): Check if there is a way to specify this in the default
-	// role and if we can derive it from there instead?
-	keyARN := os.Getenv("AWS_KEY_ARN")
-	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+	// Get AWS KMS region from env variable.
+	kmsRegion := os.Getenv("AWS_REGION")
+	if kmsRegion == "" {
+		skip.IgnoreLint(t, "AWS_REGION env var must be set")
 	}
+	q.Add(cloudimpl.KMSRegionParam, kmsRegion)
 
-	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		// Set AUTH to specified but don't provide AccessKey params.
-		params := make(url.Values)
-		params.Add(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
-
-		uri := fmt.Sprintf("aws:///%s?%s", keyARN, params.Encode())
-		_, err := cloud.KMSFromURI(uri, &testKMSEnv{})
-		require.EqualError(t, err, fmt.Sprintf(
-			`%s is set to '%s', but %s is not set`,
-			cloudimpl.AuthParam,
-			cloudimpl.AuthParamSpecified,
-			cloudimpl.AWSAccessKeyParam,
-		))
-	})
-
-	t.Run("auth-implicit", func(t *testing.T) {
-		// You can create an IAM that can access AWS KMS
-		// in the AWS console, then set it up locally.
-		// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
-		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
-		if err != nil {
-			skip.IgnoreLint(t, err)
+	// The KeyID for AWS can be specified as any of the following:
+	// - AWS_KEY_ARN
+	// - AWS_KEY_ID
+	// - AWS_KEY_ALIAS
+	for _, id := range []string{"AWS_KEY_ARN", "AWS_KEY_ID", "AWS_KEY_ALIAS"} {
+		// Get AWS Key identifier from env variable.
+		keyID := os.Getenv(id)
+		if keyID == "" {
+			skip.IgnoreLint(t, fmt.Sprintf("%s env var must be set", id))
 		}
 
-		// Set AUTH to implicit
-		q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+		t.Run(fmt.Sprintf("auth-empty-no-cred-%s", id), func(t *testing.T) {
+			// Set AUTH to specified but don't provide AccessKey params.
+			params := make(url.Values)
+			params.Add(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+			params.Add(cloudimpl.KMSRegionParam, kmsRegion)
 
-		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		testEncryptDecrypt(t, uri, testKMSEnv{
-			cluster.NoSettings, &base.ExternalIODirConfig{},
+			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
+			_, err := cloud.KMSFromURI(uri, &testKMSEnv{})
+			require.EqualError(t, err, fmt.Sprintf(
+				`%s is set to '%s', but %s is not set`,
+				cloudimpl.AuthParam,
+				cloudimpl.AuthParamSpecified,
+				cloudimpl.AWSAccessKeyParam,
+			))
 		})
-	})
 
-	t.Run("auth-specified", func(t *testing.T) {
-		// Set AUTH to specified.
-		q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
-		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
+		t.Run(fmt.Sprintf("auth-implicit-%s", id), func(t *testing.T) {
+			// You can create an IAM that can access AWS KMS
+			// in the AWS console, then set it up locally.
+			// https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html
+			// We only run this test if default role exists.
+			credentialsProvider := credentials.SharedCredentialsProvider{}
+			_, err := credentialsProvider.Retrieve()
+			if err != nil {
+				skip.IgnoreLint(t, err)
+			}
 
-		testEncryptDecrypt(t, uri, testKMSEnv{
-			cluster.NoSettings, &base.ExternalIODirConfig{},
+			// Set the AUTH and REGION params.
+			params := make(url.Values)
+			params.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
+			params.Add(cloudimpl.KMSRegionParam, kmsRegion)
+
+			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
+			testEncryptDecrypt(t, uri, testKMSEnv{
+				cluster.NoSettings, &base.ExternalIODirConfig{},
+			})
 		})
-	})
+
+		t.Run(fmt.Sprintf("auth-specified-%s", id), func(t *testing.T) {
+			// Set AUTH to specified.
+			q.Set(cloudimpl.AuthParam, cloudimpl.AuthParamSpecified)
+			uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
+
+			testEncryptDecrypt(t, uri, testKMSEnv{
+				cluster.NoSettings, &base.ExternalIODirConfig{},
+			})
+		})
+	}
 }
 
 func TestPutAWSKMSEndpoint(t *testing.T) {
@@ -129,9 +142,9 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
+	keyARN := os.Getenv("AWS_KEY_ARN")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
 	}
 
 	t.Run("allow-endpoints", func(t *testing.T) {
@@ -157,9 +170,9 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	// Set AUTH to implicit
 	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
 
-	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
+	keyARN := os.Getenv("AWS_KEY_ARN")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	_, err := cloud.KMSFromURI(uri, &testKMSEnv{cluster.NoSettings,
