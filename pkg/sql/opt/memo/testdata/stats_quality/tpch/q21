@@ -14,7 +14,7 @@ import file=tpch_stats
 # supplier order (with current status of 'F') where they were the only supplier
 # who failed to meet the committed delivery date.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q21
+stats-quality database=tpch stats-quality-prefix=q21
 SELECT
     s_name,
     count(*) AS numwait
@@ -55,6 +55,7 @@ ORDER BY
     numwait DESC,
     s_name
 LIMIT 100;
+----
 ----
 limit
  ├── save-table-name: q21_limit_1
@@ -160,8 +161,7 @@ limit
  │              └── count-rows [as=count_rows:75, type=int]
  └── 100 [type=int]
 
-stats table=q21_limit_1
-----
+----Stats for q21_limit_1----
 column_names  row_count  distinct_count  null_count
 {numwait}     100        8               0
 {s_name}      100        100             0
@@ -170,8 +170,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {numwait}     100.00         1.00           100.00              12.50 <==           0.00            1.00
 {s_name}      100.00         1.00           100.00              1.00                0.00            1.00
 
-stats table=q21_sort_2
-----
+----Stats for q21_sort_2----
 column_names  row_count  distinct_count  null_count
 {count_rows}  100        8               0
 {s_name}      100        100             0
@@ -180,8 +179,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {count_rows}  8389.00        83.89 <==      8389.00             1048.62 <==         0.00            1.00
 {s_name}      8389.00        83.89 <==      8389.00             83.89 <==           0.00            1.00
 
-stats table=q21_group_by_3
-----
+----Stats for q21_group_by_3----
 column_names  row_count  distinct_count  null_count
 {count_rows}  411        17              0
 {s_name}      411        411             0
@@ -190,8 +188,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {count_rows}  8389.00        20.41 <==      8389.00             493.47 <==          0.00            1.00
 {s_name}      8389.00        20.41 <==      8389.00             20.41 <==           0.00            1.00
 
-stats table=q21_lookup_join_4
-----
+----Stats for q21_lookup_join_4----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   4141       1188            0
 {l_orderkey}     4141       4127            0
@@ -218,8 +215,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    17925.00       4.33 <==       1.00                1.00                0.00            1.00
 {s_suppkey}      17925.00       4.33 <==       8351.00             20.32 <==           0.00            1.00
 
-stats table=q21_lookup_join_5
-----
+----Stats for q21_lookup_join_5----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   8357       2357            0
 {l_orderkey}     8357       8343            0
@@ -242,8 +238,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    17925.00       2.14 <==       1.00                1.00                0.00            1.00
 {s_suppkey}      17925.00       2.14 <==       400.00              1.03                0.00            1.00
 
-stats table=q21_lookup_join_6
-----
+----Stats for q21_lookup_join_6----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   151237     2464            0
 {l_orderkey}     151237     144608          0
@@ -266,8 +261,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    26887.00       5.62 <==       1.00                1.00                0.00            1.00
 {s_suppkey}      26887.00       5.62 <==       400.00              1.03                0.00            1.00
 
-stats table=q21_lookup_join_7
-----
+----Stats for q21_lookup_join_7----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   156739     2464            0
 {l_orderkey}     156739     149986          0
@@ -290,8 +284,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    80661.00       1.94 <==       1.00                1.00                0.00            1.00
 {s_suppkey}      80661.00       1.94 <==       400.00              1.03                0.00            1.00
 
-stats table=q21_lookup_join_8
-----
+----Stats for q21_lookup_join_8----
 column_names    row_count  distinct_count  null_count
 {l_linenumber}  247140     7               0
 {l_orderkey}    247140     228525          0
@@ -312,8 +305,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {s_nationkey}   241984.00      1.02           1.00                1.00                0.00            1.00
 {s_suppkey}     241984.00      1.02           400.00              1.03                0.00            1.00
 
-stats table=q21_lookup_join_9
-----
+----Stats for q21_lookup_join_9----
 column_names   row_count  distinct_count  null_count
 {n_name}       411        1               0
 {n_nationkey}  411        1               0
@@ -328,8 +320,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  400.00         1.03           1.00                1.00                0.00            1.00
 {s_suppkey}    400.00         1.03           400.00              1.03                0.00            1.00
 
-stats table=q21_lookup_join_10
-----
+----Stats for q21_lookup_join_10----
 column_names   row_count  distinct_count  null_count
 {n_name}       411        1               0
 {n_nationkey}  411        1               0
@@ -342,8 +333,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  400.00         1.03           1.00                1.00                0.00            1.00
 {s_suppkey}    400.00         1.03           400.00              1.03                0.00            1.00
 
-stats table=q21_select_11
-----
+----Stats for q21_select_11----
 column_names   row_count  distinct_count  null_count
 {n_name}       1          1               0
 {n_nationkey}  1          1               0
@@ -352,8 +342,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {n_nationkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q21_scan_12
-----
+----Stats for q21_scan_12----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -361,3 +350,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----

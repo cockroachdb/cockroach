@@ -15,7 +15,7 @@ import file=tpch_stats
 # orders. The query lists the customer name, customer key, the order key, date
 # and total price and the quantity for the order.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q18
+stats-quality database=tpch stats-quality-prefix=q18
 SELECT
     c_name,
     c_custkey,
@@ -49,6 +49,7 @@ ORDER BY
     o_totalprice DESC,
     o_orderdate
 LIMIT 100;
+----
 ----
 limit
  ├── save-table-name: q18_limit_1
@@ -167,8 +168,7 @@ limit
  │                   └── o_orderdate:14 [type=date]
  └── 100 [type=int]
 
-stats table=q18_limit_1
-----
+----Stats for q18_limit_1----
 column_names    row_count  distinct_count  null_count
 {c_custkey}     57         57              0
 {c_name}        57         57              0
@@ -185,8 +185,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_totalprice}  100.00         1.75           100.00              1.75                0.00            1.00
 {sum}           100.00         1.75           100.00              5.56 <==            0.00            1.00
 
-stats table=q18_sort_2
-----
+----Stats for q18_sort_2----
 column_names    row_count  distinct_count  null_count
 {c_custkey}     57         57              0
 {c_name}        57         57              0
@@ -203,8 +202,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_totalprice}  499392.00      8761.26 <==    499392.00           8761.26 <==         0.00            1.00
 {sum}           499392.00      8761.26 <==    499392.00           27744.00 <==        0.00            1.00
 
-stats table=q18_group_by_3
-----
+----Stats for q18_group_by_3----
 column_names    row_count  distinct_count  null_count
 {c_custkey}     57         57              0
 {c_name}        57         57              0
@@ -221,8 +219,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_totalprice}  499392.00      8761.26 <==    499392.00           8761.26 <==         0.00            1.00
 {sum}           499392.00      8761.26 <==    499392.00           27744.00 <==        0.00            1.00
 
-stats table=q18_inner_join_4
-----
+----Stats for q18_inner_join_4----
 column_names    row_count  distinct_count  null_count
 {c_custkey}     399        57              0
 {c_name}        399        57              0
@@ -243,8 +240,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_orderkey}    2016361.00     5053.54 <==    499392.00           8761.26 <==         0.00            1.00
 {o_totalprice}  2016361.00     5053.54 <==    488044.00           8562.18 <==         0.00            1.00
 
-stats table=q18_scan_5
-----
+----Stats for q18_scan_5----
 column_names  row_count  distinct_count  null_count
 {l_orderkey}  6001215    1527270         0
 {l_quantity}  6001215    50              0
@@ -253,8 +249,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_orderkey}  6001215.00     1.00           1527270.00          1.00                0.00            1.00
 {l_quantity}  6001215.00     1.00           50.00               1.00                0.00            1.00
 
-stats table=q18_inner_join_6
-----
+----Stats for q18_inner_join_6----
 column_names    row_count  distinct_count  null_count
 {c_custkey}     57         57              0
 {c_name}        57         57              0
@@ -271,8 +266,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_orderkey}    513151.00      9002.65 <==    323295.00           5671.84 <==         0.00            1.00
 {o_totalprice}  513151.00      9002.65 <==    322560.00           5658.95 <==         0.00            1.00
 
-stats table=q18_merge_join_7
-----
+----Stats for q18_merge_join_7----
 column_names    row_count  distinct_count  null_count
 {o_custkey}     57         57              0
 {o_orderdate}   57         57              0
@@ -285,8 +279,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_orderkey}    509090.00      8931.40 <==    509090.00           8931.40 <==         0.00            1.00
 {o_totalprice}  509090.00      8931.40 <==    506350.00           8883.33 <==         0.00            1.00
 
-stats table=q18_scan_8
-----
+----Stats for q18_scan_8----
 column_names    row_count  distinct_count  null_count
 {o_custkey}     1500000    99846           0
 {o_orderdate}   1500000    2406            0
@@ -299,8 +292,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_orderkey}    1500000.00     1.00           1500000.00          1.02                0.00            1.00
 {o_totalprice}  1500000.00     1.00           1459167.00          1.00                0.00            1.00
 
-stats table=q18_select_9
-----
+----Stats for q18_select_9----
 column_names  row_count  distinct_count  null_count
 {l_orderkey}  57         57              0
 {sum}         57         18              0
@@ -309,8 +301,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_orderkey}  509090.00      8931.40 <==    509090.00           8931.40 <==         0.00            1.00
 {sum}         509090.00      8931.40 <==    509090.00           28282.78 <==        0.00            1.00
 
-stats table=q18_group_by_10
-----
+----Stats for q18_group_by_10----
 column_names  row_count  distinct_count  null_count
 {l_orderkey}  1500000    1527270         0
 {sum}         1500000    318             0
@@ -319,8 +310,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_orderkey}  1527270.00     1.02           1527270.00          1.00                0.00            1.00
 {sum}         1527270.00     1.02           1527270.00          4802.74 <==         0.00            1.00
 
-stats table=q18_scan_11
-----
+----Stats for q18_scan_11----
 column_names  row_count  distinct_count  null_count
 {l_orderkey}  6001215    1527270         0
 {l_quantity}  6001215    50              0
@@ -329,8 +319,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_orderkey}  6001215.00     1.00           1527270.00          1.00                0.00            1.00
 {l_quantity}  6001215.00     1.00           50.00               1.00                0.00            1.00
 
-stats table=q18_scan_12
-----
+----Stats for q18_scan_12----
 column_names  row_count  distinct_count  null_count
 {c_custkey}   150000     148813          0
 {c_name}      150000     151126          0
@@ -338,3 +327,5 @@ column_names  row_count  distinct_count  null_count
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_custkey}   150000.00      1.00           148813.00           1.00                0.00            1.00
 {c_name}      150000.00      1.00           150000.00           1.01                0.00            1.00
+----
+----
