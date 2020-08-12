@@ -102,7 +102,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	cm, err := security.NewCertificateManager(certsDir)
 	require.NoError(t, err)
-	serverTLSConfig, err := cm.GetTenantServerTLSConfig()
+	serverTLSConfig, err := cm.GetServerTLSConfig()
 	require.NoError(t, err)
 
 	// Make a new CertificateManager for the tenant. We could've used this one
