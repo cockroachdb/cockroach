@@ -67,7 +67,7 @@ func gcTables(
 		}
 
 		// First, delete all the table data.
-		if err := clearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, table); err != nil {
+		if err := ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, table); err != nil {
 			return false, errors.Wrapf(err, "clearing data for table %d", table.ID)
 		}
 
@@ -83,8 +83,8 @@ func gcTables(
 	return didGC, nil
 }
 
-// clearTableData deletes all of the data in the specified table.
-func clearTableData(
+// ClearTableData deletes all of the data in the specified table.
+func ClearTableData(
 	ctx context.Context,
 	db *kv.DB,
 	distSender *kvcoord.DistSender,
