@@ -23,6 +23,8 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -910,6 +912,15 @@ func (j jsonObject) allPaths() ([]JSON, error) {
 		}
 	}
 	return ret, nil
+}
+
+// FromSpatialObject transforms a SpatialObject into the json.JSON type.
+func FromSpatialObject(so geopb.SpatialObject) (JSON, error) {
+	j, err := geo.SpatialObjectToGeoJSON(so, geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
+	if err != nil {
+		return nil, err
+	}
+	return ParseJSON(string(j))
 }
 
 // FromDecimal returns a JSON value given a apd.Decimal.
