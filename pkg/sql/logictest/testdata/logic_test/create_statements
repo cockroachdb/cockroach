@@ -90,14 +90,14 @@ unlogged_tbl  CREATE TABLE public.unlogged_tbl (
 statement error invalid storage parameter "foo"
 CREATE TABLE a (b INT) WITH (foo=100);
 
-statement error argument of fillfactor must be type int, not type bool
+statement error parameter "fillfactor" requires an float value
 CREATE TABLE a (b INT) WITH (fillfactor=true);
 
 statement error unimplemented: storage parameter "toast_tuple_target"
 CREATE TABLE a (b INT) WITH (toast_tuple_target=100);
 
 query T noticetrace
-CREATE TABLE a (b INT) WITH (fillfactor=100)
+CREATE TABLE a (b INT) WITH (fillfactor=99.9)
 ----
 NOTICE: storage parameter "fillfactor" is ignored
 
@@ -105,3 +105,15 @@ query T noticetrace
 CREATE INDEX a_idx ON a(b) WITH (fillfactor=50)
 ----
 NOTICE: storage parameter "fillfactor" is ignored
+
+query T noticetrace
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=off)
+----
+NOTICE: storage parameter "autovacuum_enabled = 'off'" is ignored
+
+query T noticetrace
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled=on)
+----
+
+statement error parameter "autovacuum_enabled" requires a Boolean value
+DROP TABLE a CASCADE; CREATE TABLE a (b INT) WITH (autovacuum_enabled='11')

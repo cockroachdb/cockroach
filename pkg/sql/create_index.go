@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,14 +35,25 @@ type createIndexNode struct {
 	tableDesc *sqlbase.MutableTableDescriptor
 }
 
-var indexStorageParams = map[string]storageParamType{
-	`fillfactor`:                        storageParamInt,
-	`vacuum_cleanup_index_scale_factor`: storageParamUnimplemented,
-	`buffering`:                         storageParamUnimplemented,
-	`fastupdate`:                        storageParamUnimplemented,
-	`gin_pending_list_limit`:            storageParamUnimplemented,
-	`pages_per_range`:                   storageParamUnimplemented,
-	`autosummarize`:                     storageParamUnimplemented,
+type indexStorageParamObserver struct{}
+
+var _ storageParamObserver = (*indexStorageParamObserver)(nil)
+
+func (a *indexStorageParamObserver) apply(
+	evalCtx *tree.EvalContext, key string, expr tree.Datum,
+) error {
+	switch key {
+	case `fillfactor`:
+		return applyFillFactorStorageParam(evalCtx, key, expr)
+	case `vacuum_cleanup_index_scale_factor`,
+		`buffering`,
+		`fastupdate`,
+		`gin_pending_list_limit`,
+		`pages_per_range`,
+		`autosummarize`:
+		return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+	}
+	return errors.Errorf("invalid storage parameter %q", key)
 }
 
 // CreateIndex creates an index.
@@ -146,16 +158,6 @@ func MakeIndexDescriptor(
 		CreatedExplicitly: true,
 	}
 
-	if err := checkStorageParameters(
-		params.ctx,
-		params.p.SemaCtx(),
-		params.EvalContext(),
-		n.StorageParams,
-		indexStorageParams,
-	); err != nil {
-		return nil, err
-	}
-
 	if n.Inverted {
 		if n.Interleave != nil {
 			return nil, pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support interleaved tables")
@@ -241,6 +243,16 @@ func MakeIndexDescriptor(
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
+		return nil, err
+	}
+
+	if err := applyStorageParameters(
+		params.ctx,
+		params.p.SemaCtx(),
+		params.EvalContext(),
+		n.StorageParams,
+		&indexStorageParamObserver{},
+	); err != nil {
 		return nil, err
 	}
 	return &indexDesc, nil
