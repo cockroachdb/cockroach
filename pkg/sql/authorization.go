@@ -41,6 +41,10 @@ type userRoleMembership map[string]bool
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
+	CheckPrivilegeForUser(
+		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
+	) error
+
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
 		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
@@ -68,10 +72,10 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
-// CheckPrivilege implements the AuthorizationAccessor interface.
+// CheckPrivilegeForUser implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+func (p *planner) CheckPrivilegeForUser(
+	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -94,10 +98,8 @@ func (p *planner) CheckPrivilege(
 		return nil
 	}
 
-	user := p.SessionData().User
-
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
-		return isOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
 		return err
@@ -110,11 +112,19 @@ func (p *planner) CheckPrivilege(
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
+// CheckPrivilege implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) CheckPrivilege(
+	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+) error {
+	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
+}
+
 // TODO(richardjcai): Add checks for if the user owns the parent of the object.
 // Ie, being the owner of a database gives access to all tables in the db.
 // Issue #51931.
-// isOwner returns if the role has ownership privilege of the descriptor.
-func isOwner(desc sqlbase.Descriptor, role string) bool {
+// IsOwner returns if the role has ownership privilege of the descriptor.
+func IsOwner(desc sqlbase.Descriptor, role string) bool {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner
 
@@ -139,7 +149,7 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descripto
 	user := p.SessionData().User
 
 	return p.checkRolePredicate(ctx, user, func(role string) bool {
-		return isOwner(descriptor, role)
+		return IsOwner(descriptor, role)
 	})
 }
 

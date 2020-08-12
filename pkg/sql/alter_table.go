@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -69,8 +70,18 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+	hasOwnership, err := p.HasOwnership(ctx, tableDesc)
+	if err != nil {
 		return nil, err
+	}
+
+	if !hasOwnership {
+		// This check for CREATE privilege is kept for backwards compatibility.
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"must be owner of table %s or have CREATE privilege on table %s",
+				tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
+		}
 	}
 
 	n.HoistAddColumnConstraints()
@@ -724,7 +735,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-
+		case *tree.AlterTableOwner:
+			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
+			if err != nil {
+				return err
+			}
+			descriptorChanged = changed
 		default:
 			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
@@ -1131,4 +1147,64 @@ func (p *planner) updateFKBackReferenceName(
 		}
 	}
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
+}
+
+// alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
+// was updated.
+func (p *planner) alterTableOwner(
+	ctx context.Context, n *alterTableNode, newOwner string,
+) (bool, error) {
+	desc := n.tableDesc
+	privs := desc.GetPrivileges()
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner {
+		return false, nil
+	}
+
+	// Make sure the newOwner exists.
+	roleExists, err := p.RoleExists(ctx, newOwner)
+	if err != nil {
+		return false, err
+	}
+	if !roleExists {
+		return false, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", newOwner)
+	}
+
+	// The user explicitly has to be owner to change the owner.
+	if ok := IsOwner(desc, p.User()); !ok {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of table %s", tree.Name(desc.GetName()))
+	}
+
+	// Requirements from PG:
+	// To alter the owner, you must also be a direct or indirect member of the new owning role,
+	// and that role must have CREATE privilege on the type's schema.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := memberOf[newOwner]; !ok {
+		return false, pgerror.Newf(
+			pgcode.InsufficientPrivilege, "must be member of role %s", newOwner)
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	// We do not have to check for the public schema.
+	if desc.GetParentSchemaID() != keys.RootNamespaceID && desc.GetParentSchemaID() != keys.PublicSchemaID {
+		schemaDesc, err := catalogkv.MustGetSchemaDescByID(
+			ctx, p.Txn(), p.ExecCfg().Codec, desc.GetParentSchemaID(),
+		)
+		if err != nil {
+			return false, err
+		}
+
+		if err := p.CheckPrivilegeForUser(ctx, schemaDesc, privilege.CREATE, newOwner); err != nil {
+			return false, err
+		}
+	}
+
+	privs.SetOwner(newOwner)
+
+	return true, nil
 }
