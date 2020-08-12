@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -73,26 +75,37 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+
+	ver201 := cluster.MakeTestingClusterSettingsWithVersions(
+		roachpb.Version{Major: 20, Minor: 1},
+		roachpb.Version{Major: 20, Minor: 1},
+		true)
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: ver201})
 	defer s.Stopper().Stop(ctx)
 
 	// Disable leniency for instant expiration
 	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
+	const cancelInterval = time.Duration(math.MaxInt64)
+	const adoptInterval = time.Microsecond
+	slinstance.DefaultTTL.Override(&s.ClusterSettings().SV, 2*adoptInterval)
+	slinstance.DefaultHeartBeat.Override(&s.ClusterSettings().SV, adoptInterval)
 
 	db := s.DB()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
-		const cancelInterval = time.Duration(math.MaxInt64)
-		const adoptInterval = time.Nanosecond
-
 		var c base.NodeIDContainer
 		c.Set(ctx, id)
 		idContainer := base.NewSQLIDContainer(0, &c, true /* exposed */)
 		ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+		sqlStorage := slstorage.NewStorage(
+			s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor), s.ClusterSettings(),
+		)
+		sqlInstance := slinstance.NewSQLInstance(s.Stopper(), clock, sqlStorage, s.ClusterSettings())
 		r := jobs.MakeRegistry(
-			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db, s.InternalExecutor().(sqlutil.InternalExecutor),
-			idContainer, s.ClusterSettings(), base.DefaultHistogramWindowInterval(), jobs.FakePHS, "",
+			ac, s.Stopper(), clock, sqlbase.MakeOptionalNodeLiveness(nodeLiveness), db,
+			s.InternalExecutor().(sqlutil.InternalExecutor), idContainer, sqlInstance,
+			s.ClusterSettings(), base.DefaultHistogramWindowInterval(), jobs.FakePHS, "",
 		)
 		if err := r.Start(ctx, s.Stopper(), cancelInterval, adoptInterval); err != nil {
 			t.Fatal(err)

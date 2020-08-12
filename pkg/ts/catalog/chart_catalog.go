@@ -1433,6 +1433,32 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL Livness"}},
+		Charts: []chartDescription{
+			{
+				Title: "Session Writes",
+				Metrics: []string{
+					"sqlliveness.write_successes",
+					"sqlliveness.write_failures",
+				},
+			},
+			{
+				Title: "IsAlive cache",
+				Metrics: []string{
+					"sqlliveness.is_alive.cache_hits",
+					"sqlliveness.is_alive.cache_misses",
+				},
+			},
+			{
+				Title: "Session deletion",
+				Metrics: []string{
+					"sqlliveness.sessions_deletion_runs",
+					"sqlliveness.sessions_deleted",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
 		Charts: []chartDescription{
 			{

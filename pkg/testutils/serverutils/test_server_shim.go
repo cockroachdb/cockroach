@@ -108,6 +108,9 @@ type TestServerInterface interface {
 	// DistSQLServer returns the *distsql.ServerImpl as an interface{}.
 	DistSQLServer() interface{}
 
+	// SQLLivenessStorage returns the sqlliveness.Provider as an interface{}.
+	SQLLivenessProvider() interface{}
+
 	// JobRegistry returns the *jobs.Registry as an interface{}.
 	JobRegistry() interface{}
 

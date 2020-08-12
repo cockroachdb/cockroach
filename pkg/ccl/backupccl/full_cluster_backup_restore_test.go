@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 	"testing"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Large test to ensure that all of the system table data is being restored in
@@ -37,6 +37,13 @@ func TestFullClusterBackup(t *testing.T) {
 	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
+
+	// The claim_session_id field in jobs is a uuid and so needs to be excluded
+	// when comparing jobs pre/post restore.
+	const jobsQuery = `
+SELECT id, status, created, payload, progress, created_by_type, created_by_id, claim_instance_id
+FROM system.jobs
+	`
 
 	// Disable automatic stats collection on the backup and restoring clusters to ensure
 	// the test is deterministic.
@@ -64,7 +71,7 @@ func TestFullClusterBackup(t *testing.T) {
 	// Populate system.jobs.
 	// Note: this is not the backup under test, this just serves as a job which should appear in the restore.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
-	preBackupJobs := sqlDB.QueryStr(t, "SELECT * FROM system.jobs")
+	preBackupJobs := sqlDB.QueryStr(t, jobsQuery)
 	// Populate system.settings.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 5`)
 	sqlDB.Exec(t, `INSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`, "some_key", "some_val")
@@ -182,21 +189,23 @@ func TestFullClusterBackup(t *testing.T) {
 		// that were in the BACKUP cluster (before the full cluster BACKUP job was
 		// run). There may be more jobs now because the restore can run jobs of
 		// its own.
-		newJobs := sqlDBRestore.QueryStr(t, "SELECT * FROM system.jobs")
+		newJobsStr := sqlDBRestore.QueryStr(t, jobsQuery)
+		newJobs := make(map[string][]string)
+
+		for _, newJob := range newJobsStr {
+			// The first element of the slice is the job id.
+			newJobs[newJob[0]] = newJob
+		}
 		for _, oldJob := range preBackupJobs {
-			present := false
-			for _, newJob := range newJobs {
-				if reflect.DeepEqual(oldJob, newJob) {
-					present = true
-				}
-			}
-			if !present {
+			newJob, ok := newJobs[oldJob[0]]
+			if !ok {
 				t.Errorf("Expected to find job %+v in RESTORE cluster, but not found", oldJob)
 			}
+			require.Equal(t, oldJob, newJob)
 		}
 	})
 
-	t.Run("ensure that tables can be created at the execpted ID", func(t *testing.T) {
+	t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
 		maxID, err := strconv.Atoi(sqlDBRestore.QueryStr(t, "SELECT max(id) FROM system.namespace")[0][0])
 		if err != nil {
 			t.Fatal(err)

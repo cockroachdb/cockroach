@@ -324,6 +324,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 		rts.mu.e.Success = true
 		rts.check(t, jobs.StatusSucceeded)
+		t.Log("Done")
 	})
 
 	t.Run("create separately success", func(t *testing.T) {
@@ -2288,6 +2289,7 @@ func TestUnmigratedSchemaChangeJobs(t *testing.T) {
 	}
 
 	t.Run("job is not adopted", func(t *testing.T) {
+		defer jobs.ResetConstructors()()
 		resuming := make(chan struct{})
 		jobs.RegisterConstructor(jobspb.TypeSchemaChange, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return jobs.FakeResumer{
