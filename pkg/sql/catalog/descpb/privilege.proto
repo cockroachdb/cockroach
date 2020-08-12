@@ -28,4 +28,6 @@ message PrivilegeDescriptor {
   option (gogoproto.equal) = true;
   repeated UserPrivileges users = 1 [(gogoproto.nullable) = false];
   optional string owner = 2 [(gogoproto.nullable) = false];
+  optional uint32 version = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.casttype) = "PrivilegeDescVersion"];
 }
