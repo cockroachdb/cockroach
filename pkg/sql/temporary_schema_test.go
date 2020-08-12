@@ -51,29 +51,13 @@ CREATE TEMP TABLE a (a SERIAL, c INT);
 ALTER TABLE a ADD COLUMN b SERIAL;
 CREATE TEMP SEQUENCE a_sequence;
 CREATE TEMP VIEW a_view AS SELECT a FROM a;
-CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
-INSERT INTO perm_table VALUES (DEFAULT, 1);
-`)
+CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int); INSERT INTO perm_table VALUES (DEFAULT, 1); `)
 	require.NoError(t, err)
 
-	rows, err := conn.QueryContext(ctx, `SELECT id, name FROM system.namespace`)
-	require.NoError(t, err)
-
-	namesToID := make(map[string]sqlbase.ID)
-	var schemaName string
-	for rows.Next() {
-		var id int64
-		var name string
-		err := rows.Scan(&id, &name)
-		require.NoError(t, err)
-
-		namesToID[name] = sqlbase.ID(id)
-		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
-			schemaName = name
-		}
-	}
-
-	require.NotEqual(t, "", schemaName)
+	namesToID, tempSchemaNames := constructNameToIDMapping(ctx, t, conn)
+	require.Equal(t, len(tempSchemaNames), 1, "unexpected number of temp schemas")
+	tempSchemaName := tempSchemaNames[0]
+	require.NotEqual(t, "", tempSchemaName)
 
 	tempNames := []string{
 		"a",
@@ -83,12 +67,12 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		"a_b_seq",
 	}
 	selectableTempNames := []string{"a", "a_view"}
-	for _, name := range append(tempNames, schemaName) {
+	for _, name := range append(tempNames, tempSchemaName) {
 		require.Contains(t, namesToID, name)
 	}
 	for _, name := range selectableTempNames {
 		// Check tables are accessible.
-		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
+		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
 		require.NoError(t, err)
 	}
 
@@ -101,27 +85,14 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 				txn,
 				s.InternalExecutor().(*InternalExecutor),
 				namesToID["defaultdb"],
-				schemaName,
+				tempSchemaName,
 			)
 			require.NoError(t, err)
 			return nil
 		}),
 	)
 
-	for _, name := range selectableTempNames {
-		// Ensure all the entries for the given temporary structures are gone.
-		// This can take a longer amount of time if the job takes time / lease doesn't expire in time.
-		testutils.SucceedsSoon(t, func() error {
-			_, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
-			if err != nil {
-				if !strings.Contains(err.Error(), fmt.Sprintf(`relation "%s.%s" does not exist`, schemaName, name)) {
-					return errors.Errorf("expected %s.%s error to resolve relation not existing", schemaName, name)
-				}
-				return nil //nolint:returnerrcheck
-			}
-			return errors.Errorf("expected %s.%s to be deleted", schemaName, name)
-		})
-	}
+	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
 
 	// Check perm_table performs correctly, and has the right schema.
 	_, err = db.Query("SELECT * FROM perm_table")
@@ -134,6 +105,85 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	).Scan(&colDefault)
 	require.NoError(t, err)
 	assert.False(t, colDefault.Valid)
+}
+
+// Regression test for #51219, where the TempSchemaObject cleaner was trying to
+// clean up some objects under the public schema which had been present before
+// 19.2 upgrade because of a bug in the namespace fallback logic.
+func TestCleanupSchemaObjectsAfterVersionUpgrade(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn, err := db.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `
+SET experimental_enable_temp_tables=true;
+CREATE TEMP TABLE a_temp (a INT, c INT);
+CREATE SEQUENCE perm_sequence;
+CREATE TABLE perm_table (a INT, b INT);
+INSERT INTO perm_table VALUES (3, 4);
+`)
+	require.NoError(t, err)
+
+	namesToID, tempSchemaNames := constructNameToIDMapping(ctx, t, conn)
+	require.Equal(t, len(tempSchemaNames), 1, "unexpected number of temp schemas")
+	tempSchemaName := tempSchemaNames[0]
+	require.NotEqual(t, "", tempSchemaName)
+
+	// Simulate 19.2 -> 20.1 upgrade by placing perm_table and perm_sequence in
+	// the old namespace table.
+	deprecatedTbKey := sqlbase.NewDeprecatedTableKey(
+		namesToID["defaultdb"], "perm_table").Key()
+	deprecatedSeqKey := sqlbase.NewDeprecatedTableKey(
+		namesToID["defaultdb"], "perm_sequence").Key()
+	err = kvDB.CPut(ctx, deprecatedTbKey, namesToID["perm_table"], nil)
+	require.NoError(t, err)
+	err = kvDB.CPut(ctx, deprecatedSeqKey, namesToID["perm_sequence"], nil)
+	require.NoError(t, err)
+
+	tempNames := []string{
+		"a_temp",
+	}
+	for _, name := range append(tempNames, tempSchemaName) {
+		require.Contains(t, namesToID, name)
+	}
+	for _, name := range tempNames {
+		// Check tables are accessible.
+		_, err = conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", tempSchemaName, name))
+		require.NoError(t, err)
+	}
+
+	require.NoError(
+		t,
+		kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			execCfg := s.ExecutorConfig().(ExecutorConfig)
+			err = cleanupSchemaObjects(
+				ctx,
+				execCfg.Settings,
+				txn,
+				s.InternalExecutor().(*InternalExecutor),
+				namesToID["defaultdb"],
+				tempSchemaName,
+			)
+			require.NoError(t, err)
+			return nil
+		}),
+	)
+
+	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)
+
+	// Check perm_table performs correctly, and has the right schema.
+	_, err = db.Query("SELECT * FROM perm_table")
+	require.NoError(t, err)
+
+	// Check perm_sequence performs correctly and has the right schema.
+	_, err = db.Query("SELECT * FROM perm_sequence")
+	require.NoError(t, err)
 }
 
 func TestTemporaryObjectCleaner(t *testing.T) {
@@ -265,4 +315,49 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 		).Scan(&tempObjectCount)
 		assert.Equal(t, 0, tempObjectCount)
 	}
+}
+
+// ensureTemporaryObjectsAreDeleted ensures all the tempNames have been deleted.
+// This can take a longer amount of time if the job takes time.
+func ensureTemporaryObjectsAreDeleted(
+	ctx context.Context, t *testing.T, conn *gosql.Conn, schemaName string, tempNames []string,
+) {
+	for _, name := range tempNames {
+		// Ensure all the entries for the given temporary structures are gone.
+		// This can take a longer amount of time if the job takes time / lease doesn't expire in time.
+		testutils.SucceedsSoon(t, func() error {
+			_, err := conn.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s.%s", schemaName, name))
+			if err != nil {
+				if !strings.Contains(err.Error(), fmt.Sprintf(`relation "%s.%s" does not exist`, schemaName, name)) {
+					return errors.Errorf("expected %s.%s error to resolve relation not existing", schemaName, name)
+				}
+				return nil //nolint:returnerrcheck
+			}
+			return errors.Errorf("expected %s.%s to be deleted", schemaName, name)
+		})
+	}
+}
+
+// constructNameToIDMapping constructs and returns a mapping of names to IDs for
+// all objects in system.namespace along with the temp schemas.
+func constructNameToIDMapping(
+	ctx context.Context, t *testing.T, conn *gosql.Conn,
+) (map[string]sqlbase.ID, []string) {
+	rows, err := conn.QueryContext(ctx, `SELECT id, name FROM system.namespace`)
+	require.NoError(t, err)
+
+	namesToID := make(map[string]sqlbase.ID)
+	tempSchemaNames := make([]string, 0)
+	for rows.Next() {
+		var id int64
+		var name string
+		err := rows.Scan(&id, &name)
+		require.NoError(t, err)
+
+		namesToID[name] = sqlbase.ID(id)
+		if strings.HasPrefix(name, sessiondata.PgTempSchemaName) {
+			tempSchemaNames = append(tempSchemaNames, name)
+		}
+	}
+	return namesToID, tempSchemaNames
 }
