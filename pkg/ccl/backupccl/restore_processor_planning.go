@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -51,8 +53,23 @@ func distRestore(
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
 
-	// Wrap the relevant BackupEncryptionOptions to be used by the KV
-	// ImportRequest.
+	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
+		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+			settings: phs.ExecCfg().Settings,
+			conf:     &phs.ExecCfg().ExternalIODirConfig,
+		})
+		if err != nil {
+			return err
+		}
+
+		encryption.Key, err = kms.Decrypt(ctx, encryption.KMSInfo.EncryptedDataKey)
+		if err != nil {
+			return errors.Wrap(err,
+				"failed to decrypt data key before starting BackupDataProcessor")
+		}
+	}
+	// Wrap the relevant BackupEncryptionOptions to be used by the Restore
+	// processor and KV ImportRequest.
 	var fileEncryption *roachpb.FileEncryptionOptions
 	if encryption != nil {
 		fileEncryption = &roachpb.FileEncryptionOptions{Key: encryption.Key}
