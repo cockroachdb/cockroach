@@ -489,7 +489,7 @@ func (tc *Collection) getObjectVersion(
 func (tc *Collection) GetTableVersionByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedRelationError(
@@ -510,7 +510,7 @@ func (tc *Collection) GetTableVersionByID(
 }
 
 func (tc *Collection) getDescriptorVersionByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.ObjectLookupFlags, setTxnDeadline bool,
+	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
 	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id, catalogkv.Immutable,
@@ -557,7 +557,7 @@ func (tc *Collection) getDescriptorVersionByID(
 	tc.leasedDescriptors.add(desc)
 	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.GetName())
 
-	if setTxnDeadline {
+	if txn.Type() == kv.RootTxn {
 		// If the descriptor we just acquired expires before the txn's deadline,
 		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 		// timestamp, so we need to set a deadline on the transaction to prevent it
@@ -867,7 +867,7 @@ func (tc *Collection) GetTypeVersion(
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTypeDescriptor, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
@@ -1255,13 +1255,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, sqlbase.TypeDescriptor, error) {
-	desc, err := dt.descriptors.getDescriptorVersionByID(
-		ctx,
-		dt.txn,
-		id,
-		tree.ObjectLookupFlagsWithRequired(),
-		false, /* setTxnDeadline */
-	)
+	desc, err := dt.descriptors.getDescriptorVersionByID(ctx, dt.txn, id, tree.ObjectLookupFlagsWithRequired())
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
