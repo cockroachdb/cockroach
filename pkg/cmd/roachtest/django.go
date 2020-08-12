@@ -19,8 +19,8 @@ import (
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
-var djangoSupportedTag = "3.0.6"
-var djangoCockroachDBSupportedTag = "3.0.1"
+var djangoSupportedTag = "cockroach-3.0.x"
+var djangoCockroachDBSupportedTag = "3.0.2"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -114,7 +114,7 @@ func registerDjango(r *testRegistry) {
 			c,
 			"https://github.com/timgraham/django/",
 			"/mnt/data1/django",
-			"cockroach-3.0.x",
+			djangoSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
