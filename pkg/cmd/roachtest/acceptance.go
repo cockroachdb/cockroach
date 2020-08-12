@@ -50,7 +50,6 @@ func registerAcceptance(r *testRegistry) {
 		{
 			name: "many-splits", fn: runManySplits,
 			minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
-			skip:       "https://github.com/cockroachdb/cockroach/issues/47325",
 		},
 		{name: "status-server", fn: runStatusServer},
 		{

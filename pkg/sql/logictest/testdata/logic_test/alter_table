@@ -89,11 +89,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                                     validated
-t           check_a          CHECK            CHECK ((a > 0:::INT8))                      true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES public.other(b)  true
-t           foo              UNIQUE           UNIQUE (b ASC)                              true
-t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                         true
+table_name  constraint_name  constraint_type  details                              validated
+t           check_a          CHECK            CHECK ((a > 0:::INT8))               true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                       true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -119,10 +119,10 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                              true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -137,11 +137,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                              true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -159,11 +159,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
-t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                              true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))               true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))               true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                       true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
