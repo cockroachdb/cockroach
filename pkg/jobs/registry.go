@@ -983,7 +983,9 @@ func (r *Registry) stepThroughStateMachine(
 	status Status,
 	jobErr error,
 ) error {
-	log.Infof(ctx, "job %d: stepping through state %s with error: %v", *job.ID(), status, jobErr)
+	payload := job.Payload()
+	jobType := payload.Type().String()
+	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, *job.ID(), status, jobErr)
 	switch status {
 	case StatusRunning:
 		if jobErr != nil {
