@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/pierrre/geohash"
@@ -30,6 +31,9 @@ import (
 	"github.com/twpayne/go-geom/encoding/wkbhex"
 	"github.com/twpayne/go-geom/encoding/wkt"
 )
+
+// DefaultGeoJSONDecimalDigits is the default number of digits coordinates in GeoJSON.
+const DefaultGeoJSONDecimalDigits = 9
 
 // SpatialObjectToWKT transforms a given SpatialObject to WKT.
 func SpatialObjectToWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.WKT, error) {
@@ -55,6 +59,16 @@ func SpatialObjectToEWKT(so geopb.SpatialObject, maxDecimalDigits int) (geopb.EW
 		ret = fmt.Sprintf("SRID=%d;%s", t.SRID(), ret)
 	}
 	return geopb.EWKT(ret), err
+}
+
+// SpatialObjectToInternalJSON transforms a SpatialObject into the CockroachDB
+// json.JSON type.
+func SpatialObjectToInternalJSON(so geopb.SpatialObject) (json.JSON, error) {
+	j, err := SpatialObjectToGeoJSON(so, DefaultGeoJSONDecimalDigits, SpatialObjectToGeoJSONFlagZero)
+	if err != nil {
+		return nil, err
+	}
+	return json.ParseJSON(string(j))
 }
 
 // SpatialObjectToWKB transforms a given SpatialObject to WKB.

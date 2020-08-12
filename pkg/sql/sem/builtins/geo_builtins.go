@@ -51,8 +51,7 @@ const spheroidDistanceMessage = `"\n\nWhen operating on a spheroid, this functio
 	`This follows observed PostGIS behavior.`
 
 const (
-	defaultGeoJSONDecimalDigits = 9
-	defaultWKTDecimalDigits     = 15
+	defaultWKTDecimalDigits = 15
 )
 
 // infoBuilder is used to build a detailed info string that is consistent between
@@ -1165,14 +1164,14 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
 			infoBuilder{
 				info: fmt.Sprintf(
 					"Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of %d decimal digits.",
-					defaultGeoJSONDecimalDigits,
+					geo.DefaultGeoJSONDecimalDigits,
 				),
 			},
 			tree.VolatilityImmutable,
@@ -1222,14 +1221,14 @@ Options is a flag that can be bitmasked. The options are:
 		},
 		geographyOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeography) (tree.Datum, error) {
-				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), defaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
+				geojson, err := geo.SpatialObjectToGeoJSON(g.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 				return tree.NewDString(string(geojson)), err
 			},
 			types.String,
 			infoBuilder{
 				info: fmt.Sprintf(
 					"Returns the GeoJSON representation of a given Geography. Coordinates have a maximum of %d decimal digits.",
-					defaultGeoJSONDecimalDigits,
+					geo.DefaultGeoJSONDecimalDigits,
 				),
 			},
 			tree.VolatilityImmutable,
