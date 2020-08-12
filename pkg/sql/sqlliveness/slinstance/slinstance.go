@@ -250,7 +250,7 @@ func (l *Instance) Start(ctx context.Context) {
 		return
 	}
 	log.Infof(ctx, "starting SQL liveness instance")
-	l.stopper.RunWorker(ctx, l.heartbeatLoop)
+	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
 	l.mu.started = true
 }
 

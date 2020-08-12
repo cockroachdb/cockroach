@@ -115,7 +115,7 @@ func (s *Storage) Start(ctx context.Context) {
 	if s.mu.started {
 		return
 	}
-	s.stopper.RunWorker(ctx, s.deleteSessionsLoop)
+	_ = s.stopper.RunAsyncTask(ctx, "slstorage", s.deleteSessionsLoop)
 	s.mu.started = true
 }
 
