@@ -123,16 +123,18 @@ func GenerateInsertRow(
 			// since we disallow computed columns from referencing other computed
 			// columns, all the columns which could possibly be referenced *are*
 			// available.
-			if !computedColsLookup[i].IsComputed() {
+			col := computedColsLookup[i]
+			computeIdx := rowContainerForComputedVals.Mapping[col.ID]
+			if !col.IsComputed() {
 				continue
 			}
-			d, err := computeExprs[i].Eval(evalCtx)
+			d, err := computeExprs[computeIdx].Eval(evalCtx)
 			if err != nil {
 				return nil, errors.Wrapf(err,
 					"computed column %s",
-					tree.ErrString((*tree.Name)(&computedColsLookup[i].Name)))
+					tree.ErrString((*tree.Name)(&col.Name)))
 			}
-			rowVals[rowContainerForComputedVals.Mapping[computedColsLookup[i].ID]] = d
+			rowVals[computeIdx] = d
 		}
 		evalCtx.PopIVarContainer()
 	}
@@ -209,6 +211,7 @@ type DatumRowConverter struct {
 	cols                  []descpb.ColumnDescriptor
 	VisibleCols           []descpb.ColumnDescriptor
 	VisibleColTypes       []*types.T
+	computedExprs         []tree.TypedExpr
 	defaultCache          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 
@@ -358,6 +361,26 @@ func NewDatumRowConverter(
 	c.BatchCap = kvDatumRowConverterBatchSize + padding
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 
+	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.Columns))
+	for _, col := range c.tableDesc.Columns {
+		// We prefer to have the order of columns that will be sent into
+		// MakeComputedExprs to map that of Datums.
+		colsOrdered[ri.InsertColIDtoRowIndex[col.ID]] = col
+	}
+	// Here, computeExprs will be nil if there's no computed column, or
+	// the list of computed expressions (including nil, for those columns
+	// that are not computed) otherwise, according to colsOrdered.
+	c.computedExprs, err = schemaexpr.MakeComputedExprs(
+		ctx,
+		colsOrdered,
+		c.tableDesc,
+		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
+		c.EvalCtx,
+		&semaCtx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
+	}
+
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
@@ -387,33 +410,13 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		}
 	}
 
-	colsOrdered := make([]descpb.ColumnDescriptor, len(c.tableDesc.Columns))
-	for _, col := range c.tableDesc.Columns {
-		// We prefer to have the order of columns that will be sent into
-		// MakeComputedExprs to map that of Datums.
-		colsOrdered[c.computedIVarContainer.Mapping[col.ID]] = col
-	}
-	semaCtx := tree.MakeSemaContext()
-	// Here, computeExprs will be nil if there's no computed column, or
-	// the list of computed expressions (including nil, for those columns
-	// that are not computed) otherwise, according to colsOrdered.
-	computeExprs, err := schemaexpr.MakeComputedExprs(
-		ctx,
-		colsOrdered,
-		c.tableDesc,
-		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.Name)),
-		c.EvalCtx,
-		&semaCtx)
-	if err != nil {
-		return errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
-	}
 	var computedColsLookup []descpb.ColumnDescriptor
-	if len(computeExprs) > 0 {
-		computedColsLookup = colsOrdered
+	if len(c.computedExprs) > 0 {
+		computedColsLookup = c.tableDesc.Columns
 	}
 
 	insertRow, err := GenerateInsertRow(
-		c.defaultCache, computeExprs, c.cols, computedColsLookup, c.EvalCtx,
+		c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
 		c.tableDesc, c.Datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
