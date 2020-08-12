@@ -59,7 +59,7 @@ func TestDiskQueue(t *testing.T) {
 					dequeuedProbabilityBeforeAllEnqueuesAreDone = 0
 					prefix, suffix = "Rewindable/", ""
 				}
-				numBatches := 1 + rng.Intn(1024)
+				numBatches := 1 + rng.Intn(16)
 				t.Run(fmt.Sprintf("%sDiskQueueCacheMode=%d/AlwaysCompress=%t%s/NumBatches=%d",
 					prefix, diskQueueCacheMode, alwaysCompress, suffix, numBatches), func(t *testing.T) {
 					// Create random input.
