@@ -3053,9 +3053,12 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
-	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray,
-		*DGeography, *DGeometry:
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
+	case *DGeometry:
+		return json.FromSpatialObject(t.Geometry.SpatialObject())
+	case *DGeography:
+		return json.FromSpatialObject(t.Geography.SpatialObject())
 	default:
 		if d == DNull {
 			return json.NullJSONValue, nil

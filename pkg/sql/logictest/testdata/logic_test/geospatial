@@ -225,6 +225,31 @@ SELECT ST_Azimuth(ST_Point(0, 0), ST_Point(0, 0))
 ----
 NULL
 
+subtest json_test
+
+# All values here should be true.
+query BB
+SELECT
+  to_json(g::geometry) = st_asgeojson(g::geometry)::jsonb,
+  to_json(g::geography) = st_asgeojson(g::geography)::jsonb
+FROM ( VALUES
+  ('POINT (30 10)'),
+  ('LINESTRING (30 10, 10 30, 40 40)'),
+  ('POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10),(20 30, 35 35, 30 20, 20 30))'),
+  ('MULTIPOINT (10 40, 40 30, 20 20, 30 10)'),
+  ('MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))'),
+  ('MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)), ((20 35, 10 30, 10 10, 30 5, 45 20, 20 35), (30 20, 20 15, 20 25, 30 20)))'),
+  ('GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40), POLYGON ((40 40, 20 45, 45 30, 40 40)))')
+) tbl(g)
+----
+true  true
+true  true
+true  true
+true  true
+true  true
+true  true
+true  true
+
 subtest cast_test
 
 query T
