@@ -71,15 +71,14 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 	return scan.IsLocking()
 }
 
-// GenerateIndexScans enumerates all non-inverted and non-partial secondary
-// indexes on the given Scan operator's table and generates an alternate Scan
-// operator for each index that includes the set of needed columns specified in
-// the ScanOpDef.
+// GenerateIndexScans enumerates all non-inverted secondary indexes on the given
+// Scan operator's table and generates an alternate Scan operator for each index
+// that includes the set of needed columns specified in the ScanOpDef.
 //
-// Partial indexes do not index every row in the table and they can only be used
-// in cases where a query filter implies the partial index predicate.
-// GenerateIndexScans does not deal with filters. Therefore, partial indexes
-// cannot be considered for non-constrained index scans.
+// This transformation can only consider partial indexes that are guaranteed to
+// index every row in the table. Therefore, only partial indexes with predicates
+// that always evaluate to true are considered. Such an index is pseudo-partial
+// in that it behaves the exactly the same as a non-partial secondary index.
 //
 // NOTE: This does not generate index joins for non-covering indexes (except in
 //       case of ForceIndex). Index joins are usually only introduced "one level
@@ -89,9 +88,23 @@ func (c *CustomFuncs) IsLocking(scan *memo.ScanPrivate) bool {
 //       rows from the table. See ConstrainScans and LimitScans for cases where
 //       index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
 	// Iterate over all non-inverted and non-partial secondary indexes.
-	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes|rejectPartialIndexes)
+	iter := makeScanIndexIter(c.e.mem, scanPrivate, rejectPrimaryIndex|rejectInvertedIndexes)
 	for iter.Next() {
+		// If the secondary index is a partial index with a predicate that always
+		// evaluates to true, it contains all rows in the table, and can be used
+		// for an unconstrained index scan.
+		_, isPartialIndex := md.Table(scanPrivate.Table).Index(iter.IndexOrdinal()).Predicate()
+		if isPartialIndex {
+			pred := memo.PartialIndexPredicate(tabMeta, iter.IndexOrdinal())
+			if !pred.IsTrue() {
+				continue
+			}
+		}
+
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if iter.IsCovering() {

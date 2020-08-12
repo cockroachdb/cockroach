@@ -208,6 +208,20 @@ New expression 1 of 1:
 ----
 ----
 
+# Scans over partial indexes should be generated when the partial index
+# predicates always evaluate to true.
+
+exec-ddl
+CREATE TABLE p (i INT, INDEX (i) WHERE 1 = 1)
+----
+
+opt
+SELECT i FROM p ORDER BY i
+----
+scan p@secondary,partial
+ ├── columns: i:1
+ └── ordering: +1
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------
