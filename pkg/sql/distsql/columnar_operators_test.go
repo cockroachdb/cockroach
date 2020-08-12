@@ -66,6 +66,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.AggregatorSpec_JSONB_OBJECT_AGG:     2,
 	execinfrapb.AggregatorSpec_VAR_POP:              1,
 	execinfrapb.AggregatorSpec_STDDEV_POP:           1,
+	execinfrapb.AggregatorSpec_ST_MAKELINE:          1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are

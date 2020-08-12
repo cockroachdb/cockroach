@@ -3789,8 +3789,6 @@ SRID=4326;MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)))                            
 SRID=4326;POINT (1 1)                                                           false  false
 SRID=4326;POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                                   false  false
 
-subtest translate_test
-
 query TT
 SELECT
   ST_AsText(a.geom) d,
@@ -3810,6 +3808,29 @@ POINT EMPTY                                            POINT EMPTY
 POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0.9 1, 2 1, 2 2, 0.9 2, 0.9 1))
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((0 1, 1 1, 1 2, 0 2, 0 1))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((1 1, 2 1, 2 2, 1 2, 1 1))
+
+query TTTT
+SELECT
+  ST_AsText(a.geom) d,
+  ST_AsText(ST_Scale(a.geom, .5 , 2)),
+  ST_AsText(ST_Scale(a.geom, 'Point(.25 3)')),
+  ST_AsText(ST_Scale(a.geom, 'Point(2 2)', 'Point(1 1)'))
+FROM geom_operators_test a
+ORDER BY d ASC
+----
+NULL                                                   NULL                                                   NULL                                                      NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))     GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (-1 -1)))
+GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                                  GEOMETRYCOLLECTION EMPTY
+LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.25 1, 0.25 1)                           LINESTRING (-0.125 1.5, 0.125 1.5)                        LINESTRING (-2 0, 0 0)
+LINESTRING EMPTY                                       LINESTRING EMPTY                                       LINESTRING EMPTY                                          LINESTRING EMPTY
+POINT (-0.5 0.5)                                       POINT (-0.25 1)                                        POINT (-0.125 1.5)                                        POINT (-2 0)
+POINT (0.5 0.5)                                        POINT (0.25 1)                                         POINT (0.125 1.5)                                         POINT (0 0)
+POINT (5 5)                                            POINT (2.5 10)                                         POINT (1.25 15)                                           POINT (9 9)
+POINT EMPTY                                            POINT EMPTY                                            POINT EMPTY                                               POINT EMPTY
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.05 0, 0.5 0, 0.5 2, -0.05 2, -0.05 0))    POLYGON ((-0.025 0, 0.25 0, 0.25 3, -0.025 3, -0.025 0))  POLYGON ((-1.2 -1, 1 -1, 1 1, -1.2 1, -1.2 -1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-0.5 0, 0 0, 0 2, -0.5 2, -0.5 0))           POLYGON ((-0.25 0, 0 0, 0 3, -0.25 3, -0.25 0))           POLYGON ((-3 -1, -1 -1, -1 1, -3 1, -3 -1))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0.5 0, 0.5 2, 0 2, 0 0))                POLYGON ((0 0, 0.25 0, 0.25 3, 0 3, 0 0))                 POLYGON ((-1 -1, 1 -1, 1 1, -1 1, -1 -1))
+
 
 query T
 SELECT ST_Summary('POINT(0 0)'::geometry)
@@ -3981,26 +4002,26 @@ SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 statement error Unknown type: 'ABC'
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
-subtest scale_test
-
-query TTTT
-SELECT
-  ST_AsText(a.geom) d,
-  ST_AsText(ST_Scale(a.geom, .5 , 2)),
-  ST_AsText(ST_Scale(a.geom, 'Point(.25 3)')),
-  ST_AsText(ST_Scale(a.geom, 'Point(2 2)', 'Point(1 1)'))
-FROM geom_operators_test a
-ORDER BY d ASC
+query T
+SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
+  (NULL),
+  ('POINT (30 10)'), -- value is used
+  ('POINT EMPTY'),
+  ('LINESTRING (30 10, 10 30, 40 40)'), -- value is used
+  ('LINESTRING EMPTY'),
+  ('POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10), (20 30, 35 35, 30 20, 20 30))'),
+  ('MULTIPOINT ((10 40), (40 30), (20 20), (30 10))'), -- value is used
+  ('MULTIPOINT EMPTY'),
+  ('MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))'),
+  ('MULTIPOLYGON (((30 20, 45 40, 10 40, 30 20)), ((15 5, 40 10, 10 20, 5 10, 15 5)))'),
+  ('GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40), POLYGON ((40 40, 20 45, 45 30, 40 40)))')
+) t(g)
 ----
-NULL                                                   NULL                                                   NULL                                                      NULL
-GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))     GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (-1 -1)))
-GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY                                  GEOMETRYCOLLECTION EMPTY
-LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (-0.25 1, 0.25 1)                           LINESTRING (-0.125 1.5, 0.125 1.5)                        LINESTRING (-2 0, 0 0)
-LINESTRING EMPTY                                       LINESTRING EMPTY                                       LINESTRING EMPTY                                          LINESTRING EMPTY
-POINT (-0.5 0.5)                                       POINT (-0.25 1)                                        POINT (-0.125 1.5)                                        POINT (-2 0)
-POINT (0.5 0.5)                                        POINT (0.25 1)                                         POINT (0.125 1.5)                                         POINT (0 0)
-POINT (5 5)                                            POINT (2.5 10)                                         POINT (1.25 15)                                           POINT (9 9)
-POINT EMPTY                                            POINT EMPTY                                            POINT EMPTY                                               POINT EMPTY
-POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.05 0, 0.5 0, 0.5 2, -0.05 2, -0.05 0))    POLYGON ((-0.025 0, 0.25 0, 0.25 3, -0.025 3, -0.025 0))  POLYGON ((-1.2 -1, 1 -1, 1 1, -1.2 1, -1.2 -1))
-POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-0.5 0, 0 0, 0 2, -0.5 2, -0.5 0))           POLYGON ((-0.25 0, 0 0, 0 3, -0.25 3, -0.25 0))           POLYGON ((-3 -1, -1 -1, -1 1, -3 1, -3 -1))
-POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0.5 0, 0.5 2, 0 2, 0 0))                POLYGON ((0 0, 0.25 0, 0.25 3, 0 3, 0 0))                 POLYGON ((-1 -1, 1 -1, 1 1, -1 1, -1 -1))
+LINESTRING (30 10, 30 10, 10 30, 40 40, 10 40, 40 30, 20 20, 30 10)
+
+query T
+SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
+  (NULL)
+) t(g)
+----
+NULL
