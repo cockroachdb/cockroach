@@ -1040,10 +1040,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 90001   _geometry      1307062959    NULL      -1      false     b
 90002   geography      1307062959    NULL      -1      false     b
 90003   _geography     1307062959    NULL      -1      false     b
-100063  newtype1       1307062959    NULL      -1      false     e
-100064  _newtype1      1307062959    NULL      -1      false     b
-100065  newtype2       1307062959    NULL      -1      false     e
-100066  _newtype2      1307062959    NULL      -1      false     b
+100063  newtype1       2332901747    NULL      -1      false     e
+100064  _newtype1      2332901747    NULL      -1      false     b
+100065  newtype2       2332901747    NULL      -1      false     e
+100066  _newtype2      2332901747    NULL      -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1407,8 +1407,8 @@ SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 WHERE oid = 100063
 ----
-oid     typname        typnamespace  typowner  typlen  typbyval  typtype
-100063  newtype1       1307062959    NULL      -1      false     e
+oid     typname   typnamespace  typowner  typlen  typbyval  typtype
+100063  newtype1  2332901747    NULL      -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
