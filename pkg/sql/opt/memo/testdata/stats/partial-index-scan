@@ -1,7 +1,5 @@
 # ------------------------
 # Tests without Histograms
-# TODO(mgartner): Add more interesting tests for constrained partial index
-# scans, with and without histograms.
 # ------------------------
 
 exec-ddl
@@ -116,7 +114,7 @@ index-join a
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
-      ├── columns: k:1(int!null) i:2(int)
+      ├── columns: k:1(int!null) i:2(int!null)
       ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=500, null(2)=0]
       ├── key: (1)
       └── fd: (1)-->(2)
@@ -139,18 +137,50 @@ index-join a
  ├── stats: [rows=140, distinct(2)=14, null(2)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/16 - /29]
+      ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt disable=GenerateConstrainedScans
+SELECT * FROM a WHERE i > 15 AND i < 30
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=140, distinct(2)=14, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
  └── select
       ├── columns: k:1(int!null) i:2(int!null)
       ├── stats: [rows=140, distinct(2)=14, null(2)=0]
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan a@idx,partial
-      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── columns: k:1(int!null) i:2(int!null)
       │    ├── stats: [rows=490, distinct(1)=490, null(1)=0, distinct(2)=49, null(2)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters
            └── (i:2 > 15) AND (i:2 < 30) [type=bool, outer=(2), constraints=(/2: [/16 - /29]; tight)]
+
+opt
+SELECT * FROM a WHERE (i > 0 AND i < 10) OR (i > 40 AND i < 50)
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
+ ├── stats: [rows=180, distinct(2)=18, null(2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1
+      │    ├── [/1 - /9]
+      │    └── [/41 - /49]
+      ├── stats: [rows=180, distinct(2)=18, null(2)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
 
 exec-ddl
 DROP INDEX idx
@@ -174,12 +204,12 @@ index-join a
       ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
       ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0]
       ├── key: (1)
-      ├── fd: (1)-->(3,4)
+      ├── fd: (1)-->(3,4), (3)==(4), (4)==(3)
       ├── scan a@idx,partial
-      │    ├── columns: k:1(int!null) s:3(string) t:4(string)
+      │    ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
       │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0]
       │    ├── key: (1)
-      │    └── fd: (1)-->(3,4)
+      │    └── fd: (1)-->(3,4), (3)==(4), (4)==(3)
       └── filters
            ├── s:3 LIKE '%foo%' [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
            └── t:4 LIKE '%bar%' [type=bool, outer=(4), constraints=(/4: (/NULL - ])]
@@ -212,6 +242,178 @@ exec-ddl
 DROP INDEX idx
 ----
 
+# Test for a partial index with a predicate that references an un-indexed
+# column.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/11 - /19]
+      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'baz'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=24.8207143]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1: [/11 - /19]
+ │         ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── s:3 = 'baz' [type=bool, outer=(3), constraints=(/3: [/'baz' - /'baz']; tight), fd=()-->(3)]
+
+opt
+SELECT * FROM a WHERE (i = 100 AND s = 'foo') OR (i = 200 AND s = 'bar')
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=1.22571429, distinct(2)=1.22571429, null(2)=0, distinct(3)=1.22571429, null(3)=0, distinct(2,3)=1.22571429, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── index-join a
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string) t:4(string)
+ │    ├── stats: [rows=5.51571429]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4)
+ │    └── scan a@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1
+ │         │    ├── [/100 - /100]
+ │         │    └── [/200 - /200]
+ │         ├── stats: [rows=5.51571429, distinct(2)=2, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=5.51571429, null(2,3)=0]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── ((i:2 = 100) AND (s:3 = 'foo')) OR ((i:2 = 200) AND (s:3 = 'bar')) [type=bool, outer=(2,3), constraints=(/2: [/100 - /100] [/200 - /200]; /3: [/'bar' - /'bar'] [/'foo' - /'foo'])]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references indexed and
+# un-indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON a (i) WHERE i > 0 AND i < 50 AND s = 'foo'
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/11 - /19]
+      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate the references one
+# indexed column.
+
+exec-ddl
+CREATE INDEX idx ON a (i, s) WHERE s IN ('foo', 'bar', 'baz')
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s IN ('foo', 'bar', 'baz')
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── constraint: /2/3/1: [/11 - /19]
+      ├── stats: [rows=24.8207143, distinct(2)=9, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=24.8207143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 50 AND s = 'baz'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=35.8521429, distinct(2)=35.8521429, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=35.8521429, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── stats: [rows=35.8521429, distinct(3)=1, null(3)=0]
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan a@idx,partial
+      │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      │    ├── constraint: /2/3/1: [/11/'baz' - /49/'baz']
+      │    ├── stats: [rows=107.556429, distinct(1)=107.556429, null(1)=0, distinct(2)=39, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=107.556429, null(2,3)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── s:3 = 'baz' [type=bool, outer=(3), constraints=(/3: [/'baz' - /'baz']; tight), fd=()-->(3)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate that references all
+# indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON a (i, s) WHERE i > 0 AND i < 50 AND s = 'foo'
+----
+
+opt
+SELECT * FROM a WHERE i > 10 AND i < 20 AND s = 'foo'
+----
+index-join a
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
+ ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4)
+ └── scan a@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+      ├── constraint: /2/3/1: [/11 - /19]
+      ├── stats: [rows=8.27357143, distinct(2)=8.27357143, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=8.27357143, null(2,3)=0]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
 # ---------------------
 # Tests with Histograms
 # ---------------------
@@ -220,8 +422,7 @@ exec-ddl
 CREATE TABLE hist (
   k INT PRIMARY KEY,
   i INT,
-  s STRING,
-  INDEX idx_i (s) WHERE i > 100 AND i <= 200
+  s STRING
 )
 ----
 
@@ -241,6 +442,20 @@ ALTER TABLE hist INJECT STATISTICS '[
       {"num_eq": 20, "num_range": 270, "distinct_range": 9, "upper_bound": "300"},
       {"num_eq": 30, "num_range": 360, "distinct_range": 9, "upper_bound": "400"}
     ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 40,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 100, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 100, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
   }
 ]'
 ----
@@ -249,6 +464,11 @@ ALTER TABLE hist INJECT STATISTICS '[
 # not 11. It is currently one more than it should be because
 # updateDistinctCountFromHistogram increments the distinct count before the null
 # count has been set to zero.
+
+exec-ddl
+CREATE INDEX idx ON hist (s) WHERE i > 100 AND i <= 200
+----
+
 opt
 SELECT * FROM hist WHERE i > 125 AND i < 150
 ----
@@ -264,7 +484,7 @@ select
  │    ├── stats: [rows=190]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3)
- │    └── scan hist@idx_i,partial
+ │    └── scan hist@idx,partial
  │         ├── columns: k:1(int!null) s:3(string)
  │         ├── stats: [rows=190, distinct(2)=11, null(2)=0]
  │         │   histogram(2)=  0   0   180  10
@@ -273,3 +493,285 @@ select
  │         └── fd: (1)-->(3)
  └── filters
       └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for an indexed column that is also constrained by partial index predicate.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE i > 100 AND i <= 200
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /149]
+      ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182
+      │                <--- 125 -------- 149 -
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt disable=GenerateConstrainedScans
+SELECT * FROM hist WHERE i > 125 AND i < 150
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=43.6363636, distinct(2)=4.09090909, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182
+ │                <--- 125 -------- 149 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── select
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── stats: [rows=43.6363636, distinct(2)=3.09090909, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182
+      │                <--- 125 -------- 149 -
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan hist@idx,partial
+      │    ├── columns: k:1(int!null) i:2(int!null)
+      │    ├── stats: [rows=190, distinct(1)=190, null(1)=0, distinct(2)=11, null(2)=0]
+      │    │   histogram(2)=  0   0   180  10
+      │    │                <--- 100 ----- 200
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── (i:2 > 125) AND (i:2 < 150) [type=bool, outer=(2), constraints=(/2: [/126 - /149]; tight)]
+
+opt
+SELECT * FROM hist WHERE (i > 100 AND i < 125) OR (i > 150 AND i < 175)
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+ │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
+ │                <--- 100 -------- 124 ---- 150 -------- 174 -
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1
+      │    ├── [/101 - /124]
+      │    └── [/151 - /174]
+      ├── stats: [rows=87.2727273, distinct(2)=7.18181818, null(2)=0]
+      │   histogram(2)=  0   0   41.818 1.8182 0   0   41.818 1.8182
+      │                <--- 100 -------- 124 ---- 150 -------- 174 -
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references an un-indexed
+# column.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE s IN ('banana', 'cherry', 'mango')
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mango')
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │   histogram(2)=  0   0   3.4572 1.1524
+ │                <--- 125 -------- 129 -
+ │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │                <--- 'banana' --- 'cherry' --- 'mango'
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /129]
+      ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+      │   histogram(2)=  0   0   3.4572 1.1524
+      │                <--- 125 -------- 129 -
+      │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+      │                <--- 'banana' --- 'cherry' --- 'mango'
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ │   histogram(2)=  0   0   1.7286 0.57619
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0  2.3048
+ │                <--- 'mango'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=4.60955951]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1: [/126 - /129]
+ │         ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │         │   histogram(2)=  0   0   3.4572 1.1524
+ │         │                <--- 125 -------- 129 -
+ │         │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │         │                <--- 'banana' --- 'cherry' --- 'mango'
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── s:3 = 'mango' [type=bool, outer=(3), constraints=(/3: [/'mango' - /'mango']; tight), fd=()-->(3)]
+
+opt
+SELECT * FROM hist WHERE (i = 100 AND s = 'banana') OR (i = 200 AND s = 'cherry')
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=1.28083333, distinct(2)=1.28083333, null(2)=0, distinct(3)=1.28083333, null(3)=0, distinct(2,3)=1.28083333, null(2,3)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join hist
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=12.6762887]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan hist@idx,partial
+ │         ├── columns: k:1(int!null) i:2(int!null)
+ │         ├── constraint: /2/1
+ │         │    ├── [/100 - /100]
+ │         │    └── [/200 - /200]
+ │         ├── stats: [rows=12.6762887, distinct(2)=3, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=9, null(2,3)=0]
+ │         │   histogram(2)=  0 6.3381 0 6.3381
+ │         │                <--- 100 ---- 200 -
+ │         │   histogram(3)=  0   3.1691   0   3.1691   0  6.3381
+ │         │                <--- 'banana' --- 'cherry' --- 'mango'
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2)
+ └── filters
+      └── ((i:2 = 100) AND (s:3 = 'banana')) OR ((i:2 = 200) AND (s:3 = 'cherry')) [type=bool, outer=(2,3), constraints=(/2: [/100 - /100] [/200 - /200]; /3: [/'banana' - /'banana'] [/'cherry' - /'cherry'])]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a partial index with a predicate that references indexed and
+# un-indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON hist (i) WHERE i > 100 AND i <= 200 AND s = 'banana'
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 150 AND s = 'banana'
+----
+index-join hist
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+ │   histogram(2)=  0   0   6.6262 0.2881
+ │                <--- 125 -------- 149 -
+ │   histogram(3)=  0   6.9143
+ │                <--- 'banana'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ └── scan hist@idx,partial
+      ├── columns: k:1(int!null) i:2(int!null)
+      ├── constraint: /2/1: [/126 - /149]
+      ├── stats: [rows=6.91433927, distinct(2)=4.09090909, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=4.09090909, null(2,3)=0]
+      │   histogram(2)=  0   0   6.6262 0.2881
+      │                <--- 125 -------- 149 -
+      │   histogram(3)=  0   6.9143
+      │                <--- 'banana'
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate the references one
+# indexed column.
+
+exec-ddl
+CREATE INDEX idx ON hist (i, s) WHERE s IN ('banana', 'cherry', 'mango')
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s IN ('banana', 'cherry', 'mango')
+----
+scan hist@idx,partial
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── constraint: /2/3/1: [/126 - /129]
+ ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │   histogram(2)=  0   0   3.4572 1.1524
+ │                <--- 125 -------- 129 -
+ │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │                <--- 'banana' --- 'cherry' --- 'mango'
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'mango'
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── stats: [rows=2.30477976, distinct(2)=2.27272727, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.27272727, null(2,3)=0]
+ │   histogram(2)=  0   0   1.7286 0.57619
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0  2.3048
+ │                <--- 'mango'
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── scan hist@idx,partial
+ │    ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ │    ├── constraint: /2/3/1: [/126/'mango' - /129/'mango']
+ │    ├── stats: [rows=4.60955951, distinct(2)=2.27272727, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=4.60955951, null(2,3)=0]
+ │    │   histogram(2)=  0   0   3.4572 1.1524
+ │    │                <--- 125 -------- 129 -
+ │    │   histogram(3)=  0   1.1524   0   1.1524   0  2.3048
+ │    │                <--- 'banana' --- 'cherry' --- 'mango'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── s:3 = 'mango' [type=bool, outer=(3), constraints=(/3: [/'mango' - /'mango']; tight), fd=()-->(3)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+# Test for a multi-column partial index with a predicate that references all
+# indexed columns.
+
+exec-ddl
+CREATE INDEX idx ON hist (i, s) WHERE i > 100 AND i <= 200 AND s = 'banana'
+----
+
+opt
+SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'banana'
+----
+scan hist@idx,partial
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
+ ├── constraint: /2/3/1: [/126 - /129]
+ ├── stats: [rows=1.15238988, distinct(2)=1.15238988, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1.15238988, null(2,3)=0]
+ │   histogram(2)=  0   0   0.86429 0.2881
+ │                <--- 125 --------- 129 -
+ │   histogram(3)=  0   1.1524
+ │                <--- 'banana'
+ ├── key: (1)
+ └── fd: ()-->(3), (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
+----
