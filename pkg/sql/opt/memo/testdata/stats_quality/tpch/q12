@@ -18,7 +18,7 @@ import file=tpch_stats
 # The late lineitems are partitioned into two groups, those with priority URGENT
 # or HIGH, and those with a priority other than URGENT or HIGH.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q12
+stats-quality database=tpch stats-quality-prefix=q12
 SELECT
     l_shipmode,
     sum(CASE
@@ -47,6 +47,7 @@ GROUP BY
     l_shipmode
 ORDER BY
     l_shipmode;
+----
 ----
 sort
  ├── save-table-name: q12_sort_1
@@ -108,8 +109,7 @@ sort
            └── sum [as=sum:31, type=decimal, outer=(30)]
                 └── column30:30 [type=int]
 
-stats table=q12_sort_1
-----
+----Stats for q12_sort_1----
 column_names       row_count  distinct_count  null_count
 {high_line_count}  2          2               0
 {l_shipmode}       2          2               0
@@ -120,8 +120,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_shipmode}       2.00           1.00           2.00                1.00                0.00            1.00
 {low_line_count}   2.00           1.00           2.00                1.00                0.00            1.00
 
-stats table=q12_group_by_2
-----
+----Stats for q12_group_by_2----
 column_names  row_count  distinct_count  null_count
 {l_shipmode}  2          2               0
 {sum_1}       2          2               0
@@ -132,8 +131,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {sum}         2.00           1.00           2.00                1.00                0.00            1.00
 {sum_1}       2.00           1.00           2.00                1.00                0.00            1.00
 
-stats table=q12_project_3
-----
+----Stats for q12_project_3----
 column_names  row_count  distinct_count  null_count
 {column28}    30988      2               0
 {column30}    30988      2               0
@@ -144,8 +142,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column30}    29823.00       1.04           5.00                2.50 <==            0.00            1.00
 {l_shipmode}  29823.00       1.04           2.00                1.00                0.00            1.00
 
-stats table=q12_lookup_join_4
-----
+----Stats for q12_lookup_join_4----
 column_names       row_count  distinct_count  null_count
 {l_commitdate}     30988      392             0
 {l_orderkey}       30988      28828           0
@@ -164,8 +161,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderkey}       29823.00       1.04           29606.00            1.03                0.00            1.00
 {o_orderpriority}  29823.00       1.04           5.00                1.00                0.00            1.00
 
-stats table=q12_select_5
-----
+----Stats for q12_select_5----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   30988      392             0
 {l_orderkey}     30988      28828           0
@@ -180,8 +176,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {l_shipdate}     29823.00       1.04           2526.00             6.46 <==            0.00            1.00
 {l_shipmode}     29823.00       1.04           2.00                1.00                0.00            1.00
 
-stats table=q12_index_join_6
-----
+----Stats for q12_index_join_6----
 column_names     row_count  distinct_count  null_count
 {l_commitdate}   909844     560             0
 {l_orderkey}     909844     267788          0
@@ -195,3 +190,16 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {l_receiptdate}  939420.00      1.03           365.00              1.00                0.00            1.00
 {l_shipdate}     939420.00      1.03           2526.00             6.41 <==            0.00            1.00
 {l_shipmode}     939420.00      1.03           7.00                1.00                0.00            1.00
+
+----Stats for q12_scan_7----
+column_names     row_count  distinct_count  null_count
+{l_linenumber}   909844     7               0
+{l_orderkey}     909844     267788          0
+{l_receiptdate}  909844     365             0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}   939420.00      1.03           7.00                1.00                0.00            1.00
+{l_orderkey}     939420.00      1.03           744923.00           2.78 <==            0.00            1.00
+{l_receiptdate}  939420.00      1.03           365.00              1.00                0.00            1.00
+----
+----

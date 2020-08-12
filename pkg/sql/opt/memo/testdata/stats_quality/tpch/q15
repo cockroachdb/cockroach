@@ -29,7 +29,7 @@ CREATE VIEW revenue0 (supplier_no, total_revenue) AS
         l_suppkey;
 ----
 
-save-tables database=tpch save-tables-prefix=q15
+stats-quality database=tpch stats-quality-prefix=q15
 SELECT
     s_suppkey,
     s_name,
@@ -49,6 +49,7 @@ WHERE
     )
 ORDER BY
     s_suppkey;
+----
 ----
 project
  ├── save-table-name: q15_project_1
@@ -179,8 +180,7 @@ project
       │                                       └── sum:46 [type=float]
       └── filters (true)
 
-stats table=q15_project_1
-----
+----Stats for q15_project_1----
 column_names     row_count  distinct_count  null_count
 {s_address}      1          1               0
 {s_name}         1          1               0
@@ -195,8 +195,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_suppkey}      3333.00        3333.00 <==    3307.00             3307.00 <==         0.00            1.00
 {total_revenue}  3333.00        3333.00 <==    2100.00             2100.00 <==         0.00            1.00
 
-stats table=q15_merge_join_2
-----
+----Stats for q15_merge_join_2----
 column_names  row_count  distinct_count  null_count
 {l_suppkey}   1          1               0
 {s_address}   1          1               0
@@ -213,8 +212,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_suppkey}   3333.00        3333.00 <==    3307.00             3307.00 <==         0.00            1.00
 {sum}         3333.00        3333.00 <==    2100.00             2100.00 <==         0.00            1.00
 
-stats table=q15_scan_3
-----
+----Stats for q15_scan_3----
 column_names  row_count  distinct_count  null_count
 {s_address}   10000      10027           0
 {s_name}      10000      9990            0
@@ -227,8 +225,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_phone}     10000.00       1.00           10000.00            1.00                0.00            1.00
 {s_suppkey}   10000.00       1.00           9920.00             1.00                0.00            1.00
 
-stats table=q15_sort_4
-----
+----Stats for q15_sort_4----
 column_names  row_count  distinct_count  null_count
 {l_suppkey}   1          1               0
 {sum}         1          1               0
@@ -237,8 +234,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_suppkey}   3307.00        3307.00 <==    3307.00             3307.00 <==         0.00            1.00
 {sum}         3307.00        3307.00 <==    3307.00             3307.00 <==         0.00            1.00
 
-stats table=q15_select_5
-----
+----Stats for q15_select_5----
 column_names  row_count  distinct_count  null_count
 {l_suppkey}   1          1               0
 {sum}         1          1               0
@@ -247,8 +243,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_suppkey}   3307.00        3307.00 <==    3307.00             3307.00 <==         0.00            1.00
 {sum}         3307.00        3307.00 <==    3307.00             3307.00 <==         0.00            1.00
 
-stats table=q15_group_by_6
-----
+----Stats for q15_group_by_6----
 column_names  row_count  distinct_count  null_count
 {l_suppkey}   10000      9920            0
 {sum}         10000      10011           0
@@ -257,8 +252,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_suppkey}   9920.00        1.01           9920.00             1.00                0.00            1.00
 {sum}         9920.00        1.01           9920.00             1.01                0.00            1.00
 
-stats table=q15_project_7
-----
+----Stats for q15_project_7----
 column_names  row_count  distinct_count  null_count
 {column26}    225954     220864          0
 {l_suppkey}   225954     9920            0
@@ -267,8 +261,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column26}    259635.00      1.15           259635.00           1.18                0.00            1.00
 {l_suppkey}   259635.00      1.15           9920.00             1.00                0.00            1.00
 
-stats table=q15_index_join_8
-----
+----Stats for q15_index_join_8----
 column_names       row_count  distinct_count  null_count
 {l_discount}       225954     11              0
 {l_extendedprice}  225954     196692          0
@@ -281,16 +274,25 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_shipdate}       259635.00      1.15           91.00               1.00                0.00            1.00
 {l_suppkey}        259635.00      1.15           9920.00             1.00                0.00            1.00
 
-stats table=q15_scalar_group_by_10
-----
+----Stats for q15_scan_9----
+column_names    row_count  distinct_count  null_count
+{l_linenumber}  225954     7               0
+{l_orderkey}    225954     95273           0
+{l_shipdate}    225954     91              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}  259635.00      1.15           7.00                1.00                0.00            1.00
+{l_orderkey}    259635.00      1.15           243636.00           2.56 <==            0.00            1.00
+{l_shipdate}    259635.00      1.15           91.00               1.00                0.00            1.00
+
+----Stats for q15_scalar_group_by_10----
 column_names  row_count  distinct_count  null_count
 {max}         1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {max}         1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q15_group_by_11
-----
+----Stats for q15_group_by_11----
 column_names  row_count  distinct_count  null_count
 {l_suppkey}   10000      9920            0
 {sum}         10000      10011           0
@@ -299,8 +301,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_suppkey}   9920.00        1.01           9920.00             1.00                0.00            1.00
 {sum}         9920.00        1.01           9920.00             1.01                0.00            1.00
 
-stats table=q15_project_12
-----
+----Stats for q15_project_12----
 column_names  row_count  distinct_count  null_count
 {column45}    225954     220864          0
 {l_suppkey}   225954     9920            0
@@ -309,8 +310,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column45}    259635.00      1.15           259635.00           1.18                0.00            1.00
 {l_suppkey}   259635.00      1.15           9920.00             1.00                0.00            1.00
 
-stats table=q15_index_join_13
-----
+----Stats for q15_index_join_13----
 column_names       row_count  distinct_count  null_count
 {l_discount}       225954     11              0
 {l_extendedprice}  225954     196692          0
@@ -322,3 +322,16 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_extendedprice}  259635.00      1.15           230767.00           1.17                0.00            1.00
 {l_shipdate}       259635.00      1.15           91.00               1.00                0.00            1.00
 {l_suppkey}        259635.00      1.15           9920.00             1.00                0.00            1.00
+
+----Stats for q15_scan_14----
+column_names    row_count  distinct_count  null_count
+{l_linenumber}  225954     7               0
+{l_orderkey}    225954     95273           0
+{l_shipdate}    225954     91              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}  259635.00      1.15           7.00                1.00                0.00            1.00
+{l_orderkey}    259635.00      1.15           243636.00           2.56 <==            0.00            1.00
+{l_shipdate}    259635.00      1.15           91.00               1.00                0.00            1.00
+----
+----

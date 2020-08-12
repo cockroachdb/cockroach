@@ -17,7 +17,7 @@ import file=tpch_stats
 # LINESTATUS, and listed in ascending order of RETURNFLAG and LINESTATUS. A
 # count of the number of lineitems in each group is included.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q1
+stats-quality database=tpch stats-quality-prefix=q1
 SELECT
     l_returnflag,
     l_linestatus,
@@ -39,6 +39,7 @@ GROUP BY
 ORDER BY
     l_returnflag,
     l_linestatus;
+----
 ----
 sort
  ├── save-table-name: q1_sort_1
@@ -95,8 +96,7 @@ sort
            │    └── l_discount:7 [type=float]
            └── count-rows [as=count_rows:27, type=int]
 
-stats table=q1_sort_1
-----
+----Stats for q1_sort_1----
 column_names      row_count  distinct_count  null_count
 {avg_disc}        4          4               0
 {avg_price}       4          4               0
@@ -121,8 +121,7 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 {sum_disc_price}  6.00           1.50           6.00                1.50                0.00            1.00
 {sum_qty}         6.00           1.50           6.00                1.50                0.00            1.00
 
-stats table=q1_group_by_2
-----
+----Stats for q1_group_by_2----
 column_names    row_count  distinct_count  null_count
 {avg_1}         4          4               0
 {avg_2}         4          4               0
@@ -147,8 +146,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {sum_2}         6.00           1.50           6.00                1.50                0.00            1.00
 {sum_3}         6.00           1.50           6.00                1.50                0.00            1.00
 
-stats table=q1_project_3
-----
+----Stats for q1_project_3----
 column_names       row_count  distinct_count  null_count
 {column20}         5916591    4150364         0
 {column22}         5916591    5661182         0
@@ -167,8 +165,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_quantity}       5925056.00     1.00           50.00               1.00                0.00            1.00
 {l_returnflag}     5925056.00     1.00           3.00                1.00                0.00            1.00
 
-stats table=q1_select_4
-----
+----Stats for q1_select_4----
 column_names       row_count  distinct_count  null_count
 {l_discount}       5916591    11              0
 {l_extendedprice}  5916591    925955          0
@@ -187,8 +184,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_shipdate}       5925056.00     1.00           2435.00             1.00                0.00            1.00
 {l_tax}            5925056.00     1.00           9.00                1.00                0.00            1.00
 
-stats table=q1_scan_5
-----
+----Stats for q1_scan_5----
 column_names       row_count  distinct_count  null_count
 {l_discount}       6001215    11              0
 {l_extendedprice}  6001215    925955          0
@@ -206,3 +202,5 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_returnflag}     6001215.00     1.00           3.00                1.00                0.00            1.00
 {l_shipdate}       6001215.00     1.00           2526.00             1.00                0.00            1.00
 {l_tax}            6001215.00     1.00           9.00                1.00                0.00            1.00
+----
+----

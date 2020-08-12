@@ -15,7 +15,7 @@ import file=tpch_stats
 # several special categories of orders. Special categories are identified in the
 # order comment column by looking for a particular pattern.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q13
+stats-quality database=tpch stats-quality-prefix=q13
 SELECT
     c_count, count(*) AS custdist
 FROM (
@@ -34,6 +34,7 @@ GROUP BY
 ORDER BY
     custdist DESC,
     c_count DESC;
+----
 ----
 sort
  ├── save-table-name: q13_sort_1
@@ -95,8 +96,7 @@ sort
       └── aggregations
            └── count-rows [as=count_rows:21, type=int]
 
-stats table=q13_sort_1
-----
+----Stats for q13_sort_1----
 column_names  row_count  distinct_count  null_count
 {c_count}     42         42              0
 {custdist}    42         41              0
@@ -105,8 +105,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_count}     148813.00      3543.17 <==    148813.00           3543.17 <==         0.00            1.00
 {custdist}    148813.00      3543.17 <==    148813.00           3629.59 <==         0.00            1.00
 
-stats table=q13_group_by_2
-----
+----Stats for q13_group_by_2----
 column_names  row_count  distinct_count  null_count
 {count_rows}  42         41              0
 {count}       42         42              0
@@ -115,8 +114,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {count}       148813.00      3543.17 <==    148813.00           3543.17 <==         0.00            1.00
 {count_rows}  148813.00      3543.17 <==    148813.00           3629.59 <==         0.00            1.00
 
-stats table=q13_group_by_3
-----
+----Stats for q13_group_by_3----
 column_names  row_count  distinct_count  null_count
 {c_custkey}   150000     148813          0
 {count}       150000     42              0
@@ -125,8 +123,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_custkey}   148813.00      1.01           148813.00           1.00                0.00            1.00
 {count}       148813.00      1.01           148813.00           3543.17 <==         0.00            1.00
 
-stats table=q13_right_join_4
-----
+----Stats for q13_right_join_4----
 column_names  row_count  distinct_count  null_count
 {c_custkey}   1533923    148813          0
 {o_comment}   1533923    1454164         50005
@@ -139,8 +136,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_custkey}   503988.00      3.04 <==       99620.00            1.00                0.00            +Inf <==
 {o_orderkey}  503988.00      3.04 <==       317522.00           4.76 <==            0.00            +Inf <==
 
-stats table=q13_select_5
-----
+----Stats for q13_select_5----
 column_names  row_count  distinct_count  null_count
 {o_comment}   1483918    1454164         0
 {o_custkey}   1483918    99846           0
@@ -151,8 +147,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_custkey}   500000.00      2.97 <==       99620.00            1.00                0.00            1.00
 {o_orderkey}  500000.00      2.97 <==       500000.00           3.02 <==            0.00            1.00
 
-stats table=q13_scan_6
-----
+----Stats for q13_scan_6----
 column_names  row_count  distinct_count  null_count
 {o_comment}   1500000    1469402         0
 {o_custkey}   1500000    99846           0
@@ -163,10 +158,11 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_custkey}   1500000.00     1.00           99846.00            1.00                0.00            1.00
 {o_orderkey}  1500000.00     1.00           1500000.00          1.02                0.00            1.00
 
-stats table=q13_scan_7
-----
+----Stats for q13_scan_7----
 column_names  row_count  distinct_count  null_count
 {c_custkey}   150000     148813          0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_custkey}   150000.00      1.00           148813.00           1.00                0.00            1.00
+----
+----

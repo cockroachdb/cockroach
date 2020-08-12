@@ -15,7 +15,7 @@ import file=tpch_stats
 # shipped in that month and gives the percentage. Revenue is defined as
 # (l_extendedprice * (1-l_discount)).
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q14
+stats-quality database=tpch stats-quality-prefix=q14
 SELECT
     100.00 * sum(CASE
         WHEN p_type LIKE 'PROMO%'
@@ -29,6 +29,7 @@ WHERE
     l_partkey = p_partkey
     AND l_shipdate >= DATE '1995-09-01'
     AND l_shipdate < DATE '1995-09-01' + INTERVAL '1' MONTH;
+----
 ----
 project
  ├── save-table-name: q14_project_1
@@ -95,16 +96,14 @@ project
  └── projections
       └── (sum:29 * 100.0) / sum:31 [as=promo_revenue:32, type=float, outer=(29,31), immutable]
 
-stats table=q14_project_1
-----
+----Stats for q14_project_1----
 column_names     row_count  distinct_count  null_count
 {promo_revenue}  1          1               0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {promo_revenue}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q14_scalar_group_by_2
-----
+----Stats for q14_scalar_group_by_2----
 column_names  row_count  distinct_count  null_count
 {sum_1}       1          1               0
 {sum}         1          1               0
@@ -113,8 +112,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {sum}         1.00           1.00           1.00                1.00                0.00            1.00
 {sum_1}       1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q14_project_3
-----
+----Stats for q14_project_3----
 column_names  row_count  distinct_count  null_count
 {column28}    75983      12638           0
 {column30}    75983      76207           0
@@ -123,8 +121,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column28}    82727.00       1.09           82727.00            6.55 <==            0.00            1.00
 {column30}    82727.00       1.09           52210.00            1.46                0.00            1.00
 
-stats table=q14_inner_join_4
-----
+----Stats for q14_inner_join_4----
 column_names       row_count  distinct_count  null_count
 {l_discount}       75983      11              0
 {l_extendedprice}  75983      72627           0
@@ -141,8 +138,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {p_partkey}        82727.00       1.09           67871.00            1.08                0.00            1.00
 {p_type}           82727.00       1.09           150.00              1.00                0.00            1.00
 
-stats table=q14_scan_5
-----
+----Stats for q14_scan_5----
 column_names  row_count  distinct_count  null_count
 {p_partkey}   200000     199241          0
 {p_type}      200000     150             0
@@ -151,8 +147,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_partkey}   200000.00      1.00           199241.00           1.00                0.00            1.00
 {p_type}      200000.00      1.00           150.00              1.00                0.00            1.00
 
-stats table=q14_index_join_6
-----
+----Stats for q14_index_join_6----
 column_names       row_count  distinct_count  null_count
 {l_discount}       75983      11              0
 {l_extendedprice}  75983      72627           0
@@ -164,3 +159,16 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_extendedprice}  82413.00       1.08           79374.00            1.09                0.00            1.00
 {l_partkey}        82413.00       1.08           67871.00            1.08                0.00            1.00
 {l_shipdate}       82413.00       1.08           30.00               1.00                0.00            1.00
+
+----Stats for q14_scan_7----
+column_names    row_count  distinct_count  null_count
+{l_linenumber}  75983      7               0
+{l_orderkey}    75983      49544           0
+{l_shipdate}    75983      30              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}  82413.00       1.08           7.00                1.00                0.00            1.00
+{l_orderkey}    82413.00       1.08           80770.00            1.63                0.00            1.00
+{l_shipdate}    82413.00       1.08           30.00               1.00                0.00            1.00
+----
+----
