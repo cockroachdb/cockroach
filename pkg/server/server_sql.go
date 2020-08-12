@@ -74,7 +74,7 @@ type sqlServer struct {
 	internalExecutor *sql.InternalExecutor
 	leaseMgr         *lease.Manager
 	blobService      *blobs.Service
-	tenantProxy      kvtenant.Proxy
+	tenantConnect    kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
@@ -121,7 +121,7 @@ type sqlServerOptionalKVArgs struct {
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
-	tenantProxy kvtenant.Proxy
+	tenantConnect kvtenant.Connector
 }
 
 type sqlServerArgs struct {
@@ -592,7 +592,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		internalExecutor:        cfg.circularInternalExecutor,
 		leaseMgr:                leaseMgr,
 		blobService:             blobService,
-		tenantProxy:             cfg.tenantProxy,
+		tenantConnect:           cfg.tenantConnect,
 		sessionRegistry:         cfg.sessionRegistry,
 		jobRegistry:             jobRegistry,
 		statsRefresher:          statsRefresher,
@@ -615,8 +615,8 @@ func (s *sqlServer) start(
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes.
-	if s.tenantProxy != nil {
-		if err := s.tenantProxy.Start(ctx); err != nil {
+	if s.tenantConnect != nil {
+		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
 	}
