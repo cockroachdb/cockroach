@@ -61,6 +61,7 @@ type txnKVFetcher struct {
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	lockWaitPolicy descpb.ScanLockingWaitPolicy
+	needValueCols  bool
 
 	fetchEnd bool
 	batchIdx int
@@ -188,6 +189,7 @@ func makeKVBatchFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
+	needValueCols bool,
 ) (txnKVFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
@@ -197,7 +199,7 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength, lockWaitPolicy, mon, needValueCols,
 	)
 }
 
@@ -212,6 +214,7 @@ func makeKVBatchFetcherWithSendFunc(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	mon *mon.BytesMonitor,
+	needValueCols bool,
 ) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
@@ -265,6 +268,7 @@ func makeKVBatchFetcherWithSendFunc(
 		lockStrength:    lockStrength,
 		lockWaitPolicy:  lockWaitPolicy,
 		mon:             mon,
+		needValueCols:   needValueCols,
 	}, nil
 }
 
@@ -302,6 +306,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			ba.Requests[i].Value = &scans[i].union
 		}
 	} else {
+		if f.needValueCols {
 		scans := make([]struct {
 			req   roachpb.ScanRequest
 			union roachpb.RequestUnion_Scan
@@ -312,6 +317,16 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			scans[i].req.KeyLocking = keyLocking
 			scans[i].union.Scan = &scans[i].req
 			ba.Requests[i].Value = &scans[i].union
+
+			}
+		} else {
+			scans := make([]roachpb.CheckExistsRequest, len(f.spans))
+			for i := range f.spans {
+				scans[i].SetSpan(f.spans[i])
+				ba.Requests[i].MustSetInner(&scans[i])
+			}
+			ba.Header.MaxSpanRequestKeys = 0
+			ba.Header.TargetBytes = 0
 		}
 	}
 	if cap(f.requestSpans) < len(f.spans) {
@@ -407,7 +422,15 @@ func (f *txnKVFetcher) nextBatch(
 				f.remainingBatches = t.BatchResponses[1:]
 			}
 			return true, t.Rows, batchResp, origSpan, nil
+		case *roachpb.CheckExistsResponse:
+			if t.Exists {
+				kvs = []roachpb.KeyValue{{
+					Key: origSpan.Key,
+				}}
+			}
+			return true, kvs, batchResp, origSpan, nil
 		}
+
 	}
 	if f.fetchEnd {
 		return false, nil, nil, roachpb.Span{}, nil

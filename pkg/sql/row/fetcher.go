@@ -244,6 +244,7 @@ type Fetcher struct {
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
 	isCheck bool
+	usingCE bool
 
 	// IgnoreUnexpectedNulls allows Fetcher to return null values for non-nullable
 	// columns and is only used for decoding for error messages or debugging.
@@ -449,7 +450,6 @@ func (rf *Fetcher) Init(
 		// It's the total number of needed columns minus the ones we read from the
 		// index key, except for composite columns.
 		table.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
-
 		if table.isSecondaryIndex {
 			for i := range table.cols {
 				if table.neededCols.Contains(int(table.cols[i].ID)) && !table.index.ContainsColumnID(table.cols[i].ID) {
@@ -520,11 +520,13 @@ func (rf *Fetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	needRightCols bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
 
+	rf.usingCE = !needRightCols
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
 		txn,
@@ -535,6 +537,7 @@ func (rf *Fetcher) StartScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		needRightCols,
 	)
 	if err != nil {
 		return err
@@ -616,6 +619,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		rf.lockStrength,
 		rf.lockWaitPolicy,
 		rf.mon,
+		true,
 	)
 	if err != nil {
 		return err
@@ -726,11 +730,19 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			// We still need to consume the key until the family
 			// id, so processKV can know whether we've finished a
 			// row or not.
-			prefixLen, err := keys.GetRowPrefixLength(rf.kv.Key)
-			if err != nil {
-				return false, err
+			//prefixLen, err := keys.GetRowPrefixLength(rf.kv.Key)
+			//if err != nil {
+			//	return false, err
+			//}
+			var prefixLen int
+			if rf.usingCE {
+				prefixLen = len(rf.kv.Key)
+			} else {
+				prefixLen, err = keys.GetRowPrefixLength(rf.kv.Key)
+				if err != nil {
+					return false, err
+				}
 			}
-
 			rf.keyRemainingBytes = rf.kv.Key[prefixLen:]
 		}
 
