@@ -1995,7 +1995,6 @@ func (s *Server) startSampleEnvironment(
 
 	// Initialize a goroutine dumper if we have an output directory
 	// specified.
-	var err error
 	var goroutineDumper *goroutinedumper.GoroutineDumper
 	if s.cfg.GoroutineDumpDirName != "" {
 		hasValidDumpDir := true
@@ -2009,6 +2008,7 @@ func (s *Server) startSampleEnvironment(
 			hasValidDumpDir = false
 		}
 		if hasValidDumpDir {
+			var err error
 			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(ctx, s.cfg.GoroutineDumpDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting goroutine dumper worker")
@@ -2032,7 +2032,9 @@ func (s *Server) startSampleEnvironment(
 			log.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
 			hasValidDumpDir = false
 		}
+
 		if hasValidDumpDir {
+			var err error
 			heapProfiler, err = heapprofiler.NewHeapProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
