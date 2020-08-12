@@ -123,9 +123,6 @@ func (p *planner) CheckPrivilege(
 }
 
 // IsOwner returns if the role has ownership on the descriptor.
-// TODO(richardjcai): Add checks for if the user owns the parent of the object.
-// Ie, being the owner of a database gives access to all tables in the db.
-// Issue #51931.
 func IsOwner(desc sqlbase.Descriptor, role string) bool {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner

@@ -916,6 +916,7 @@ func joinTypeStr(t descpb.JoinType) string {
 // strings are constant and not precomputed so that the type names can
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
+	reflect.TypeOf(&alterDatabaseOwnerNode{}):      "alter database owner",
 	reflect.TypeOf(&alterIndexNode{}):              "alter index",
 	reflect.TypeOf(&alterSequenceNode{}):           "alter sequence",
 	reflect.TypeOf(&alterSchemaNode{}):             "alter schema",
