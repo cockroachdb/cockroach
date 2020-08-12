@@ -163,7 +163,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 
 		// Validate privilege descriptors directly as the db/table level Validate
 		// may fix up the descriptor.
-		if err := privileges.Validate(descriptor.GetID()); err != nil {
+		if err := privileges.Validate(descriptor.GetID(), n.grantOn); err != nil {
 			return err
 		}
 
