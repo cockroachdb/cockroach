@@ -121,7 +121,7 @@ TESTCONFIG :=
 SUBTESTS :=
 
 ## Test timeout to use for the linter.
-LINTTIMEOUT := 20m
+LINTTIMEOUT := 30m
 
 ## Test timeout to use for regular tests.
 TESTTIMEOUT := 30m
