@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -29,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type Node time.Duration
@@ -42,7 +45,19 @@ func (n Node) Batch(
 	return &roachpb.BatchResponse{}, nil
 }
 
+func (n Node) RangeLookup(
+	_ context.Context, _ *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	panic("unimplemented")
+}
+
 func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer) error {
+	panic("unimplemented")
+}
+
+func (n Node) GossipSubscription(
+	_ *roachpb.GossipSubscriptionRequest, _ roachpb.Internal_GossipSubscriptionServer,
+) error {
 	panic("unimplemented")
 }
 
@@ -50,9 +65,10 @@ func (n Node) RangeFeed(_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFee
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -71,7 +87,7 @@ func TestSendToOneClient(t *testing.T) {
 		return ln.Addr(), nil
 	})
 
-	reply, err := sendBatch(context.Background(), nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
+	reply, err := sendBatch(context.Background(), t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +113,7 @@ func (f *firstNErrorTransport) SendNext(
 ) (*roachpb.BatchResponse, error) {
 	var err error
 	if f.numSent < f.numErrors {
-		err = roachpb.NewSendError("test")
+		err = errors.New("firstNErrorTransport injected error")
 	}
 	f.numSent++
 	return &roachpb.BatchResponse{}, err
@@ -110,7 +126,11 @@ func (f *firstNErrorTransport) NextInternalClient(
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return roachpb.ReplicaDescriptor{}
+	return f.replicas[f.numSent].ReplicaDescriptor
+}
+
+func (f *firstNErrorTransport) SkipReplica() {
+	panic("SkipReplica not supported")
 }
 
 func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
@@ -120,9 +140,10 @@ func (*firstNErrorTransport) MoveToFront(roachpb.ReplicaDescriptor) {
 // mocking sendOne.
 func TestComplexScenarios(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
@@ -160,6 +181,7 @@ func TestComplexScenarios(t *testing.T) {
 
 		reply, err := sendBatch(
 			context.Background(),
+			t,
 			func(
 				_ SendOptions,
 				_ *nodedialer.Dialer,
@@ -193,25 +215,25 @@ func TestComplexScenarios(t *testing.T) {
 // nodes before unhealthy nodes.
 func TestSplitHealthy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type batchClient struct {
+		replica roachpb.ReplicaDescriptor
+		healthy bool
+	}
 
 	testData := []struct {
-		in       []batchClient
-		out      []batchClient
-		nHealthy int
+		in  []batchClient
+		out []roachpb.ReplicaDescriptor
 	}{
-		{nil, nil, 0},
+		{nil, []roachpb.ReplicaDescriptor{}},
 		{
 			[]batchClient{
 				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-			},
-			1,
+			[]roachpb.ReplicaDescriptor{{NodeID: 3}, {NodeID: 1}, {NodeID: 2}},
 		},
 		{
 			[]batchClient{
@@ -219,12 +241,7 @@ func TestSplitHealthy(t *testing.T) {
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-			},
-			2,
+			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 3}, {NodeID: 2}},
 		},
 		{
 			[]batchClient{
@@ -232,60 +249,75 @@ func TestSplitHealthy(t *testing.T) {
 				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
 				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
 			},
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-			},
-			3,
+			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 2}, {NodeID: 3}},
 		},
 	}
 
-	for i, td := range testData {
-		nHealthy := splitHealthy(td.in)
-		if nHealthy != td.nHealthy {
-			t.Errorf("%d. splitHealthy(%+v) = %d; not %d", i, td.in, nHealthy, td.nHealthy)
-		}
-		if !reflect.DeepEqual(td.in, td.out) {
-			t.Errorf("%d. splitHealthy(...)\n  = %+v;\nnot %+v", i, td.in, td.out)
-		}
+	for _, td := range testData {
+		t.Run("", func(t *testing.T) {
+			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
+			health := make(map[roachpb.ReplicaDescriptor]bool)
+			for i, r := range td.in {
+				replicas[i] = r.replica
+				health[replicas[i]] = r.healthy
+			}
+			splitHealthy(replicas, health)
+			if !reflect.DeepEqual(replicas, td.out) {
+				t.Errorf("splitHealthy(...) = %+v not %+v", replicas, td.out)
+			}
+		})
 	}
-}
-
-func makeReplicas(addrs ...net.Addr) ReplicaSlice {
-	replicas := make(ReplicaSlice, len(addrs))
-	for i, addr := range addrs {
-		replicas[i].NodeDesc = &roachpb.NodeDescriptor{
-			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		}
-	}
-	return replicas
 }
 
 // sendBatch sends Batch requests to specified addresses using send.
 func sendBatch(
 	ctx context.Context,
+	t *testing.T,
 	transportFactory TransportFactory,
 	addrs []net.Addr,
 	rpcContext *rpc.Context,
 	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	g := makeGossip(t, stopper, rpcContext)
+
+	desc := new(roachpb.RangeDescriptor)
+	desc.StartKey = roachpb.RKeyMin
+	desc.EndKey = roachpb.RKeyMax
+	for i, addr := range addrs {
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i + 1),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		err := g.AddInfoProto(gossip.MakeNodeIDKey(nd.NodeID), nd, gossip.NodeDescriptorTTL)
+		require.NoError(t, err)
+
+		desc.InternalReplicas = append(desc.InternalReplicas,
+			roachpb.ReplicaDescriptor{
+				NodeID:    nd.NodeID,
+				StoreID:   0,
+				ReplicaID: roachpb.ReplicaID(i + 1),
+			})
+	}
+
 	ds := NewDistSender(DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		RPCContext: rpcContext,
+		AmbientCtx:         log.AmbientContext{Tracer: tracing.NewTracer()},
+		Settings:           cluster.MakeTestingClusterSettings(),
+		NodeDescs:          g,
+		RPCContext:         rpcContext,
+		NodeDialer:         nodeDialer,
+		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{
 			TransportFactory: transportFactory,
 		},
-		Settings: cluster.MakeTestingClusterSettings(),
-	}, nil)
-	return ds.sendToReplicas(
-		ctx,
-		roachpb.BatchRequest{},
-		SendOptions{metrics: &ds.metrics},
-		0, /* rangeID */
-		makeReplicas(addrs...),
-		nodeDialer,
-		roachpb.ReplicaDescriptor{},
-		false, /* withCommit */
-	)
+	})
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  *desc,
+		Lease: roachpb.Lease{},
+	})
+	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, EvictionToken{}, false /* useReverseScan */)
+	require.NoError(t, err)
+
+	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)
 }

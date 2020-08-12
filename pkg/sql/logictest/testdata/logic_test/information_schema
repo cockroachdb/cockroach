@@ -11,30 +11,30 @@ CREATE TABLE information_schema.t (x INT)
 query error database "information_schema" does not exist
 DROP DATABASE information_schema
 
-query TTT
+query TTTI
 SHOW TABLES FROM information_schema
 ----
-information_schema  administrable_role_authorizations  table
-information_schema  applicable_roles                   table
-information_schema  check_constraints                  table
-information_schema  column_privileges                  table
-information_schema  columns                            table
-information_schema  constraint_column_usage            table
-information_schema  enabled_roles                      table
-information_schema  key_column_usage                   table
-information_schema  parameters                         table
-information_schema  referential_constraints            table
-information_schema  role_table_grants                  table
-information_schema  routines                           table
-information_schema  schema_privileges                  table
-information_schema  schemata                           table
-information_schema  sequences                          table
-information_schema  statistics                         table
-information_schema  table_constraints                  table
-information_schema  table_privileges                   table
-information_schema  tables                             table
-information_schema  user_privileges                    table
-information_schema  views                              table
+information_schema  administrable_role_authorizations  table  NULL
+information_schema  applicable_roles                   table  NULL
+information_schema  check_constraints                  table  NULL
+information_schema  column_privileges                  table  NULL
+information_schema  columns                            table  NULL
+information_schema  constraint_column_usage            table  NULL
+information_schema  enabled_roles                      table  NULL
+information_schema  key_column_usage                   table  NULL
+information_schema  parameters                         table  NULL
+information_schema  referential_constraints            table  NULL
+information_schema  role_table_grants                  table  NULL
+information_schema  routines                           table  NULL
+information_schema  schema_privileges                  table  NULL
+information_schema  schemata                           table  NULL
+information_schema  sequences                          table  NULL
+information_schema  statistics                         table  NULL
+information_schema  table_constraints                  table  NULL
+information_schema  table_privileges                   table  NULL
+information_schema  tables                             table  NULL
+information_schema  user_privileges                    table  NULL
+information_schema  views                              table  NULL
 
 # Verify that the name is not special for databases.
 
@@ -53,43 +53,43 @@ DROP DATABASE information_schema CASCADE
 
 # Verify information_schema tables handle mutation statements correctly.
 
-statement error user root does not have DROP privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables RENAME TO information_schema.bad
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables RENAME COLUMN x TO y
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables ADD COLUMN x DECIMAL
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables DROP COLUMN x
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables ADD CONSTRAINT foo UNIQUE (b)
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables DROP CONSTRAINT bar
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables ALTER COLUMN x SET DEFAULT 'foo'
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 ALTER TABLE information_schema.tables ALTER x DROP NOT NULL
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 CREATE INDEX i on information_schema.tables (x)
 
-statement error user root does not have DROP privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 DROP TABLE information_schema.tables
 
-statement error user root does not have CREATE privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 DROP INDEX information_schema.tables@i
 
-statement error user root does not have GRANT privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 GRANT CREATE ON information_schema.tables TO root
 
-statement error user root does not have GRANT privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 REVOKE CREATE ON information_schema.tables FROM root
 
 
@@ -104,7 +104,7 @@ INSERT INTO information_schema.tables VALUES ('abc')
 statement error user root does not have UPDATE privilege on relation tables
 UPDATE information_schema.tables SET a = 'abc'
 
-statement error user root does not have DROP privilege on relation tables
+statement error tables is a virtual object and cannot be modified
 TRUNCATE TABLE information_schema.tables
 
 
@@ -118,36 +118,36 @@ postgres
 system
 test
 
-query TTT
+query TTTI
 SHOW TABLES FROM test.information_schema
 ----
-information_schema  administrable_role_authorizations  table
-information_schema  applicable_roles                   table
-information_schema  check_constraints                  table
-information_schema  column_privileges                  table
-information_schema  columns                            table
-information_schema  constraint_column_usage            table
-information_schema  enabled_roles                      table
-information_schema  key_column_usage                   table
-information_schema  parameters                         table
-information_schema  referential_constraints            table
-information_schema  role_table_grants                  table
-information_schema  routines                           table
-information_schema  schema_privileges                  table
-information_schema  schemata                           table
-information_schema  sequences                          table
-information_schema  statistics                         table
-information_schema  table_constraints                  table
-information_schema  table_privileges                   table
-information_schema  tables                             table
-information_schema  user_privileges                    table
-information_schema  views                              table
+information_schema  administrable_role_authorizations  table  NULL
+information_schema  applicable_roles                   table  NULL
+information_schema  check_constraints                  table  NULL
+information_schema  column_privileges                  table  NULL
+information_schema  columns                            table  NULL
+information_schema  constraint_column_usage            table  NULL
+information_schema  enabled_roles                      table  NULL
+information_schema  key_column_usage                   table  NULL
+information_schema  parameters                         table  NULL
+information_schema  referential_constraints            table  NULL
+information_schema  role_table_grants                  table  NULL
+information_schema  routines                           table  NULL
+information_schema  schema_privileges                  table  NULL
+information_schema  schemata                           table  NULL
+information_schema  sequences                          table  NULL
+information_schema  statistics                         table  NULL
+information_schema  table_constraints                  table  NULL
+information_schema  table_privileges                   table  NULL
+information_schema  tables                             table  NULL
+information_schema  user_privileges                    table  NULL
+information_schema  views                              table  NULL
 
 query TT colnames
 SHOW CREATE TABLE information_schema.tables
 ----
 table_name                 create_statement
-information_schema.tables  CREATE TABLE tables (
+information_schema.tables  CREATE TABLE information_schema.tables (
                            table_catalog STRING NOT NULL,
                            table_schema STRING NOT NULL,
                            table_name STRING NOT NULL,
@@ -189,25 +189,25 @@ test           information_schema  tables      public   SELECT
 
 ## information_schema.schemata
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM information_schema.schemata
 ----
-catalog_name  schema_name         default_character_set_name  sql_path
-test          crdb_internal       NULL                        NULL
-test          information_schema  NULL                        NULL
-test          pg_catalog          NULL                        NULL
-test          pg_extension        NULL                        NULL
-test          public              NULL                        NULL
+catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
+test          crdb_internal       NULL                        NULL      NO
+test          information_schema  NULL                        NULL      NO
+test          pg_catalog          NULL                        NULL      NO
+test          pg_extension        NULL                        NULL      NO
+test          public              NULL                        NULL      NO
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM INFormaTION_SCHEMa.schemata
 ----
-catalog_name  schema_name         default_character_set_name  sql_path
-test          crdb_internal       NULL                        NULL
-test          information_schema  NULL                        NULL
-test          pg_catalog          NULL                        NULL
-test          pg_extension        NULL                        NULL
-test          public              NULL                        NULL
+catalog_name  schema_name         default_character_set_name  sql_path  crdb_is_user_defined
+test          crdb_internal       NULL                        NULL      NO
+test          information_schema  NULL                        NULL      NO
+test          pg_catalog          NULL                        NULL      NO
+test          pg_extension        NULL                        NULL      NO
+test          public              NULL                        NULL      NO
 
 ## information_schema.tables
 
@@ -223,6 +223,8 @@ crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
 crdb_internal       cluster_transactions
 crdb_internal       create_statements
+crdb_internal       create_type_statements
+crdb_internal       databases
 crdb_internal       feature_usage
 crdb_internal       forward_dependencies
 crdb_internal       gossip_alerts
@@ -251,6 +253,7 @@ crdb_internal       session_trace
 crdb_internal       session_variables
 crdb_internal       table_columns
 crdb_internal       table_indexes
+crdb_internal       table_row_statistics
 crdb_internal       tables
 crdb_internal       zones
 information_schema  administrable_role_authorizations
@@ -370,6 +373,8 @@ cluster_sessions
 cluster_settings
 cluster_transactions
 create_statements
+create_type_statements
+databases
 feature_usage
 forward_dependencies
 gossip_alerts
@@ -398,6 +403,7 @@ session_trace
 session_variables
 table_columns
 table_indexes
+table_row_statistics
 tables
 zones
 administrable_role_authorizations
@@ -507,6 +513,7 @@ views
 user_privileges
 tables
 tables
+table_row_statistics
 table_privileges
 table_indexes
 table_constraints
@@ -524,6 +531,8 @@ system         crdb_internal       cluster_sessions                   SYSTEM VIE
 system         crdb_internal       cluster_settings                   SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transactions               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                  SYSTEM VIEW  NO                  1
+system         crdb_internal       create_type_statements             SYSTEM VIEW  NO                  1
+system         crdb_internal       databases                          SYSTEM VIEW  NO                  1
 system         crdb_internal       feature_usage                      SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies               SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                      SYSTEM VIEW  NO                  1
@@ -552,6 +561,7 @@ system         crdb_internal       session_trace                      SYSTEM VIE
 system         crdb_internal       session_variables                  SYSTEM VIEW  NO                  1
 system         crdb_internal       table_columns                      SYSTEM VIEW  NO                  1
 system         crdb_internal       table_indexes                      SYSTEM VIEW  NO                  1
+system         crdb_internal       table_row_statistics               SYSTEM VIEW  NO                  1
 system         crdb_internal       tables                             SYSTEM VIEW  NO                  1
 system         crdb_internal       zones                              SYSTEM VIEW  NO                  1
 system         information_schema  administrable_role_authorizations  SYSTEM VIEW  NO                  1
@@ -656,6 +666,7 @@ system         public              role_options                       BASE TABLE
 system         public              statement_bundle_chunks            BASE TABLE   YES                 1
 system         public              statement_diagnostics_requests     BASE TABLE   YES                 1
 system         public              statement_diagnostics              BASE TABLE   YES                 1
+system         public              scheduled_jobs                     BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -798,6 +809,12 @@ system              public             primary                  system         p
 system              public             630200280_33_1_not_null  system         public        role_options                     CHECK            NO             NO
 system              public             630200280_33_2_not_null  system         public        role_options                     CHECK            NO             NO
 system              public             primary                  system         public        role_options                     PRIMARY KEY      NO             NO
+system              public             630200280_37_1_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_2_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_3_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_8_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             630200280_37_9_not_null  system         public        scheduled_jobs                   CHECK            NO             NO
+system              public             primary                  system         public        scheduled_jobs                   PRIMARY KEY      NO             NO
 system              public             630200280_6_1_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_2_not_null   system         public        settings                         CHECK            NO             NO
 system              public             630200280_6_3_not_null   system         public        settings                         CHECK            NO             NO
@@ -940,6 +957,11 @@ system              public             630200280_36_1_not_null  id IS NOT NULL
 system              public             630200280_36_2_not_null  statement_fingerprint IS NOT NULL
 system              public             630200280_36_3_not_null  statement IS NOT NULL
 system              public             630200280_36_4_not_null  collected_at IS NOT NULL
+system              public             630200280_37_1_not_null  schedule_id IS NOT NULL
+system              public             630200280_37_2_not_null  schedule_name IS NOT NULL
+system              public             630200280_37_3_not_null  created IS NOT NULL
+system              public             630200280_37_8_not_null  executor_type IS NOT NULL
+system              public             630200280_37_9_not_null  execution_args IS NOT NULL
 system              public             630200280_3_1_not_null   id IS NOT NULL
 system              public             630200280_4_1_not_null   username IS NOT NULL
 system              public             630200280_4_3_not_null   isRole IS NOT NULL
@@ -994,6 +1016,7 @@ system         public        role_members                     member          sy
 system         public        role_members                     role            system              public             primary
 system         public        role_options                     option          system              public             primary
 system         public        role_options                     username        system              public             primary
+system         public        scheduled_jobs                   schedule_id     system              public             primary
 system         public        settings                         name            system              public             primary
 system         public        statement_bundle_chunks          id              system              public             primary
 system         public        statement_diagnostics            id              system              public             primary
@@ -1047,8 +1070,8 @@ ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name          check_clause
 constraint_db       public             541687103_59_1_not_null  p IS NOT NULL
-constraint_db       public             c2                       ((a < 99))
-constraint_db       public             check_a                  ((a > 4))
+constraint_db       public             c2                       ((a < 99:::INT8))
+constraint_db       public             check_a                  ((a > 4:::INT8))
 
 query TTTTTTT colnames
 SELECT *
@@ -1074,8 +1097,8 @@ ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
 table_schema  table_name  constraint_name          check_clause
 public        t1          541687103_59_1_not_null  p IS NOT NULL
-public        t1          c2                       ((a < 99))
-public        t1          check_a                  ((a > 4))
+public        t1          c2                       ((a < 99:::INT8))
+public        t1          check_a                  ((a > 4:::INT8))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
@@ -1116,6 +1139,8 @@ system         pg_extension  geometry_columns                 f_table_schema    
 system         pg_extension  geometry_columns                 srid                      6
 system         pg_extension  geometry_columns                 type                      7
 system         public        jobs                             created                   3
+system         public        jobs                             created_by_id             7
+system         public        jobs                             created_by_type           6
 system         public        jobs                             id                        1
 system         public        jobs                             payload                   4
 system         public        jobs                             progress                  5
@@ -1181,6 +1206,16 @@ system         public        role_members                     role              
 system         public        role_options                     option                    2
 system         public        role_options                     username                  1
 system         public        role_options                     value                     3
+system         public        scheduled_jobs                   created                   3
+system         public        scheduled_jobs                   execution_args            9
+system         public        scheduled_jobs                   executor_type             8
+system         public        scheduled_jobs                   next_run                  5
+system         public        scheduled_jobs                   owner                     4
+system         public        scheduled_jobs                   schedule_changes          10
+system         public        scheduled_jobs                   schedule_details          7
+system         public        scheduled_jobs                   schedule_expr             6
+system         public        scheduled_jobs                   schedule_id               1
+system         public        scheduled_jobs                   schedule_name             2
 system         public        settings                         lastUpdated               3
 system         public        settings                         name                      1
 system         public        settings                         value                     2
@@ -1447,6 +1482,40 @@ num_prec    rowid        64                 2                        0          
 statement ok
 DROP TABLE num_prec
 
+statement ok
+CREATE TABLE time_prec (
+  a TIME, 
+  b TIME(0),
+  c TIMETZ,
+  d TIMETZ(1),
+  e TIMESTAMP, 
+  f TIMESTAMP(2), 
+  g TIMESTAMPTZ,
+  h TIMESTAMPTZ(3),
+  i INTERVAL,
+  j INTERVAL(6))
+
+query TTIIII colnames
+SELECT table_name, column_name, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'time_prec'
+----
+table_name  column_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision
+time_prec   a            NULL               NULL                     NULL           6
+time_prec   b            NULL               NULL                     NULL           0
+time_prec   c            NULL               NULL                     NULL           6
+time_prec   d            NULL               NULL                     NULL           1
+time_prec   e            NULL               NULL                     NULL           6
+time_prec   f            NULL               NULL                     NULL           2
+time_prec   g            NULL               NULL                     NULL           6
+time_prec   h            NULL               NULL                     NULL           3
+time_prec   i            NULL               NULL                     NULL           6
+time_prec   j            NULL               NULL                     NULL           6
+time_prec   rowid        64                 2                        0              NULL
+
+statement ok
+DROP TABLE time_prec
+
 ## information_schema.key_column_usage
 ## information_schema.referential_constraints
 
@@ -1559,6 +1628,8 @@ NULL     public   system         crdb_internal       cluster_sessions           
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       create_type_statements             SELECT          NULL          YES
+NULL     public   system         crdb_internal       databases                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          YES
@@ -1587,6 +1658,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_columns                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_indexes                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       table_row_statistics               SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
@@ -1805,6 +1877,16 @@ NULL     root     system         public              role_options               
 NULL     root     system         public              role_options                       INSERT          NULL          NO
 NULL     root     system         public              role_options                       SELECT          NULL          YES
 NULL     root     system         public              role_options                       UPDATE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     admin    system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     admin    system         public              scheduled_jobs                     UPDATE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     root     system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     root     system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     root     system         public              scheduled_jobs                     UPDATE          NULL          NO
 NULL     admin    system         public              settings                           DELETE          NULL          NO
 NULL     admin    system         public              settings                           GRANT           NULL          NO
 NULL     admin    system         public              settings                           INSERT          NULL          NO
@@ -1911,6 +1993,8 @@ NULL     public   system         crdb_internal       cluster_sessions           
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          YES
+NULL     public   system         crdb_internal       create_type_statements             SELECT          NULL          YES
+NULL     public   system         crdb_internal       databases                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          YES
@@ -1939,6 +2023,7 @@ NULL     public   system         crdb_internal       session_trace              
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_columns                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       table_indexes                      SELECT          NULL          YES
+NULL     public   system         crdb_internal       table_row_statistics               SELECT          NULL          YES
 NULL     public   system         crdb_internal       tables                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       zones                              SELECT          NULL          YES
 NULL     public   system         information_schema  administrable_role_authorizations  SELECT          NULL          YES
@@ -2251,6 +2336,16 @@ NULL     root     system         public              statement_diagnostics      
 NULL     root     system         public              statement_diagnostics              INSERT          NULL          NO
 NULL     root     system         public              statement_diagnostics              SELECT          NULL          YES
 NULL     root     system         public              statement_diagnostics              UPDATE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     admin    system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     admin    system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     admin    system         public              scheduled_jobs                     UPDATE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     DELETE          NULL          NO
+NULL     root     system         public              scheduled_jobs                     GRANT           NULL          NO
+NULL     root     system         public              scheduled_jobs                     INSERT          NULL          NO
+NULL     root     system         public              scheduled_jobs                     SELECT          NULL          YES
+NULL     root     system         public              scheduled_jobs                     UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

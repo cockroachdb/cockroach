@@ -60,9 +60,14 @@ func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{
 		})
 		defer t.Stop()
 	}
-	if mainLog.stderrRedirected() {
+	if !LoggingToStderr(sev) {
+		// The logging call below would not otherwise appear on stderr;
+		// however this is what the Shout() contract guarantees, so we do
+		// it here.
 		fmt.Fprintf(OrigStderr, "*\n* %s: %s\n*\n", sev.String(),
-			strings.Replace(MakeMessage(ctx, format, args), "\n", "\n* ", -1))
+			strings.Replace(
+				FormatWithContextTags(ctx, format, args...),
+				"\n", "\n* ", -1))
 	}
 	logDepth(ctx, 1, sev, format, args)
 }

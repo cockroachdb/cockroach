@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -204,7 +203,7 @@ BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
-CREATE TABLE t29494 (
+CREATE TABLE public.t29494 (
    x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
    FAMILY "primary" (x)

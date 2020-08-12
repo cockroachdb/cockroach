@@ -14,6 +14,7 @@ import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
+import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 // TODO(vilterp): tooltips
 
@@ -138,6 +139,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Available Disk Capacity"
       sources={storeSources}
+      tooltip={<AvailableDiscCapacityGraphTooltip />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
         {nodeIDs.map((nid) => (

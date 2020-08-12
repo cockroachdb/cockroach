@@ -17,13 +17,15 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type queryCounter struct {
@@ -52,17 +54,18 @@ type queryCounter struct {
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
 			// query stats stable.
 			DisableDeleteOrphanedLeases: true,
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -166,11 +169,12 @@ func TestQueryCounts(t *testing.T) {
 
 func TestAbortCountConflictingWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
 		params, cmdFilters := tests.CreateTestServerParams()
 		s, sqlDB, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		accum := initializeQueryCounter(s)
 
@@ -183,7 +187,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 
 		// Inject errors on the INSERT below.
 		restarted := false
-		cmdFilters.AppendFilter(func(args storagebase.FilterArgs) *roachpb.Error {
+		cmdFilters.AppendFilter(func(args kvserverbase.FilterArgs) *roachpb.Error {
 			switch req := args.Req.(type) {
 			// SQL INSERT generates ConditionalPuts for unique indexes (such as the PK).
 			case *roachpb.ConditionalPutRequest:
@@ -272,9 +276,10 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 // results in an error during a txn.
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
 
@@ -305,10 +310,11 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 
 func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
 

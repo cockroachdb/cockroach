@@ -21,14 +21,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -72,9 +74,10 @@ func checkAllGaugesZero(tc testContext) error {
 
 func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -160,7 +163,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
 
-	if resp, pErr := q.MaybeWaitForPush(context.TODO(), &req); resp != nil || pErr != nil {
+	if resp, pErr := q.MaybeWaitForPush(context.Background(), &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
 	if err := checkAllGaugesZero(tc); err != nil {
@@ -170,9 +173,10 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 
 func TestTxnWaitQueueCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -187,7 +191,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	if err := checkAllGaugesZero(tc); err != nil {
 		t.Fatal(err.Error())
 	}
@@ -233,9 +237,10 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 // both are returned when the txn is updated.
 func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -253,7 +258,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	req2.PusherTxn = *pusher2
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 	m := tc.store.txnWaitMetrics
 	assert.EqualValues(tc, 1, m.PusheeWaiting.Value())
@@ -342,13 +347,14 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 // be advanced, the PushTxnRequest could get stuck forever.
 func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// This test relies on concurrently waiting for a value to change in the
 	// underlying engine(s). Since the teeing engine does not respond well to
 	// value mismatches, whether transient or permanent, skip this test if the
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		skip.IgnoreLint(t, "disabled on teeing engine")
 	}
 	tc := testContext{}
 	ctx := context.Background()
@@ -371,7 +377,7 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
@@ -429,9 +435,10 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 // updated.
 func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -446,7 +453,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 1)
@@ -483,6 +490,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 // returned when the pushee's txn may have expired.
 func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var queryTxnCount int32
 
 	manual := hlc.NewManualClock(123)
@@ -495,14 +503,14 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if qtReq, ok := filterArgs.Req.(*roachpb.QueryTxnRequest); ok && bytes.Equal(qtReq.Txn.Key, txn.Key) {
 				atomic.AddInt32(&queryTxnCount, 1)
 			}
 			return nil
 		}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, tc.Clock())
@@ -521,7 +529,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 	q.EnqueueTxn(txn)
 
 	retCh := make(chan RespWithErr, 2)
@@ -581,6 +589,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 // periodically updated and will notice if the pusher has been aborted.
 func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "txnRecordExists", func(t *testing.T, txnRecordExists bool) {
 		// Test with the pusher txn record below the pusher's expected epoch, at
@@ -599,7 +608,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 			t.Run(fmt.Sprintf("recordEpoch=%s", c.name), func(t *testing.T) {
 				tc := testContext{}
 				stopper := stop.NewStopper()
-				defer stopper.Stop(context.TODO())
+				defer stopper.Stop(context.Background())
 				tc.Start(t, stopper)
 
 				txn, err := createTxnForPushQueue(context.Background(), &tc)
@@ -624,7 +633,7 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 				}
 
 				q := tc.repl.concMgr.TxnWaitQueue()
-				q.Enable()
+				q.Enable(1 /* leaseSeq */)
 				q.EnqueueTxn(txn)
 
 				retCh := make(chan RespWithErr, 1)
@@ -694,9 +703,10 @@ type ReqWithRespAndErr struct {
 // detected and broken by a higher priority pusher.
 func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	txnA, err := createTxnForPushQueue(context.Background(), &tc)
@@ -738,7 +748,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -787,9 +797,10 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 // and the dependency is appropriately broken.
 func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	// Create txnA with a lower priority so it won't think it could push
@@ -829,7 +840,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 
 	q := tc.repl.concMgr.TxnWaitQueue()
-	q.Enable()
+	q.Enable(1 /* leaseSeq */)
 
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.EnqueueTxn(txn)

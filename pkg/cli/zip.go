@@ -23,10 +23,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -293,6 +294,8 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return z.createJSONOrError(r.pathName+".json", data, err)
 	}
 
+	// NB: we intentionally omit liveness since it's already pulled manually (we
+	// act on the output to special case decommissioned nodes).
 	for _, r := range []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -305,12 +308,6 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			},
 			pathName: rangelogName,
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Liveness(ctx, &serverpb.LivenessRequest{})
-			},
-			pathName: livenessName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -336,7 +333,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			selectClause = "*"
 		}
 		if err := dumpTableDataForZip(z, sqlConn, timeout, base, table, selectClause); err != nil {
-			return errors.Wrap(err, table)
+			return errors.Wrapf(err, "fetching %s", table)
 		}
 	}
 
@@ -370,19 +367,81 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			lresponse, err = admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if cErr := z.createJSONOrError(base+"/liveness.json", nodes, err); cErr != nil {
+		if cErr := z.createJSONOrError(livenessName+".json", nodes, err); cErr != nil {
 			return cErr
 		}
-		livenessByNodeID := map[roachpb.NodeID]storagepb.NodeLivenessStatus{}
+		livenessByNodeID := map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
+		}
+
+		// Collect CPU profiles in parallel over all nodes (this is useful since
+		// these profiles contain profiler labels, which can then be correlated
+		// across nodes). Do this first and in isolation, before other zip
+		// operations possibly influence the node.
+		if zipCtx.cpuProfDuration > 0 {
+			var wg sync.WaitGroup
+			type profData struct {
+				data []byte
+				err  error
+			}
+
+			// NB: this takes care not to produce non-deterministic log output.
+			resps := make([]profData, len(nodeList))
+			for i := range nodeList {
+				if livenessByNodeID[nodeList[i].Desc.NodeID] == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
+					continue
+				}
+				wg.Add(1)
+				go func(ctx context.Context, i int) {
+					defer wg.Done()
+
+					secs := int32(zipCtx.cpuProfDuration / time.Second)
+					if secs < 1 {
+						secs = 1
+					}
+
+					var pd profData
+					err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
+						resp, err := status.Profile(ctx, &serverpb.ProfileRequest{
+							NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
+							Type:    serverpb.ProfileRequest_CPU,
+							Seconds: secs,
+						})
+						if err != nil {
+							return err
+						}
+						pd = profData{data: resp.Data}
+						return nil
+					})
+					if err != nil {
+						resps[i] = profData{err: err}
+					} else {
+						resps[i] = pd
+					}
+				}(baseCtx, i)
+			}
+
+			fmt.Print("requesting CPU profiles... ")
+			wg.Wait()
+			fmt.Println("ok")
+
+			for i, pd := range resps {
+				if len(pd.data) == 0 && pd.err == nil {
+					continue // skipped node
+				}
+				prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeList[i].Desc.NodeID))
+				if err := z.createRawOrError(prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
+					return err
+				}
+			}
 		}
 
 		for _, node := range nodeList {
 			nodeID := node.Desc.NodeID
 
 			liveness := livenessByNodeID[nodeID]
-			if liveness == storagepb.NodeLivenessStatus_DECOMMISSIONED {
+			if liveness == kvserverpb.NodeLivenessStatus_DECOMMISSIONED {
 				// Decommissioned + process terminated. Let's not waste time
 				// on this node.
 				//
@@ -414,12 +473,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// not work and if it doesn't, we let the invalid curSQLConn get
 			// used anyway so that anything that does *not* need it will
 			// still happen.
-			sqlAddr := node.Desc.SQLAddress
-			if sqlAddr.IsEmpty() {
-				// No SQL address: either a pre-19.2 node, or same address for both
-				// SQL and RPC.
-				sqlAddr = node.Desc.Address
-			}
+			sqlAddr := node.Desc.CheckedSQLAddress()
 			curSQLConn := guessNodeURL(sqlConn.url, sqlAddr.AddressField)
 			if err := z.createJSON(prefix+"/status.json", node); err != nil {
 				return err
@@ -432,7 +486,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					selectClause = "*"
 				}
 				if err := dumpTableDataForZip(z, curSQLConn, timeout, prefix, table, selectClause); err != nil {
-					return errors.Wrap(err, table)
+					return errors.Wrapf(err, "fetching %s", table)
 				}
 			}
 
@@ -574,7 +628,9 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					if err := runZipRequestWithTimeout(baseCtx, fmt.Sprintf("requesting log file %s", file.Name), timeout,
 						func(ctx context.Context) error {
 							entries, err = status.LogFile(
-								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+								ctx, &serverpb.LogFileRequest{
+									NodeId: id, File: file.Name, Redact: zipCtx.redactLogs, KeepRedactable: true,
+								})
 							return err
 						}); err != nil {
 						if err := z.createError(name, err); err != nil {
@@ -586,10 +642,33 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 					if err != nil {
 						return err
 					}
+					warnRedactLeak := false
 					for _, e := range entries.Entries {
+						// If the user requests redaction, and some non-redactable
+						// data was found in the log, *despite KeepRedactable
+						// being set*, this means that this zip client is talking
+						// to a node that doesn't yet know how to redact. This
+						// also means that node may be leaking sensitive data.
+						//
+						// In that case, we do the redaction work ourselves in the
+						// most conservative way possible. (It's not great that
+						// possibly confidential data flew over the network, but
+						// at least it stops here.)
+						if zipCtx.redactLogs && !e.Redactable {
+							e.Message = "REDACTEDBYZIP"
+							// We're also going to print a warning at the end.
+							warnRedactLeak = true
+						}
 						if err := e.Format(logOut); err != nil {
 							return err
 						}
+					}
+					if warnRedactLeak {
+						// Defer the warning, so that it does not get "drowned" as
+						// part of the main zip output.
+						defer func(fileName string) {
+							fmt.Fprintf(stderr, "WARNING: server-side redaction failed for %s, completed client-side (--redact-logs=true)\n", fileName)
+						}(file.Name)
 					}
 				}
 			}
@@ -663,6 +742,16 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		}
 	}
 
+	// Add a little helper script to draw attention to the existence of tags in
+	// the profiles.
+	{
+		if err := z.createRaw(base+"/pprof-summary.sh", []byte(`#!/bin/sh
+find . -name cpu.pprof | xargs go tool pprof -tags
+`)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -724,7 +813,7 @@ func dumpTableDataForZip(
 				// Not a SQL error. Nothing to retry.
 				break
 			}
-			if pqErr.Code != pgcode.SerializationFailure {
+			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
 				// A non-retry error. We've printed the error, and
 				// there's nothing to retry. Stop here.
 				break

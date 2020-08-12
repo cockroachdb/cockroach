@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -44,6 +45,7 @@ import (
 // ts1).
 func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	k := roachpb.Key("a")
@@ -118,7 +120,7 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 		t.Fatal(err)
 	} else if intent != nil {
 		t.Fatalf("got unexpected intent: %v", intent)
-	} else if !val.EqualData(v) {
+	} else if !val.EqualTagAndData(v) {
 		t.Fatalf("expected %v, got %v", v, val)
 	}
 

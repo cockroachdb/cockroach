@@ -16,14 +16,13 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
@@ -64,58 +63,6 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
-// removePreemptiveSnapshot is a migration put in place during the 20.1 release
-// to remove any on-disk preemptive snapshots which may still be resident on a
-// 19.2 node's store due to a rapid upgrade.
-//
-// As of 19.2, a range can never process commands while it is not part of a
-// range. It is still possible that on-disk replica state exists which does not
-// contain this Store exist from when this store was running 19.1 and was not
-// removed during 19.2. For the sake of this method and elsewhere we'll define
-// a preemptive snapshot as on-disk data corresponding to an initialized range
-// which has a range descriptor which does not contain this store.
-//
-// In 19.1 when a Replica processes a command which removes it from the range
-// it does not immediately destroy its data. In fact it just assumed that it
-// would not be getting more commands appended to its log. In some cases a
-// Replica would continue to apply commands even while it was not a part of the
-// range. This was unfortunate as it is not possible to uphold certain invariants
-// for stores which are not a part of a range when it processes a command. Not
-// only did the above behavior of processing commands regardless of whether the
-// current store was in the range wasn't just happenstance, it was a fundamental
-// property that was relied upon for the change replicas protocol. In 19.2 we
-// adopt learner Replicas which are added to the raft group as a non-voting
-// member before receiving a snapshot of the state. In all previous versions
-// we did not have voters. The legacy protocol instead relied on sending a
-// snapshot of raft state and then the Replica had to apply log entries up to
-// the point where it was added to the range.
-//
-// TODO(ajwerner): Remove during 20.2.
-func removePreemptiveSnapshot(
-	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
-) (err error) {
-	batch := s.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
-	const rangeIDLocalOnly = false
-	const mustClearRange = false
-	defer func() {
-		if err != nil {
-			err = errors.Wrapf(err, "failed to remove preemptive snapshot for range %v", desc)
-		}
-	}()
-	if err := clearRangeData(desc, s.Engine(), batch, rangeIDLocalOnly, mustClearRange); err != nil {
-		return err
-	}
-	if err := writeTombstoneKey(ctx, batch, desc.RangeID, desc.NextReplicaID); err != nil {
-		return err
-	}
-	if err := batch.Commit(true); err != nil {
-		return err
-	}
-	log.Infof(ctx, "removed preemptive snapshot for %v", desc)
-	return nil
-}
-
 // mergedTombstoneReplicaID is the replica ID written into the tombstone
 // for replicas which are part of a range which is known to have been merged.
 // This value should prevent any messages from stale replicas of that range from
@@ -151,12 +98,12 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	//
 	// TODO(benesch): we would ideally atomically suggest the compaction with
 	// the deletion of the data itself.
-	if ms != (enginepb.MVCCStats{}) {
+	if ms != (enginepb.MVCCStats{}) && r.store.compactor != nil {
 		desc := r.Desc()
-		r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
+		r.store.compactor.Suggest(ctx, kvserverpb.SuggestedCompaction{
 			StartKey: roachpb.Key(desc.StartKey),
 			EndKey:   roachpb.Key(desc.EndKey),
-			Compaction: storagepb.Compaction{
+			Compaction: kvserverpb.Compaction{
 				Bytes:            ms.Total(),
 				SuggestedAtNanos: timeutil.Now().UnixNano(),
 			},
@@ -173,6 +120,12 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// forever.
 	if r.raftMu.sideloaded != nil {
 		return r.raftMu.sideloaded.Clear(ctx)
+	}
+
+	// Release the reference to this tenant in metrics, we know the tenant ID is
+	// valid if the replica is initialized.
+	if tenantID, ok := r.TenantID(); ok {
+		r.store.metrics.releaseTenant(ctx, tenantID)
 	}
 
 	return nil

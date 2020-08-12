@@ -16,6 +16,16 @@ package oidext
 
 import "github.com/lib/pq/oid"
 
+// CockroachPredefinedOIDMax defines the maximum OID allowed for use by
+// non user defined types. OIDs for user defined types will start at
+// CockroachPrefixedOIDMax and increase as new types are created.
+// User defined type descriptors have a cluster-wide unique stable ID.
+// CockroachPredefinedOIDMax defines the mapping from this stable ID to
+// a type OID. In particular, stable ID + CockroachPredefinedOIDMax = type OID.
+// types.StableTypeIDToOID and types.UserDefinedTypeOIDToID should be used when
+// converting between stable ID's and type OIDs.
+const CockroachPredefinedOIDMax = 100000
+
 // OIDs in this block are extensions of postgres, thus having no official OID.
 const (
 	T_geometry   = oid.Oid(90000)

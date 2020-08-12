@@ -273,6 +273,7 @@ func TestExtractTimeSpanFromTimestamp(t *testing.T) {
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "second", expected: 15.123456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "millisecond", expected: 15123.456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "microsecond", expected: 15123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, time.UTC), timeSpan: "epoch", expected: 1.576023255123456e+09},
 
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "timezone", expected: 4*60*60 + 30*60},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "timezone_hour", expected: 4},
@@ -288,6 +289,7 @@ func TestExtractTimeSpanFromTimestamp(t *testing.T) {
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "second", expected: 15.123456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "millisecond", expected: 15123.456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "microsecond", expected: 15123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcPositiveOffset), timeSpan: "epoch", expected: 1.576007055123456e+09},
 
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "timezone", expected: -4*60*60 - 30*60},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "timezone_hour", expected: -4},
@@ -303,6 +305,7 @@ func TestExtractTimeSpanFromTimestamp(t *testing.T) {
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "second", expected: 15.123456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "millisecond", expected: 15123.456},
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "microsecond", expected: 15123456},
+		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "epoch", expected: 1.576039455123456e+09},
 
 		{input: time.Date(2019, time.December, 11, 0, 14, 15, 123456000, utcNegativeOffset), timeSpan: "it's numberwang!", expectedError: "unsupported timespan: it's numberwang!"},
 	}
@@ -348,7 +351,7 @@ func TestExtractTimeSpanFromTimeTZ(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s_%s", tc.timeSpan, tc.timeTZString), func(t *testing.T) {
-			timeTZ, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
+			timeTZ, _, err := tree.ParseDTimeTZ(nil, tc.timeTZString, time.Microsecond)
 			assert.NoError(t, err)
 
 			datum, err := extractTimeSpanFromTimeTZ(timeTZ, tc.timeSpan)
@@ -464,7 +467,7 @@ func TestTruncateTimestamp(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.timeSpan, func(t *testing.T) {
-			result, err := truncateTimestamp(nil, tc.fromTime, tc.timeSpan)
+			result, err := truncateTimestamp(tc.fromTime, tc.timeSpan)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})

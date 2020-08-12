@@ -7,14 +7,14 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that --max-disk-temp-storage works."
-send "$argv start-single-node --insecure --store=path=mystore --max-disk-temp-storage=10GiB\r"
+send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10GiB\r"
 eexpect "node starting"
 interrupt
 eexpect ":/# "
 end_test
 
 start_test "Check that --max-disk-temp-storage can be expressed as a percentage."
-send "$argv start-single-node --insecure --store=path=mystore --max-disk-temp-storage=10%\r"
+send "$argv start-single-node --insecure --store=path=logs/mystore --max-disk-temp-storage=10%\r"
 eexpect "node starting"
 interrupt
 eexpect ":/# "
@@ -72,16 +72,42 @@ eexpect {Failed running "cockroach"}
 eexpect ":/# "
 end_test
 
-start_test "Check that start without --join reports a deprecation warning"
+start_test "Check that start without --join errors out"
 send "$argv start --insecure\r"
-eexpect "running 'cockroach start' without --join is deprecated."
-eexpect "node starting"
+eexpect "ERROR: no --join flags provided to 'cockroach start'"
+eexpect "HINT: Consider using 'cockroach init' or 'cockroach start-single-node' instead"
+eexpect {Failed running "start"}
+end_test
+
+start_test "Check that demo start-up flags are reported to telemetry"
+send "$argv demo --empty --echo-sql --logtostderr=WARNING\r"
+eexpect "defaultdb>"
+send "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'cli.demo.%' ORDER BY 1;\r"
+eexpect feature_name
+eexpect "cli.demo.explicitflags.echo-sql"
+eexpect "cli.demo.explicitflags.empty"
+eexpect "cli.demo.explicitflags.logtostderr"
+eexpect "cli.demo.runs"
+eexpect "defaultdb>"
 interrupt
 eexpect ":/# "
 end_test
 
-
 start_server $argv
+
+start_test "Check that server start-up flags are reported to telemetry"
+send "$argv sql --insecure\r"
+eexpect "defaultdb>"
+send "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'cli.start-single-node.%' ORDER BY 1;\r"
+eexpect feature_name
+eexpect "cli.start-single-node.explicitflags.insecure"
+eexpect "cli.start-single-node.explicitflags.listening-url-file"
+eexpect "cli.start-single-node.explicitflags.max-sql-memory"
+eexpect "cli.start-single-node.runs"
+eexpect "defaultdb>"
+interrupt
+eexpect ":/# "
+end_test
 
 start_test "Check that a client can connect using the URL env var"
 send "export COCKROACH_URL=`cat server_url`;\r"

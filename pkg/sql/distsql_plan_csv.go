@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"math"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -21,11 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -102,40 +101,6 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
-func (dsp *DistSQLPlanner) setupAllNodesPlanning(
-	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
-) (*PlanningCtx, []roachpb.NodeID, error) {
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
-
-	ss, err := execCfg.StatusServer.OptionalErr(47900)
-	if err != nil {
-		return nil, nil, err
-	}
-	resp, err := ss.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return nil, nil, err
-	}
-	// Because we're not going through the normal pathways, we have to set up
-	// the nodeID -> nodeAddress map ourselves.
-	for _, node := range resp.Nodes {
-		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
-			continue
-		}
-	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
-	for nodeID := range planCtx.NodeAddresses {
-		nodes = append(nodes, nodeID)
-	}
-	// Shuffle node order so that multiple IMPORTs done in parallel will not
-	// identically schedule CSV reading. For example, if there are 3 nodes and 4
-	// files, the first node will get 2 files while the other nodes will each get 1
-	// file. Shuffling will make that first node random instead of always the same.
-	rand.Shuffle(len(nodes), func(i, j int) {
-		nodes[i], nodes[j] = nodes[j], nodes[i]
-	})
-	return planCtx, nodes, nil
-}
-
 func makeImportReaderSpecs(
 	job *jobs.Job,
 	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
@@ -143,6 +108,7 @@ func makeImportReaderSpecs(
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
 	walltime int64,
+	user string,
 ) []*execinfrapb.ReadImportDataSpec {
 
 	// For each input file, assign it to a node.
@@ -163,6 +129,7 @@ func makeImportReaderSpecs(
 				WalltimeNanos: walltime,
 				Uri:           make(map[int32]string),
 				ResumePos:     make(map[int32]int64),
+				User:          user,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -188,8 +155,10 @@ func presplitTableBoundaries(
 ) error {
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
-		for _, span := range tbl.Desc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
+		// TODO(ajwerner): Consider passing in the wrapped descriptors.
+		tblDesc := sqlbase.MakeImmutableTableDescriptor(*tbl.Desc)
+		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}
 
@@ -224,34 +193,34 @@ func DistIngest(
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
 
-	planCtx, nodes, err := dsp.setupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, phs.ExecCfg())
 	if err != nil {
 		return roachpb.BulkOpSummary{}, err
 	}
 
-	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime)
+	inputSpecs := makeImportReaderSpecs(job, tables, from, format, nodes, walltime, phs.User())
 
-	var p PhysicalPlan
+	gatewayNodeID, err := evalCtx.ExecCfg.NodeID.OptionalNodeIDErr(47970)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, err
+	}
+	p := MakePhysicalPlan(gatewayNodeID)
 
 	// Setup a one-stage plan with one proc per input spec.
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(inputSpecs))
-	for i, rcs := range inputSpecs {
-		proc := physicalplan.Processor{
-			Node: nodes[i],
-			Spec: execinfrapb.ProcessorSpec{
-				Core:    execinfrapb.ProcessorCoreUnion{ReadImport: rcs},
-				Output:  []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-				StageID: stageID,
-			},
-		}
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(inputSpecs))
+	for i := range inputSpecs {
+		corePlacement[i].NodeID = nodes[i]
+		corePlacement[i].Core.ReadImport = inputSpecs[i]
 	}
+	p.AddNoInputStage(
+		corePlacement,
+		execinfrapb.PostProcessSpec{},
+		// The direct-ingest readers will emit a binary encoded BulkOpSummary.
+		[]*types.T{types.Bytes, types.Bytes},
+		execinfrapb.Ordering{},
+	)
 
-	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []*types.T{types.Bytes, types.Bytes}
 
 	dsp.FinalizePlan(planCtx, &p)
 
@@ -319,10 +288,9 @@ func DistIngest(
 
 	recv := MakeDistSQLReceiver(
 		ctx,
-		&metadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
+		&MetadataCallbackWriter{rowResultWriter: rowResultWriter, fn: metaFn},
 		tree.Rows,
 		nil, /* rangeCache */
-		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,

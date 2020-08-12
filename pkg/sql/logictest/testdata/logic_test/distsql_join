@@ -1,7 +1,7 @@
 # LogicTest: 5node-default-configs
 
 # Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate
-# equivilance. The use of sorts here force the planning of merge join.
+# equivalence. The use of sorts here force the planning of merge join.
 
 statement ok
 CREATE TABLE distsql_mj_test (k INT, v INT)
@@ -54,8 +54,3 @@ query III
 SELECT pk, a, b FROM tab0 WHERE a < 10 AND b = 2 ORDER BY a DESC, pk;
 ----
 0 1 2
-
-query T
-SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-distributed' AND usage_count > 0
-----
-sql.exec.query.is-distributed

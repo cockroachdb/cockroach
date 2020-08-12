@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package sql_test
 
 import (
 	"context"
@@ -17,22 +17,32 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRevertTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s, sqlDB, kv := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
-	defer s.Stopper().Stop(context.TODO())
-	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	defer s.Stopper().Stop(context.Background())
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
@@ -48,7 +58,7 @@ func TestRevertTable(t *testing.T) {
 	var ts string
 	var before int
 	db.QueryRow(t, `SELECT cluster_logical_timestamp(), xor_agg(k # rev) FROM test`).Scan(&ts, &before)
-	targetTime, err := ParseHLC(ts)
+	targetTime, err := sql.ParseHLC(ts)
 	require.NoError(t, err)
 
 	t.Run("simple", func(t *testing.T) {
@@ -68,9 +78,9 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
-		desc.State = sqlbase.TableDescriptor_OFFLINE // bypass the offline check.
-		require.NoError(t, RevertTables(context.TODO(), kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc.State = descpb.TableDescriptor_OFFLINE // bypass the offline check.
+		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc}, targetTime, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -83,7 +93,7 @@ func TestRevertTable(t *testing.T) {
 		db.Exec(t, `UPDATE child SET rev = 1 WHERE a % 3 = 0`)
 
 		db.QueryRow(t, `SELECT cluster_logical_timestamp() FROM test`).Scan(&ts)
-		targetTime, err = ParseHLC(ts)
+		targetTime, err = sql.ParseHLC(ts)
 		require.NoError(t, err)
 
 		var beforeChild int
@@ -94,19 +104,19 @@ func TestRevertTable(t *testing.T) {
 		db.Exec(t, `DELETE FROM child WHERE a % 7 = 0`)
 
 		// Revert the table to ts.
-		desc := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
-		desc.State = sqlbase.TableDescriptor_OFFLINE
-		child := sqlbase.GetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
-		child.State = sqlbase.TableDescriptor_OFFLINE
+		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc.State = descpb.TableDescriptor_OFFLINE
+		child := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
+		child.State = descpb.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
-			require.Error(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc}, targetTime, 10))
 		})
 		t.Run("reject only child", func(t *testing.T) {
-			require.Error(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{child}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{child}, targetTime, 10))
 		})
 
 		t.Run("rollback parent and child", func(t *testing.T) {
-			require.NoError(t, RevertTables(ctx, kv, &execCfg, []*sqlbase.TableDescriptor{desc, child}, targetTime, RevertTableDefaultBatchSize))
+			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []*sqlbase.ImmutableTableDescriptor{desc, child}, targetTime, sql.RevertTableDefaultBatchSize))
 
 			var reverted, revertedChild int
 			db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -115,4 +125,22 @@ func TestRevertTable(t *testing.T) {
 			require.Equal(t, beforeChild, revertedChild, "expected reverted table after edits to match before")
 		})
 	})
+}
+
+func TestRevertGCThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	kvDB := tc.Server(0).DB()
+
+	req := &roachpb.RevertRangeRequest{
+		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		TargetTime:    hlc.Timestamp{WallTime: -1},
+	}
+	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
+	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
+		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
+	}
 }

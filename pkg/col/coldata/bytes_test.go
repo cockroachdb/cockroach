@@ -107,7 +107,9 @@ func applyMethodsAndVerify(
 			b1Window.AssertOffsetsAreNonDecreasing(b1Window.Len())
 			debugString += fmt.Sprintf("\n%s\n", b1Window)
 			if err := verifyEqual(b1Window, b2Window); err != nil {
-				return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat:\n%sreference:\n%s", debugString, b1Window.String(), prettyByteSlice(b2Window)))
+				return errors.Wrapf(err,
+					"\ndebugString:\n%s\nflat:\n%s\nreference:\n%s",
+					debugString, b1Window.String(), prettyByteSlice(b2Window))
 			}
 			continue
 		case copySlice, appendSlice:
@@ -157,7 +159,9 @@ func applyMethodsAndVerify(
 		b1.AssertOffsetsAreNonDecreasing(b1.Len())
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("\ndebugString:\n%sflat (maxSetIdx=%d):\n%sreference:\n%s", debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2)))
+			return errors.Wrapf(err,
+				"\ndebugString:\n%s\nflat (maxSetIdx=%d):\n%s\nreference:\n%s",
+				debugString, b1.maxSetIndex, b1.String(), prettyByteSlice(b2))
 		}
 	}
 	return nil
@@ -313,6 +317,24 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "hello again", string(b1.Get(1)))
 	})
 
+	t.Run("AppendZeroSlice", func(t *testing.T) {
+		// This test makes sure that b.maxSetIndex is updated correctly when we
+		// create a long flat bytes vector but not set all the values and then
+		// truncate the vector. The expected behavior is that offsets must be
+		// backfilled, and once a new value is appended, it should be
+		// retrievable.
+		b := NewBytes(5)
+		b.Set(0, []byte("zero"))
+		require.Equal(t, 5, b.Len())
+		b.AppendSlice(b, 3, 0, 0)
+		require.Equal(t, 3, b.Len())
+		b.AppendVal([]byte("three"))
+		require.Equal(t, 4, b.Len())
+		require.Equal(t, "zero", string(b.Get(0)))
+		require.Equal(t, "three", string(b.Get(3)))
+		b.AssertOffsetsAreNonDecreasing(b.Len())
+	})
+
 	t.Run("Copy", func(t *testing.T) {
 		b1 := NewBytes(0)
 		b2 := NewBytes(0)
@@ -417,7 +439,7 @@ func TestBytes(t *testing.T) {
 // TestAppendBytesWithLastNull makes sure that Append handles correctly the
 // case when the last element of Bytes vector is NULL.
 func TestAppendBytesWithLastNull(t *testing.T) {
-	src := NewMemColumn(types.Bytes, 4)
+	src := NewMemColumn(types.Bytes, 4, StandardColumnFactory)
 	sel := []int{0, 2, 3}
 	src.Bytes().Set(0, []byte("zero"))
 	src.Nulls().SetNull(1)
@@ -429,8 +451,8 @@ func TestAppendBytesWithLastNull(t *testing.T) {
 		SrcStartIdx: 0,
 		SrcEndIdx:   len(sel),
 	}
-	dest := NewMemColumn(types.Bytes, 3)
-	expected := NewMemColumn(types.Bytes, 3)
+	dest := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
+	expected := NewMemColumn(types.Bytes, 3, StandardColumnFactory)
 	for _, withSel := range []bool{false, true} {
 		t.Run(fmt.Sprintf("AppendBytesWithLastNull/sel=%t", withSel), func(t *testing.T) {
 			expected.Nulls().UnsetNulls()

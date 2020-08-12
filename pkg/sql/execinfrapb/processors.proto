@@ -103,6 +103,11 @@ message ProcessorCoreUnion {
   optional ChangeFrontierSpec changeFrontier = 26;
   optional OrdinalitySpec ordinality = 27;
   optional BulkRowWriterSpec bulkRowWriter = 28;
+  optional InvertedFiltererSpec invertedFilterer = 29;
+  optional InvertedJoinerSpec invertedJoiner = 30;
+  optional BackupDataSpec backupData = 31;
+  optional SplitAndScatterSpec splitAndScatter = 32;
+  optional RestoreDataSpec restoreData = 33;
 
   reserved 6, 12;
 }

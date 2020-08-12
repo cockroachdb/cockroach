@@ -27,16 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro"
+	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEncoders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 	require.NoError(t, err)
@@ -226,10 +228,10 @@ func TestEncoders(t *testing.T) {
 				prevDatums:    nil,
 				prevTableDesc: tableDesc,
 			}
-			keyInsert, err := e.EncodeKey(context.TODO(), rowInsert)
+			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
 			require.NoError(t, err)
 			keyInsert = append([]byte(nil), keyInsert...)
-			valueInsert, err := e.EncodeValue(context.TODO(), rowInsert)
+			valueInsert, err := e.EncodeValue(context.Background(), rowInsert)
 			require.NoError(t, err)
 			require.Equal(t, expected.insert, rowStringFn(keyInsert, valueInsert))
 
@@ -241,14 +243,14 @@ func TestEncoders(t *testing.T) {
 				tableDesc:     tableDesc,
 				prevTableDesc: tableDesc,
 			}
-			keyDelete, err := e.EncodeKey(context.TODO(), rowDelete)
+			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
 			require.NoError(t, err)
 			keyDelete = append([]byte(nil), keyDelete...)
-			valueDelete, err := e.EncodeValue(context.TODO(), rowDelete)
+			valueDelete, err := e.EncodeValue(context.Background(), rowDelete)
 			require.NoError(t, err)
 			require.Equal(t, expected.delete, rowStringFn(keyDelete, valueDelete))
 
-			resolved, err := e.EncodeResolvedTimestamp(context.TODO(), tableDesc.Name, ts)
+			resolved, err := e.EncodeResolvedTimestamp(context.Background(), tableDesc.GetName(), ts)
 			require.NoError(t, err)
 			require.Equal(t, expected.resolved, resolvedStringFn(resolved))
 		})
@@ -332,6 +334,7 @@ func (r *testSchemaRegistry) encodedAvroToNative(b []byte) (interface{}, error) 
 
 func TestAvroEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
@@ -387,6 +390,7 @@ func TestAvroEncoder(t *testing.T) {
 
 func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()
@@ -417,6 +421,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 
 func TestAvroLedger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		reg := makeTestSchemaRegistry()

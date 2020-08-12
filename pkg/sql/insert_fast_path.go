@@ -15,7 +15,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -91,9 +94,9 @@ type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
 	tabDesc     *sqlbase.ImmutableTableDescriptor
-	idxDesc     *sqlbase.IndexDescriptor
+	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
-	colMap      map[sqlbase.ColumnID]int
+	colMap      map[descpb.ColumnID]int
 	spanBuilder *span.Builder
 }
 
@@ -103,17 +106,17 @@ func (c *insertFastPathFKCheck) init(params runParams) error {
 	c.idxDesc = idx.desc
 
 	codec := params.ExecCfg().Codec
-	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, &c.tabDesc.TableDescriptor, c.idxDesc.ID)
-	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc.TableDesc(), c.idxDesc)
+	c.keyPrefix = sqlbase.MakeIndexKeyPrefix(codec, c.tabDesc, c.idxDesc.ID)
+	c.spanBuilder = span.MakeBuilder(codec, c.tabDesc, c.idxDesc)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
 		return errors.AssertionFailedf(
 			"%d FK cols, only %d cols in index", len(c.InsertCols), idx.numLaxKeyCols,
 		)
 	}
-	c.colMap = make(map[sqlbase.ColumnID]int, len(c.InsertCols))
+	c.colMap = make(map[descpb.ColumnID]int, len(c.InsertCols))
 	for i, ord := range c.InsertCols {
-		var colID sqlbase.ColumnID
+		var colID descpb.ColumnID
 		if i < len(c.idxDesc.ColumnIDs) {
 			colID = c.idxDesc.ColumnIDs[i]
 		} else {
@@ -284,6 +287,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			var err error
 			inputRow[col], err = typedExpr.Eval(params.EvalContext())
 			if err != nil {
+				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return false, err
 			}
 		}
@@ -308,18 +312,14 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := n.run.ti.atBatchEnd(params.ctx, n.run.traceKV); err != nil {
-		return false, err
-	}
-
-	if _, err := n.run.ti.finalize(params.ctx, n.run.traceKV); err != nil {
+	if err := n.run.ti.finalize(params.ctx); err != nil {
 		return false, err
 	}
 	// Remember we're done for the next call to BatchedNext().
 	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc().ID, len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.ID, len(n.input))
 
 	return true, nil
 }
@@ -328,13 +328,10 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 func (n *insertFastPathNode) BatchedCount() int { return len(n.input) }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.run.rows.At(rowIdx) }
+func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.run.ti.rows.At(rowIdx) }
 
 func (n *insertFastPathNode) Close(ctx context.Context) {
 	n.run.ti.close(ctx)
-	if n.run.rows != nil {
-		n.run.rows.Close(ctx)
-	}
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
 }
@@ -342,4 +339,67 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
+}
+
+// interceptAlterColumnTypeParseError wraps a type parsing error with a warning
+// about the column undergoing an ALTER COLUMN TYPE schema change.
+// If colNum is not -1, only the colNum'th column in insertCols will be checked
+// for AlterColumnTypeInProgress, otherwise every column in insertCols will
+// be checked.
+func interceptAlterColumnTypeParseError(
+	insertCols []descpb.ColumnDescriptor, colNum int, err error,
+) error {
+	// Only intercept the error if the column being inserted into
+	// is an actual column. This is to avoid checking on values that don't
+	// correspond to an actual column, for example a check constraint.
+	if colNum >= len(insertCols) {
+		return err
+	}
+	var insertCol descpb.ColumnDescriptor
+
+	// wrapParseError is a helper function that checks if an insertCol has the
+	// AlterColumnTypeInProgress flag and wraps the parse error msg stating
+	// that the error may be because the column is being altered.
+	// Returns if the error msg has been wrapped and the wrapped error msg.
+	wrapParseError := func(insertCol descpb.ColumnDescriptor, colNum int, err error) (bool, error) {
+		if insertCol.AlterColumnTypeInProgress {
+			code := pgerror.GetPGCode(err)
+			if code == pgcode.InvalidTextRepresentation {
+				if colNum != -1 {
+					// If a column is specified, we can ensure the parse error
+					// is happening because the column is undergoing an alter column type
+					// schema change.
+					return true, errors.Wrapf(err,
+						"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+							"this insert is not supported until the schema change is finalized")
+				}
+				// If no column is specified, the error message is slightly changed to say
+				// that the error MAY be because a column is undergoing an alter column type
+				// schema change.
+				return true, errors.Wrap(err,
+					"This table is still undergoing the ALTER COLUMN TYPE schema change, "+
+						"this insert may not be supported until the schema change is finalized")
+			}
+		}
+		return false, err
+	}
+
+	// If a colNum is specified, we just check the one column for
+	// AlterColumnTypeInProgress and return the error whether it's wrapped or not.
+	if colNum != -1 {
+		insertCol = insertCols[colNum]
+		_, err = wrapParseError(insertCol, colNum, err)
+		return err
+	}
+
+	// If the colNum is -1, we check every insertCol for AlterColumnTypeInProgress.
+	for _, insertCol = range insertCols {
+		var changed bool
+		changed, err = wrapParseError(insertCol, colNum, err)
+		if changed {
+			return err
+		}
+	}
+
+	return err
 }

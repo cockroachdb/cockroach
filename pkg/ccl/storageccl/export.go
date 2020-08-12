@@ -75,21 +75,12 @@ func evalExport(
 	ctx, span := tracing.ChildSpan(ctx, fmt.Sprintf("Export [%s,%s)", args.Key, args.EndKey))
 	defer tracing.FinishSpan(span)
 
-	// If the startTime is zero, then we're doing a full backup and the gc
-	// threshold is irrelevant for MVCC_Lastest backups. Otherwise, make sure
-	// startTime is after the gc threshold. If it's not, the mvcc tombstones could
-	// have been deleted and the resulting RocksDB tombstones compacted, which
-	// means we'd miss deletions in the incremental backup. For MVCC_All backups
-	// with no start time, they'll only be capturing the *revisions* since the
-	// gc threshold, so noting that in the reply allows the BACKUP to correctly
-	// note the supported time bounds for RESTORE AS OF SYSTEM TIME.
-	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
-	if !args.StartTime.IsEmpty() {
-		if args.StartTime.LessEq(gcThreshold) {
-			return result.Result{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
-		}
-	} else if args.MVCCFilter == roachpb.MVCCFilter_All {
-		reply.StartTime = gcThreshold
+	// For MVCC_All backups with no start time, they'll only be capturing the
+	// *revisions* since the gc threshold, so noting that in the reply allows the
+	// BACKUP to correctly note the supported time bounds for RESTORE AS OF SYSTEM
+	// TIME.
+	if args.MVCCFilter == roachpb.MVCCFilter_All {
+		reply.StartTime = cArgs.EvalCtx.GetGCThreshold()
 	}
 
 	if err := cArgs.EvalCtx.GetLimiters().ConcurrentExportRequests.Begin(ctx); err != nil {

@@ -24,9 +24,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/lib/pq/auth/kerberos"
 )
+
+func init() {
+	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+}
 
 func TestGSS(t *testing.T) {
 	connector, err := pq.NewConnector("user=root sslmode=require")
@@ -99,12 +105,76 @@ func TestGSS(t *testing.T) {
 			if _, err := db.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS '%s'`, tc.user)); err != nil {
 				t.Fatal(err)
 			}
-			out, err := exec.Command("psql", "-c", "SELECT 1", "-U", tc.user).CombinedOutput()
-			err = errors.Wrap(err, strings.TrimSpace(string(out)))
-			if !IsError(err, tc.gssErr) {
-				t.Errorf("expected err %v, got %v", tc.gssErr, err)
-			}
+			t.Run("libpq", func(t *testing.T) {
+				userConnector, err := pq.NewConnector(fmt.Sprintf("user=%s sslmode=require krbspn=postgres/gss_cockroach_1.gss_default", tc.user))
+				if err != nil {
+					t.Fatal(err)
+				}
+				userDB := gosql.OpenDB(userConnector)
+				defer userDB.Close()
+				_, err = userDB.Exec("SELECT 1")
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
+			t.Run("psql", func(t *testing.T) {
+				out, err := exec.Command("psql", "-c", "SELECT 1", "-U", tc.user).CombinedOutput()
+				err = errors.Wrap(err, strings.TrimSpace(string(out)))
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
+			t.Run("cockroach", func(t *testing.T) {
+				out, err := exec.Command("/cockroach/cockroach", "sql",
+					"-e", "SELECT 1",
+					"--certs-dir", "/certs",
+					// TODO(mjibson): Teach the CLI to not ask for passwords during kerberos.
+					// See #51588.
+					"--url", fmt.Sprintf("postgresql://%s:nopassword@cockroach:26257/?sslmode=require&krbspn=postgres/gss_cockroach_1.gss_default", tc.user),
+				).CombinedOutput()
+				err = errors.Wrap(err, strings.TrimSpace(string(out)))
+				if !IsError(err, tc.gssErr) {
+					t.Errorf("expected err %v, got %v", tc.gssErr, err)
+				}
+			})
 		})
+	}
+}
+
+func TestGSSFileDescriptorCount(t *testing.T) {
+	// When the docker-compose.yml added a ulimit for the cockroach
+	// container the open file count would just stop there, it wouldn't
+	// cause cockroach to panic or error like I had hoped since it would
+	// allow a test to assert that multiple gss connections didn't leak
+	// file descriptors. Another possibility would be to have something
+	// track the open file count in the cockroach container, but that seems
+	// brittle and probably not worth the effort. However this test is
+	// useful when doing manual tracking of file descriptor count.
+	t.Skip("#51791")
+
+	rootConnector, err := pq.NewConnector("user=root sslmode=require")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootDB := gosql.OpenDB(rootConnector)
+	defer rootDB.Close()
+
+	if _, err := rootDB.Exec(`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, "host all all all gss include_realm=0"); err != nil {
+		t.Fatal(err)
+	}
+	const user = "tester"
+	if _, err := rootDB.Exec(fmt.Sprintf(`CREATE USER IF NOT EXISTS '%s'`, user)); err != nil {
+		t.Fatal(err)
+	}
+
+	start := timeutil.Now()
+	for i := 0; i < 1000; i++ {
+		fmt.Println(i, timeutil.Since(start))
+		out, err := exec.Command("psql", "-c", "SELECT 1", "-U", user).CombinedOutput()
+		if IsError(err, "GSS authentication requires an enterprise license") {
+			t.Log(string(out))
+			t.Fatal(err)
+		}
 	}
 }
 

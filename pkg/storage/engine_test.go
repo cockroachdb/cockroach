@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -66,6 +68,7 @@ func ensureRangeEqual(
 // or it contains the final value, but never a value in between.
 func TestEngineBatchCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	numWrites := 10000
 	key := mvccKey("a")
 	finalVal := []byte(strconv.Itoa(numWrites - 1))
@@ -126,6 +129,7 @@ func TestEngineBatchCommit(t *testing.T) {
 
 func TestEngineBatchStaleCachedIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Prevent regression of a bug which caused spurious MVCC errors due to an
 	// invalid optimization which let an iterator return key-value pairs which
 	// had since been deleted from the underlying engine.
@@ -207,6 +211,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 func TestEngineBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -349,6 +354,7 @@ func TestEngineBatch(t *testing.T) {
 
 func TestEnginePutGetDelete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -434,6 +440,7 @@ func addMergeTimestamp(t *testing.T, data []byte, ts int64) []byte {
 // exhaustively in the merge tests themselves.
 func TestEngineMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	engineBytes := make([][][]byte, len(mvccEngineImpls))
 	for engineIndex, engineImpl := range mvccEngineImpls {
@@ -525,6 +532,7 @@ func TestEngineMerge(t *testing.T) {
 
 func TestEngineMustExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	test := func(engineType enginepb.EngineType, errStr string) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
@@ -550,6 +558,7 @@ func TestEngineMustExist(t *testing.T) {
 
 func TestEngineTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -712,6 +721,7 @@ func TestEngineTimeBound(t *testing.T) {
 
 func TestFlushWithSSTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -749,6 +759,7 @@ func TestFlushWithSSTables(t *testing.T) {
 
 func TestEngineScan1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -831,6 +842,7 @@ func verifyScan(start, end roachpb.Key, max int64, expKeys []MVCCKey, engine Eng
 
 func TestEngineScan2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// TODO(Tobias): Merge this with TestEngineScan1 and remove
 	// either verifyScan or the other helper function.
 
@@ -901,6 +913,7 @@ func testEngineDeleteRange(t *testing.T, clearRange func(engine Engine, start, e
 
 func TestEngineDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		return engine.ClearRange(start, end)
 	})
@@ -908,6 +921,7 @@ func TestEngineDeleteRange(t *testing.T) {
 
 func TestEngineDeleteRangeBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		batch := engine.NewWriteOnlyBatch()
 		defer batch.Close()
@@ -925,6 +939,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 
 func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
 		iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
@@ -934,6 +949,7 @@ func TestEngineDeleteIterRange(t *testing.T) {
 
 func TestSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -993,6 +1009,7 @@ func TestSnapshot(t *testing.T) {
 // engine operations.
 func TestSnapshotMethods(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1092,6 +1109,7 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 
 func TestCreateCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
@@ -1124,6 +1142,7 @@ func TestCreateCheckpoint(t *testing.T) {
 
 func TestIngestDelayLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := cluster.MakeTestingClusterSettings()
 
 	max, ramp := time.Second*5, time.Second*5/10
@@ -1133,14 +1152,13 @@ func TestIngestDelayLimit(t *testing.T) {
 		stats Stats
 	}{
 		{0, Stats{}},
-		{0, Stats{L0FileCount: 19}},
-		{0, Stats{L0FileCount: 20}},
-		{ramp, Stats{L0FileCount: 21}},
-		{ramp * 2, Stats{L0FileCount: 22}},
-		{max, Stats{L0FileCount: 55}},
-		{0, Stats{PendingCompactionBytesEstimate: (2 << 30) - 1}},
-		{max, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}},
-		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}},
+		{0, Stats{L0FileCount: 19, L0SublevelCount: -1}},
+		{0, Stats{L0FileCount: 20, L0SublevelCount: -1}},
+		{ramp, Stats{L0FileCount: 21, L0SublevelCount: -1}},
+		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: -1}},
+		{ramp * 2, Stats{L0FileCount: 22, L0SublevelCount: 22}},
+		{ramp * 2, Stats{L0FileCount: 55, L0SublevelCount: 22}},
+		{max, Stats{L0FileCount: 55, L0SublevelCount: -1}},
 	} {
 		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &tc.stats))
 	}
@@ -1154,6 +1172,7 @@ func (s stringSorter) Less(i int, j int) bool { return strings.Compare(s[i], s[j
 
 func TestEngineFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1228,25 +1247,25 @@ func TestEngineFS(t *testing.T) {
 				)
 				switch s[0] {
 				case "create":
-					g, err = e.CreateFile(s[1])
+					g, err = e.Create(s[1])
 				case "create-with-sync":
-					g, err = e.CreateFileWithSync(s[1], 1)
+					g, err = e.CreateWithSync(s[1], 1)
 				case "link":
-					err = e.LinkFile(s[1], s[2])
+					err = e.Link(s[1], s[2])
 				case "open":
-					g, err = e.OpenFile(s[1])
+					g, err = e.Open(s[1])
 				case "opendir":
 					g, err = e.OpenDir(s[1])
 				case "delete":
-					err = e.DeleteFile(s[1])
+					err = e.Remove(s[1])
 				case "rename":
-					err = e.RenameFile(s[1], s[2])
+					err = e.Rename(s[1], s[2])
 				case "create-dir":
-					err = e.CreateDir(s[1])
+					err = e.MkdirAll(s[1])
 				case "delete-dir":
-					err = e.DeleteDir(s[1])
+					err = e.RemoveDir(s[1])
 				case "list-dir":
-					result, err := e.ListDir(s[1])
+					result, err := e.List(s[1])
 					if err != nil {
 						break
 					}
@@ -1318,11 +1337,13 @@ func TestEngineFS(t *testing.T) {
 	}
 }
 
-// These FS implementations are not in-memory.
-var engineRealFSImpls = []struct {
+type engineImpl struct {
 	name   string
 	create func(*testing.T, string) Engine
-}{
+}
+
+// These FS implementations are not in-memory.
+var engineRealFSImpls = []engineImpl{
 	{"rocksdb", func(t *testing.T, dir string) Engine {
 		db, err := NewRocksDB(
 			RocksDBConfig{
@@ -1362,6 +1383,7 @@ var engineRealFSImpls = []struct {
 
 func TestEngineFSFileNotFoundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range engineRealFSImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -1370,19 +1392,19 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 			db := engineImpl.create(t, dir)
 			defer db.Close()
 
-			// Verify DeleteFile returns os.ErrNotExist if file does not exist.
-			if err := db.DeleteFile("/non/existent/file"); !os.IsNotExist(err) {
+			// Verify Remove returns os.ErrNotExist if file does not exist.
+			if err := db.Remove("/non/existent/file"); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
-			// Verify DeleteDirAndFiles returns os.ErrNotExist if dir does not exist.
-			if err := db.DeleteDirAndFiles("/non/existent/file"); !os.IsNotExist(err) {
-				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+			// Verify RemoveAll returns nil if path does not exist.
+			if err := db.RemoveAll("/non/existent/file"); err != nil {
+				t.Fatalf("expected nil, but got %v (%T)", err, err)
 			}
 
 			fname := filepath.Join(dir, "random.file")
 			data := "random data"
-			if f, err := db.CreateFile(fname); err != nil {
+			if f, err := db.Create(fname); err != nil {
 				t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
 			} else {
 				// Write data to file so we can read it later.
@@ -1403,7 +1425,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 				t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
 			}
 
-			if err := db.DeleteFile(fname); err != nil {
+			if err := db.Remove(fname); err != nil {
 				t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
 			}
 
@@ -1412,10 +1434,153 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
 
-			// Verify DeleteFile returns os.ErrNotExist if deleting an already deleted file.
-			if err := db.DeleteFile(fname); !os.IsNotExist(err) {
+			// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
+			if err := db.Remove(fname); !os.IsNotExist(err) {
 				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 			}
+		})
+	}
+}
+
+// TestSupportPrev tests that SupportsPrev works as expected.
+func TestSupportsPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	opts := IterOptions{LowerBound: keys.MinKey, UpperBound: keys.MaxKey}
+	type engineTest struct {
+		engineIterSupportsPrev   bool
+		batchIterSupportsPrev    bool
+		snapshotIterSupportsPrev bool
+	}
+	runTest := func(t *testing.T, eng Engine, et engineTest) {
+		t.Run("engine", func(t *testing.T) {
+			it := eng.NewIterator(opts)
+			defer it.Close()
+			require.Equal(t, et.engineIterSupportsPrev, it.SupportsPrev())
+		})
+		t.Run("batch", func(t *testing.T) {
+			batch := eng.NewBatch()
+			defer batch.Close()
+			batchIt := batch.NewIterator(opts)
+			defer batchIt.Close()
+			require.Equal(t, et.batchIterSupportsPrev, batchIt.SupportsPrev())
+		})
+		t.Run("snapshot", func(t *testing.T) {
+			snap := eng.NewSnapshot()
+			defer snap.Close()
+			snapIt := snap.NewIterator(opts)
+			defer snapIt.Close()
+			require.Equal(t, et.snapshotIterSupportsPrev, snapIt.SupportsPrev())
+		})
+	}
+	t.Run("pebble", func(t *testing.T) {
+		eng := newPebbleInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    true,
+			snapshotIterSupportsPrev: true,
+		})
+	})
+	t.Run("rocksdb", func(t *testing.T) {
+		eng := newRocksDBInMem(roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    false,
+			snapshotIterSupportsPrev: true,
+		})
+	})
+	t.Run("tee", func(t *testing.T) {
+		eng := newTeeInMem(context.Background(), roachpb.Attributes{}, 1<<20)
+		defer eng.Close()
+		runTest(t, eng, engineTest{
+			engineIterSupportsPrev:   true,
+			batchIterSupportsPrev:    false,
+			snapshotIterSupportsPrev: true,
+		})
+	})
+}
+
+func TestFS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var engineImpls []engineImpl
+	engineImpls = append(engineImpls, engineRealFSImpls...)
+	engineImpls = append(engineImpls,
+		engineImpl{
+			name: "rocksdb_mem",
+			create: func(_ *testing.T, _ string) Engine {
+				return createTestRocksDBEngine()
+			},
+		},
+		engineImpl{
+			name: "pebble_mem",
+			create: func(_ *testing.T, _ string) Engine {
+				return createTestPebbleEngine()
+			},
+		})
+
+	for _, impl := range engineImpls {
+		t.Run(impl.name, func(t *testing.T) {
+			dir, cleanupDir := testutils.TempDir(t)
+			defer cleanupDir()
+			fs := impl.create(t, dir)
+			defer fs.Close()
+
+			path := func(rel string) string {
+				return filepath.Join(dir, rel)
+			}
+			expectLS := func(dir string, want []string) {
+				t.Helper()
+
+				got, err := fs.List(dir)
+				require.NoError(t, err)
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("fs.List(%q) = %#v, want %#v", dir, got, want)
+				}
+			}
+
+			// Create a/ and assert that it's empty.
+			require.NoError(t, fs.MkdirAll(path("a")))
+			expectLS(path("a"), []string{})
+			if _, err := fs.Stat(path("a/b/c")); !os.IsNotExist(err) {
+				t.Fatal(`fs.Stat("a/b/c") should not exist`)
+			}
+
+			// Create a/b/ and a/b/c/ in a single MkdirAll call.
+			// Then ensure that a duplicate call returns a nil error.
+			require.NoError(t, fs.MkdirAll(path("a/b/c")))
+			require.NoError(t, fs.MkdirAll(path("a/b/c")))
+			expectLS(path("a"), []string{"b"})
+			expectLS(path("a/b"), []string{"c"})
+			expectLS(path("a/b/c"), []string{})
+			_, err := fs.Stat(path("a/b/c"))
+			require.NoError(t, err)
+
+			// Create a file at a/b/c/foo.
+			f, err := fs.Create(path("a/b/c/foo"))
+			require.NoError(t, err)
+			require.NoError(t, f.Close())
+			expectLS(path("a/b/c"), []string{"foo"})
+
+			// Create a file at a/b/c/bar.
+			f, err = fs.Create(path("a/b/c/bar"))
+			require.NoError(t, err)
+			require.NoError(t, f.Close())
+			expectLS(path("a/b/c"), []string{"bar", "foo"})
+			_, err = fs.Stat(path("a/b/c/bar"))
+			require.NoError(t, err)
+
+			// RemoveAll a file.
+			require.NoError(t, fs.RemoveAll(path("a/b/c/bar")))
+			expectLS(path("a/b/c"), []string{"foo"})
+
+			// RemoveAll a directory that contains subdirectories and
+			// descendant files.
+			require.NoError(t, fs.RemoveAll(path("a/b")))
+			expectLS(path("a"), []string{})
 		})
 	}
 }

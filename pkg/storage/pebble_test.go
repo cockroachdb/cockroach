@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -32,6 +33,7 @@ import (
 
 func TestPebbleTimeBoundPropCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.RunTest(t, "testdata/time_bound_props", func(t *testing.T, d *datadriven.TestData) string {
 		c := &pebbleTimeBoundPropCollector{}
@@ -106,6 +108,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 
 func TestPebbleIterReuse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Regression test for https://github.com/cockroachdb/cockroach/issues/42354
 	// and similar issues arising from improper re-initialization of cached
 	// iterators.
@@ -179,6 +182,7 @@ func makeMVCCKey(a string) MVCCKey {
 
 func TestPebbleSeparatorSuccessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sepCases := []struct {
 		a, b, want MVCCKey

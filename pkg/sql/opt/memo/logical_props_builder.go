@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +67,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// ------------
 	// A Locking option is a side-effect (we don't want to elide this scan).
 	if scan.Locking != nil {
-		rel.CanHaveSideEffects = true
+		rel.VolatilitySet.AddVolatile()
 	}
 
 	// Output Columns
@@ -265,6 +266,55 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 	}
 }
 
+func (b *logicalPropsBuilder) buildInvertedFilterProps(
+	invFilter *InvertedFilterExpr, rel *props.Relational,
+) {
+	BuildSharedProps(invFilter, &rel.Shared)
+
+	inputProps := invFilter.Input.Relational()
+
+	// Output Columns
+	// --------------
+	// Inherit output columns from input, but remove the inverted column.
+	rel.OutputCols = inputProps.OutputCols
+	rel.OutputCols.Remove(invFilter.InvertedColumn)
+
+	// Not Null Columns
+	// ----------------
+	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
+	rel.NotNullCols.IntersectionWith(rel.OutputCols)
+
+	// Outer Columns
+	// -------------
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
+	// by input columns.
+	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
+
+	// Functional Dependencies
+	// -----------------------
+	// Start with copy of FuncDepSet from input, add FDs from the outer columns,
+	// modify with any additional not-null columns, then possibly simplify by
+	// calling ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
+	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
+
+	// Cardinality
+	// -----------
+	// Inverted filter can filter any or all rows.
+	rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
+	if rel.FuncDeps.HasMax1Row() {
+		rel.Cardinality = rel.Cardinality.Limit(1)
+	}
+
+	// Statistics
+	// ----------
+	if !b.disableStats {
+		b.sb.buildInvertedFilter(invFilter, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildInnerJoinProps(join *InnerJoinExpr, rel *props.Relational) {
 	b.buildJoinProps(join, rel)
 }
@@ -399,8 +449,8 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 	b.buildJoinProps(join, rel)
 }
 
-func (b *logicalPropsBuilder) buildGeoLookupJoinProps(
-	join *GeoLookupJoinExpr, rel *props.Relational,
+func (b *logicalPropsBuilder) buildInvertedJoinProps(
+	join *InvertedJoinExpr, rel *props.Relational,
 ) {
 	b.buildJoinProps(join, rel)
 }
@@ -755,7 +805,8 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
 	BuildSharedProps(withScan, &rel.Shared)
-	bindingProps := withScan.BindingProps
+	boundExpr := b.mem.Metadata().WithBinding(withScan.With).(RelExpr)
+	bindingProps := boundExpr.Relational()
 
 	// Side Effects
 	// ------------
@@ -791,7 +842,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildWithScan(withScan, rel)
+		b.sb.buildWithScan(withScan, rel, bindingProps)
 	}
 }
 
@@ -878,6 +929,12 @@ func (b *logicalPropsBuilder) buildControlJobsProps(ctl *ControlJobsExpr, rel *p
 	b.buildBasicProps(ctl, opt.ColList{}, rel)
 }
 
+func (b *logicalPropsBuilder) buildControlSchedulesProps(
+	ctl *ControlSchedulesExpr, rel *props.Relational,
+) {
+	b.buildBasicProps(ctl, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildCancelQueriesProps(
 	cancel *CancelQueriesExpr, rel *props.Relational,
 ) {
@@ -910,7 +967,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 	// ------------
 	// Negative limits can trigger a runtime error.
 	if constLimit < 0 || !haveConstLimit {
-		rel.CanHaveSideEffects = true
+		rel.VolatilitySet.AddImmutable()
 	}
 
 	// Output Columns
@@ -1354,8 +1411,8 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 //
 // Note that shared is an "input-output" argument, and should be assumed
 // to be partially filled in already. Boolean fields such as HasPlaceholder,
-// CanHaveSideEffects and HasCorrelatedSubquery should never be reset to false
-// once set to true.
+// HasCorrelatedSubquery should never be reset to false once set to true;
+// VolatilitySet should never be re-initialized.
 func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 	switch t := e.(type) {
 	case *VariableExpr:
@@ -1370,6 +1427,9 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 	case *DivExpr:
 		// Division by zero error is possible, unless the right-hand side is a
 		// non-zero constant.
+		//
+		// TODO(radu): this case should be removed (Div should be covered by the
+		// binary operator logic below).
 		var nonZero bool
 		if c, ok := t.Right.(*ConstExpr); ok {
 			switch v := c.Value.(type) {
@@ -1382,7 +1442,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			}
 		}
 		if !nonZero {
-			shared.CanHaveSideEffects = true
+			shared.VolatilitySet.AddImmutable()
 		}
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
@@ -1395,15 +1455,47 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 		}
 
 	case *FunctionExpr:
-		if t.Properties.Impure {
-			// Impure functions can return different value on each call.
-			shared.CanHaveSideEffects = true
+		shared.VolatilitySet.Add(t.Overload.Volatility)
+
+	case *CastExpr:
+		from, to := t.Input.DataType(), t.Typ
+		volatility, ok := tree.LookupCastVolatility(from, to)
+		if !ok {
+			panic(errors.AssertionFailedf("no volatility for cast %s::%s", from, to))
 		}
+		shared.VolatilitySet.Add(volatility)
 
 	default:
-		if opt.IsMutationOp(e) {
-			shared.CanHaveSideEffects = true
+		if opt.IsUnaryOp(e) {
+			inputType := e.Child(0).(opt.ScalarExpr).DataType()
+			o, ok := FindUnaryOverload(e.Op(), inputType)
+			if !ok {
+				panic(errors.AssertionFailedf("unary overload not found (%s, %s)", e.Op(), inputType))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsComparisonOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(1).(opt.ScalarExpr).DataType()
+			o, _, _, ok := FindComparisonOverload(e.Op(), leftType, rightType)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"comparison overload not found (%s, %s, %s)", e.Op(), leftType, rightType,
+				))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsBinaryOp(e) {
+			leftType := e.Child(0).(opt.ScalarExpr).DataType()
+			rightType := e.Child(1).(opt.ScalarExpr).DataType()
+			o, ok := FindBinaryOverload(e.Op(), leftType, rightType)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"binary overload not found (%s, %s, %s)", e.Op(), leftType, rightType,
+				))
+			}
+			shared.VolatilitySet.Add(o.Volatility)
+		} else if opt.IsMutationOp(e) {
 			shared.CanMutate = true
+			shared.VolatilitySet.AddVolatile()
 		}
 	}
 
@@ -1426,9 +1518,7 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared) {
 			if cached.HasPlaceholder {
 				shared.HasPlaceholder = true
 			}
-			if cached.CanHaveSideEffects {
-				shared.CanHaveSideEffects = true
-			}
+			shared.VolatilitySet.UnionWith(cached.VolatilitySet)
 			if cached.CanMutate {
 				shared.CanMutate = true
 			}
@@ -1479,7 +1569,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	// Make now and annotate the metadata table with it for next time.
 	var allCols opt.ColSet
 	tab := md.Table(tabID)
-	for i := 0; i < tab.DeletableColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		allCols.Add(tabID.ColumnID(i))
 	}
 
@@ -1490,6 +1580,11 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 
 		if index.IsInverted() {
 			// Skip inverted indexes for now.
+			continue
+		}
+		if tab.IsVirtualTable() && i == cat.PrimaryIndex {
+			// Don't advertise any functional dependencies for virtual table primary
+			// keys, since they are composed of a fake, unusable column.
 			continue
 		}
 
@@ -1627,8 +1722,8 @@ func (b *logicalPropsBuilder) updateCardinalityFromConstraint(
 		return
 	}
 
-	count := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
-	if count != 0 && count < math.MaxUint32 {
+	count, ok := c.CalculateMaxResults(b.evalCtx, cols, rel.NotNullCols)
+	if ok && count < math.MaxUint32 {
 		rel.Cardinality = rel.Cardinality.Limit(uint32(count))
 	}
 }
@@ -1658,11 +1753,9 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 	return relational
 }
 
-// ensureGeoLookupJoinInputProps lazily populates the relational properties
+// ensureInvertedJoinInputProps lazily populates the relational properties
 // that apply to the lookup side of the join, as if it were a Scan operator.
-func ensureGeoLookupJoinInputProps(
-	join *GeoLookupJoinExpr, sb *statisticsBuilder,
-) *props.Relational {
+func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
 		md := join.Memo().Metadata()
@@ -1726,7 +1819,7 @@ func ensureInputPropsForIndex(
 	}
 }
 
-// tableNotNullCols returns the set of not-NULL columns from the given table.
+// tableNotNullCols returns the set of not-NULL non-mutation columns from the given table.
 func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	cs := opt.ColSet{}
 	tab := md.Table(tabID)
@@ -1735,7 +1828,7 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 	// columns can be null during backfill.
 	for i := 0; i < tab.ColumnCount(); i++ {
 		// Non-null mutation columns can be null during backfill.
-		if !tab.Column(i).IsNullable() {
+		if !cat.IsMutationColumn(tab, i) && !tab.Column(i).IsNullable() {
 			cs.Add(tabID.ColumnID(i))
 		}
 	}
@@ -1800,16 +1893,16 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 
-	case *GeoLookupJoinExpr:
+	case *InvertedJoinExpr:
 		h.leftProps = joinExpr.Child(0).(RelExpr).Relational()
-		ensureGeoLookupJoinInputProps(join, &b.sb)
+		ensureInvertedJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
-		// Geospatial lookup join always has a filter condition on the index keys.
+		// Inverted join always has a filter condition on the index keys.
 		h.filterIsTrue = false
 		h.filterIsFalse = h.filters.IsFalse()
 
@@ -1965,10 +2058,16 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
 
 		case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-			rel.FuncDeps.MakeLeftOuter(h.rightProps.OutputCols, notNullInputCols)
+			rel.FuncDeps.MakeLeftOuter(
+				&h.leftProps.FuncDeps, &h.filtersFD,
+				h.leftProps.OutputCols, h.rightProps.OutputCols, notNullInputCols,
+			)
 
 		case opt.RightJoinOp:
-			rel.FuncDeps.MakeLeftOuter(h.leftProps.OutputCols, notNullInputCols)
+			rel.FuncDeps.MakeLeftOuter(
+				&h.rightProps.FuncDeps, &h.filtersFD,
+				h.rightProps.OutputCols, h.leftProps.OutputCols, notNullInputCols,
+			)
 
 		case opt.FullJoinOp:
 			rel.FuncDeps.MakeFullOuter(h.leftProps.OutputCols, h.rightProps.OutputCols, notNullInputCols)
@@ -2008,9 +2107,34 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		}
 	}
 
-	// Outer joins return minimum number of rows, depending on type.
+	// Adjust cardinality to account for outer joins as well as join multiplicity.
+	joinWithMult, isJoinWithMult := h.join.(joinWithMultiplicity)
 	switch h.joinType {
+	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		if isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows(h.joinType) && innerJoinCard.Max > left.Max {
+				// If left rows aren't duplicated, the max join cardinality is at most the
+				// max left cardinality.
+				innerJoinCard.Max = left.Max
+			}
+			if multiplicity.JoinDoesNotDuplicateRightRows(h.joinType) && innerJoinCard.Max > right.Max {
+				// If right rows aren't duplicated, the max join cardinality is at most
+				// the max right cardinality.
+				innerJoinCard.Max = right.Max
+			}
+		}
+		return innerJoinCard
+
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		if isJoinWithMult {
+			// If left rows aren't duplicated, the max join cardinality is at most the
+			// max left cardinality.
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows(h.joinType) && innerJoinCard.Max > left.Max {
+				innerJoinCard.Max = left.Max
+			}
+		}
 		return innerJoinCard.AtLeast(left)
 
 	case opt.RightJoinOp:
@@ -2031,13 +2155,94 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		// We could get left.Max + right.Max rows (if the filter doesn't match
 		// anything). We use Add here because it handles overflow.
 		c.Max = left.Add(right).Max
+
+		if isJoinWithMult {
+			multiplicity := joinWithMult.getMultiplicity()
+			if multiplicity.JoinDoesNotDuplicateLeftRows(h.joinType) &&
+				multiplicity.JoinDoesNotDuplicateRightRows(h.joinType) && innerJoinCard.Max > c.Max {
+				// If neither left rows nor right rows are duplicated, the join max
+				// cardinality is at most the sum of the left and right maxes.
+				innerJoinCard.Max = c.Max
+			}
+		}
 		return innerJoinCard.AtLeast(c)
 
 	default:
-		return innerJoinCard
+		panic(errors.AssertionFailedf("unexpected operator: %v", h.joinType))
 	}
 }
 
 func (b *logicalPropsBuilder) buildFakeRelProps(fake *FakeRelExpr, rel *props.Relational) {
 	*rel = *fake.Props
+}
+
+// WithUses returns the WithUsesMap for the given expression.
+func WithUses(r opt.Expr) props.WithUsesMap {
+	switch e := r.(type) {
+	case RelExpr:
+		relProps := e.Relational()
+
+		// Lazily calculate and store the WithUses value.
+		if !relProps.IsAvailable(props.WithUses) {
+			relProps.Shared.Rule.WithUses = deriveWithUses(r)
+			relProps.SetAvailable(props.WithUses)
+		}
+		return relProps.Shared.Rule.WithUses
+
+	case ScalarPropsExpr:
+		scalarProps := e.ScalarProps()
+
+		// Lazily calculate and store the WithUses value.
+		if !scalarProps.IsAvailable(props.WithUses) {
+			scalarProps.Shared.Rule.WithUses = deriveWithUses(r)
+			scalarProps.SetAvailable(props.WithUses)
+		}
+		return scalarProps.Shared.Rule.WithUses
+
+	default:
+		return deriveWithUses(r)
+	}
+}
+
+// deriveWithUses collects information about WithScans in the expression.
+func deriveWithUses(r opt.Expr) props.WithUsesMap {
+	// We don't allow the information to escape the scope of the WITH itself, so
+	// we exclude that ID from the results.
+	var excludedID opt.WithID
+
+	switch e := r.(type) {
+	case *WithScanExpr:
+		info := props.WithUseInfo{
+			Count:    1,
+			UsedCols: e.InCols.ToSet(),
+		}
+		return props.WithUsesMap{e.With: info}
+
+	case *WithExpr:
+		excludedID = e.ID
+
+	default:
+		if opt.IsMutationOp(e) {
+			// Note: this can still be 0.
+			excludedID = e.Private().(*MutationPrivate).WithID
+		}
+	}
+
+	var result props.WithUsesMap
+	for i, n := 0, r.ChildCount(); i < n; i++ {
+		childUses := WithUses(r.Child(i))
+		for id, info := range childUses {
+			if id == excludedID {
+				continue
+			}
+			if result == nil {
+				result = make(props.WithUsesMap, len(childUses))
+			}
+			existing := result[id]
+			existing.Count += info.Count
+			existing.UsedCols.UnionWith(info.UsedCols)
+			result[id] = existing
+		}
+	}
+	return result
 }

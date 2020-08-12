@@ -149,7 +149,7 @@ func (w *bulkingest) Tables() []workload.Table {
 					a = ab % w.aCount
 				}
 
-				cb.Reset(bulkingestTypes, w.cCount)
+				cb.Reset(bulkingestTypes, w.cCount, coldata.StandardColumnFactory)
 				aCol := cb.ColVec(0).Int64()
 				bCol := cb.ColVec(1).Int64()
 				cCol := cb.ColVec(2).Int64()
@@ -175,7 +175,9 @@ func (w *bulkingest) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *bulkingest) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (w *bulkingest) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

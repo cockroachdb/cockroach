@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,11 +38,11 @@ type Config struct {
 	Settings           *cluster.Settings
 	DB                 *kv.DB
 	Clock              *hlc.Clock
-	Gossip             gossip.DeprecatedGossip
+	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
 	Sink               EventBufferWriter
-	LeaseMgr           *sql.LeaseManager
+	LeaseMgr           *lease.Manager
 	Metrics            *Metrics
 	MM                 *mon.BytesMonitor
 	WithDiff           bool

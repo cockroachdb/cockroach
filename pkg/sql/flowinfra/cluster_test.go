@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +51,7 @@ func TestClusterFlow(t *testing.T) {
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	tc := serverutils.StartTestCluster(t, 3, args)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	sumDigitsFn := func(row int) tree.Datum {
 		sum := 0
@@ -65,7 +68,7 @@ func TestClusterFlow(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sumDigitsFn, sqlutils.RowEnglishFn))
 
 	kvDB := tc.Server(0).DB()
-	desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 	makeIndexSpan := func(start, end int) execinfrapb.TableReaderSpan {
 		var span roachpb.Span
 		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.Indexes[0].ID))
@@ -99,19 +102,19 @@ func TestClusterFlow(t *testing.T) {
 	leafInputState := txn.GetLeafTxnInputState(ctx)
 
 	tr1 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(0, 8)},
 	}
 
 	tr2 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(8, 12)},
 	}
 
 	tr3 := execinfrapb.TableReaderSpec{
-		Table:    *desc,
+		Table:    *desc.TableDesc(),
 		IndexIdx: 1,
 		Spans:    []execinfrapb.TableReaderSpan{makeIndexSpan(12, 100)},
 	}
@@ -195,7 +198,7 @@ func TestClusterFlow(t *testing.T) {
 						},
 						ColumnTypes: sqlbase.TwoIntCols,
 					}},
-					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc}},
+					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc()}},
 					Post: execinfrapb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{2},
@@ -285,7 +288,7 @@ func TestClusterFlow(t *testing.T) {
 }
 
 // ignoreMisplannedRanges takes a slice of metadata and returns the entries that
-// are not about range info from mis-planned ranges.
+// are not about range info from misplanned ranges.
 func ignoreMisplannedRanges(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
 	res := make([]execinfrapb.ProducerMetadata, 0)
 	for _, m := range metas {
@@ -326,7 +329,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Set up the following network - a simplification of the one described in
 	// #17097 (the numbers on the streams are the StreamIDs in the spec below):
@@ -406,7 +409,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		RightOrdering: execinfrapb.Ordering{
 			Columns: []execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 		},
-		Type: sqlbase.InnerJoin,
+		Type: descpb.InnerJoin,
 	}
 
 	now := tc.Server(0).Clock().Now()
@@ -418,9 +421,9 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		0, // maxOffset
 	)
 	txn := kv.NewTxnFromProto(
-		context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
+		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 		now, kv.RootTxn, &txnProto)
-	leafInputState := txn.GetLeafTxnInputState(context.TODO())
+	leafInputState := txn.GetLeafTxnInputState(context.Background())
 
 	req := execinfrapb.SetupFlowRequest{
 		Version:           execinfra.Version,
@@ -505,7 +508,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stream, err := execinfrapb.NewDistSQLClient(conn).RunSyncFlow(context.TODO())
+	stream, err := execinfrapb.NewDistSQLClient(conn).RunSyncFlow(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +528,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			}
 			t.Fatal(err)
 		}
-		err = decoder.AddMessage(context.TODO(), msg)
+		err = decoder.AddMessage(context.Background(), msg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,8 +562,8 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-					EvalKnobs: storagebase.BatchEvalTestingKnobs{
-						TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 							scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
 							if !ok {
 								return nil
@@ -581,7 +584,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	db := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db, "t",
@@ -633,7 +636,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		if vectorize {
-			t.Skip("skipped because we can't yet vectorize queries using DECIMALs")
+			skip.IgnoreLint(t, "skipped because we can't yet vectorize queries using DECIMALs")
 		}
 		// We're going to use the first node as the gateway and expect everything to
 		// be planned remotely.
@@ -653,7 +656,8 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		require.NoError(t, err)
 
 		// Query again just in case the previous query executed on the gateway
-		// because the leaseholder cache wasn't populated and we fooled ourselves.
+		// because the we didn't have a leaseholder in the cache and we fooled
+		// ourselves.
 		_, err = db.Exec("SELECT cluster_logical_timestamp() FROM t")
 		require.NoError(t, err)
 	})
@@ -690,7 +694,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 								b.Fatal(err)
 							}
 						}
-						msg := se.FormMessage(context.TODO())
+						msg := se.FormMessage(context.Background())
 						valSpecs[i] = execinfrapb.ValuesCoreSpec{
 							Columns:  msg.Typing,
 							RawBytes: [][]byte{msg.Data.RawBytes},
@@ -733,9 +737,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						0, // maxOffset
 					)
 					txn := kv.NewTxnFromProto(
-						context.TODO(), tc.Server(0).DB(), tc.Server(0).NodeID(),
+						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 						now, kv.RootTxn, &txnProto)
-					leafInputState := txn.GetLeafTxnInputState(context.TODO())
+					leafInputState := txn.GetLeafTxnInputState(context.Background())
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
 							Version:           execinfra.Version,
@@ -803,13 +807,13 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 
 						for i := 1; i < numNodes; i++ {
-							if resp, err := clients[i].SetupFlow(context.TODO(), &reqs[i]); err != nil {
+							if resp, err := clients[i].SetupFlow(context.Background(), &reqs[i]); err != nil {
 								b.Fatal(err)
 							} else if resp.Error != nil {
 								b.Fatal(resp.Error)
 							}
 						}
-						stream, err := clients[0].RunSyncFlow(context.TODO())
+						stream, err := clients[0].RunSyncFlow(context.Background())
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -829,7 +833,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 								}
 								b.Fatal(err)
 							}
-							err = decoder.AddMessage(context.TODO(), msg)
+							err = decoder.AddMessage(context.Background(), msg)
 							if err != nil {
 								b.Fatal(err)
 							}

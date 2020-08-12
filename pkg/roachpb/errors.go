@@ -11,7 +11,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -342,21 +341,6 @@ func (e *LeaseRejectedError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &LeaseRejectedError{}
 
-// NewSendError creates a SendError.
-func NewSendError(msg string) *SendError {
-	return &SendError{Message: msg}
-}
-
-func (s SendError) Error() string {
-	return s.message(nil)
-}
-
-func (s *SendError) message(_ *Error) string {
-	return "failed to send RPC: " + s.Message
-}
-
-var _ ErrorDetailInterface = &SendError{}
-
 // NewRangeNotFoundError initializes a new RangeNotFoundError for the given RangeID and, optionally,
 // a StoreID.
 func NewRangeNotFoundError(rangeID RangeID, storeID StoreID) *RangeNotFoundError {
@@ -380,18 +364,47 @@ func (e *RangeNotFoundError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
 
+// IsRangeNotFoundError returns true if err contains a *RangeNotFoundError.
+func IsRangeNotFoundError(err error) bool {
+	return errors.HasType(err, (*RangeNotFoundError)(nil))
+}
+
 // NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-func NewRangeKeyMismatchError(start, end Key, desc *RangeDescriptor) *RangeKeyMismatchError {
-	if desc != nil && !desc.IsInitialized() {
-		// We must never send uninitialized ranges back to the client (nil
-		// is fine) guard against regressions of #6027.
+//
+// desc and lease represent info about the range that the request was
+// erroneously routed to. lease can be nil. If it's not nil but the leaseholder
+// is not part of desc, it is ignored. This allows callers to read the
+// descriptor and lease non-atomically without worrying about incoherence.
+//
+// Note that more range info is commonly added to the error after the error is
+// created.
+func NewRangeKeyMismatchError(
+	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+) *RangeKeyMismatchError {
+	if desc == nil {
+		panic("NewRangeKeyMismatchError with nil descriptor")
+	}
+	if !desc.IsInitialized() {
+		// We must never send uninitialized ranges back to the client guard against
+		// regressions of #6027.
 		panic(fmt.Sprintf("descriptor is not initialized: %+v", desc))
 	}
-	return &RangeKeyMismatchError{
-		RequestStartKey: start,
-		RequestEndKey:   end,
-		MismatchedRange: desc,
+	var l Lease
+	if lease != nil {
+		// We ignore leases that are not part of the descriptor.
+		_, ok := desc.GetReplicaDescriptorByID(lease.Replica.ReplicaID)
+		if ok {
+			l = *lease
+		}
 	}
+	e := &RangeKeyMismatchError{
+		RequestStartKey:           start,
+		RequestEndKey:             end,
+		DeprecatedMismatchedRange: *desc,
+	}
+	// More ranges are sometimes added to rangesInternal later.
+	e.AppendRangeInfo(ctx, *desc, l)
+	return e
 }
 
 func (e *RangeKeyMismatchError) Error() string {
@@ -399,11 +412,45 @@ func (e *RangeKeyMismatchError) Error() string {
 }
 
 func (e *RangeKeyMismatchError) message(_ *Error) string {
-	if e.MismatchedRange != nil {
-		return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s",
-			e.RequestStartKey, e.RequestEndKey, e.MismatchedRange.StartKey, e.MismatchedRange.EndKey)
+	desc := &e.Ranges()[0].Desc
+	return fmt.Sprintf("key range %s-%s outside of bounds of range %s-%s; suggested ranges: %s",
+		e.RequestStartKey, e.RequestEndKey, desc.StartKey, desc.EndKey, e.Ranges())
+}
+
+// Ranges returns the range info for the range that the request was erroneously
+// routed to. It deals with legacy errors coming from 20.1 nodes by returning
+// empty lease for the respective descriptors.
+//
+// At least one RangeInfo is returned.
+func (e *RangeKeyMismatchError) Ranges() []RangeInfo {
+	if len(e.rangesInternal) != 0 {
+		return e.rangesInternal
 	}
-	return fmt.Sprintf("key range %s-%s could not be located within a range on store", e.RequestStartKey, e.RequestEndKey)
+	// Fallback for 20.1 errors. Remove in 21.1.
+	ranges := []RangeInfo{{Desc: e.DeprecatedMismatchedRange}}
+	if e.DeprecatedSuggestedRange != nil {
+		ranges = append(ranges, RangeInfo{Desc: *e.DeprecatedSuggestedRange})
+	}
+	return ranges
+}
+
+// AppendRangeInfo appends info about one range to the set returned to the
+// kvclient.
+//
+// l can be empty. Otherwise, the leaseholder is asserted to be a replica in
+// desc.
+func (e *RangeKeyMismatchError) AppendRangeInfo(
+	ctx context.Context, desc RangeDescriptor, l Lease,
+) {
+	if !l.Empty() {
+		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
+			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
+		}
+	}
+	e.rangesInternal = append(e.rangesInternal, RangeInfo{
+		Desc:  desc,
+		Lease: l,
+	})
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
@@ -412,6 +459,12 @@ var _ ErrorDetailInterface = &RangeKeyMismatchError{}
 // an explanatory message.
 func NewAmbiguousResultError(msg string) *AmbiguousResultError {
 	return &AmbiguousResultError{Message: msg}
+}
+
+// NewAmbiguousResultErrorf initializes a new AmbiguousResultError with
+// an explanatory format and set of arguments.
+func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResultError {
+	return NewAmbiguousResultError(fmt.Sprintf(format, args...))
 }
 
 func (e *AmbiguousResultError) Error() string {
@@ -574,7 +627,7 @@ func (e *WriteIntentError) Error() string {
 }
 
 func (e *WriteIntentError) message(_ *Error) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	buf.WriteString("conflicting intents on ")
 
 	// If we have a lot of intents, we only want to show the first and the last.
@@ -882,8 +935,3 @@ func (e *IndeterminateCommitError) message(pErr *Error) string {
 }
 
 var _ ErrorDetailInterface = &IndeterminateCommitError{}
-
-// IsRangeNotFoundError returns true if err contains a *RangeNotFoundError.
-func IsRangeNotFoundError(err error) bool {
-	return errors.HasType(err, (*RangeNotFoundError)(nil))
-}

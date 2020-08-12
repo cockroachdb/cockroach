@@ -22,8 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var (
@@ -154,12 +155,12 @@ func runMetaTest(run testRun) {
 // TestRocksPebbleEquivalence runs the MVCC Metamorphic test suite, and checks
 // for matching outputs by the test suite between RocksDB and Pebble.
 func TestRocksPebbleEquivalence(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
-	if util.RaceEnabled {
-		// This test times out with the race detector enabled.
-		return
-	}
+	// This test times out with the race detector enabled.
+	skip.UnderRace(t)
 
 	// Have one fixed seed, one user-specified seed, and one random seed.
 	seeds := []int64{123, *seed, rand.Int63()}
@@ -187,12 +188,12 @@ func TestRocksPebbleEquivalence(t *testing.T) {
 // enabled, and ensures that the output remains the same across different
 // engine sequences with restarts in between.
 func TestRocksPebbleRestarts(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// This test times out with the race detector enabled.
+	skip.UnderRace(t)
+
 	ctx := context.Background()
-	if util.RaceEnabled {
-		// This test times out with the race detector enabled.
-		return
-	}
 
 	// Have one fixed seed, one user-specified seed, and one random seed.
 	seeds := []int64{123, *seed, rand.Int63()}
@@ -219,7 +220,9 @@ func TestRocksPebbleRestarts(t *testing.T) {
 // TestRocksPebbleCheck checks whether the output file specified with --check has
 // matching behavior across rocks/pebble.
 func TestRocksPebbleCheck(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	if *check != "" {

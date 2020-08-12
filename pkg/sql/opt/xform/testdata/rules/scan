@@ -57,10 +57,10 @@ memo (optimized, ~3KB, required=[presentation: k:1,f:3] [ordering: -1])
  ├── G1: (limit G2 G3 ordering=-1) (scan a,rev,cols=(1,3),lim=10(rev))
  │    ├── [presentation: k:1,f:3] [ordering: -1]
  │    │    ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
- │    │    └── cost: 11.05
+ │    │    └── cost: 11.04
  │    └── []
  │         ├── best: (scan a,rev,cols=(1,3),lim=10(rev))
- │         └── cost: 11.05
+ │         └── cost: 11.04
  ├── G2: (scan a,cols=(1,3)) (scan a@s_idx,cols=(1,3))
  │    ├── [ordering: -1] [limit hint: 10.00]
  │    │    ├── best: (scan a,rev,cols=(1,3))
@@ -348,9 +348,9 @@ CREATE TABLE abc (
 memo
 SELECT d FROM abc ORDER BY lower(d)
 ----
-memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +5])
+memo (optimized, ~3KB, required=[presentation: d:4] [ordering: +6])
  ├── G1: (project G2 G3 d)
- │    ├── [presentation: d:4] [ordering: +5]
+ │    ├── [presentation: d:4] [ordering: +6]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1289.36
  │    └── []
@@ -492,7 +492,7 @@ SELECT s, i, f FROM a ORDER BY s FOR UPDATE
 scan a@s_idx
  ├── columns: s:4 i:2 f:3
  ├── locking: for-update
- ├── side-effects
+ ├── volatile
  └── ordering: +4
 
 # Collated strings are treated properly.
@@ -583,10 +583,10 @@ opt
 SELECT sum(total) FROM "orders" WHERE seq_num >= 100 AND seq_num < 200
 ----
 scalar-group-by
- ├── columns: sum:5
+ ├── columns: sum:6
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(5)
+ ├── fd: ()-->(6)
  ├── scan orders@orders_by_seq_num
  │    ├── columns: total:3!null seq_num:4!null
  │    └── constraint: /1/4/2
@@ -594,7 +594,7 @@ scalar-group-by
  │         ├── [/'us-east1'/100 - /'us-east1'/199]
  │         └── [/'us-west1'/100 - /'us-west1'/199]
  └── aggregations
-      └── sum [as=sum:5, outer=(3)]
+      └── sum [as=sum:6, outer=(3)]
            └── total:3
 
 exec-ddl
@@ -711,3 +711,26 @@ SELECT * FROM check_constraint_validity WHERE a > 6
 scan check_constraint_validity@secondary
  ├── columns: a:1!null
  └── constraint: /1/2: [/7 - /19]
+
+# Test that we can constrain indexes using the results of now().
+exec-ddl
+CREATE TABLE with_time_index (k INT PRIMARY KEY, time TIMESTAMP, INDEX(time))
+----
+
+opt
+SELECT * FROM with_time_index WHERE time > now() - INTERVAL '1 hour'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 12:00:00.000001' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)
+
+opt
+SELECT * FROM with_time_index WHERE time >= 'today'
+----
+scan with_time_index@secondary
+ ├── columns: k:1!null time:2!null
+ ├── constraint: /2/1: [/'2017-05-10 00:00:00' - ]
+ ├── key: (1)
+ └── fd: (1)-->(2)

@@ -69,7 +69,7 @@ func newPartiallyOrderedDistinct(
 	)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
-		distinct: distinct.(resettableOperator),
+		distinct: distinct.(ResettableOperator),
 	}, nil
 }
 
@@ -79,7 +79,7 @@ func newPartiallyOrderedDistinct(
 // (where "chunk" is all tuples that are equal on the ordered columns).
 type partiallyOrderedDistinct struct {
 	input    *chunkerOperator
-	distinct resettableOperator
+	distinct ResettableOperator
 }
 
 var _ colexecbase.Operator = &partiallyOrderedDistinct{}
@@ -159,7 +159,7 @@ type chunkerOperator struct {
 	windowedBatch coldata.Batch
 }
 
-var _ resettableOperator = &chunkerOperator{}
+var _ ResettableOperator = &chunkerOperator{}
 
 func (c *chunkerOperator) ChildCount(bool) int {
 	return 1

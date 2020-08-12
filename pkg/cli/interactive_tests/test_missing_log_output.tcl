@@ -8,12 +8,10 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-start_test "Check that a server encountering a fatal error when not logging to stderr shows the fatal error."
+start_test "Check that a server encountering a fatal error when not logging to stderr exits with the right code."
 send "$argv start-single-node -s=path=logs/db --insecure\r"
 eexpect "CockroachDB node starting"
 system "$argv sql --insecure -e \"select crdb_internal.force_log_fatal('helloworld')\" || true"
-eexpect "\r\nF"
-eexpect "helloworld"
 eexpect ":/# "
 send "echo \$?\r"
 eexpect "255"
@@ -36,7 +34,7 @@ eexpect ":/# "
 # is only reported on the logger which is writing first after stderr
 # is has been broken, and that may be the secondary logger.
 send "tail -F `find logs/db/logs -type l`\r"
-eexpect "log: exiting because of error: write /dev/stderr: broken pipe"
+eexpect "error: write /dev/stderr: broken pipe"
 interrupt
 eexpect ":/# "
 end_test
@@ -90,16 +88,19 @@ eexpect "CockroachDB node starting"
 
 system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
 # Check the panic is reported on the server's stderr
+eexpect "a SQL panic has occurred"
 eexpect "panic: helloworld"
-eexpect "panic while executing"
-eexpect "goroutine"
+eexpect "stack trace"
 eexpect ":/# "
 # Check the panic is reported on the server log file
 send "cat logs/db/logs/cockroach.log\r"
 eexpect "a SQL panic has occurred"
 eexpect "helloworld"
 eexpect "a panic has occurred"
-eexpect "panic while executing"
+eexpect ":/# "
+send "cat logs/db/logs/cockroach-stderr.log\r"
+eexpect "panic"
+eexpect "helloworld"
 eexpect "goroutine"
 eexpect ":/# "
 
@@ -115,7 +116,7 @@ start_test "Test that quit does not show INFO by default with --logtostderr"
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
 send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[WEF\]\[0-9\]+|^node is draining'\r"
-eexpect "marker\r\nok"
+eexpect "marker\r\nCommand \"quit\" is deprecated"
 eexpect ":/# "
 end_test
 

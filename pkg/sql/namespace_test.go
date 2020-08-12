@@ -15,15 +15,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // This test creates table/database descriptors that have entries in the
@@ -32,10 +35,11 @@ import (
 // cluster version has not been finalized yet.
 func TestNamespaceTableSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 	codec := keys.SystemSQLCodec
 
 	// IDs to map (parentID, name) to. Actual ID value is irrelevant to the test.
@@ -98,7 +102,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 
 	txn := kvDB.NewTxn(ctx, "lookup-test-db-id")
-	found, dbID, err := sqlbase.LookupDatabaseID(ctx, txn, codec, "test")
+	found, dbID, err := catalogkv.LookupDatabaseID(ctx, txn, codec, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,21 +130,21 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	if _, err := kvDB.Inc(ctx, codec.DescIDSequenceKey(), 1); err != nil {
 		t.Fatal(err)
 	}
-	mKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(idCounter))
+	mKey := sqlbase.MakeDescMetadataKey(codec, descpb.ID(idCounter))
 	// Fill the dummy descriptor with garbage.
-	desc := sql.InitTableDescriptor(
-		sqlbase.ID(idCounter),
+	desc := sqlbase.InitTableDescriptor(
+		descpb.ID(idCounter),
 		dbID,
 		keys.PublicSchemaID,
 		"rel",
 		hlc.Timestamp{},
-		&sqlbase.PrivilegeDescriptor{},
-		false,
+		&descpb.PrivilegeDescriptor{},
+		tree.PersistencePermanent,
 	)
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.Put(ctx, mKey, sqlbase.WrapDescriptor(&desc)); err != nil {
+	if err := kvDB.Put(ctx, mKey, desc.DescriptorProto()); err != nil {
 		t.Fatal(err)
 	}
 

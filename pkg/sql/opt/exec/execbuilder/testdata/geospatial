@@ -1,8 +1,13 @@
+# This logic test fails in the 3node-tenant configuration because the keys are
+# prefixed with the tenant ID if run by a tenant:
+# https://github.com/cockroachdb/cockroach/issues/49582
+# LogicTest: !3node-tenant
+
 statement ok
 CREATE TABLE b(
   a int primary key,
   geog geography(geometry, 4326),
-  geom geometry(point, 4326),
+  geom geometry(point),
   FAMILY (a, geog, geom)
 )
 
@@ -10,7 +15,7 @@ statement ok
 CREATE TABLE c(
   a int primary key,
   geog geography(geometry, 4326),
-  geom geometry(point, 4326),
+  geom geometry(point),
   FAMILY (a, geog, geom),
   INVERTED INDEX (geog),
   INVERTED INDEX (geom)
@@ -57,3 +62,20 @@ InitPut /Table/53/2/1153290940513779712/4/0 -> /BYTES/
 InitPut /Table/53/2/1154047404446580736/4/0 -> /BYTES/
 InitPut /Table/53/2/1154328879490400256/4/0 -> /BYTES/
 InitPut /Table/53/3/1152921510042997845/4/0 -> /BYTES/
+
+statement ok
+CREATE TABLE ltable(
+  k int primary key,
+  geom geometry
+)
+
+statement ok
+CREATE TABLE rtable(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+statement ok
+SELECT url FROM [EXPLAIN (DISTSQL)
+SELECT ltable.k, rtable.k FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom, rtable.geom)]

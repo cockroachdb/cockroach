@@ -25,7 +25,8 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *tree.EvalContext) (tree.D
 	case types.ArrayFamily, types.CollatedStringFamily:
 		return parseAsTyp(evalCtx, t, s)
 	default:
-		return tree.ParseAndRequireString(t, s, evalCtx)
+		res, _, err := tree.ParseAndRequireString(t, s, evalCtx)
+		return res, err
 	}
 }
 
@@ -50,7 +51,8 @@ func parseAsTyp(evalCtx *tree.EvalContext, typ *types.T, s string) (tree.Datum, 
 	if err != nil {
 		return nil, err
 	}
-	typedExpr, err := tree.TypeCheck(expr, nil, typ)
+	semaCtx := tree.MakeSemaContext()
+	typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, &semaCtx, typ)
 	if err != nil {
 		return nil, err
 	}

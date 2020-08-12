@@ -44,11 +44,11 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1]
 ----
 false
 
-# Partial scan with filter - distribute.
+# Partial scan with filter - don't distribute.
 query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM kv WHERE k>1 AND v=1]
 ----
-true
+false
 
 # Sort - distribute.
 query B
@@ -117,8 +117,8 @@ SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND c%2=0]
 ----
 false
 
-# Index join with filter on index scan - distribute.
+# Index join with filter on index scan - don't distribute.
 query B
 SELECT automatic FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
 ----
-true
+false

@@ -11,12 +11,13 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query TTT
 EXECUTE change_index
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        ab@primary
-·     spans        FULL SCAN
-·     filter       b = 10
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b = 10
+ └── scan  ·             ·
+·          table         ab@primary
+·          spans         FULL SCAN
 
 statement ok
 CREATE INDEX bindex ON ab (b)
@@ -24,11 +25,11 @@ CREATE INDEX bindex ON ab (b)
 query TTT
 EXECUTE change_index
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        ab@bindex
-·     spans        /10-/11
+·     distribution  full
+·     vectorized    true
+scan  ·             ·
+·     table         ab@bindex
+·     spans         /10-/11
 
 statement ok
 DROP INDEX bindex
@@ -36,12 +37,13 @@ DROP INDEX bindex
 query TTT
 EXECUTE change_index
 ----
-·     distributed  true
-·     vectorized   true
-scan  ·            ·
-·     table        ab@primary
-·     spans        FULL SCAN
-·     filter       b = 10
+·          distribution  full
+·          vectorized    true
+filter     ·             ·
+ │         filter        b = 10
+ └── scan  ·             ·
+·          table         ab@primary
+·          spans         FULL SCAN
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
 statement ok
@@ -53,9 +55,9 @@ PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 query TTT
 EXECUTE change_stats
 ----
-·           distributed         true
+·           distribution        full
 ·           vectorized          true
-merge-join  ·                   ·
+merge join  ·                   ·
  │          type                inner
  │          equality            (a) = (c)
  │          left cols are key   ·
@@ -77,9 +79,9 @@ CREATE STATISTICS s FROM ab
 query TTT retry
 EXECUTE change_stats
 ----
-·            distributed            true
+·            distribution           full
 ·            vectorized             true
-lookup-join  ·                      ·
+lookup join  ·                      ·
  │           table                  cd@primary
  │           type                   inner
  │           equality               (a) = (c)

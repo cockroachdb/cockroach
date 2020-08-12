@@ -27,7 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -168,8 +171,9 @@ func testSchemaChangeMigrations(t *testing.T, testCase migrationTestCase) {
 		signalRevMigrationDone,
 		signalMigrationDone,
 	)
-	defer tc.Stopper().Stop(context.TODO())
-	defer disableGCTTLStrictEnforcement(t, sqlDB)()
+
+	defer tc.Stopper().Stop(context.Background())
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	log.Info(ctx, "waiting for all schema changes to block")
 	<-revMigrationDoneCh
@@ -285,7 +289,7 @@ func setupServerAndStartSchemaChange(
 		return nil
 	})
 	// TODO(pbardea): Remove this magic 53.
-	if _, err := addImmediateGCZoneConfig(sqlDB, sqlbase.ID(53)); err != nil {
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descpb.ID(53)); err != nil {
 		t.Fatal(err)
 	}
 	return runner, sqlDB, tc
@@ -299,9 +303,9 @@ func migrateJobToOldFormat(
 ) error {
 	ctx := context.Background()
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	if schemaChangeType == CreateTable {
-		tableDesc = sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
+		tableDesc = catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "new_table")
 	}
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -345,7 +349,7 @@ func migrateJobToOldFormat(
 	}
 
 	// Update the table descriptor.
-	tableDesc.Lease = &sqlbase.TableDescriptor_SchemaChangeLease{
+	tableDesc.Lease = &descpb.TableDescriptor_SchemaChangeLease{
 		ExpirationTime: timeutil.Now().UnixNano(),
 		NodeID:         roachpb.NodeID(0),
 	}
@@ -356,11 +360,11 @@ func migrateJobToOldFormat(
 
 	// Write the table descriptor back.
 	return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	})
 }
@@ -425,13 +429,13 @@ func migrateGCJobToOldFormat(
 		return nil
 
 	case DropIndex:
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 		if l := len(tableDesc.GCMutations); l != 1 {
 			return errors.AssertionFailedf("expected exactly 1 GCMutation, found %d", l)
 		}
 
 		// Update the table descriptor.
-		tableDesc.Lease = &sqlbase.TableDescriptor_SchemaChangeLease{
+		tableDesc.Lease = &descpb.TableDescriptor_SchemaChangeLease{
 			ExpirationTime: timeutil.Now().UnixNano(),
 			NodeID:         roachpb.NodeID(0),
 		}
@@ -441,11 +445,11 @@ func migrateGCJobToOldFormat(
 
 		// Write the table descriptor back.
 		return kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		})
 	default:
@@ -731,12 +735,12 @@ func verifySchemaChangeJobRan(
 	}
 }
 
-func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []sqlbase.ID {
-	tableID := sqlbase.ID(53)
+func getTableIDsUnderTest(schemaChangeType SchemaChangeType) []descpb.ID {
+	tableID := descpb.ID(53)
 	if schemaChangeType == CreateTable {
-		tableID = sqlbase.ID(54)
+		tableID = descpb.ID(54)
 	}
-	return []sqlbase.ID{tableID}
+	return []descpb.ID{tableID}
 }
 
 // Helpers used to determine valid test cases.
@@ -774,6 +778,7 @@ func hadJobInOldVersion(schemaChangeType SchemaChangeType) bool {
 
 func TestMigrateSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 
 	blockStates := []BlockState{
@@ -859,13 +864,14 @@ func TestMigrateSchemaChanges(t *testing.T) {
 // running job has a GC job created for it.
 func TestGCJobCreated(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLMigrationManager = &sqlmigrations.MigrationManagerTestingKnobs{
 		AlwaysRunJobMigration: true,
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -873,21 +879,21 @@ func TestGCJobCreated(t *testing.T) {
 	if _, err := sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test();`); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	tableDesc.State = sqlbase.TableDescriptor_DROP
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc.State = descpb.TableDescriptor_DROP
 	tableDesc.Version++
 	tableDesc.DropTime = 1
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
-		if err := sqlbase.RemoveObjectNamespaceEntry(
+		if err := catalogkv.RemoveObjectNamespaceEntry(
 			ctx, txn, keys.SystemSQLCodec, tableDesc.ID, tableDesc.ParentID, tableDesc.Name, false, /* kvTrace */
 		); err != nil {
 			return err
 		}
 		return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-			keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+			keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 		)
 	}); err != nil {
 		t.Fatal(err)
@@ -911,6 +917,7 @@ func TestGCJobCreated(t *testing.T) {
 // error. Regression test for #48786.
 func TestMissingMutation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setTestJobsAdoptInterval()()
 	schemaChangeBlocked, descriptorUpdated := make(chan struct{}), make(chan struct{})
 	migratedJob := false
@@ -942,7 +949,7 @@ func TestMissingMutation(t *testing.T) {
 	bg := ctxgroup.WithContext(ctx)
 	// Start a schema change on the table in a separate goroutine.
 	bg.Go(func() error {
-		if _, err := sqlDB.ExecContext(ctx, `ALTER TABLE t.test ADD COLUMN a INT;`); err != nil {
+		if _, err := sqlDB.ExecContext(ctx, `CREATE INDEX ON t.test (v);`); err != nil {
 			cancel()
 			return err
 		}
@@ -952,19 +959,19 @@ func TestMissingMutation(t *testing.T) {
 	<-schemaChangeBlocked
 
 	// Rewrite the job to be a 19.2-style job.
-	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, AddColumn))
+	require.NoError(t, migrateJobToOldFormat(kvDB, registry, schemaChangeJobID, CreateIndex))
 
 	// To get the table descriptor into the (invalid) state we're trying to test,
 	// clear the mutations on the table descriptor.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	tableDesc.Mutations = nil
 	require.NoError(
 		t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(); err != nil {
+			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 				return err
 			}
 			return kvDB.Put(ctx, sqlbase.MakeDescMetadataKey(
-				keys.SystemSQLCodec, tableDesc.GetID()), sqlbase.WrapDescriptor(tableDesc),
+				keys.SystemSQLCodec, tableDesc.GetID()), tableDesc.DescriptorProto(),
 			)
 		}),
 	)

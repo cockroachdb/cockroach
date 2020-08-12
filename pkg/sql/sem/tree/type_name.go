@@ -11,10 +11,14 @@
 package tree
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // TypeName corresponds to the name of a type in a CREATE TYPE statement,
@@ -64,16 +68,6 @@ func (t *TypeName) FQString() string {
 
 func (t *TypeName) objectName() {}
 
-// Basename implements the types.UserDefinedTypeName interface.
-func (t *TypeName) Basename() string {
-	return t.Type()
-}
-
-// FQName implements the types.UserDefinedTypeName interface.
-func (t *TypeName) FQName() string {
-	return t.FQString()
-}
-
 // NewUnqualifiedTypeName returns a new base type name.
 func NewUnqualifiedTypeName(typ Name) *TypeName {
 	return &TypeName{objName{
@@ -81,26 +75,40 @@ func NewUnqualifiedTypeName(typ Name) *TypeName {
 	}}
 }
 
-// MakeTypeNameFromPrefix creates a type name from an unqualified name
-// and a resolved prefix.
-func MakeTypeNameFromPrefix(prefix ObjectNamePrefix, object Name) TypeName {
+// MakeUnqualifiedTypeName returns a new type name.
+func MakeUnqualifiedTypeName(typ Name) TypeName {
 	return TypeName{objName{
-		ObjectNamePrefix: prefix,
-		ObjectName:       object,
+		ObjectName: typ,
+	}}
+}
+
+// MakeNewQualifiedTypeName creates a fully qualified type name.
+func MakeNewQualifiedTypeName(db, schema, typ string) TypeName {
+	return TypeName{objName{
+		ObjectNamePrefix: ObjectNamePrefix{
+			ExplicitCatalog: true,
+			ExplicitSchema:  true,
+			CatalogName:     Name(db),
+			SchemaName:      Name(schema),
+		},
+		ObjectName: Name(typ),
 	}}
 }
 
 // TypeReferenceResolver is the interface that will provide the ability
 // to actually look up type metadata and transform references into
-// *types.T's. In practice, this will probably be implemented by
-// the planner, but for now it is a dummy interface.
+// *types.T's. Implementers of TypeReferenceResolver should also implement
+// descpb.TypeDescriptorResolver is sqlbase.TypeDescriptorInterface is the
+// underlying representation of a user defined type.
 type TypeReferenceResolver interface {
-	// In the future this will take a context.
-	ResolveType(name *UnresolvedObjectName) (*types.T, error)
+	ResolveType(ctx context.Context, name *UnresolvedObjectName) (*types.T, error)
+	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 }
 
 // ResolvableTypeReference represents a type that is possibly unknown
 // until type-checking/type name resolution is performed.
+// N.B. ResolvableTypeReferences in expressions must be formatted with
+// FormatTypeReference instead of SQLString.
 type ResolvableTypeReference interface {
 	SQLString() string
 }
@@ -108,14 +116,17 @@ type ResolvableTypeReference interface {
 var _ ResolvableTypeReference = &UnresolvedObjectName{}
 var _ ResolvableTypeReference = &ArrayTypeReference{}
 var _ ResolvableTypeReference = &types.T{}
+var _ ResolvableTypeReference = &OIDTypeReference{}
 
 // ResolveType converts a ResolvableTypeReference into a *types.T.
-func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*types.T, error) {
+func ResolveType(
+	ctx context.Context, ref ResolvableTypeReference, resolver TypeReferenceResolver,
+) (*types.T, error) {
 	switch t := ref.(type) {
 	case *types.T:
 		return t, nil
 	case *ArrayTypeReference:
-		typ, err := ResolveType(t.ElementType, resolver)
+		typ, err := ResolveType(ctx, t.ElementType, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -126,10 +137,34 @@ func ResolveType(ref ResolvableTypeReference, resolver TypeReferenceResolver) (*
 			// name into a type.
 			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", t)
 		}
-		return resolver.ResolveType(t)
+		return resolver.ResolveType(ctx, t)
+	case *OIDTypeReference:
+		if resolver == nil {
+			return nil, pgerror.Newf(pgcode.UndefinedObject, "type OID %d does not exist", t.OID)
+		}
+		return resolver.ResolveTypeByOID(ctx, t.OID)
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable type reference type %s", t)
 	}
+}
+
+// FormatTypeReference formats a ResolvableTypeReference.
+func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
+	if ctx.HasFlags(fmtStaticallyFormatUserDefinedTypes) {
+		switch t := ref.(type) {
+		case *types.T:
+			if t.UserDefined() {
+				idRef := OIDTypeReference{OID: t.Oid()}
+				ctx.WriteString(idRef.SQLString())
+				return
+			}
+		}
+	}
+	if idRef, ok := ref.(*OIDTypeReference); ok && ctx.indexedTypeFormatter != nil {
+		ctx.indexedTypeFormatter(ctx, idRef)
+		return
+	}
+	ctx.WriteString(ref.SQLString())
 }
 
 // GetStaticallyKnownType possibly promotes a ResolvableTypeReference into a
@@ -149,6 +184,16 @@ func MustBeStaticallyKnownType(ref ResolvableTypeReference) *types.T {
 		return typ
 	}
 	panic(errors.AssertionFailedf("type reference was not a statically known type"))
+}
+
+// OIDTypeReference is a reference to a type directly by its stable ID.
+type OIDTypeReference struct {
+	OID oid.Oid
+}
+
+// SQLString implements the ResolvableTypeReference interface.
+func (node *OIDTypeReference) SQLString() string {
+	return fmt.Sprintf("@%d", node.OID)
 }
 
 // ArrayTypeReference represents an array of possibly unknown type references.
@@ -182,18 +227,61 @@ func IsReferenceSerialType(ref ResolvableTypeReference) bool {
 	return false
 }
 
+// TypeCollectorVisitor is an expression visitor that collects all explicit
+// OID type references in an expression.
+type TypeCollectorVisitor struct {
+	OIDs map[oid.Oid]struct{}
+}
+
+// VisitPre implements the Visitor interface.
+func (v *TypeCollectorVisitor) VisitPre(expr Expr) (bool, Expr) {
+	switch t := expr.(type) {
+	case Datum:
+		if t.ResolvedType().UserDefined() {
+			v.OIDs[t.ResolvedType().Oid()] = struct{}{}
+		}
+	case *IsOfTypeExpr:
+		for _, ref := range t.Types {
+			if idref, ok := ref.(*OIDTypeReference); ok {
+				v.OIDs[idref.OID] = struct{}{}
+			}
+		}
+	case *CastExpr:
+		if idref, ok := t.Type.(*OIDTypeReference); ok {
+			v.OIDs[idref.OID] = struct{}{}
+		}
+	case *AnnotateTypeExpr:
+		if idref, ok := t.Type.(*OIDTypeReference); ok {
+			v.OIDs[idref.OID] = struct{}{}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost implements the Visitor interface.
+func (v *TypeCollectorVisitor) VisitPost(e Expr) Expr {
+	return e
+}
+
 // TestingMapTypeResolver is a fake type resolver for testing purposes.
 type TestingMapTypeResolver struct {
 	typeMap map[string]*types.T
 }
 
 // ResolveType implements the TypeReferenceResolver interface.
-func (dtr *TestingMapTypeResolver) ResolveType(name *UnresolvedObjectName) (*types.T, error) {
+func (dtr *TestingMapTypeResolver) ResolveType(
+	_ context.Context, name *UnresolvedObjectName,
+) (*types.T, error) {
 	typ, ok := dtr.typeMap[name.String()]
 	if !ok {
 		return nil, errors.Newf("type %q does not exist", name)
 	}
 	return typ, nil
+}
+
+// ResolveTypeByOID implements the TypeReferenceResolver interface.
+func (dtr *TestingMapTypeResolver) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
+	return nil, errors.AssertionFailedf("unimplemented")
 }
 
 // MakeTestingMapTypeResolver creates a TestingMapTypeResolver from a map.

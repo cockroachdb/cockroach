@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,6 +45,7 @@ import (
 // transaction has been cleaned up by that point.
 func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var cleanupSeen int64
 	key := roachpb.Key("a")
@@ -52,7 +53,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	s, _, origDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					// We'll eventually expect to see an EndTxn(commit=false)
 					// with the right intents.
 					if args.Req.IsSingleEndTxnRequest() {
@@ -97,7 +98,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	db := kv.NewDB(ambient, tsf, s.Clock())
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 	if err := txn.Put(ctx, key, "val"); err != nil {
 		t.Fatal(err)
@@ -142,6 +143,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 // times a heartbeat loop was started.
 func TestNoDuplicateHeartbeatLoops(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()

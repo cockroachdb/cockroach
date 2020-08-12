@@ -632,24 +632,24 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	txn1Meta := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts10, MinTimestamp: ts10}
 	txn2Meta := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts20, MinTimestamp: ts20}
 	txn3Meta := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts30, MinTimestamp: ts30}
-	txn1Proto := roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
-	txn2Proto := roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
-	txn3Proto := roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
+	txn1Proto := &roachpb.Transaction{TxnMeta: txn1Meta, Status: roachpb.PENDING}
+	txn2Proto := &roachpb.Transaction{TxnMeta: txn2Meta, Status: roachpb.PENDING}
+	txn3Proto := &roachpb.Transaction{TxnMeta: txn3Meta, Status: roachpb.PENDING}
 
 	// Modifications for test 2.
 	txn1MetaT2Pre := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts25, MinTimestamp: ts10}
 	txn1MetaT2Post := enginepb.TxnMeta{ID: txn1, Key: keyA, WriteTimestamp: ts50, MinTimestamp: ts10}
 	txn2MetaT2Post := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts60, MinTimestamp: ts20}
 	txn3MetaT2Post := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts70, MinTimestamp: ts30}
-	txn1ProtoT2 := roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
-	txn2ProtoT2 := roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
-	txn3ProtoT2 := roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
+	txn1ProtoT2 := &roachpb.Transaction{TxnMeta: txn1MetaT2Post, Status: roachpb.COMMITTED}
+	txn2ProtoT2 := &roachpb.Transaction{TxnMeta: txn2MetaT2Post, Status: roachpb.PENDING}
+	txn3ProtoT2 := &roachpb.Transaction{TxnMeta: txn3MetaT2Post, Status: roachpb.PENDING}
 
 	// Modifications for test 3.
 	txn2MetaT3Post := enginepb.TxnMeta{ID: txn2, Key: keyB, WriteTimestamp: ts60, MinTimestamp: ts20}
 	txn3MetaT3Post := enginepb.TxnMeta{ID: txn3, Key: keyC, WriteTimestamp: ts90, MinTimestamp: ts30}
-	txn2ProtoT3 := roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
-	txn3ProtoT3 := roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
+	txn2ProtoT3 := &roachpb.Transaction{TxnMeta: txn2MetaT3Post, Status: roachpb.ABORTED}
+	txn3ProtoT3 := &roachpb.Transaction{TxnMeta: txn3MetaT3Post, Status: roachpb.PENDING}
 
 	testNum := 0
 	pausePushAttemptsC := make(chan struct{})
@@ -659,7 +659,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Create a TxnPusher that performs assertions during the first 3 uses.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]roachpb.Transaction, error) {
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
 		// The txns are not in a sorted order. Enforce one.
 		sort.Slice(txns, func(i, j int) bool {
 			return bytes.Compare(txns[i].Key, txns[j].Key) < 0
@@ -674,7 +674,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 			require.Equal(t, txn3Meta, txns[2])
 
 			// Push does not succeed. Protos not at larger ts.
-			return []roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, nil
+			return []*roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, nil
 		case 2:
 			require.Equal(t, 3, len(txns))
 			require.Equal(t, txn1MetaT2Pre, txns[0])
@@ -682,19 +682,19 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 			require.Equal(t, txn3Meta, txns[2])
 
 			// Push succeeds. Return new protos.
-			return []roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, nil
+			return []*roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, nil
 		case 3:
 			require.Equal(t, 2, len(txns))
 			require.Equal(t, txn2MetaT2Post, txns[0])
 			require.Equal(t, txn3MetaT2Post, txns[1])
 
 			// Push succeeds. Return new protos.
-			return []roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, nil
+			return []*roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, nil
 		default:
 			return nil, nil
 		}
 	})
-	tp.mockCleanupTxnIntentsAsync(func(txns []roachpb.Transaction) error {
+	tp.mockCleanupTxnIntentsAsync(func(txns []*roachpb.Transaction) error {
 		switch testNum {
 		case 1:
 			require.Equal(t, 0, len(txns))

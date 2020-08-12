@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 const (
@@ -169,6 +171,11 @@ func (tc *Catalog) ResolveDataSourceByID(
 		"relation [%d] does not exist", id)
 }
 
+// ResolveTypeByOID is part of the cat.Catalog interface.
+func (tc *Catalog) ResolveTypeByOID(context.Context, oid.Oid) (*types.T, error) {
+	return nil, errors.Newf("test catalog cannot handle user defined types")
+}
+
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	return tc.CheckAnyPrivilege(ctx, o)
@@ -259,6 +266,17 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 		"\"%q\" is not a table", tree.ErrString(name)))
 }
 
+// Tables returns a list of all tables added to the test catalog.
+func (tc *Catalog) Tables() []*Table {
+	tables := make([]*Table, 0, len(tc.testSchema.dataSources))
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok {
+			tables = append(tables, tab)
+		}
+	}
+	return tables
+}
+
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
 	fq := tab.TabName.FQString()
@@ -333,6 +351,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		tc.CreateTable(stmt)
 		return "", nil
 
+	case *tree.CreateIndex:
+		tc.CreateIndex(stmt)
+		return "", nil
+
 	case *tree.CreateView:
 		tc.CreateView(stmt)
 		return "", nil
@@ -343,6 +365,10 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 
 	case *tree.DropTable:
 		tc.DropTable(stmt)
+		return "", nil
+
+	case *tree.DropIndex:
+		tc.DropIndex(stmt)
 		return "", nil
 
 	case *tree.CreateSequence:
@@ -526,16 +552,17 @@ func (tv *View) ColumnName(i int) tree.Name {
 
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
-	TabID      cat.StableID
-	TabVersion int
-	TabName    tree.TableName
-	Columns    []*Column
-	Indexes    []*Index
-	Stats      TableStats
-	Checks     []cat.CheckConstraint
-	Families   []*Family
-	IsVirtual  bool
-	Catalog    cat.Catalog
+	TabID         cat.StableID
+	TabVersion    int
+	TabName       tree.TableName
+	Columns       []*Column
+	SystemColumns []*Column
+	Indexes       []*Index
+	Stats         TableStats
+	Checks        []cat.CheckConstraint
+	Families      []*Family
+	IsVirtual     bool
+	Catalog       cat.Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -597,22 +624,31 @@ func (tt *Table) IsVirtualTable() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
-	return len(tt.Columns) - tt.writeOnlyColCount - tt.deleteOnlyColCount
-}
-
-// WritableColumnCount is part of the cat.Table interface.
-func (tt *Table) WritableColumnCount() int {
-	return len(tt.Columns) - tt.deleteOnlyColCount
-}
-
-// DeletableColumnCount is part of the cat.Table interface.
-func (tt *Table) DeletableColumnCount() int {
-	return len(tt.Columns)
+	return len(tt.Columns) + len(tt.SystemColumns)
 }
 
 // Column is part of the cat.Table interface.
 func (tt *Table) Column(i int) cat.Column {
+	if i >= len(tt.Columns) {
+		return tt.SystemColumns[i-len(tt.Columns)]
+	}
 	return tt.Columns[i]
+}
+
+// ColumnKind is part of the cat.Table interface.
+func (tt *Table) ColumnKind(i int) cat.ColumnKind {
+	writeOnlyEnd := len(tt.Columns) - tt.deleteOnlyColCount
+	standardEnd := writeOnlyEnd - tt.writeOnlyColCount
+	switch {
+	case i < standardEnd:
+		return cat.Ordinary
+	case i < writeOnlyEnd:
+		return cat.WriteOnly
+	case i < len(tt.Columns):
+		return cat.DeleteOnly
+	default:
+		return cat.System
+	}
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -733,6 +769,13 @@ type Index struct {
 	// partitionBy is the partitioning clause that corresponds to this index. Used
 	// to implement PartitionByListPrefixes.
 	partitionBy *tree.PartitionBy
+
+	// predicate is the partial index predicate expression, if it exists.
+	predicate string
+
+	// geoConfig is the geospatial index configuration, if this is a geospatial
+	// inverted index. Otherwise geoConfig is nil.
+	geoConfig *geoindex.Config
 }
 
 // ID is part of the cat.Index interface.
@@ -795,8 +838,16 @@ func (ti *Index) Span() roachpb.Span {
 	panic("not implemented")
 }
 
+// Predicate is part of the cat.Index interface. It returns the predicate
+// expression and true if the index is a partial index. If the index is not
+// partial, the empty string and false is returned.
+func (ti *Index) Predicate() (string, bool) {
+	return ti.predicate, ti.predicate != ""
+}
+
 // PartitionByListPrefixes is part of the cat.Index interface.
 func (ti *Index) PartitionByListPrefixes() []tree.Datums {
+	ctx := context.Background()
 	p := ti.partitionBy
 	if p == nil {
 		return nil
@@ -835,7 +886,7 @@ func (ti *Index) PartitionByListPrefixes() []tree.Datums {
 			d := make(tree.Datums, len(vals))
 			for i := range vals {
 				c := tree.CastExpr{Expr: vals[i], Type: ti.Columns[i].DatumType()}
-				cTyped, err := c.TypeCheck(&semaCtx, nil)
+				cTyped, err := c.TypeCheck(ctx, &semaCtx, nil)
 				if err != nil {
 					panic(err)
 				}
@@ -873,6 +924,11 @@ func (ti *Index) InterleavedByCount() int {
 // InterleavedBy is part of the cat.Index interface.
 func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
 	panic("no interleavings")
+}
+
+// GeoConfig is part of the cat.Index interface.
+func (ti *Index) GeoConfig() *geoindex.Config {
+	return ti.geoConfig
 }
 
 // Column implements the cat.Column interface for testing purposes.
@@ -970,7 +1026,7 @@ var _ cat.TableStatistic = &TableStat{}
 
 // CreatedAt is part of the cat.TableStatistic interface.
 func (ts *TableStat) CreatedAt() time.Time {
-	d, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
+	d, _, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
 		panic(err)
 	}

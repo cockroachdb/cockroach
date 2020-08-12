@@ -29,15 +29,11 @@ type Error interface {
 // Exit codes for the errors
 const (
 	cmdExitCode          = 20
-	cockroachExitCode    = 30
 	sshExitCode          = 10
 	unclassifiedExitCode = 1
 )
 
-// Cmd wraps errors that result from a non-cockroach command run against
-// the cluster.
-//
-// For errors coming from a cockroach command, use Cockroach.
+// Cmd wraps errors that result from a command run against the cluster.
 type Cmd struct {
 	Err error
 }
@@ -59,32 +55,6 @@ func (e Cmd) Format(s fmt.State, verb rune) {
 
 // Unwrap the wrapped the non-cockroach command error.
 func (e Cmd) Unwrap() error {
-	return e.Err
-}
-
-// Cockroach wraps errors that result from a cockroach command run against the cluster.
-//
-// For non-cockroach commands, use Cmd.
-type Cockroach struct {
-	Err error
-}
-
-func (e Cockroach) Error() string {
-	return fmt.Sprintf("DEAD_ROACH_PROBLEM: %s", e.Err.Error())
-}
-
-// ExitCode gives the process exit code to return for cockroach errors.
-func (e Cockroach) ExitCode() int {
-	return cockroachExitCode
-}
-
-// Format passes formatting responsibilities to cockroachdb/errors
-func (e Cockroach) Format(s fmt.State, verb rune) {
-	errors.FormatError(e, s, verb)
-}
-
-// Unwrap the wrapped cockroach error.
-func (e Cockroach) Unwrap() error {
 	return e.Err
 }
 
@@ -149,23 +119,6 @@ func ClassifyCmdError(err error) Error {
 			return SSH{err}
 		}
 		return Cmd{err}
-	}
-
-	return Unclassified{err}
-}
-
-// ClassifyCockroachError classifies an error received while executing a
-// cockroach command remotely over an ssh connection to the right Error type.
-func ClassifyCockroachError(err error) Error {
-	if err == nil {
-		return nil
-	}
-
-	if exitErr, ok := asExitError(err); ok {
-		if exitErr.ExitCode() == 255 {
-			return SSH{err}
-		}
-		return Cockroach{err}
 	}
 
 	return Unclassified{err}

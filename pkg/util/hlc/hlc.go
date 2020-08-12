@@ -220,18 +220,23 @@ func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
 }
 
-// getPhysicalClockAndCheck locks mu in order to access the physical clock, check for
-// time jumps and update the internal jump checking state.
+// getPhysicalClockAndCheck reads the physical time as nanos since epoch. It
+// also checks for backwards and forwards jumps, as configured.
 func (c *Clock) getPhysicalClockAndCheck(ctx context.Context) int64 {
 	oldTime := atomic.LoadInt64(&c.lastPhysicalTime)
 	newTime := c.physicalClock()
 	lastPhysTime := oldTime
+	// Try to update c.lastPhysicalTime. When multiple updaters race, we want the
+	// highest clock reading to win, so keep retrying while we interleave with
+	// updaters with lower clock readings; bail if we interleave with a higher
+	// clock reading.
 	for {
-		atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime)
+		if atomic.CompareAndSwapInt64(&c.lastPhysicalTime, lastPhysTime, newTime) {
+			break
+		}
 		lastPhysTime = atomic.LoadInt64(&c.lastPhysicalTime)
 		if lastPhysTime >= newTime {
-			// Either we did a successful update or someone else updated to a
-			// later time than ours. Either way - we are done.
+			// Someone else updated to a later time than ours.
 			break
 		}
 		// Someone else did an update to an earlier time than what we got in newTime.
@@ -261,8 +266,8 @@ func (c *Clock) checkPhysicalClock(ctx context.Context, oldTime, newTime int64) 
 			log.Fatalf(
 				ctx,
 				"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
-				float64(-interval)/1e9,
-				float64(toleratedForwardClockJump)/1e9,
+				log.Safe(float64(-interval)/1e9),
+				log.Safe(float64(toleratedForwardClockJump)/1e9),
 			)
 		}
 	}
@@ -298,8 +303,8 @@ func (c *Clock) enforceWallTimeWithinBoundLocked() {
 		log.Fatalf(
 			context.TODO(),
 			"wall time %d is not allowed to be greater than upper bound of %d.",
-			c.mu.timestamp.WallTime,
-			c.mu.wallTimeUpperBound,
+			log.Safe(c.mu.timestamp.WallTime),
+			log.Safe(c.mu.wallTimeUpperBound),
 		)
 	}
 }

@@ -922,36 +922,36 @@ NULL  NULL  NULL  2  2  2
 # Regression test for #20858.
 
 statement ok
-CREATE TABLE l (a INT PRIMARY KEY)
+CREATE TABLE l (a INT PRIMARY KEY, b1 INT)
 
 statement ok
-CREATE TABLE r (a INT PRIMARY KEY)
+CREATE TABLE r (a INT PRIMARY KEY, b2 INT)
 
 statement ok
-INSERT INTO l VALUES (1), (2), (3)
+INSERT INTO l VALUES (1, 1), (2, 1), (3, 1)
 
 statement ok
-INSERT INTO r VALUES (2), (3), (4)
+INSERT INTO r VALUES (2, 1), (3, 1), (4, 1)
 
-query I
+query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 1
 ----
-1
+1  1  NULL
 
-query I
+query III
 SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 2
 ----
-2
+2  1  1
 
-query I
+query III
 SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3
 ----
-3
+3  1  1
 
-query I
+query III
 SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 4
 ----
-4
+4  NULL  1
 
 
 # Regression tests for mixed-type equality columns (#22514).
@@ -1093,3 +1093,22 @@ CREATE TABLE t44746_1(c1 INT)
 # Note: an "error parsing regexp" would also be acceptable here.
 statement ok
 SELECT * FROM t44746_0 FULL JOIN t44746_1 ON (SUBSTRING('', ')') = '') = (c1 > 0)
+
+# Regression test for #49630.
+statement ok
+DROP TABLE empty;
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+CREATE TABLE fk_ref (r INT NOT NULL REFERENCES xy (x));
+CREATE TABLE empty (v INT);
+INSERT INTO xy (VALUES (1, 1));
+INSERT INTO fk_ref (VALUES (1));
+
+query IIII
+SELECT * FROM fk_ref LEFT JOIN (SELECT * FROM xy INNER JOIN empty ON True) ON r = x
+----
+1  NULL  NULL  NULL
+
+statement ok
+DROP TABLE empty;
+DROP TABLE fk_ref;
+DROP TABLE xy;

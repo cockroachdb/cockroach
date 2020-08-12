@@ -106,16 +106,6 @@ function run_json_test() {
   return $status
 }
 
-# Takes a package name and remaining args that produce `go test` text output
-# for the given package.
-function run_text_test() {
-  pkg=$1
-  shift
-  echo "# ${pkg}"
-  echo "$@"
-  "$@" 2>&1 | go tool test2json -t -p "${pkg}" | run_json_test cat
-}
-
 function maybe_stress() {
   # Don't stressrace on the release branches; we only want that to happen on the
   # PRs. There's no need in making master flakier than it needs to be; nightly

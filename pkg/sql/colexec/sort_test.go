@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -137,15 +138,18 @@ func init() {
 
 func TestSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, tc := range sortAllTestCases {
-		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
-		})
+		runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return NewSorter(testAllocator, input[0], tc.typs, tc.ordCols)
+			})
 	}
 }
 
 func TestSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 	nTups := coldata.BatchSize()*2 + 1
 	maxCols := 3
@@ -159,17 +163,16 @@ func TestSortRandomized(t *testing.T) {
 			for _, k := range []int{0, rng.Intn(nTups) + 1} {
 				topK := k != 0
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/topK=%t", nCols, nOrderingCols, topK)
-				t.Run(name, func(t *testing.T) {
-					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				log.Infof(context.Background(), "%s", name)
+				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols)
+				if topK {
+					expected = expected[:k]
+				}
+				runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 					if topK {
-						expected = expected[:k]
+						return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
 					}
-					runTests(t, []tuples{tups}, expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						if topK {
-							return NewTopKSorter(testAllocator, input[0], typs[:nCols], ordCols, k), nil
-						}
-						return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
-					})
+					return NewSorter(testAllocator, input[0], typs[:nCols], ordCols)
 				})
 			}
 		}
@@ -209,6 +212,7 @@ func generateRandomDataForTestSort(
 
 func TestAllSpooler(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tcs := []struct {
 		tuples tuples

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/linkedin/goavro"
+	"github.com/linkedin/goavro/v2"
 )
 
 // nativeToDatum converts go native type (interface{} as
@@ -155,6 +155,7 @@ var familyToAvroT = map[types.Family][]string{
 	types.JsonFamily:           {"string"},
 	types.BitFamily:            {"string"},
 	types.DecimalFamily:        {"string"},
+	types.EnumFamily:           {"string"},
 }
 
 // avroConsumer implements importRowConsumer interface.
@@ -446,7 +447,7 @@ var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
 	kvCh chan row.KVBatch,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,
@@ -473,8 +474,9 @@ func (a *avroInputReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, a.readFile, makeExternalStorage, user)
 }
 
 func (a *avroInputReader) readFile(

@@ -12,7 +12,6 @@ package kv
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -218,24 +217,9 @@ func RangeLookup(
 				} else {
 					// Since we support scanning non-transactionally, it's possible that
 					// we pick up both the pre- and post-split descriptor for a range.
-					if desc.GetGenerationComparable() && matchingRanges[0].GetGenerationComparable() {
-						if desc.GetGeneration() > matchingRanges[0].GetGeneration() {
-							// If both generations are comparable, we take the range
-							// descriptor with the newer generation.
-							matchingRanges[0] = *desc
-						}
-					} else {
-						if rand.Intn(index+1) == 0 {
-							// Generations are not comparable, so we randomly choose using
-							// reservoir sampling. Note that we cannot determine the newer
-							// version of the descriptor by looking at the size of the range
-							// because both splits and merges can happen. Using randomness to
-							// determine which range to return is okay, because if we guess
-							// wrong we will try the lookup again. Randomness is used to
-							// ensure we probabilistically converge to the correct
-							// descriptor.
-							matchingRanges[0] = *desc
-						}
+					if desc.Generation > matchingRanges[0].Generation {
+						// Take the range descriptor with the newer generation.
+						matchingRanges[0] = *desc
 					}
 				}
 			} else {

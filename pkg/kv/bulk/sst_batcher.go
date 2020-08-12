@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -139,7 +139,7 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 			return nil
 		}
 
-		err := &storagebase.DuplicateKeyError{}
+		err := &kvserverbase.DuplicateKeyError{}
 		err.Key = append(err.Key, key.Key...)
 		err.Value = append(err.Value, value...)
 		return err
@@ -213,11 +213,9 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		if k, err := keys.Addr(nextKey); err != nil {
 			log.Warningf(ctx, "failed to get RKey for flush key lookup")
 		} else {
-			r, err := b.rc.GetCachedRangeDescriptor(k, false /* inverted */)
-			if err != nil {
-				log.Warningf(ctx, "failed to determine where to split SST: %+v", err)
-			} else if r != nil {
-				b.flushKey = r.EndKey.AsRawKey()
+			r := b.rc.GetCached(k, false /* inverted */)
+			if r != nil {
+				b.flushKey = r.Desc().EndKey.AsRawKey()
 				log.VEventf(ctx, 3, "building sstable that will flush before %v", b.flushKey)
 			} else {
 				log.VEventf(ctx, 3, "no cached range desc available to determine sst flush key")
@@ -430,7 +428,9 @@ func AddSSTable(
 				}
 				// This range has split -- we need to split the SST to try again.
 				if m := (*roachpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
-					split := m.MismatchedRange.EndKey.AsRawKey()
+					// TODO(andrei): We just use the first of m.Ranges; presumably we
+					// should be using all of them to avoid further retries.
+					split := m.Ranges()[0].Desc.EndKey.AsRawKey()
 					log.Infof(ctx, "SSTable cannot be added spanning range bounds %v, retrying...", split)
 					left, right, err := createSplitSSTable(ctx, db, item.start, split, item.disallowShadowing, iter, settings)
 					if err != nil {

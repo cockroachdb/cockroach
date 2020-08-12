@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant
 
 statement ok
 CREATE TABLE other (b INT PRIMARY KEY)
@@ -90,11 +89,11 @@ a f b    c
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                              validated
-t           check_a          CHECK            CHECK ((a > 0))                      true
-t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
-t           foo              UNIQUE           UNIQUE (b ASC)                       true
-t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                  true
+table_name  constraint_name  constraint_type  details                                     validated
+t           check_a          CHECK            CHECK ((a > 0:::INT8))                      true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES public.other(b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                              true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                         true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -105,7 +104,7 @@ ALTER TABLE t DROP CONSTRAINT check_a
 statement ok
 INSERT INTO t (a, f) VALUES (-2, 9)
 
-statement error validation of CHECK "a > 0" failed on row: a=-2, f=9, b=NULL, c=NULL
+statement error validation of CHECK "a > 0:::INT8" failed on row: a=-2, f=9, b=NULL, c=NULL
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
 statement ok
@@ -120,10 +119,10 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -138,11 +137,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  check_a1        CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -160,11 +159,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK        CHECK ((a > 0))                      true
-t  check_a1        CHECK        CHECK ((a > 0))                      true
-t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  foo             UNIQUE       UNIQUE (b ASC)                       true
-t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t  check_a         CHECK        CHECK ((a > 0:::INT8))                      true
+t  check_a1        CHECK        CHECK ((a > 0:::INT8))                      true
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES public.other(b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                              true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                         true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -260,9 +259,6 @@ INSERT INTO t (a, d) VALUES (23, 24)
 statement error foreign key
 INSERT INTO t VALUES (31, 7, 32)
 
-statement error in use as a foreign key constraint
-DROP INDEX t@t_f_idx
-
 statement ok
 ALTER TABLE t DROP CONSTRAINT fk_f_ref_other
 
@@ -321,14 +317,6 @@ ALTER TABLE t DROP COLUMN y
 statement error cannot drop column "e" because view "v" depends on it
 ALTER TABLE t DROP COLUMN e
 
-# TODO(knz): this statement should succeed after #17269 is fixed.
-statement error cannot drop column "d" because view "v" depends on it
-ALTER TABLE t DROP COLUMN d
-
-# TODO(knz): remove the following once the test above succeeds.
-statement ok
-ALTER TABLE t DROP COLUMN d CASCADE
-
 statement ok
 ALTER TABLE t DROP COLUMN e CASCADE
 
@@ -351,7 +339,7 @@ statement ok
 ALTER TABLE t ADD COLUMN g INT UNIQUE
 
 statement ok
-CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX ii (i) STORING(h))
+CREATE TABLE o (gf INT REFERENCES t (g), h INT, i INT, INDEX oi (i), INDEX oh (h), INDEX oih (i) STORING (h))
 
 statement error "t_g_key" is referenced by foreign key from table "o"
 ALTER TABLE t DROP COLUMN g
@@ -359,11 +347,18 @@ ALTER TABLE t DROP COLUMN g
 statement ok
 ALTER TABLE t DROP COLUMN g CASCADE
 
-statement error column "h" is referenced by existing index "ii"
+# Dropping columns that are indexed or stored in indexes drops those indexes
+# too.
+statement ok
 ALTER TABLE o DROP COLUMN h
 
-statement ok
-ALTER TABLE o DROP COLUMN h CASCADE
+query TTBITTBB colnames
+SHOW INDEXES FROM o
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+o           primary     false       1             rowid        ASC        false    false
+o           oi          true        1             i            ASC        false    false
+o           oi          true        2             rowid        ASC        false    true
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -374,24 +369,24 @@ ALTER TABLE t ADD g INT DEFAULT 1 CHECK (g > 0)
 statement ok
 ALTER TABLE t ADD h INT CHECK (h > 0) CHECK (h < 10) UNIQUE
 
-statement error pq: validation of CHECK "i < 0" failed on row:.* i=1
+statement error pq: validation of CHECK "i < 0:::INT8" failed on row:.* i=1
 ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < 0)
 
 statement error pq: validation of CHECK "i < g" failed on row:.* g=1.* i=1
 ALTER TABLE t ADD i INT DEFAULT 1 CHECK (i < g)
 
-statement error pq: validation of CHECK "i > 0" failed on row:.* g=1.* i=0
+statement error pq: validation of CHECK "i > 0:::INT8" failed on row:.* g=1.* i=0
 ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_f   CHECK        CHECK ((f > 1))      true
-t  check_g   CHECK        CHECK ((g > 0))      true
-t  check_h   CHECK        CHECK ((h > 0))      true
-t  check_h1  CHECK        CHECK ((h < 10))     true
-t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)  true
-t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
+t  check_f   CHECK        CHECK ((f > 1:::INT8))  true
+t  check_g   CHECK        CHECK ((g > 0:::INT8))  true
+t  check_h   CHECK        CHECK ((h > 0:::INT8))  true
+t  check_h1  CHECK        CHECK ((h < 10:::INT8)) true
+t  primary   PRIMARY KEY  PRIMARY KEY (a ASC)     true
+t  t_h_key   UNIQUE       UNIQUE (h ASC)          true
 
 statement ok
 DROP TABLE t
@@ -424,13 +419,13 @@ ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT c
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_c_b  CHECK        CHECK ((c > b))      true
-t  ck         CHECK        CHECK ((a > 0))      true
-t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)  true
-t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
-t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
-t  t_u_key    UNIQUE       UNIQUE (u ASC)       true
-t  t_v_key    UNIQUE       UNIQUE (v ASC)       true
+t  check_c_b  CHECK        CHECK ((c > b))         true
+t  ck         CHECK        CHECK ((a > 0:::INT8))  true
+t  primary    PRIMARY KEY  PRIMARY KEY (a ASC)     true
+t  t_d_key    UNIQUE       UNIQUE (d ASC)          true
+t  t_e_key    UNIQUE       UNIQUE (e ASC)          true
+t  t_u_key    UNIQUE       UNIQUE (u ASC)          true
+t  t_v_key    UNIQUE       UNIQUE (v ASC)          true
 
 statement ok
 DROP TABLE t
@@ -788,7 +783,7 @@ select a, b from decomputed_column order by a
 query TT
 show create table decomputed_column
 ----
-decomputed_column  CREATE TABLE decomputed_column (
+decomputed_column  CREATE TABLE public.decomputed_column (
                    a INT8 NOT NULL,
                    b INT8 NULL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC),
@@ -971,7 +966,7 @@ CREATE TABLE t (a int);
 statement ok
 INSERT INTO t VALUES (10), (15), (17)
 
-statement error pq: validation of CHECK "a < 16" failed on row: a=17
+statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
 ALTER TABLE t ADD CHECK (a < 16)
 
 statement ok
@@ -983,13 +978,13 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK  ((a < 100))  true
-t  check_a1  CHECK  CHECK  ((a < 16))  false
+t  check_a   CHECK  CHECK  ((a < 100:::INT8))  true
+t  check_a1  CHECK  CHECK  ((a < 16:::INT8))   false
 
-query error pq: failed to satisfy CHECK constraint \(a < 16\)
+query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
 
-statement error pq: validation of CHECK "a < 16" failed on row: a=17
+statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
 statement ok
@@ -1001,8 +996,8 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK  ((a < 100))  true
-t  check_a1  CHECK  CHECK  ((a < 16))   true
+t  check_a   CHECK  CHECK  ((a < 100:::INT8))  true
+t  check_a1  CHECK  CHECK  ((a < 16:::INT8))   true
 
 subtest regression_42858
 
@@ -1094,9 +1089,6 @@ subtest regression_47141
 statement ok
 CREATE TABLE regression_47141(a time(3), b bytea)
 
-statement error type conversion from TIME\(3\) to TIME\(2\) requires overwriting existing values which is not yet implemented
-ALTER TABLE regression_47141 ALTER a SET DATA TYPE time(2)
-
 # Regression for #26045.
 statement ok
 CREATE TABLE t25045 (x INT, y INT AS (x+1) STORED)
@@ -1123,19 +1115,14 @@ INSERT INTO t2 VALUES (2, 2)
 statement ok
 INSERT INTO t2 VALUES (1, 1)
 
-# Error out trying to add a column with a foreign key on a non-empty table.
-statement error pq: foreign key requires an existing index on columns \("z"\)
-ALTER TABLE t2 ADD COLUMN z INT REFERENCES t1 (x)
-
 # Check that the foreign key was indeed added.
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1150,10 +1137,10 @@ ALTER TABLE t3 ADD COLUMN x INT UNIQUE REFERENCES t1 (x)
 query TT
 SHOW CREATE t3
 ----
-t3  CREATE TABLE t3 (
+t3  CREATE TABLE public.t3 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t3_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1177,14 +1164,6 @@ ROLLBACK
 statement ok
 INSERT INTO t2 VALUES (1, 2)
 
-statement error pq: foreign key requires an existing index on columns \("x"\)
-BEGIN;
-DROP INDEX t2@i;
-ALTER TABLE t2 ADD FOREIGN KEY (x) REFERENCES t1(x)
-
-statement ok
-ROLLBACK
-
 # Test using ADD COL REFERENCES in a self referencing constraint.
 statement ok
 DROP TABLE t1 CASCADE;
@@ -1194,12 +1173,11 @@ ALTER TABLE t1 ADD COLUMN x2 INT REFERENCES t1 (x)
 query TT
 SHOW CREATE t1
 ----
-t1  CREATE TABLE t1 (
+t1  CREATE TABLE public.t1 (
     x INT8 NOT NULL,
     x2 INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (x ASC),
-    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES t1(x),
-    INDEX t1_auto_index_fk_x2_ref_t1 (x2 ASC),
+    CONSTRAINT fk_x2_ref_t1 FOREIGN KEY (x2) REFERENCES public.t1(x),
     FAMILY "primary" (x, x2)
 )
 
@@ -1220,11 +1198,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1243,11 +1220,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
-    INDEX t2_auto_index_fk_x_ref_t1 (x ASC),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1269,10 +1245,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1293,10 +1269,10 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )
@@ -1316,9 +1292,9 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (x, rowid)
 )
@@ -1343,10 +1319,42 @@ ALTER TABLE t2 ADD COLUMN x INT DEFAULT 1 UNIQUE REFERENCES t1 (x)
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
+t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL DEFAULT 1:::INT8,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
     UNIQUE INDEX t2_x_key (x ASC),
     FAMILY "primary" (y, rowid, x)
+)
+
+# Regression 50069, computed exprs must only refer to columns inside the
+# current table.
+statement ok
+CREATE TABLE t50069_a (x INT);
+CREATE TABLE t50069_b (x INT);
+
+statement error pq: no data source matches prefix: t50069_b in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (t50069_b.x + 1) STORED
+
+statement ok
+CREATE DATABASE d;
+CREATE TABLE d.public.t50069_a (x INT);
+
+statement error pq: no data source matches prefix: d.public.t50069_a in this context
+ALTER TABLE t50069_a ADD COLUMN y INT AS (d.public.t50069_a.x + 1) STORED
+
+# Dropping a column with a foreign key should delete the column and the FK.
+statement ok
+DROP TABLE IF EXISTS parent, child;
+CREATE TABLE parent (p INT PRIMARY KEY);
+CREATE TABLE child (c INT PRIMARY KEY, p INT REFERENCES parent(p), FAMILY (c, p));
+ALTER TABLE child DROP COLUMN p
+
+query TT
+SHOW CREATE child
+----
+child  CREATE TABLE public.child (
+       c INT8 NOT NULL,
+       CONSTRAINT "primary" PRIMARY KEY (c ASC),
+       FAMILY fam_0_c_p (c)
 )

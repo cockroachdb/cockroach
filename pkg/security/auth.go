@@ -24,6 +24,15 @@ const (
 	NodeUser = "node"
 	// RootUser is the default cluster administrator.
 	RootUser = "root"
+
+	// AdminRole is the default (and non-droppable) role with superuser privileges.
+	AdminRole = "admin"
+
+	// PublicRole is the special "public" pseudo-role.
+	// All users are implicit members of "public". The role cannot be created,
+	// dropped, assigned to another role, and is generally not listed.
+	// It can be granted privileges, implicitly granting them to all users (current and future).
+	PublicRole = "public"
 )
 
 var certPrincipalMap struct {
@@ -32,8 +41,9 @@ var certPrincipalMap struct {
 }
 
 // UserAuthHook authenticates a user based on their username and whether their
-// connection originates from a client or another node in the cluster.
-type UserAuthHook func(string, bool) error
+// connection originates from a client or another node in the cluster. It
+// returns an optional func that is run at connection close.
+type UserAuthHook func(string, bool) (connClose func(), _ error)
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
@@ -115,54 +125,65 @@ func UserAuthCertHook(insecureMode bool, tlsState *tls.ConnectionState) (UserAut
 		}
 	}
 
-	return func(requestedUser string, clientConnection bool) error {
+	return func(requestedUser string, clientConnection bool) (func(), error) {
 		// TODO(marc): we may eventually need stricter user syntax rules.
 		if len(requestedUser) == 0 {
-			return errors.New("user is missing")
+			return nil, errors.New("user is missing")
 		}
 
 		if !clientConnection && requestedUser != NodeUser {
-			return errors.Errorf("user %s is not allowed", requestedUser)
+			return nil, errors.Errorf("user %s is not allowed", requestedUser)
 		}
 
 		// If running in insecure mode, we have nothing to verify it against.
 		if insecureMode {
-			return nil
+			return nil, nil
+		}
+
+		// The client certificate should not be a tenant client type. For now just
+		// check that it doesn't have OU=Tenants. It would make sense to add
+		// explicit OU=Users to all client certificates and to check for match.
+		ous := tlsState.PeerCertificates[0].Subject.OrganizationalUnit
+		for _, ou := range ous {
+			if ou == tenantsOU {
+				return nil,
+					errors.Errorf("using tenant client certificate as user certificate is not allowed")
+			}
 		}
 
 		// The client certificate user must match the requested user,
 		// except if the certificate user is NodeUser, which is allowed to
 		// act on behalf of all other users.
 		if !ContainsUser(requestedUser, certUsers) && !ContainsUser(NodeUser, certUsers) {
-			return errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
+			return nil, errors.Errorf("requested user is %s, but certificate is for %s", requestedUser, certUsers)
 		}
 
-		return nil
+		return nil, nil
 	}, nil
 }
 
 // UserAuthPasswordHook builds an authentication hook based on the security
 // mode, password, and its potentially matching hash.
 func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []byte) UserAuthHook {
-	return func(requestedUser string, clientConnection bool) error {
+	return func(requestedUser string, clientConnection bool) (func(), error) {
 		if len(requestedUser) == 0 {
-			return errors.New("user is missing")
+			return nil, errors.New("user is missing")
 		}
 
 		if !clientConnection {
-			return errors.New("password authentication is only available for client connections")
+			return nil, errors.New("password authentication is only available for client connections")
 		}
 
 		if insecureMode {
-			return nil
+			return nil, nil
 		}
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
-			return errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
+			return nil, errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 
-		return nil
+		return nil, nil
 	}
 }
 

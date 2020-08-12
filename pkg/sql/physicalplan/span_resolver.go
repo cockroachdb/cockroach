@@ -13,7 +13,6 @@ package physicalplan
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -35,7 +34,7 @@ import (
 //   spans ...spanWithDir,
 // ) ([][]kv.ReplicaInfo, error) {
 //   lr := execinfra.NewSpanResolver(
-//     distSender, gossip, nodeDescriptor,
+//     distSender, nodeDescs, nodeDescriptor,
 //     execinfra.BinPackingLeaseHolderChoice)
 //   it := lr.NewSpanResolverIterator(nil)
 //   res := make([][]kv.ReplicaInfo, 0)
@@ -109,15 +108,14 @@ type SpanResolverIterator interface {
 
 	// ReplicaInfo returns information about the replica that has been picked for
 	// the current range.
-	// A RangeUnavailableError is returned if there's no information in gossip
+	// A RangeUnavailableError is returned if there's no information in nodeDescs
 	// about any of the replicas.
-	ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error)
+	ReplicaInfo(ctx context.Context) (roachpb.ReplicaDescriptor, error)
 }
 
 // spanResolver implements SpanResolver.
 type spanResolver struct {
 	st            *cluster.Settings
-	gossip        gossip.DeprecatedGossip
 	distSender    *kvcoord.DistSender
 	nodeDesc      roachpb.NodeDescriptor
 	oracleFactory replicaoracle.OracleFactory
@@ -129,7 +127,7 @@ var _ SpanResolver = &spanResolver{}
 func NewSpanResolver(
 	st *cluster.Settings,
 	distSender *kvcoord.DistSender,
-	gw gossip.DeprecatedGossip,
+	nodeDescs kvcoord.NodeDescStore,
 	nodeDesc roachpb.NodeDescriptor,
 	rpcCtx *rpc.Context,
 	policy replicaoracle.Policy,
@@ -138,20 +136,18 @@ func NewSpanResolver(
 		st:       st,
 		nodeDesc: nodeDesc,
 		oracleFactory: replicaoracle.NewOracleFactory(policy, replicaoracle.Config{
-			Settings:         st,
-			Gossip:           gw.DeprecatedOracleGossip(48432),
-			NodeDesc:         nodeDesc,
-			RPCContext:       rpcCtx,
-			LeaseHolderCache: distSender.LeaseHolderCache(),
+			NodeDescs:  nodeDescs,
+			NodeDesc:   nodeDesc,
+			Settings:   st,
+			RPCContext: rpcCtx,
 		}),
 		distSender: distSender,
-		gossip:     gw,
 	}
 }
 
 // spanResolverIterator implements the SpanResolverIterator interface.
 type spanResolverIterator struct {
-	// it is a wrapper RangeIterator.
+	// it is a wrapped RangeIterator.
 	it *kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
 	// in the cache.
@@ -194,21 +190,14 @@ func (it *spanResolverIterator) Error() error {
 func (it *spanResolverIterator) Seek(
 	ctx context.Context, span roachpb.Span, scanDir kvcoord.ScanDirection,
 ) {
-	var key, endKey roachpb.RKey
-	var err error
-	if key, err = keys.Addr(span.Key); err != nil {
+	rSpan, err := keys.SpanAddr(span)
+	if err != nil {
 		it.err = err
 		return
 	}
-	if endKey, err = keys.Addr(span.EndKey); err != nil {
-		it.err = err
-		return
-	}
+
 	oldDir := it.dir
-	it.curSpan = roachpb.RSpan{
-		Key:    key,
-		EndKey: endKey,
-	}
+	it.curSpan = rSpan
 	it.dir = scanDir
 
 	var seekKey roachpb.RKey
@@ -257,17 +246,25 @@ func (it *spanResolverIterator) Desc() roachpb.RangeDescriptor {
 }
 
 // ReplicaInfo is part of the SpanResolverIterator interface.
-func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kvcoord.ReplicaInfo, error) {
+func (it *spanResolverIterator) ReplicaInfo(
+	ctx context.Context,
+) (roachpb.ReplicaDescriptor, error) {
 	if !it.Valid() {
 		panic(it.Error())
 	}
 
+	// If we've assigned the range before, return that assignment.
+	rngID := it.it.Desc().RangeID
+	if repl, ok := it.queryState.AssignedRanges[rngID]; ok {
+		return repl, nil
+	}
+
 	repl, err := it.oracle.ChoosePreferredReplica(
-		ctx, *it.it.Desc(), it.queryState)
+		ctx, it.it.Desc(), it.it.Leaseholder(), it.queryState)
 	if err != nil {
-		return kvcoord.ReplicaInfo{}, err
+		return roachpb.ReplicaDescriptor{}, err
 	}
 	it.queryState.RangesPerNode[repl.NodeID]++
-	it.queryState.AssignedRanges[it.it.Desc().RangeID] = repl
+	it.queryState.AssignedRanges[rngID] = repl
 	return repl, nil
 }

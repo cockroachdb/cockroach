@@ -22,18 +22,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestMaybeRefreshStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -54,12 +58,13 @@ func TestMaybeRefreshStats(t *testing.T) {
 		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	descA := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	descA := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -98,7 +103,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
-	descVW := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
+	descVW := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descVW.ID, 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
@@ -111,6 +116,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 func TestAverageRefreshTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -129,51 +135,56 @@ func TestAverageRefreshTime(t *testing.T) {
 		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	tableID := sqlbase.GetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
+	tableID := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").ID
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
-		cache.InvalidateTableStats(ctx, tableID)
-		stats, err := cache.GetTableStats(ctx, tableID)
-		if err != nil {
-			return err
-		}
-		if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
-			return fmt.Errorf("expected avgRefreshTime %s but found %s",
-				expected.String(), actual.String())
-		}
-		return nil
+		cache.RefreshTableStats(ctx, tableID)
+		return testutils.SucceedsSoonError(func() error {
+			stats, err := cache.GetTableStats(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
+				return fmt.Errorf("expected avgRefreshTime %s but found %s",
+					expected.String(), actual.String())
+			}
+			return nil
+		})
 	}
 
 	// Checks that the most recent statistic was created less than (greater than)
 	// expectedAge time ago if lessThan is true (false).
 	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
-		cache.InvalidateTableStats(ctx, tableID)
-		stats, err := cache.GetTableStats(ctx, tableID)
-		if err != nil {
-			return err
-		}
-		stat := mostRecentAutomaticStat(stats)
-		if stat == nil {
-			return fmt.Errorf("no recent automatic statistic found")
-		}
-		if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
-			return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
-				expectedAge, stat.CreatedAt, timeutil.Now(),
-			)
-		}
-		if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
-			return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
-				expectedAge, stat.CreatedAt, timeutil.Now(),
-			)
-		}
-		return nil
+		cache.RefreshTableStats(ctx, tableID)
+		return testutils.SucceedsSoonError(func() error {
+			stats, err := cache.GetTableStats(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			stat := mostRecentAutomaticStat(stats)
+			if stat == nil {
+				return fmt.Errorf("no recent automatic statistic found")
+			}
+			if !lessThan && stat.CreatedAt.After(timeutil.Now().Add(-1*expectedAge)) {
+				return fmt.Errorf("most recent stat is less than %s old. Created at: %s Current time: %s",
+					expectedAge, stat.CreatedAt, timeutil.Now(),
+				)
+			}
+			if lessThan && stat.CreatedAt.Before(timeutil.Now().Add(-1*expectedAge)) {
+				return fmt.Errorf("most recent stat is more than %s old. Created at: %s Current time: %s",
+					expectedAge, stat.CreatedAt, timeutil.Now(),
+				)
+			}
+			return nil
+		})
 	}
 
 	// Since there are no stats yet, avgRefreshTime should return the default
@@ -344,6 +355,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 func TestAutoStatsReadOnlyTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -362,9 +374,10 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -386,6 +399,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 func TestNoRetryOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -398,9 +412,10 @@ func TestNoRetryOnFailure(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
+		keys.SystemSQLCodec,
 	)
 	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -417,6 +432,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 func TestMutationsChannel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
@@ -431,7 +447,7 @@ func TestMutationsChannel(t *testing.T) {
 	// Test that the mutations channel doesn't block even when we add 10 more
 	// items than can fit in the buffer.
 	for i := 0; i < refreshChanBufferLen+10; i++ {
-		r.NotifyMutation(sqlbase.ID(53), 5 /* rowsAffected */)
+		r.NotifyMutation(descpb.ID(53), 5 /* rowsAffected */)
 	}
 
 	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
@@ -441,6 +457,7 @@ func TestMutationsChannel(t *testing.T) {
 
 func TestDefaultColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -474,15 +491,17 @@ func TestDefaultColumns(t *testing.T) {
 }
 
 func checkStatsCount(
-	ctx context.Context, cache *TableStatisticsCache, tableID sqlbase.ID, expected int,
+	ctx context.Context, cache *TableStatisticsCache, tableID descpb.ID, expected int,
 ) error {
-	cache.InvalidateTableStats(ctx, tableID)
-	stats, err := cache.GetTableStats(ctx, tableID)
-	if err != nil {
-		return err
-	}
-	if len(stats) != expected {
-		return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
-	}
-	return nil
+	cache.RefreshTableStats(ctx, tableID)
+	return testutils.SucceedsSoonError(func() error {
+		stats, err := cache.GetTableStats(ctx, tableID)
+		if err != nil {
+			return err
+		}
+		if len(stats) != expected {
+			return fmt.Errorf("expected %d stat(s) but found %d", expected, len(stats))
+		}
+		return nil
+	})
 }

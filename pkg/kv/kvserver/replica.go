@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -27,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -53,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft"
@@ -133,30 +133,41 @@ type atomicDescString struct {
 
 // store atomically updates d.strPtr with the string representation of desc.
 func (d *atomicDescString) store(replicaID roachpb.ReplicaID, desc *roachpb.RangeDescriptor) {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "%d/", desc.RangeID)
-	if replicaID == 0 {
-		fmt.Fprintf(&buf, "?:")
-	} else {
-		fmt.Fprintf(&buf, "%d:", replicaID)
-	}
+	str := redact.Sprintfn(func(w redact.SafePrinter) {
+		w.Printf("%d/", desc.RangeID)
+		if replicaID == 0 {
+			w.SafeString("?:")
+		} else {
+			w.Printf("%d:", replicaID)
+		}
 
-	if !desc.IsInitialized() {
-		buf.WriteString("{-}")
-	} else {
-		const maxRangeChars = 30
-		rngStr := keys.PrettyPrintRange(roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
-		buf.WriteString(rngStr)
-	}
+		if !desc.IsInitialized() {
+			w.SafeString("{-}")
+		} else {
+			const maxRangeChars = 30
+			rngStr := keys.PrettyPrintRange(roachpb.Key(desc.StartKey), roachpb.Key(desc.EndKey), maxRangeChars)
+			w.UnsafeString(rngStr)
+		}
+	})
 
-	str := buf.String()
 	atomic.StorePointer(&d.strPtr, unsafe.Pointer(&str))
 }
 
 // String returns the string representation of the range; since we are not
 // using a lock, the copy might be inconsistent.
 func (d *atomicDescString) String() string {
-	return *(*string)(atomic.LoadPointer(&d.strPtr))
+	return d.get().StripMarkers()
+}
+
+// SafeFormat renders the string safely.
+func (d *atomicDescString) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(d.get())
+}
+
+// Get returns the string representation of the range; since we are not
+// using a lock, the copy might be inconsistent.
+func (d *atomicDescString) get() redact.RedactableString {
+	return *(*redact.RedactableString)(atomic.LoadPointer(&d.strPtr))
 }
 
 // atomicConnectionClass stores an rpc.ConnectionClass atomically.
@@ -181,7 +192,6 @@ func (c *atomicConnectionClass) set(cc rpc.ConnectionClass) {
 type Replica struct {
 	log.AmbientContext
 
-	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
 	RangeID roachpb.RangeID // Only set by the constructor
 
 	store     *Store
@@ -250,8 +260,13 @@ type Replica struct {
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
 		mergeComplete chan struct{}
+		// freezeStart indicates the subsumption time of this range when it is the
+		// right-hand range in an ongoing merge. This range will allow read-only
+		// traffic below this timestamp, while blocking everything else, until the
+		// merge completes.
+		freezeStart hlc.Timestamp
 		// The state of the Raft state machine.
-		state storagepb.ReplicaState
+		state kvserverpb.ReplicaState
 		// Last index/term persisted to the raft log (not necessarily
 		// committed). Note that lastTerm may be 0 (and thus invalid) even when
 		// lastIndex is known, in which case the term will have to be retrieved
@@ -340,7 +355,7 @@ type Replica struct {
 		//
 		// TODO(ajwerner): move the proposal map and ProposalData entirely under
 		// the raftMu.
-		proposals         map[storagebase.CmdIDKey]*ProposalData
+		proposals         map[kvserverbase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID
@@ -500,6 +515,8 @@ type Replica struct {
 		// abort of a transaction which might have blocked the system config from
 		// being gossiped and attempting to gossip again.
 		failureToGossipSystemConfig bool
+
+		tenantID roachpb.TenantID // Set when first initialized, not modified after
 	}
 
 	rangefeedMu struct {
@@ -581,7 +598,13 @@ var _ kv.Sender = &Replica{}
 // require a lock and its output may not be atomic with other ongoing work in
 // the replica. This is done to prevent deadlocks in logging sites.
 func (r *Replica) String() string {
-	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[n%d,s%d,r%s]",
+		r.store.Ident.NodeID, r.store.Ident.StoreID, r.rangeStr.get())
 }
 
 // ReplicaID returns the ID for the Replica. It may be zero if the replica does
@@ -709,7 +732,7 @@ func (r *Replica) StoreID() roachpb.StoreID {
 }
 
 // EvalKnobs returns the EvalContext's Knobs.
-func (r *Replica) EvalKnobs() storagebase.BatchEvalTestingKnobs {
+func (r *Replica) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
 }
 
@@ -772,7 +795,7 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 // is enabled and the TTL has passed. If this is an admin command or this range
 // contains data outside of the user keyspace, we return the true GC threshold.
 func (r *Replica) getImpliedGCThresholdRLocked(
-	st *storagepb.LeaseStatus, isAdmin bool,
+	st *kvserverpb.LeaseStatus, isAdmin bool,
 ) hlc.Timestamp {
 	threshold := *r.mu.state.GCThreshold
 
@@ -791,7 +814,7 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	// user experience win; it's always safe to allow reads to continue so long
 	// as they are after the GC threshold.
 	c := r.mu.cachedProtectedTS
-	if st.State != storagepb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
+	if st.State != kvserverpb.LeaseState_VALID || c.readAt.Less(st.Lease.Start) {
 		return threshold
 	}
 
@@ -806,7 +829,8 @@ func (r *Replica) getImpliedGCThresholdRLocked(
 	return threshold
 }
 
-// isSystemRange returns true if r's key range precedes keys.UserTableDataMin.
+// isSystemRange returns true if r's key range precedes the start of user
+// structured data (SQL keys) for the range's tenant keyspace.
 func (r *Replica) isSystemRange() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -814,7 +838,8 @@ func (r *Replica) isSystemRange() bool {
 }
 
 func (r *Replica) isSystemRangeRLocked() bool {
-	return r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.UserTableDataMin))
+	rem, _, err := keys.DecodeTenantPrefix(r.mu.state.Desc.StartKey.AsRawKey())
+	return err == nil && roachpb.Key(rem).Compare(keys.UserTableDataMin) < 0
 }
 
 // maxReplicaIDOfAny returns the maximum ReplicaID of any replica, including
@@ -869,6 +894,20 @@ func (r *Replica) getMergeCompleteChRLocked() chan struct{} {
 	return r.mu.mergeComplete
 }
 
+func (r *Replica) mergeInProgress() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mergeInProgressRLocked()
+}
+
+func (r *Replica) mergeInProgressRLocked() bool {
+	return r.mu.mergeComplete != nil
+}
+
+func (r *Replica) getFreezeStartRLocked() hlc.Timestamp {
+	return r.mu.freezeStart
+}
+
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -902,13 +941,13 @@ func (r *Replica) GetSplitQPS() float64 {
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return storagebase.ContainsKey(r.Desc(), key)
+	return kvserverbase.ContainsKey(r.Desc(), key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
-	return storagebase.ContainsKeyRange(r.Desc(), start, end)
+	return kvserverbase.ContainsKeyRange(r.Desc(), start, end)
 }
 
 // GetLastReplicaGCTimestamp reads the timestamp at which the replica was
@@ -980,8 +1019,8 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
-func (r *Replica) State() storagepb.RangeInfo {
-	var ri storagepb.RangeInfo
+func (r *Replica) State() kvserverpb.RangeInfo {
+	var ri kvserverpb.RangeInfo
 
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
 	// this first before RLocking below. Performance of this extra lock
@@ -995,7 +1034,7 @@ func (r *Replica) State() storagepb.RangeInfo {
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
+	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*kvserverpb.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.mu.raftLogSize
@@ -1025,11 +1064,16 @@ func (r *Replica) State() storagepb.RangeInfo {
 				}
 				if ri.NewestClosedTimestamp.ClosedTimestamp.Less(e.ClosedTimestamp) {
 					ri.NewestClosedTimestamp.NodeID = replDesc.NodeID
-					ri.NewestClosedTimestamp.MLAI = int64(mlai)
 					ri.NewestClosedTimestamp.ClosedTimestamp = e.ClosedTimestamp
+					ri.NewestClosedTimestamp.MLAI = int64(mlai)
+					ri.NewestClosedTimestamp.Epoch = int64(e.Epoch)
 				}
 				return true // done
 			})
+		}
+
+		if r.mu.tenantID != (roachpb.TenantID{}) {
+			ri.TenantID = r.mu.tenantID.ToUint64()
 		}
 	}
 	return ri
@@ -1065,12 +1109,12 @@ func (r *Replica) assertStateLocked(ctx context.Context, reader storage.Reader) 
 // The method accepts a concurrency Guard and a LeaseStatus parameter. These are
 // used to indicate whether the caller has acquired latches and checked the
 // Range lease. The method will only check for a pending merge if both of these
-// conditions are true. If either !g.HoldingLatches() or st == nil then the
-// method will not check for a pending merge. Callers might be ok with this if
-// they know that they will end up checking for a pending merge at some later
-// time.
+// conditions are true. If either !g.HoldingLatches() or st.State !=
+// LeaseState_VALID then the method will not check for a pending merge. Callers
+// might be ok with this if they know that they will end up checking for a
+// pending merge at some later time.
 func (r *Replica) checkExecutionCanProceed(
-	ba *roachpb.BatchRequest, g *concurrency.Guard, st *storagepb.LeaseStatus,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, st *kvserverpb.LeaseStatus,
 ) error {
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1080,14 +1124,21 @@ func (r *Replica) checkExecutionCanProceed(
 	defer r.mu.RUnlock()
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
-	} else if err := r.checkTSAboveGCThresholdRLocked(ba.Timestamp, st, ba.IsAdmin()); err != nil {
+	} else if err := r.checkTSAboveGCThresholdRLocked(
+		ba.EarliestActiveTimestamp(), st, ba.IsAdmin(),
+	); err != nil {
 		return err
-	} else if g.HoldingLatches() && st != nil {
+	} else if g.HoldingLatches() && st.State == kvserverpb.LeaseState_VALID {
 		// Only check for a pending merge if latches are held and the Range
 		// lease is held by this Replica. Without both of these conditions,
 		// checkForPendingMergeRLocked could return false negatives.
+		//
+		// In practice, this means that follower reads or any request where
+		// concurrency.shouldAcquireLatches() == false (e.g. lease requests)
+		// will not check for a pending merge before executing and, as such,
+		// can execute while a range is in a merge's critical phase.
 		return r.checkForPendingMergeRLocked(ba)
 	}
 	return nil
@@ -1096,15 +1147,15 @@ func (r *Replica) checkExecutionCanProceed(
 // checkExecutionCanProceedForRangeFeed returns an error if a rangefeed request
 // cannot be executed by the Replica.
 func (r *Replica) checkExecutionCanProceedForRangeFeed(
-	rSpan roachpb.RSpan, ts hlc.Timestamp,
+	ctx context.Context, rSpan roachpb.RSpan, ts hlc.Timestamp,
 ) error {
 	now := r.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	status := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	status := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	if _, err := r.isDestroyedRLocked(); err != nil {
 		return err
-	} else if err := r.checkSpanInRangeRLocked(rSpan); err != nil {
+	} else if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
 		return err
 	} else if err := r.checkTSAboveGCThresholdRLocked(ts, &status, false /* isAdmin */); err != nil {
 		return err
@@ -1118,21 +1169,21 @@ func (r *Replica) checkExecutionCanProceedForRangeFeed(
 }
 
 // checkSpanInRangeRLocked returns an error if a request (identified by its
-// key span) can be run on the replica.
-func (r *Replica) checkSpanInRangeRLocked(rspan roachpb.RSpan) error {
+// key span) can not be run on the replica.
+func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSpan) error {
 	desc := r.mu.state.Desc
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
 	return roachpb.NewRangeKeyMismatchError(
-		rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc,
+		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease,
 	)
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified
 // by its MVCC timestamp) can be run on the replica.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
-	ts hlc.Timestamp, st *storagepb.LeaseStatus, isAdmin bool,
+	ts hlc.Timestamp, st *kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
 	threshold := r.getImpliedGCThresholdRLocked(st, isAdmin)
 	if threshold.Less(ts) {
@@ -1154,9 +1205,47 @@ func (r *Replica) checkForPendingMergeRLocked(ba *roachpb.BatchRequest) error {
 	if ba.IsSingleSubsumeRequest() {
 		return nil
 	}
-	// The replica is being merged into its left-hand neighbor. This request
-	// cannot proceed until the merge completes, signaled by the closing of the
-	// channel.
+
+	// The range is being merged into its left-hand neighbor.
+	if ba.IsReadOnly() {
+		freezeStart := r.getFreezeStartRLocked()
+		ts := ba.Timestamp
+		if ba.Txn != nil {
+			ts.Forward(ba.Txn.MaxTimestamp)
+		}
+		if ts.Less(freezeStart) {
+			// When the max timestamp of a read request is less than the subsumption
+			// time recorded by this Range (freezeStart), we're guaranteed that none
+			// of the writes accepted by the leaseholder for the keyspan (which could
+			// be a part of the subsuming range if the merge succeeded, or part of
+			// this range if it didn't) for timestamps after the subsumption timestamp
+			// could have causally preceded the current request. Letting such requests
+			// go through does not violate any of the invariants guaranteed by
+			// Subsume().
+			//
+			// NB: It would be incorrect to serve this read request if freezeStart
+			// were in its uncertainty window. For the sake of contradiction, consider
+			// the following scenario, if such a request were allowed to proceed:
+			// 1. This range gets subsumed, `maybeWatchForMerge` is called and the
+			// `mergeCompleteCh` channel is set up.
+			// 2. A read request *that succeeds the subsumption in real time* comes in
+			// for a timestamp that contains `freezeStart` in its uncertainty interval
+			// before the `mergeCompleteCh` channel is removed. Let's say the read
+			// timestamp of this request is X (with X <= freezeStart), and let's
+			// denote its uncertainty interval by [X, Y).
+			// 3. By the time this request reaches `checkForPendingMergeRLocked`, the
+			// merge has committed so all subsequent requests are directed to the
+			// leaseholder of the (subsuming) left-hand range but this pre-merge range
+			// hasn't been destroyed yet.
+			// 4. If the (post-merge) left-hand side leaseholder had accepted any new
+			// writes with timestamps in the window [freezeStart, Y), we would
+			// potentially have a stale read, as any of the writes in this window could
+			// have causally preceded the aforementioned read.
+			return nil
+		}
+	}
+	// This request cannot proceed until the merge completes, signaled by the
+	// closing of the channel.
 	//
 	// It is very important that this check occur after we have acquired latches
 	// from the spanlatch manager. Only after we release these latches are we
@@ -1299,9 +1388,10 @@ func (ec *endCmds) done(
 }
 
 // maybeWatchForMerge checks whether a merge of this replica into its left
-// neighbor is in its critical phase and, if so, arranges to block all requests
-// until the merge completes.
-func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+// neighbor is in its critical phase and, if so, arranges to block all requests,
+// except for read-only requests that are older than `freezeStart`, until the
+// merge completes.
+func (r *Replica) maybeWatchForMerge(ctx context.Context, freezeStart hlc.Timestamp) error {
 	desc := r.Desc()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
@@ -1333,6 +1423,12 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
+	// Note that if the merge txn retries for any reason (for example, if the
+	// left-hand side range undergoes a lease transfer before the merge
+	// completes), the right-hand side range will get re-subsumed. This will
+	// lead to `freezeStart` being overwritten with the new subsumption time.
+	// This is fine.
+	r.mu.freezeStart = freezeStart
 	r.mu.mergeComplete = mergeCompleteCh
 	// The RHS of a merge is not permitted to quiesce while a mergeComplete
 	// channel is installed. (If the RHS is quiescent when the merge commits, any
@@ -1450,6 +1546,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
 		// error. If the merge aborted, the requests will be handled normally.
+		r.mu.freezeStart = hlc.Timestamp{}
 		r.mu.mergeComplete = nil
 		close(mergeCompleteCh)
 		r.mu.Unlock()
@@ -1486,7 +1583,7 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 		return
 	}
 	lease := *r.mu.state.Lease
-	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(lease, r.Clock().Now()) {
+	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(ctx, lease, r.Clock().Now()) {
 		return
 	}
 	raftStatus := r.raftStatusRLocked()
@@ -1500,10 +1597,6 @@ func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
 	}
-}
-
-func (r *Replica) mergeInProgressRLocked() bool {
-	return r.mu.mergeComplete != nil
 }
 
 func (r *Replica) getReplicaDescriptorByIDRLocked(
@@ -1585,9 +1678,9 @@ func (r *Replica) GetExternalStorage(
 
 // GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
 func (r *Replica) GetExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorageFromURI(ctx, uri)
+	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }
 
 func (r *Replica) markSystemConfigGossipSuccess() {

@@ -26,12 +26,13 @@ import (
 
 func TestSplitAtTableBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testClusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationAuto,
 	}
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 	runner.Exec(t, `CREATE DATABASE test`)
@@ -53,7 +54,7 @@ SELECT tables.id FROM system.namespace tables
 			t.Fatal(err)
 		}
 		if !desc.StartKey.Equal(tableStartKey) {
-			log.Infof(context.TODO(), "waiting on split results")
+			log.Infof(context.Background(), "waiting on split results")
 			return errors.Errorf("expected range start key %s; got %s", tableStartKey, desc.StartKey)
 		}
 		return nil

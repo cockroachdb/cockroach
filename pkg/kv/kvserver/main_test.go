@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -39,6 +40,15 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+
+	// The below-Raft proto tracking is fairly expensive in terms of allocations
+	// which significantly impacts the tests under -race. We're already doing the
+	// below-Raft proto tracking in non-race builds, so there is little benefit
+	// to also doing it in race builds.
+	if util.RaceEnabled {
+		os.Exit(m.Run())
+		return
+	}
 
 	// Create a set of all protos we believe to be marshaled downstream of raft.
 	// After the tests are run, we'll subtract the encountered protos from this

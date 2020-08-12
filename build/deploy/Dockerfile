@@ -1,4 +1,4 @@
-FROM debian:9.8-slim
+FROM debian:9.12-slim
 
 # For deployment, we need
 # libc6 - dynamically linked by cockroach binary
@@ -9,6 +9,10 @@ RUN apt-get update && \
 	apt-get -y upgrade && \
 	apt-get install -y libc6 ca-certificates tzdata && \
 	rm -rf /var/lib/apt/lists/*
+
+# Install GEOS libraries.
+RUN mkdir /usr/local/lib/cockroach
+COPY libgeos.so libgeos_c.so /usr/local/lib/cockroach/
 
 RUN mkdir -p /cockroach
 COPY cockroach.sh cockroach /cockroach/

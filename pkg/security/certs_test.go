@@ -22,14 +22,30 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const testKeySize = 1024
+
+// tempDir is like testutils.TempDir but avoids a circular import.
+func tempDir(t *testing.T) (string, func()) {
+	certsDir, err := ioutil.TempDir("", "certs_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return certsDir, func() {
+		if err := os.RemoveAll(certsDir); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestGenerateCACert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -37,15 +53,8 @@ func TestGenerateCACert(t *testing.T) {
 	security.ResetAssetLoader()
 	defer ResetTest()
 
-	certsDir, err := ioutil.TempDir("", "certs_test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := os.RemoveAll(certsDir); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	certsDir, cleanup := tempDir(t)
+	defer cleanup()
 
 	cm, err := security.NewCertificateManager(certsDir)
 	if err != nil {
@@ -108,6 +117,63 @@ func TestGenerateCACert(t *testing.T) {
 	}
 }
 
+func TestGenerateTenantCerts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Do not mock cert access for this test.
+	security.ResetAssetLoader()
+	defer ResetTest()
+
+	certsDir, cleanup := tempDir(t)
+	defer cleanup()
+
+	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
+	require.NoError(t, security.CreateTenantClientCAPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		48*time.Hour,
+		false, // allowKeyReuse
+		false, // overwrite
+	))
+
+	cp, err := security.CreateTenantClientPair(
+		certsDir,
+		caKeyFile,
+		testKeySize,
+		time.Hour,
+		999,
+	)
+	require.NoError(t, err)
+	require.NoError(t, security.WriteTenantClientPair(certsDir, cp, false))
+
+	cl := security.NewCertificateLoader(certsDir)
+	require.NoError(t, cl.Load())
+	infos := cl.Certificates()
+	for _, info := range infos {
+		require.NoError(t, info.Error)
+	}
+
+	for i := range infos {
+		// Scrub the struct to retain only tested fields.
+		*infos[i] = security.CertInfo{
+			FileUsage: infos[i].FileUsage,
+			Filename:  infos[i].Filename,
+			Name:      infos[i].Name,
+		}
+	}
+	require.Equal(t, []*security.CertInfo{
+		{
+			FileUsage: security.TenantClientCAPem,
+			Filename:  "ca-client-tenant.crt",
+		},
+		{
+			FileUsage: security.TenantClientPem,
+			Filename:  "client-tenant.999.crt",
+			Name:      "999",
+		},
+	}, infos)
+}
+
 func TestGenerateNodeCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
@@ -152,25 +218,48 @@ func TestGenerateNodeCerts(t *testing.T) {
 // node.crt: dual-purpose node certificate
 // client.root.crt: client certificate for the root user.
 func generateBaseCerts(certsDir string) error {
-	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*96, true, true,
-	); err != nil {
-		return errors.Errorf("could not generate CA pair: %v", err)
+	{
+		caKey := filepath.Join(certsDir, security.EmbeddedCAKey)
+
+		if err := security.CreateCAPair(
+			certsDir, caKey,
+			testKeySize, time.Hour*96, true, true,
+		); err != nil {
+			return err
+		}
+
+		if err := security.CreateNodePair(
+			certsDir, caKey,
+			testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
+		); err != nil {
+			return err
+		}
+
+		if err := security.CreateClientPair(
+			certsDir, caKey,
+			testKeySize, time.Hour*48, true, security.RootUser, false,
+		); err != nil {
+			return err
+		}
 	}
 
-	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
-	); err != nil {
-		return errors.Errorf("could not generate Node pair: %v", err)
-	}
+	{
+		caKey := filepath.Join(certsDir, security.EmbeddedTenantClientCAKey)
+		if err := security.CreateTenantClientCAPair(
+			certsDir, caKey,
+			testKeySize, time.Hour*96, true, true,
+		); err != nil {
+			return err
+		}
 
-	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, true, security.RootUser, false,
-	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
+		tcp, err := security.CreateTenantClientPair(certsDir, caKey,
+			testKeySize, time.Hour*48, 10)
+		if err != nil {
+			return err
+		}
+		if err := security.WriteTenantClientPair(certsDir, tcp, true); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -183,19 +272,11 @@ func generateBaseCerts(certsDir string) error {
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
-	if err := security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*96, true, true,
-	); err != nil {
-		return errors.Errorf("could not generate CA pair: %v", err)
+	if err := generateBaseCerts(certsDir); err != nil {
+		return err
 	}
 
-	if err := security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		testKeySize, time.Hour*48, true, []string{"127.0.0.1"},
-	); err != nil {
-		return errors.Errorf("could not generate Node pair: %v", err)
-	}
+	// Overwrite those certs that we want to split.
 
 	if err := security.CreateClientCAPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
@@ -283,12 +364,13 @@ func TestUseCerts(t *testing.T) {
 		DisableWebSessionAuthentication: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	httpClient, err := clientContext.GetHTTPClient()
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +388,10 @@ func TestUseCerts(t *testing.T) {
 	// New client. With certs this time.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	httpClient, err = clientContext.GetHTTPClient()
+	{
+		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		httpClient, err = secondSCtx.GetHTTPClient()
+	}
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -369,12 +454,13 @@ func TestUseSplitCACerts(t *testing.T) {
 		DisableWebSessionAuthentication: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	httpClient, err := clientContext.GetHTTPClient()
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +478,10 @@ func TestUseSplitCACerts(t *testing.T) {
 	// New client. With certs this time.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	httpClient, err = clientContext.GetHTTPClient()
+	{
+		secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		httpClient, err = secondSCtx.GetHTTPClient()
+	}
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}
@@ -489,12 +578,13 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		DisableWebSessionAuthentication: true,
 	}
 	s, _, db := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Insecure mode.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.Insecure = true
-	httpClient, err := clientContext.GetHTTPClient()
+	sCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	httpClient, err := sCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +602,10 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	// New client with certs, but the UI CA is gone, we have no way to verify the Admin UI cert.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	httpClient, err = clientContext.GetHTTPClient()
+	{
+		secondCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+		httpClient, err = secondCtx.GetHTTPClient()
+	}
 	if err != nil {
 		t.Fatalf("Expected success, got %v", err)
 	}

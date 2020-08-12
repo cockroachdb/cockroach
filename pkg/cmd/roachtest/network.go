@@ -247,6 +247,28 @@ func registerNetwork(r *testRegistry) {
 		Name:    fmt.Sprintf("network/tpcc/nodes=%d", numNodes),
 		Owner:   OwnerKV,
 		Cluster: makeClusterSpec(numNodes),
+		Skip:    "https://github.com/cockroachdb/cockroach/issues/49901#issuecomment-640666646",
+		SkipDetails: `The ordering of steps in the test is:
+
+- install toxiproxy
+- start cluster, wait for up-replication
+- launch the goroutine that starts the tpcc client command, but do not wait on
+it starting
+- immediately, cause a network partition
+- only then, the goroutine meant to start the tpcc client goes to fetch the
+pg URLs and start workload, but of course this fails because network
+partition
+- tpcc fails to start, so the test tears down before it resolves the network partition
+- test tear-down and debug zip fail because the network partition is still active
+
+There are two problems here:
+
+the tpcc client is not actually started yet when the test sets up the
+network partition. This is a race condition. there should be a defer in
+there to resolve the partition when the test aborts prematurely. (And the
+command to resolve the partition should not be sensitive to the test
+context's Done() channel, because during a tear-down that is closed already)
+`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runNetworkTPCC(ctx, t, c, numNodes)
 		},

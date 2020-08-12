@@ -22,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestClassifyTablePattern(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out  string
 		expanded string
@@ -111,6 +113,7 @@ func TestClassifyTablePattern(t *testing.T) {
 
 func TestClassifyColumnName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out string
 		err     string
@@ -373,12 +376,14 @@ func (f *fakeSource) ResolveColumnItemTestResults(res tree.ColumnResolutionResul
 
 func TestResolveQualifiedStar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveQualifiedStarTest(t, f)
 }
 
 func TestResolveColumnItem(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	f := &fakeSource{t: t}
 	sqlutils.RunResolveColumnItemTest(t, f)
 }
@@ -530,6 +535,7 @@ func newFakeMetadata() *fakeMetadata {
 
 func TestResolveTablePatternOrName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	type spath = sessiondata.SearchPath
 
 	var mpath = func(args ...string) spath {
@@ -719,7 +725,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		// Names of length 2
 
 		{`public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
-		{`pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp.foo`, `db3.pg_temp.foo`, `db3.pg_temp[0]`, ``},
+		{`pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
 		{`pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
 
 		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
@@ -732,7 +738,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 
 		// Case where the temporary table being created has the same name as an
 		// existing persistent table.
-		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `pg_temp.bar`, `db3.pg_temp.bar`, `db3.pg_temp_123`, ``},
+		{`pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
 
 		// Case where the persistent table being created has the same name as an
 		// existing temporary table.
@@ -744,7 +750,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		// Names of length 3
 
 		{`db3.public.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.public.foo`, `db3.public.foo`, `db3.public[0]`, ``},
-		{`db3.pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp.foo`, `db3.pg_temp.foo`, `db3.pg_temp[0]`, ``},
+		{`db3.pg_temp.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
 		{`db3.pg_temp_123.foo`, `db3`, tpath("pg_temp_123", "public"), true, `db3.pg_temp_123.foo`, `db3.pg_temp_123.foo`, `db3.pg_temp_123[0]`, ``},
 
 		// Wrongly qualifying a TT/PT as a PT/TT results in an error.
@@ -757,7 +763,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 
 		// Case where the temporary table being created has the same name as an
 		// existing persistent table.
-		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `db3.pg_temp.bar`, `db3.pg_temp.bar`, `db3.pg_temp_123`, ``},
+		{`db3.pg_temp.bar`, `db3`, tpath("pg_temp_123", "public"), false, `db3.pg_temp_123.bar`, `db3.pg_temp_123.bar`, `db3.pg_temp_123`, ``},
 
 		// Case where the persistent table being created has the same name as an
 		// existing temporary table.

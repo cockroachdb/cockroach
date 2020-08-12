@@ -64,7 +64,16 @@ const (
 	VersionGeospatialType
 	VersionEnums
 	VersionRangefeedLeases
-
+	VersionAlterColumnTypeGeneral
+	VersionAlterSystemJobsAddCreatedByColumns
+	VersionAddScheduledJobsTable
+	VersionUserDefinedSchemas
+	VersionNoOriginFKIndexes
+	VersionClientRangeInfosOnBatchResponse
+	VersionNodeMembershipStatus
+	VersionRangeStatsRespHasDesc
+	VersionMinPasswordLength
+	VersionAbortSpanBytes
 	// Add new versions here (step one of two).
 )
 
@@ -492,7 +501,63 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionRangefeedLeases,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 4},
 	},
-
+	{
+		// VersionAlterColumnTypeGeneral enables the use of alter column type for
+		// conversions that require the column data to be rewritten.
+		Key:     VersionAlterColumnTypeGeneral,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 5},
+	},
+	{
+		// VersionAlterSystemJobsTable is a version which modified system.jobs table.
+		Key:     VersionAlterSystemJobsAddCreatedByColumns,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 6},
+	},
+	{
+		// VersionAddScheduledJobsTable is a version which adds system.scheduled_jobs table.
+		Key:     VersionAddScheduledJobsTable,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 7},
+	},
+	{
+		// VersionUserDefinedSchemas enables the creation of user defined schemas.
+		Key:     VersionUserDefinedSchemas,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 8},
+	},
+	{
+		// VersionNoOriginFKIndexes allows for foreign keys to no longer need
+		// indexes on the origin side of the relationship.
+		Key:     VersionNoOriginFKIndexes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 9},
+	},
+	{
+		// VersionClientRangeInfosOnBatchResponse moves the response RangeInfos from
+		// individual response headers to the batch header.
+		Key:     VersionClientRangeInfosOnBatchResponse,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 10},
+	},
+	{
+		// VersionNodeMembershipStatus gates the usage of the MembershipStatus
+		// enum in the Liveness proto. See comment on proto definition for more
+		// details.
+		Key:     VersionNodeMembershipStatus,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 11},
+	},
+	{
+		// VersionRangeStatsRespHasDesc adds the RangeStatsResponse.RangeInfo field.
+		Key:     VersionRangeStatsRespHasDesc,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 12},
+	},
+	{
+		// VersionMinPasswordLength adds the server.user_login.min_password_length setting.
+		Key:     VersionMinPasswordLength,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 13},
+	},
+	{
+		// VersionAbortSpanBytes adds a field to MVCCStats
+		// (MVCCStats.AbortSpanBytes) that tracks the size of a
+		// range's abort span.
+		Key:     VersionAbortSpanBytes,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 14},
+	},
 	// Add new versions here (step two of two).
 
 })
@@ -511,7 +576,7 @@ var (
 	// to HEAD; if we were to set binaryMinSupportedVersion to Version19_2,
 	// that wouldn't work since you'd have to go through the final 19.2 binary
 	// before going to HEAD.
-	binaryMinSupportedVersion = VersionByKey(VersionStart19_2)
+	binaryMinSupportedVersion = VersionByKey(Version20_1)
 
 	// binaryVersion is the version of this binary.
 	//

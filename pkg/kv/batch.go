@@ -276,10 +276,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 					result.ResumeReason = roachpb.RESUME_KEY_LIMIT
 				}
 			}
-			// Fill up the RangeInfos, in case we got any.
-			if result.Err == nil && reply != nil {
-				result.RangeInfos = reply.Header().RangeInfos
-			}
 		}
 		offset += result.calls
 	}
@@ -384,6 +380,11 @@ func (b *Batch) put(key, value interface{}, inline bool) {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
 func (b *Batch) Put(key, value interface{}) {
+	if value == nil {
+		// Empty values are used as deletion tombstones, so one can't write an empty
+		// value. If the intention was indeed to delete the key, use Del() instead.
+		panic("can't Put an empty Value; did you mean to Del() instead?")
+	}
 	b.put(key, value, false)
 }
 
@@ -397,46 +398,40 @@ func (b *Batch) Put(key, value interface{}) {
 //
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc).
+//
+// A nil value can be used to delete the respective key, since there is no
+// DelInline(). This is different from Put().
 func (b *Batch) PutInline(key, value interface{}) {
 	b.put(key, value, true)
 }
 
-// CPut conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
+// CPut conditionally sets the value for a key if the existing value is equal to
+// expValue. To conditionally set a value only if the key doesn't currently
+// exist, pass an empty expValue.
 //
 // A new result will be appended to the batch which will contain a single row
 // and Result.Err will indicate success or failure.
 //
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) CPut(key, value interface{}, expValue *roachpb.Value) {
+// key can be either a byte slice or a string.
+//
+// value can be any key type, a protoutil.Message or any Go primitive type
+// (bool, int, etc). A nil value means delete the key.
+//
+// An empty expValue means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
+func (b *Batch) CPut(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, false)
-}
-
-// CPutDeprecated conditionally sets the value for a key if the existing value is equal
-// to expValue. To conditionally set a value only if there is no existing entry
-// pass nil for expValue. Note that this must be an interface{}(nil), not a
-// typed nil value (e.g. []byte(nil)).
-//
-// A new result will be appended to the batch which will contain a single row
-// and Result.Err will indicate success or failure.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc).
-func (b *Batch) CPutDeprecated(key, value, expValue interface{}) {
-	b.cputInternalDeprecated(key, value, expValue, false)
 }
 
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
-func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue *roachpb.Value) {
+func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, true)
 }
 
-func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, allowNotExist bool) {
+func (b *Batch) cputInternal(key, value interface{}, expValue []byte, allowNotExist bool) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -447,35 +442,7 @@ func (b *Batch) cputInternal(key, value interface{}, expValue *roachpb.Value, al
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	var ev roachpb.Value
-	if expValue != nil {
-		ev = *expValue
-		// This expected value is assumed to come from a kv read or from writing a
-		// roachpb.Value. In both cases it will have a checksum set. Instead of
-		// requiring callers to clear it, do it for them.
-		ev.ClearChecksum()
-	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
-	b.initResult(1, 1, notRaw, nil)
-}
-
-func (b *Batch) cputInternalDeprecated(key, value, expValue interface{}, allowNotExist bool) {
-	k, err := marshalKey(key)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	v, err := marshalValue(value)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	ev, err := marshalValue(expValue)
-	if err != nil {
-		b.initResult(0, 1, notRaw, err)
-		return
-	}
-	b.appendReqs(roachpb.NewConditionalPut(k, v, ev, allowNotExist))
+	b.appendReqs(roachpb.NewConditionalPut(k, v, expValue, allowNotExist))
 	b.initResult(1, 1, notRaw, nil)
 }
 
@@ -645,12 +612,7 @@ func (b *Batch) adminMerge(key interface{}) {
 
 // adminSplit is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, expirationTime hlc.Timestamp) {
-	spanKey, err := marshalKey(spanKeyIn)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
+func (b *Batch) adminSplit(splitKeyIn interface{}, expirationTime hlc.Timestamp) {
 	splitKey, err := marshalKey(splitKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -658,7 +620,7 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}, expirationTime hlc
 	}
 	req := &roachpb.AdminSplitRequest{
 		RequestHeader: roachpb.RequestHeader{
-			Key: spanKey,
+			Key: splitKey,
 		},
 		SplitKey:       splitKey,
 		ExpirationTime: expirationTime,

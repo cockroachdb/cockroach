@@ -9,41 +9,41 @@ CREATE TABLE uniontest (
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-·          distributed  true
-·          vectorized   true
-union      ·            ·
- ├── scan  ·            ·
- │         table        uniontest@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        uniontest@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    true
+union      ·             ·
+ ├── scan  ·             ·
+ │         table         uniontest@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         uniontest@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-·          distributed  true
-·          vectorized   true
-append     ·            ·
- ├── scan  ·            ·
- │         table        uniontest@primary
- │         spans        FULL SCAN
- └── scan  ·            ·
-·          table        uniontest@primary
-·          spans        FULL SCAN
+·          distribution  full
+·          vectorized    true
+append     ·             ·
+ ├── scan  ·             ·
+ │         table         uniontest@primary
+ │         spans         FULL SCAN
+ └── scan  ·             ·
+·          table         uniontest@primary
+·          spans         FULL SCAN
 
 # Check that EXPLAIN properly releases memory for virtual tables.
 query TTT
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-·                        distributed  false
-·                        vectorized   false
-union                    ·            ·
- ├── values              ·            ·
- │                       size         1 column, 1 row
- └── render              ·            ·
-      └── virtual table  ·            ·
-·                        source       node_build_info@primary
+·                        distribution  local
+·                        vectorized    false
+union                    ·             ·
+ ├── values              ·             ·
+ │                       size          1 column, 1 row
+ └── render              ·             ·
+      └── virtual table  ·             ·
+·                        source        node_build_info@primary
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT)
@@ -51,27 +51,27 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-·                    distributed  true         ·       ·
-·                    vectorized   true         ·       ·
-sort                 ·            ·            (a)     +a
- │                   order        +a           ·       ·
- └── union           ·            ·            (a)     ·
-      ├── render     ·            ·            (a)     ·
-      │    │         render 0     a            ·       ·
-      │    └── scan  ·            ·            (a, c)  ·
-      │              table        abc@primary  ·       ·
-      │              spans        FULL SCAN    ·       ·
-      └── render     ·            ·            (a)     ·
-           │         render 0     a            ·       ·
-           └── scan  ·            ·            (a, b)  ·
-·                    table        abc@primary  ·       ·
-·                    spans        FULL SCAN    ·       ·
+·                    distribution  full         ·       ·
+·                    vectorized    true         ·       ·
+sort                 ·             ·            (a)     +a
+ │                   order         +a           ·       ·
+ └── union           ·             ·            (a)     ·
+      ├── render     ·             ·            (a)     ·
+      │    │         render 0      a            ·       ·
+      │    └── scan  ·             ·            (a, c)  ·
+      │              table         abc@primary  ·       ·
+      │              spans         FULL SCAN    ·       ·
+      └── render     ·             ·            (a)     ·
+           │         render 0      a            ·       ·
+           └── scan  ·             ·            (a, b)  ·
+·                    table         abc@primary  ·       ·
+·                    spans         FULL SCAN    ·       ·
 
 # Regression test for #32723.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-·                      distributed    true             ·                         ·
+·                      distribution   full             ·                         ·
 ·                      vectorized     true             ·                         ·
 render                 ·              ·                (a)                       ·
  │                     render 0       a                ·                         ·
@@ -93,7 +93,7 @@ query TTTTT
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
 ----
-·                      distributed    true              ·                                     ·
+·                      distribution   full              ·                                     ·
 ·                      vectorized     true              ·                                     ·
 render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
  │                     render 0       "?column?"        ·                                     ·

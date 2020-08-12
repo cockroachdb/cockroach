@@ -638,11 +638,9 @@ allprs = set()
 # C, E, F, and G will each be checked. F is an ancestor of B, so it will be
 # excluded. E starts with "Merge", so it will not be counted. Only C and G will
 # have statistics included.
-def analyze_pr(merge, pr):
+def analyze_pr(merge, pr, parent_idx):
     allprs.add(pr)
 
-    refname = pull_ref_prefix + "/" + pr[1:]
-    tip = name_to_object(repo, refname)
 
     noteexpr = re.compile("^%s: (?P<message>.*) r=.* a=.*" % pr[1:], flags=re.M)
     m = noteexpr.search(merge.message)
@@ -654,6 +652,26 @@ def analyze_pr(merge, pr):
         # Bors merge
         title = m.group('message')
     title = title.strip()
+
+    try:
+        refname = pull_ref_prefix + "/" + pr[1:]
+        tip = name_to_object(repo, refname)
+    except exc.BadName:
+        # Oddly, we have at least one PR (#47761) which does not have a tip
+        # at /refs/pull/47761, although it's valid and merged.
+        # As of 2020-06-08 it's the only PR missing a branch tip there.
+        print("\nuh-oh!  can't find PR head in repo", pr, file=sys.stderr)
+        # We deal with it here assuming that the order of the parents
+        # of the merge commit is the same as reported by the
+        # "Merge ..." string in the merge commit's message.
+        # This happens to be true of the missing PR above as well
+        # as for several other merge commits with more than two parents.
+        tip = merge.parents[parent_idx]
+        print("check at https://github.com/cockroachdb/cockroach/pull/%s that the last commit is %s" % (pr[1:], tip.hexsha), file=sys.stderr)
+        # TODO(knz): If this method is reliable, this means we don't
+        # need the pull tips at /refs/pull *at all* which could
+        # streamline the whole experience.
+        # This should be investigated further.
 
     merge_base_result = repo.merge_base(merge.parents[0], tip)
     if len(merge_base_result) == 0:
@@ -749,9 +767,9 @@ for commit in mergepoints:
     # Analyze the commit
     if numbermatch is not None:
         prs = numbermatch.group("numbers").strip().split(" ")
-        for pr in prs:
+        for idx, pr in enumerate(prs):
             print("                                \r%s (%s) " % (pr, ctime), end='', file=sys.stderr)
-            analyze_pr(commit, pr)
+            analyze_pr(commit, pr, idx+1)
     else:
         print("                                \r%s (%s) " % (commit.hexsha[:shamin], ctime), end='', file=sys.stderr)
         analyze_standalone_commit(commit)

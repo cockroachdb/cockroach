@@ -157,8 +157,8 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geography,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4326,
-						Shape: geopb.Shape_Unset,
+						SRID:      0,
+						ShapeType: geopb.ShapeType_Unset,
 					},
 				},
 			},
@@ -174,12 +174,12 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geography,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4325,
-						Shape: geopb.Shape_MultiPoint,
+						SRID:      4325,
+						ShapeType: geopb.ShapeType_MultiPoint,
 					},
 				},
 			},
-			MakeGeography(geopb.Shape_MultiPoint, 4325),
+			MakeGeography(geopb.ShapeType_MultiPoint, 4325),
 		},
 
 		// GEOMETRY
@@ -191,8 +191,8 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geometry,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  0,
-						Shape: geopb.Shape_Unset,
+						SRID:      0,
+						ShapeType: geopb.ShapeType_Unset,
 					},
 				},
 			},
@@ -208,12 +208,12 @@ func TestTypes(t *testing.T) {
 					Oid:    oidext.T_geometry,
 					Locale: &emptyLocale,
 					GeoMetadata: &GeoMetadata{
-						SRID:  4325,
-						Shape: geopb.Shape_MultiPoint,
+						SRID:      4325,
+						ShapeType: geopb.ShapeType_MultiPoint,
 					},
 				},
 			},
-			MakeGeometry(geopb.Shape_MultiPoint, 4325),
+			MakeGeometry(geopb.ShapeType_MultiPoint, 4325),
 		},
 
 		// INET
@@ -498,12 +498,13 @@ func TestTypes(t *testing.T) {
 		{Uuid, MakeScalar(UuidFamily, oid.T_uuid, 0, 0, emptyLocale)},
 
 		// ENUMs
-		{MakeEnum(15210), &T{InternalType: InternalType{
+		{MakeEnum(15210, 15213), &T{InternalType: InternalType{
 			Family: EnumFamily,
 			Locale: &emptyLocale,
-			// TODO (rohany): Oid will be populated in the future.
-			Oid:          0,
-			StableTypeID: 15210,
+			Oid:    15210,
+			UDTMetadata: &PersistentUserDefinedTypeMetadata{
+				ArrayTypeOID: 15213,
+			},
 		}}},
 	}
 
@@ -608,8 +609,8 @@ func TestEquivalent(t *testing.T) {
 		{MakeTuple([]*T{String, Int}), MakeTuple([]*T{Int, String}), false},
 
 		// ENUM
-		{MakeEnum(15210), MakeEnum(15210), true},
-		{MakeEnum(15210), MakeEnum(15150), false},
+		{MakeEnum(15210, 15213), MakeEnum(15210, 15213), true},
+		{MakeEnum(15210, 15213), MakeEnum(15150, 15213), false},
 
 		// UNKNOWN
 		{Unknown, &T{InternalType: InternalType{

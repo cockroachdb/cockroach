@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -108,7 +109,8 @@ type tupleHashDistributor struct {
 	// cancelChecker is used during the hashing of the rows to distribute to
 	// check for query cancellation.
 	cancelChecker  CancelChecker
-	decimalScratch decimalOverloadScratch
+	overloadHelper overloadHelper
+	datumAlloc     sqlbase.DatumAlloc
 }
 
 func newTupleHashDistributor(initHashValue uint64, numOutputs int) *tupleHashDistributor {
@@ -129,8 +131,14 @@ func (d *tupleHashDistributor) distribute(
 	n := b.Length()
 	initHash(d.buckets, n, d.initHashValue)
 
+	// Check if we received a batch with more tuples than the current
+	// allocation size and increase it if so.
+	if n > d.datumAlloc.AllocSize {
+		d.datumAlloc.AllocSize = n
+	}
+
 	for _, i := range hashCols {
-		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.decimalScratch)
+		rehash(ctx, d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, d.overloadHelper, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

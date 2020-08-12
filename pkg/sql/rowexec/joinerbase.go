@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,8 +24,8 @@ import (
 type joinerBase struct {
 	execinfra.ProcessorBase
 
-	joinType    sqlbase.JoinType
-	onCond      execinfra.ExprHelper
+	joinType    descpb.JoinType
+	onCond      execinfrapb.ExprHelper
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
 	combinedRow sqlbase.EncDatumRow
@@ -50,7 +51,7 @@ func (jb *joinerBase) init(
 	processorID int32,
 	leftTypes []*types.T,
 	rightTypes []*types.T,
-	jType sqlbase.JoinType,
+	jType descpb.JoinType,
 	onExpr execinfrapb.Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
@@ -63,7 +64,7 @@ func (jb *joinerBase) init(
 
 	if jb.joinType.IsSetOpJoin() {
 		if !onExpr.Empty() {
-			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
+			return errors.Errorf("expected empty onExpr, got %v", onExpr)
 		}
 	}
 
@@ -99,7 +100,7 @@ func (jb *joinerBase) init(
 	condTypes = append(condTypes, rightTypes...)
 
 	outputSize := len(leftTypes) + jb.numMergedEqualityColumns
-	if shouldIncludeRightColsInOutput(jb.joinType) {
+	if jb.joinType.ShouldIncludeRightColsInOutput() {
 		outputSize += len(rightTypes)
 	}
 	outputTypes := condTypes[:outputSize]
@@ -109,7 +110,8 @@ func (jb *joinerBase) init(
 	); err != nil {
 		return err
 	}
-	return jb.onCond.Init(onExpr, condTypes, jb.EvalCtx)
+	semaCtx := flowCtx.TypeResolverFactory.NewSemaContext(flowCtx.EvalCtx.Txn)
+	return jb.onCond.Init(onExpr, condTypes, semaCtx, jb.EvalCtx)
 }
 
 // joinSide is the utility type to distinguish between two sides of the join.
@@ -157,32 +159,23 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
-func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
-	switch joinType {
-	case sqlbase.LeftSemiJoin, sqlbase.LeftAntiJoin, sqlbase.IntersectAllJoin, sqlbase.ExceptAllJoin:
-		return false
-	default:
-		return true
-	}
-}
-
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
-func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
+func shouldEmitUnmatchedRow(side joinSide, joinType descpb.JoinType) bool {
 	switch joinType {
-	case sqlbase.LeftSemiJoin, sqlbase.InnerJoin, sqlbase.IntersectAllJoin:
+	case descpb.LeftSemiJoin, descpb.InnerJoin, descpb.IntersectAllJoin:
 		return false
-	case sqlbase.RightOuterJoin:
+	case descpb.RightOuterJoin:
 		return side == rightSide
-	case sqlbase.LeftOuterJoin:
+	case descpb.LeftOuterJoin:
 		return side == leftSide
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		return side == leftSide
-	case sqlbase.ExceptAllJoin:
+	case descpb.ExceptAllJoin:
 		return side == leftSide
-	case sqlbase.FullOuterJoin:
+	case descpb.FullOuterJoin:
 		return true
 	default:
 		return true

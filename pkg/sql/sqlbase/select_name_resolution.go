@@ -27,12 +27,6 @@ type NameResolutionVisitor struct {
 	iVarHelper tree.IndexedVarHelper
 	searchPath sessiondata.SearchPath
 	resolver   ColumnResolver
-
-	// foundDependentVars is set to true during the analysis if an
-	// expression was found which can change values between rows of the
-	// same data source, for example IndexedVars and calls to the
-	// random() function.
-	foundDependentVars bool
 }
 
 var _ tree.Visitor = &NameResolutionVisitor{}
@@ -52,7 +46,6 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 			return false, expr
 		}
 
-		v.foundDependentVars = true
 		return false, t
 
 	case *tree.UnresolvedName:
@@ -72,20 +65,9 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 
 		colIdx := v.resolver.ResolverState.ColIdx
 		ivar := v.iVarHelper.IndexedVar(colIdx)
-		v.foundDependentVars = true
 		return true, ivar
 
 	case *tree.FuncExpr:
-		fd, err := t.Func.Resolve(v.searchPath)
-		if err != nil {
-			v.err = err
-			return false, expr
-		}
-
-		if fd.NeedsRepeatedEvaluation {
-			v.foundDependentVars = true
-		}
-
 		// Check for invalid use of *, which, if it is an argument, is the only argument.
 		if len(t.Exprs) != 1 {
 			break
@@ -115,21 +97,19 @@ func ResolveNames(
 	source *DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
-) (tree.Expr, bool, error) {
+) (tree.Expr, error) {
 	var v NameResolutionVisitor
 	return ResolveNamesUsingVisitor(&v, expr, source, ivarHelper, searchPath)
 }
 
-// ResolveNamesUsingVisitor resolves the names in the given expression. It
-// returns the resolved expression, whether it found dependent vars, and
-// whether it found stars.
+// ResolveNamesUsingVisitor resolves the names in the given expression.
 func ResolveNamesUsingVisitor(
 	v *NameResolutionVisitor,
 	expr tree.Expr,
 	source *DataSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
-) (tree.Expr, bool, error) {
+) (tree.Expr, error) {
 	*v = NameResolutionVisitor{
 		iVarHelper: ivarHelper,
 		searchPath: searchPath,
@@ -139,5 +119,5 @@ func ResolveNamesUsingVisitor(
 	}
 
 	expr, _ = tree.WalkExpr(v, expr)
-	return expr, v.foundDependentVars, v.err
+	return expr, v.err
 }

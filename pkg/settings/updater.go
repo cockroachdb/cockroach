@@ -115,6 +115,12 @@ func (u updater) Set(key, rawValue string, vt string) error {
 			return err
 		}
 		return setting.set(u.sv, d)
+	case *DurationSettingWithExplicitUnit:
+		d, err := time.ParseDuration(rawValue)
+		if err != nil {
+			return err
+		}
+		return setting.set(u.sv, d)
 	case *StateMachineSetting:
 		return setting.set(u.sv, []byte(rawValue))
 	}

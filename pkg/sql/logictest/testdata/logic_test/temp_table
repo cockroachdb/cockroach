@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant(52567)
+
 statement error temporary tables are only supported experimentally\nHINT:.*46260\n.*\n.*SET experimental_enable_temp_tables = 'on'
 CREATE TEMP TABLE a_temp(a INT PRIMARY KEY)
 
@@ -27,15 +29,6 @@ CREATE TEMP TABLE temp_table_ref (a timetz PRIMARY KEY)
 
 statement ok
 ALTER TABLE temp_table_ref ADD CONSTRAINT fk_temp FOREIGN KEY (a) REFERENCES temp_table_test(a)
-
-query TT
-SHOW CREATE TABLE temp_table_test
-----
-temp_table_test  CREATE TEMP TABLE temp_table_test (
-                 a TIMETZ NOT NULL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC),
-                 FAMILY "primary" (a)
-)
 
 query TT
 SELECT table_name, table_type FROM information_schema.tables WHERE table_name = 'temp_table_test' AND table_schema LIKE 'pg_temp_%'
@@ -240,3 +233,32 @@ query I
 SELECT * FROM regression_47030
 ----
 2
+
+# Renaming a temp table should not move it to the public schema.
+subtest regression_48233
+
+statement ok
+CREATE TEMP TABLE regression_48233(a int)
+
+statement ok
+ALTER TABLE regression_48233 RENAME TO reg_48233
+
+query IITI rowsort
+SELECT * FROM system.namespace WHERE name LIKE '%48233'
+----
+50  65  reg_48233  79
+
+statement error pq: cannot change schema of table with RENAME
+ALTER TABLE reg_48233 RENAME TO public.reg_48233
+
+statement ok
+CREATE TABLE persistent_48233(a int)
+
+statement error pq: cannot change schema of table with RENAME
+ALTER TABLE persistent_48233 RENAME TO pg_temp.pers_48233
+
+# Ensure that temporary schemas don't appear as user defined in the
+# information_schema.schemata vtable.
+query T
+SELECT schema_name FROM information_schema.schemata WHERE crdb_is_user_defined = 'YES'
+----

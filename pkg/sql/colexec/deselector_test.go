@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestDeselector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		typs     []*types.T
 		tuples   []tuple
@@ -64,7 +66,7 @@ func TestDeselector(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
+		runTestsWithFixedSel(t, []tuples{tc.tuples}, tc.typs, tc.sel, func(t *testing.T, input []colexecbase.Operator) {
 			op := NewDeselectorOp(testAllocator, input[0], tc.typs)
 			out := newOpTestOutput(op, tc.expected)
 

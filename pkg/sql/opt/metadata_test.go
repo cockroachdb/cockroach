@@ -12,10 +12,12 @@ package opt_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,6 +31,7 @@ func TestMetadata(t *testing.T) {
 	tabID := md.AddTable(&testcat.Table{}, &tree.TableName{})
 	seqID := md.AddSequence(&testcat.Sequence{})
 	md.AddView(&testcat.View{})
+	md.AddUserDefinedType(types.MakeEnum(152100, 154180))
 
 	// Call Init and add objects from catalog, verifying that IDs have been reset.
 	testCat := testcat.New()
@@ -54,13 +57,21 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected views")
 	}
 
+	md.AddUserDefinedType(types.MakeEnum(151500, 152510))
+	if len(md.AllUserDefinedTypes()) != 1 {
+		fmt.Println(md)
+		t.Fatalf("unexpected types")
+	}
+
 	md.AddDependency(opt.DepByName(&tab.TabName), tab, privilege.CREATE)
-	depsUpToDate, err := md.CheckDependencies(context.TODO(), testCat)
+	depsUpToDate, err := md.CheckDependencies(context.Background(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked")
 	}
 
 	// Call CopyFrom and verify that same objects are present in new metadata.
+	expr := &memo.ProjectExpr{}
+	md.AddWithBinding(1, expr)
 	var mdNew opt.Metadata
 	mdNew.CopyFrom(&md)
 	if mdNew.Schema(schID) != testCat.Schema() {
@@ -82,9 +93,26 @@ func TestMetadata(t *testing.T) {
 		t.Fatalf("unexpected view")
 	}
 
-	depsUpToDate, err = md.CheckDependencies(context.TODO(), testCat)
+	if ts := mdNew.AllUserDefinedTypes(); len(ts) != 1 && ts[151500].Equal(types.MakeEnum(151500, 152510)) {
+		t.Fatalf("unexpected type")
+	}
+
+	depsUpToDate, err = md.CheckDependencies(context.Background(), testCat)
 	if err == nil || depsUpToDate {
 		t.Fatalf("expected table privilege to be revoked in metadata copy")
+	}
+
+	paniced := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				paniced = true
+			}
+		}()
+		mdNew.WithBinding(1)
+	}()
+	if !paniced {
+		t.Fatalf("with bindings should not be copied!")
 	}
 }
 
@@ -231,5 +259,69 @@ func TestIndexColumns(t *testing.T) {
 		if !tc.expectedCols.Equals(actual) {
 			t.Errorf("expected %v, got %v", tc.expectedCols, actual)
 		}
+	}
+}
+
+// TestDuplicateTable tests that we can extract a set of columns from an index ordinal.
+func TestDuplicateTable(t *testing.T) {
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var md opt.Metadata
+	tn := tree.NewUnqualifiedTableName("a")
+	a := md.AddTable(cat.Table(tn), tn)
+	b := a.ColumnID(0)
+	b2 := a.ColumnID(1)
+
+	tabMeta := md.TableMeta(a)
+	tabMeta.SetConstraints(&memo.VariableExpr{Col: b})
+	tabMeta.AddComputedCol(b2, &memo.VariableExpr{Col: b})
+	tabMeta.AddPartialIndexPredicate(1, &memo.VariableExpr{Col: b})
+
+	// remap is a simple function that can only remap column IDs in a
+	// memo.VariableExpr, useful in the context of this test only.
+	remap := func(e opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+		v := e.(*memo.VariableExpr)
+		newColID, ok := colMap.Get(int(v.Col))
+		if !ok {
+			return e
+		}
+		return &memo.VariableExpr{Col: opt.ColumnID(newColID)}
+	}
+
+	// Duplicate the table.
+	dupA := md.DuplicateTable(a, remap)
+	dupTabMeta := md.TableMeta(dupA)
+	dupB := dupA.ColumnID(0)
+	dupB2 := dupA.ColumnID(1)
+
+	if dupTabMeta.Constraints == nil {
+		t.Fatalf("expected constraints to be duplicated")
+	}
+
+	col := dupTabMeta.Constraints.(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected constraints to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if dupTabMeta.ComputedCols == nil || dupTabMeta.ComputedCols[dupB2] == nil {
+		t.Fatalf("expected computed cols to be duplicated")
+	}
+
+	col = dupTabMeta.ComputedCols[dupB2].(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected computed column to reference new column ID %d, got %d", dupB, col)
+	}
+
+	if dupTabMeta.PartialIndexPredicates == nil || dupTabMeta.PartialIndexPredicates[1] == nil {
+		t.Fatalf("expected partial index predicates to be duplicated")
+	}
+
+	col = dupTabMeta.PartialIndexPredicates[1].(*memo.VariableExpr).Col
+	if col == b {
+		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)
 	}
 }

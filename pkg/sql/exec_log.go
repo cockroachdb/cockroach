@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,7 +89,7 @@ var logStatementsExecuteEnabled = settings.RegisterPublicBoolSetting(
 	false,
 )
 
-var slowQueryLogThreshold = settings.RegisterPublicDurationSetting(
+var slowQueryLogThreshold = settings.RegisterPublicNonNegativeDurationSettingWithExplicitUnit(
 	"sql.log.slow_query.latency_threshold",
 	"when set to non-zero, log statements whose service latency exceeds "+
 		"the threshold to a secondary logger on each node",
@@ -188,7 +189,7 @@ func (p *planner) maybeLogStatementInternal(
 		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
-	if queryDuration > slowLogThreshold {
+	if slowQueryLogEnabled && queryDuration > slowLogThreshold {
 		logger := p.execCfg.SlowQueryLogger
 		logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
 			age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
@@ -216,9 +217,9 @@ func (p *planner) maybeLogStatementInternal(
 // call to this method elsewhere must find a way to ensure that
 // contributors who later add features do not have to remember to call
 // this to get it right.
-func (p *planner) maybeAudit(desc sqlbase.DescriptorProto, priv privilege.Kind) {
+func (p *planner) maybeAudit(desc sqlbase.Descriptor, priv privilege.Kind) {
 	wantedMode := desc.GetAuditMode()
-	if wantedMode == sqlbase.TableDescriptor_DISABLED {
+	if wantedMode == descpb.TableDescriptor_DISABLED {
 		return
 	}
 
@@ -233,7 +234,7 @@ func (p *planner) maybeAudit(desc sqlbase.DescriptorProto, priv privilege.Kind) 
 // auditEvent represents an audit event for a single table.
 type auditEvent struct {
 	// The descriptor being audited.
-	desc sqlbase.DescriptorProto
+	desc sqlbase.Descriptor
 	// Whether the event was for INSERT/DELETE/UPDATE.
 	writing bool
 }

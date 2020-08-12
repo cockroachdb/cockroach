@@ -27,22 +27,18 @@ import (
 
 func TestTransportMoveToFront(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rd1 := roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 1, ReplicaID: 1}
 	rd2 := roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 2, ReplicaID: 2}
 	rd3 := roachpb.ReplicaDescriptor{NodeID: 3, StoreID: 3, ReplicaID: 3}
-	clients := []batchClient{
-		{replica: rd1},
-		{replica: rd2},
-		{replica: rd3},
-	}
-	gt := grpcTransport{orderedClients: clients}
+	gt := grpcTransport{replicas: []roachpb.ReplicaDescriptor{rd1, rd2, rd3}}
 
 	verifyOrder := func(replicas []roachpb.ReplicaDescriptor) {
 		file, line, _ := caller.Lookup(1)
-		for i, bc := range gt.orderedClients {
-			if bc.replica != replicas[i] {
+		for i, r := range gt.replicas {
+			if r != replicas[i] {
 				t.Fatalf("%s:%d: expected order %+v; got mismatch at index %d: %+v",
-					file, line, replicas, i, bc.replica)
+					file, line, replicas, i, r)
 			}
 		}
 	}
@@ -105,6 +101,7 @@ func TestTransportMoveToFront(t *testing.T) {
 // came from gRPC responses (through the "snowball tracing" mechanism).
 func TestSpanImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	metrics := makeDistSenderMetrics()
 	gt := grpcTransport{
@@ -162,9 +159,23 @@ func (m *mockInternalClient) Batch(
 	return br, nil
 }
 
+// RangeLookup implements the roachpb.InternalClient interface.
+func (m *mockInternalClient) RangeLookup(
+	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
+) (*roachpb.RangeLookupResponse, error) {
+	return nil, fmt.Errorf("unsupported RangeLookup call")
+}
+
 // RangeFeed is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) RangeFeed(
 	ctx context.Context, in *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	return nil, fmt.Errorf("unsupported RangeFeed call")
+}
+
+// GossipSubscription is part of the roachpb.InternalClient interface.
+func (m *mockInternalClient) GossipSubscription(
+	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_GossipSubscriptionClient, error) {
+	return nil, fmt.Errorf("unsupported GossipSubscripion call")
 }

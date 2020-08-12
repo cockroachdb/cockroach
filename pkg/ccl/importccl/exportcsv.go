@@ -15,15 +15,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -133,15 +131,6 @@ func newCSVWriterProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 
-	if err := utilccl.CheckEnterpriseEnabled(
-		flowCtx.Cfg.Settings,
-		flowCtx.Cfg.ClusterID.Get(),
-		sql.ClusterOrganization.Get(&flowCtx.Cfg.Settings.SV),
-		"EXPORT",
-	); err != nil {
-		return nil, err
-	}
-
 	c := &csvWriter{
 		flowCtx:     flowCtx,
 		processorID: processorID,
@@ -149,7 +138,8 @@ func newCSVWriterProcessor(
 		input:       input,
 		output:      output,
 	}
-	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), flowCtx.NewEvalCtx(), output); err != nil {
+	semaCtx := tree.MakeSemaContext()
+	if err := c.out.Init(&execinfrapb.PostProcessSpec{}, c.OutputTypes(), &semaCtx, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -235,10 +225,10 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				break
 			}
 			if err := writer.Flush(); err != nil {
-				return errors.New(fmt.Sprintf("failed to flush csv writer, error %s", err))
+				return errors.Wrap(err, "failed to flush csv writer")
 			}
 
-			conf, err := cloud.ExternalStorageConfFromURI(sp.spec.Destination)
+			conf, err := cloudimpl.ExternalStorageConfFromURI(sp.spec.Destination, sp.spec.User)
 			if err != nil {
 				return err
 			}
@@ -259,7 +249,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			// Close writer to ensure buffer and any compression footer is flushed.
 			err = writer.Close()
 			if err != nil {
-				return errors.New(fmt.Sprintf("failed to close exporting writer, error %s", err))
+				return errors.Wrapf(err, "failed to close exporting writer")
 			}
 
 			size := writer.Len()

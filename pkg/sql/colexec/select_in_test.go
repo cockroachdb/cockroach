@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestSelectInInt64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		desc         string
 		inputTuples  tuples
@@ -73,29 +75,28 @@ func TestSelectInInt64(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		t.Run(c.desc, func(t *testing.T) {
-			opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				op := selectInOpInt64{
-					OneInputNode: NewOneInputNode(input[0]),
-					colIdx:       0,
-					filterRow:    c.filterRow,
-					negate:       c.negate,
-					hasNulls:     c.hasNulls,
-				}
-				return &op, nil
+		log.Infof(context.Background(), "%s", c.desc)
+		opConstructor := func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+			op := selectInOpInt64{
+				OneInputNode: NewOneInputNode(input[0]),
+				colIdx:       0,
+				filterRow:    c.filterRow,
+				negate:       c.negate,
+				hasNulls:     c.hasNulls,
 			}
-			if !c.hasNulls || !c.negate {
-				runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
-			} else {
-				// When the input tuples already have nulls and we have NOT IN
-				// operator, then the nulls injection might not change the output. For
-				// example, we have this test case "1 NOT IN (NULL, 1, 2)" with the
-				// output of length 0; similarly, we will get the same zero-length
-				// output for the corresponding nulls injection test case
-				// "1 NOT IN (NULL, NULL, NULL)".
-				runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, opConstructor)
-			}
-		})
+			return &op, nil
+		}
+		if !c.hasNulls || !c.negate {
+			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier, opConstructor)
+		} else {
+			// When the input tuples already have nulls and we have NOT IN
+			// operator, then the nulls injection might not change the output. For
+			// example, we have this test case "1 NOT IN (NULL, 1, 2)" with the
+			// output of length 0; similarly, we will get the same zero-length
+			// output for the corresponding nulls injection test case
+			// "1 NOT IN (NULL, NULL, NULL)".
+			runTestsWithoutAllNullsInjection(t, []tuples{c.inputTuples}, nil /* typs */, c.outputTuples, orderedVerifier, opConstructor)
+		}
 	}
 }
 
@@ -107,9 +108,9 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 
 	for i := 0; i < coldata.BatchSize(); i++ {
 		if float64(i) < float64(coldata.BatchSize())*selectivity {
-			col1[i] = -1
+			col1[i] = int64(i % 10)
 		} else {
-			col1[i] = 1
+			col1[i] = -1
 		}
 	}
 
@@ -136,7 +137,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	inOp := &selectInOpInt64{
 		OneInputNode: NewOneInputNode(source),
 		colIdx:       0,
-		filterRow:    []int64{1, 2, 3},
+		filterRow:    []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 	}
 	inOp.Init()
 
@@ -159,6 +160,7 @@ func BenchmarkSelectInInt64(b *testing.B) {
 
 func TestProjectInInt64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -214,48 +216,49 @@ func TestProjectInInt64(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		t.Run(c.desc, func(t *testing.T) {
-			runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
-					if err != nil {
-						return nil, err
-					}
-					p := &mockTypeContext{typs: []*types.T{types.Int, types.MakeTuple([]*types.T{types.Int})}}
-					typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
-					if err != nil {
-						return nil, err
-					}
-					spec := &execinfrapb.ProcessorSpec{
-						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
-						Core: execinfrapb.ProcessorCoreUnion{
-							Noop: &execinfrapb.NoopCoreSpec{},
+		log.Infof(ctx, "%s", c.desc)
+		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
+				if err != nil {
+					return nil, err
+				}
+				p := &mockTypeContext{typs: []*types.T{types.Int, types.MakeTuple([]*types.T{types.Int})}}
+				semaCtx := tree.MakeSemaContext()
+				semaCtx.IVarContainer = p
+				typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
+				if err != nil {
+					return nil, err
+				}
+				spec := &execinfrapb.ProcessorSpec{
+					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
+					Core: execinfrapb.ProcessorCoreUnion{
+						Noop: &execinfrapb.NoopCoreSpec{},
+					},
+					Post: execinfrapb.PostProcessSpec{
+						RenderExprs: []execinfrapb.Expression{
+							{Expr: "@1"},
+							{LocalExpr: typedExpr},
 						},
-						Post: execinfrapb.PostProcessSpec{
-							RenderExprs: []execinfrapb.Expression{
-								{Expr: "@1"},
-								{LocalExpr: typedExpr},
-							},
-						},
-					}
-					args := NewColOperatorArgs{
-						Spec:                spec,
-						Inputs:              input,
-						StreamingMemAccount: testMemAcc,
-						// TODO(yuzefovich): figure out how to make the second
-						// argument of IN comparison as DTuple not Tuple.
-						// TODO(yuzefovich): reuse createTestProjectingOperator
-						// once we don't need to provide the processor
-						// constructor.
-						ProcessorConstructor: rowexec.NewProcessor,
-					}
-					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-					result, err := NewColOperator(ctx, flowCtx, args)
-					if err != nil {
-						return nil, err
-					}
-					return result.Op, nil
-				})
-		})
+					},
+				}
+				args := &NewColOperatorArgs{
+					Spec:                spec,
+					Inputs:              input,
+					StreamingMemAccount: testMemAcc,
+					// TODO(yuzefovich): figure out how to make the second
+					// argument of IN comparison as DTuple not Tuple.
+					// TODO(yuzefovich): reuse createTestProjectingOperator
+					// once we don't need to provide the processor
+					// constructor.
+					ProcessorConstructor: rowexec.NewProcessor,
+				}
+				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+				result, err := TestNewColOperator(ctx, flowCtx, args)
+				if err != nil {
+					return nil, err
+				}
+				return result.Op, nil
+			})
 	}
 }

@@ -62,6 +62,15 @@ var retiredSettings = map[string]struct{}{
 	// removed as of 20.1.
 	"schemachanger.lease.duration":       {},
 	"schemachanger.lease.renew_fraction": {},
+	// removed as of 20.2.
+	"rocksdb.ingest_backpressure.pending_compaction_threshold":         {},
+	"sql.distsql.temp_storage.joins":                                   {},
+	"sql.distsql.temp_storage.sorts":                                   {},
+	"sql.distsql.distribute_index_joins":                               {},
+	"sql.distsql.merge_joins.enabled":                                  {},
+	"sql.defaults.optimizer_foreign_keys.enabled":                      {},
+	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled": {},
+	"sql.parallel_scans.enabled":                                       {},
 }
 
 // register adds a setting to the registry.

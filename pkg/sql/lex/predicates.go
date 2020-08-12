@@ -54,6 +54,7 @@ func init() {
 		"ordinality",
 		"similar",
 		"time",
+		"generated",
 	} {
 		reservedOrLookaheadKeywords[s] = struct{}{}
 	}

@@ -18,11 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -350,6 +352,12 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 	return r.mu.state.LeaseAppliedIndex
 }
 
+// GetTracker returns the min prop tracker that keeps tabs over ongoing command
+// evaluations for the closed timestamp subsystem.
+func (r *Replica) GetTracker() closedts.TrackerI {
+	return r.store.cfg.ClosedTimestamp.Tracker
+}
+
 // Snapshot implements the raft.Storage interface. Snapshot requires that
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
@@ -450,7 +458,7 @@ type OutgoingSnapshot struct {
 	// The complete range iterator for the snapshot to stream.
 	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
-	State storagepb.ReplicaState
+	State kvserverpb.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
@@ -462,7 +470,12 @@ type OutgoingSnapshot struct {
 }
 
 func (s *OutgoingSnapshot) String() string {
-	return fmt.Sprintf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
 }
 
 // Close releases the resources associated with the snapshot.
@@ -482,7 +495,7 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State *storagepb.ReplicaState
+	State *kvserverpb.ReplicaState
 	//
 	// When true, this snapshot contains an unreplicated TruncatedState. When
 	// false, the TruncatedState is replicated (see the reference below) and the
@@ -496,7 +509,12 @@ type IncomingSnapshot struct {
 }
 
 func (s *IncomingSnapshot) String() string {
-	return fmt.Sprintf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the
@@ -955,8 +973,8 @@ func (r *Replica) applySnapshot(
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
 	// Update the store stats for the data in the snapshot.
-	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
-	r.store.metrics.addMVCCStats(*s.Stats)
+	r.store.metrics.subtractMVCCStats(ctx, r.mu.tenantID, *r.mu.state.Stats)
+	r.store.metrics.addMVCCStats(ctx, r.mu.tenantID, *s.Stats)
 	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
 	// managed by r.setDescRaftMuLocked and changes to r.mu.state.Lease must be handled
 	// by r.leasePostApply, but we called those above, so now it's safe to
@@ -1180,7 +1198,7 @@ const (
 )
 
 func encodeRaftCommand(
-	version raftCommandEncodingVersion, commandID storagebase.CmdIDKey, command []byte,
+	version raftCommandEncodingVersion, commandID kvserverbase.CmdIDKey, command []byte,
 ) []byte {
 	b := make([]byte, raftCommandPrefixLen+len(command))
 	encodeRaftCommandPrefix(b[:raftCommandPrefixLen], version, commandID)
@@ -1189,7 +1207,7 @@ func encodeRaftCommand(
 }
 
 func encodeRaftCommandPrefix(
-	b []byte, version raftCommandEncodingVersion, commandID storagebase.CmdIDKey,
+	b []byte, version raftCommandEncodingVersion, commandID kvserverbase.CmdIDKey,
 ) {
 	if len(commandID) != raftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen))
@@ -1206,10 +1224,10 @@ func encodeRaftCommandPrefix(
 // is not empty (which indicates a dummy entry generated by raft rather
 // than a real command). Usage is mostly internal to the storage package
 // but is exported for use by debugging tools.
-func DecodeRaftCommand(data []byte) (storagebase.CmdIDKey, []byte) {
+func DecodeRaftCommand(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	v := raftCommandEncodingVersion(data[0] & raftCommandNoSplitMask)
 	if v != raftVersionStandard && v != raftVersionSideloaded {
 		panic(fmt.Sprintf("unknown command encoding version %v", data[0]))
 	}
-	return storagebase.CmdIDKey(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
+	return kvserverbase.CmdIDKey(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
 }

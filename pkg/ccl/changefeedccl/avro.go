@@ -14,16 +14,17 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
-	"github.com/linkedin/goavro"
+	"github.com/linkedin/goavro/v2"
 )
 
 // The file contains a very specific marriage between avro and our SQL schemas.
@@ -141,10 +142,10 @@ type avroEnvelopeRecord struct {
 
 // columnDescToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
-func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField, error) {
+func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
 		Name:     SQLNameToAvroName(colDesc.Name),
-		Metadata: colDesc.SQLString(),
+		Metadata: colDesc.SQLStringNotHumanReadable(),
 		Default:  nil,
 		typ:      colDesc.Type,
 	}
@@ -181,7 +182,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return []byte(d.(*tree.DGeography).EWKB()), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.ParseGeographyFromEWKBRaw(geopb.EWKB(x.([]byte)))
+			g, err := geo.ParseGeographyFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
 			if err != nil {
 				return nil, err
 			}
@@ -193,7 +194,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return []byte(d.(*tree.DGeometry).EWKB()), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			g, err := geo.ParseGeometryFromEWKBRaw(geopb.EWKB(x.([]byte)))
+			g, err := geo.ParseGeometryFromEWKBUnsafe(geopb.EWKB(x.([]byte)))
 			if err != nil {
 				return nil, err
 			}
@@ -256,7 +257,8 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return d.(*tree.DTimeTZ).TimeTZ.String(), nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(nil, x.(string), time.Microsecond)
+			return d, err
 		}
 	case types.TimestampFamily:
 		avroType = avroLogicalType{
@@ -375,11 +377,11 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 // indexToAvroSchema converts a column descriptor into its corresponding avro
 // record schema. The fields are kept in the same order as columns in the index.
 func indexToAvroSchema(
-	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableDesc sqlbase.TableDescriptor, indexDesc *descpb.IndexDescriptor,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
-			Name:       SQLNameToAvroName(tableDesc.Name),
+			Name:       SQLNameToAvroName(tableDesc.GetName()),
 			SchemaType: `record`,
 		},
 		fieldIdxByName:   make(map[string]int),
@@ -391,7 +393,7 @@ func indexToAvroSchema(
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		col := &tableDesc.Columns[colIdx]
+		col := tableDesc.GetColumnAtIdx(colIdx)
 		field, err := columnDescToAvroSchema(col)
 		if err != nil {
 			return nil, err
@@ -422,9 +424,9 @@ const (
 // If a name suffix is provided (as opposed to avroSchemaNoSuffix), it will be
 // appended to the end of the avro record's name.
 func tableToAvroSchema(
-	tableDesc *sqlbase.TableDescriptor, nameSuffix string,
+	tableDesc sqlbase.TableDescriptor, nameSuffix string,
 ) (*avroDataRecord, error) {
-	name := SQLNameToAvroName(tableDesc.Name)
+	name := SQLNameToAvroName(tableDesc.GetName())
 	if nameSuffix != avroSchemaNoSuffix {
 		name = name + `_` + nameSuffix
 	}
@@ -436,8 +438,8 @@ func tableToAvroSchema(
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
-	for colIdx := range tableDesc.Columns {
-		col := &tableDesc.Columns[colIdx]
+	for colIdx := range tableDesc.GetPublicColumns() {
+		col := tableDesc.GetColumnAtIdx(colIdx)
 		field, err := columnDescToAvroSchema(col)
 		if err != nil {
 			return nil, err

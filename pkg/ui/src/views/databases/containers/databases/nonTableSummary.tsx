@@ -15,6 +15,11 @@ import { refreshNonTableStats } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
 import { Bytes } from "src/util/format";
+import Loading from "src/views/shared/components/loading";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { NonTableStatsResponseMessage } from "src/util/api";
+import { TimeSeriesTooltip } from "src/views/databases/containers/databases/tooltips";
+import "src/views/shared/components/sortabletable/sortabletable.styl";
 
 interface TimeSeriesSummaryProps {
   nonTableStats: protos.cockroach.server.serverpb.NonTableStatsResponse;
@@ -22,11 +27,12 @@ interface TimeSeriesSummaryProps {
   // information.
   nonTableStatsValid: boolean;
   refreshNonTableStats: typeof refreshNonTableStats;
+  lastError: CachedDataReducerState<NonTableStatsResponseMessage>["lastError"];
 }
 
 // NonTableSummary displays a summary section describing the current data
 // usage of the time series system.
-class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
+export class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
   componentDidMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNonTableStats();
@@ -38,7 +44,7 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
     this.props.refreshNonTableStats();
   }
 
-  renderTable() {
+  renderTable = () => {
     return (
       <div className="database-summary-table sql-table">
         <table className="sort-table">
@@ -57,9 +63,11 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
           </thead>
           <tbody>
             <tr className="sort-table__row sort-table__row--body">
-              <td className="sort-table__cell">
-                Time Series
-              </td>
+                <td className="sort-table__cell">
+                  <TimeSeriesTooltip>
+                    Time Series
+                  </TimeSeriesTooltip>
+                </td>
               <td className="sort-table__cell">
                 { Bytes(FixLong(this.props.nonTableStats.time_series_stats.approximate_disk_bytes).toNumber()) }
               </td>
@@ -85,7 +93,6 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
   }
 
   render() {
-    const hasData = this.props.nonTableStats != null;
     return (
       <div className="database-summary">
         <div className="database-summary-title">
@@ -93,7 +100,11 @@ class NonTableSummary extends React.Component<TimeSeriesSummaryProps> {
         </div>
         <div className="l-columns">
           <div className="l-columns__left">
-            { hasData ? this.renderTable() : "loading..." }
+            <Loading
+              loading={!this.props.nonTableStats}
+              error={this.props.lastError}
+              render={this.renderTable}
+            />
           </div>
           <div className="l-columns__right" />
         </div>
@@ -110,6 +121,7 @@ const mapStateToProps = (state: AdminUIState) => {
   return {
     nonTableStats: ntStats && ntStats.data,
     nonTableStatsValid: ntStats && ntStats.valid,
+    lastError: ntStats && ntStats.lastError,
   };
 };
 

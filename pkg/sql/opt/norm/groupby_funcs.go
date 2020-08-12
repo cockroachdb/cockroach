@@ -31,42 +31,6 @@ func (c *CustomFuncs) RemoveGroupingCols(
 	return &p
 }
 
-// AppendAggCols constructs a new Aggregations operator containing the aggregate
-// functions from an existing Aggregations operator plus an additional set of
-// aggregate functions, one for each column in the given set. The new functions
-// are of the given aggregate operator type.
-func (c *CustomFuncs) AppendAggCols(
-	aggs memo.AggregationsExpr, aggOp opt.Operator, cols opt.ColSet,
-) memo.AggregationsExpr {
-	outAggs := make(memo.AggregationsExpr, len(aggs)+cols.Len())
-	copy(outAggs, aggs)
-	c.makeAggCols(aggOp, cols, outAggs[len(aggs):])
-	return outAggs
-}
-
-// AppendAggCols2 constructs a new Aggregations operator containing the
-// aggregate functions from an existing Aggregations operator plus an
-// additional set of aggregate functions, one for each column in the given set.
-// The new functions are of the given aggregate operator type.
-func (c *CustomFuncs) AppendAggCols2(
-	aggs memo.AggregationsExpr,
-	aggOp opt.Operator,
-	cols opt.ColSet,
-	aggOp2 opt.Operator,
-	cols2 opt.ColSet,
-) memo.AggregationsExpr {
-	colsLen := cols.Len()
-	outAggs := make(memo.AggregationsExpr, len(aggs)+colsLen+cols2.Len())
-	copy(outAggs, aggs)
-
-	offset := len(aggs)
-	c.makeAggCols(aggOp, cols, outAggs[offset:])
-	offset += colsLen
-	c.makeAggCols(aggOp2, cols2, outAggs[offset:])
-
-	return outAggs
-}
-
 // makeAggCols is a helper method that constructs a new aggregate function of
 // the given operator type for each column in the given set. The resulting
 // aggregates are written into outElems and outColList. As an example, for
@@ -306,5 +270,134 @@ func (c *CustomFuncs) areRowsDistinct(
 		seen[key] = true
 	}
 
+	return true
+}
+
+// CanMergeAggs returns true if the given inner and outer AggregationsExprs can
+// be replaced with a single equivalent AggregationsExpr.
+func (c *CustomFuncs) CanMergeAggs(innerAggs, outerAggs memo.AggregationsExpr) bool {
+	// Create a mapping from the output ColumnID of each inner aggregate to its
+	// operator type.
+	innerColsToAggOps := map[opt.ColumnID]opt.Operator{}
+	for i := range innerAggs {
+		innerAgg := innerAggs[i].Agg
+		if !opt.IsAggregateOp(innerAgg) {
+			// Aggregate can't be an AggFilter or AggDistinct.
+			return false
+		}
+		innerColsToAggOps[innerAggs[i].Col] = innerAgg.Op()
+	}
+
+	for i := range outerAggs {
+		outerAgg := outerAggs[i].Agg
+		if !opt.IsAggregateOp(outerAgg) {
+			// Aggregate can't be an AggFilter or AggDistinct.
+			return false
+		}
+		if outerAgg.ChildCount() != 1 {
+			// There are no valid inner-outer aggregate pairs for which the ChildCount
+			// of the outer is not equal to one.
+			return false
+		}
+		input, ok := outerAgg.Child(0).(*memo.VariableExpr)
+		if !ok {
+			// The outer aggregate does not directly aggregate on a column.
+			return false
+		}
+		innerOp, ok := innerColsToAggOps[input.Col]
+		if !ok {
+			// This outer aggregate does not reference an inner aggregate.
+			return false
+		}
+		if !opt.AggregatesCanMerge(innerOp, outerAgg.Op()) {
+			// There is no single aggregate that can replace this pair.
+			return false
+		}
+	}
+	return true
+}
+
+// MergeAggs returns an AggregationsExpr that is equivalent to the two given
+// AggregationsExprs. MergeAggs will panic if CanMergeAggs is false.
+func (c *CustomFuncs) MergeAggs(innerAggs, outerAggs memo.AggregationsExpr) memo.AggregationsExpr {
+	// Create a mapping from the output ColumnIDs of the inner aggregates to their
+	// indices in innerAggs.
+	innerColsToAggs := map[opt.ColumnID]int{}
+	for i := range innerAggs {
+		innerColsToAggs[innerAggs[i].Col] = i
+	}
+
+	newAggs := make(memo.AggregationsExpr, len(outerAggs))
+	for i := range outerAggs {
+		// For each outer aggregate, construct a new aggregate that takes the Agg
+		// field of the referenced inner aggregate and the Col field of the outer
+		// aggregate. This works because CanMergeAggs has already verified that
+		// every inner-outer aggregate pair forms a valid decomposition for the
+		// inner aggregate. In most cases, the inner and outer aggregates are the
+		// same, but in the count and count-rows cases the inner aggregate must
+		// be used (see opt.AggregatesCanMerge for details). The column from the
+		// outer aggregate has to be used to preserve logical equivalency.
+		inputCol := outerAggs[i].Agg.Child(0).(*memo.VariableExpr).Col
+		innerAgg := innerAggs[innerColsToAggs[inputCol]].Agg
+		newAggs[i] = c.f.ConstructAggregationsItem(innerAgg, outerAggs[i].Col)
+	}
+	return newAggs
+}
+
+// CanEliminateJoinUnderGroupByLeft returns true if the given join can be
+// eliminated and replaced by its left input. It should be called only when the
+// join is under a grouping operator that is only using columns from the join's
+// left input.
+func (c *CustomFuncs) CanEliminateJoinUnderGroupByLeft(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinDoesNotDuplicateLeftRows(joinExpr),
+		c.JoinPreservesLeftRows(joinExpr),
+		aggs,
+	)
+}
+
+// CanEliminateJoinUnderGroupByRight returns true if the given join can be
+// eliminated and replaced by its right input. It should be called only when the
+// join is under a grouping operator that is only using columns from the join's
+// right input.
+func (c *CustomFuncs) CanEliminateJoinUnderGroupByRight(
+	joinExpr memo.RelExpr, aggs memo.AggregationsExpr,
+) bool {
+	return canEliminateGroupByJoin(
+		c.JoinDoesNotDuplicateRightRows(joinExpr),
+		c.JoinPreservesRightRows(joinExpr),
+		aggs,
+	)
+}
+
+// canEliminateGroupByJoin returns true if a join expression that has the given
+// effects on its input rows can be safely eliminated. This is the case if the
+// join does not affect the outputs of the GroupBy aggregate functions and it
+// does not remove any rows from the left input expression. For more details on
+// the conditions this function verifies, see the EliminateJoinUnderGroupByLeft
+// comment in groupby.opt. canEliminateGroupByJoin is only be called in cases
+// where rows have not been null-extended.
+func canEliminateGroupByJoin(
+	noRowsDuplicated, allRowsPreserved bool, aggs memo.AggregationsExpr,
+) bool {
+	if !allRowsPreserved {
+		return false
+	}
+	if noRowsDuplicated {
+		return true
+	}
+
+	// All rows are preserved, but they may be duplicated. Check whether the
+	// aggregates ignore duplicates.
+	for i := range aggs {
+		aggOp := memo.ExtractAggFunc(aggs[i].Agg).Op()
+		if !opt.AggregateIgnoresDuplicates(aggOp) {
+			// At least one aggregate does not ignore duplicates.
+			return false
+		}
+	}
+	// All aggregates ignore duplicates.
 	return true
 }

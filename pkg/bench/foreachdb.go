@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
@@ -91,7 +92,7 @@ func benchmarkPostgres(b *testing.B, f BenchmarkFn) {
 		RawQuery: "sslmode=require&dbname=postgres",
 	}
 	if conn, err := net.Dial("tcp", pgURL.Host); err != nil {
-		b.Skipf("unable to connect to postgres server on %s: %s", pgURL.Host, err)
+		skip.IgnoreLintf(b, "unable to connect to postgres server on %s: %s", pgURL.Host, err)
 	} else {
 		conn.Close()
 	}
@@ -111,7 +112,7 @@ func benchmarkPostgres(b *testing.B, f BenchmarkFn) {
 func benchmarkMySQL(b *testing.B, f BenchmarkFn) {
 	const addr = "localhost:3306"
 	if conn, err := net.Dial("tcp", addr); err != nil {
-		b.Skipf("unable to connect to mysql server on %s: %s", addr, err)
+		skip.IgnoreLintf(b, "unable to connect to mysql server on %s: %s", addr, err)
 	} else {
 		conn.Close()
 	}

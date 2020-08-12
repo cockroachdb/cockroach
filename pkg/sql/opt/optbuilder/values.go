@@ -71,7 +71,7 @@ func (b *Builder) buildValuesClause(
 			}
 
 			expr := inScope.walkExprTree(tuple[colIdx])
-			texpr, err := tree.TypeCheck(expr, b.semaCtx, desired)
+			texpr, err := tree.TypeCheck(b.ctx, expr, b.semaCtx, desired)
 			if err != nil {
 				panic(err)
 			}

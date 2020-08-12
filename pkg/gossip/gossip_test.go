@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,7 @@ import (
 func TestGossipInfoStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
@@ -64,7 +65,7 @@ func TestGossipInfoStore(t *testing.T) {
 func TestGossipMoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := NewTest(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
@@ -108,7 +109,7 @@ func TestGossipMoveNode(t *testing.T) {
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -153,7 +154,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 func TestGossipLocalityResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 
@@ -241,7 +242,7 @@ func TestGossipRaceLogStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
 	clusterID := uuid.MakeV4()
@@ -281,7 +282,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// This test has an implicit dependency on the maxPeers logic deciding that
 	// maxPeers is 3 for a 5-node cluster, so let's go ahead and make that
@@ -336,7 +337,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range peers {
-		local.tightenNetwork(context.TODO())
+		local.tightenNetwork(context.Background())
 	}
 
 	if outgoing := local.outgoing.gauge.Value(); outgoing > int64(maxPeers) {
@@ -353,7 +354,7 @@ func TestGossipMostDistant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	connect := func(from, to *Gossip) {
 		to.mu.Lock()
@@ -473,7 +474,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -558,7 +559,7 @@ func TestGossipCullNetwork(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -602,7 +603,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -649,7 +650,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	local.bootstrap()
 	local.manage()
 
-	peerStopper.Stop(context.TODO())
+	peerStopper.Stop(context.Background())
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
@@ -661,7 +662,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	})
 
 	peerStopper = stop.NewStopper()
-	defer peerStopper.Stop(context.TODO())
+	defer peerStopper.Stop(context.Background())
 	startGossipAtAddr(clusterID, peerNodeID, peerAddr, peerStopper, t, metric.NewRegistry())
 
 	testutils.SucceedsSoon(t, func() error {
@@ -702,7 +703,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 			select {
 			case <-stopper.ShouldQuiesce():
 			default:
-				stopper.Stop(context.TODO())
+				stopper.Stop(context.Background())
 			}
 		}()
 
@@ -725,7 +726,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)
-		gnode.clusterID.Set(context.TODO(), clusterIDs[i])
+		gnode.clusterID.Set(context.Background(), clusterIDs[i])
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {
@@ -767,7 +768,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 	})
 
 	// Kill node 0 to force node 2 to bootstrap with node 1.
-	stoppers[0].Stop(context.TODO())
+	stoppers[0].Stop(context.Background())
 	// Wait for twice the bootstrap interval, and verify that
 	// node 2 still has not connected to node 1.
 	time.Sleep(2 * interval)
@@ -784,7 +785,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 func TestGossipPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -876,9 +877,9 @@ func TestGossipPropagation(t *testing.T) {
 //     OrigStamp is less than the highwater stamp from n2
 func TestGossipLoopbackInfoPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#34494")
+	skip.WithIssue(t, 34494)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).

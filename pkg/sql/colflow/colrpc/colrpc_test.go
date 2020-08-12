@@ -218,19 +218,18 @@ func TestOutboxInbox(t *testing.T) {
 		inputMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inputMemAcc.Close(ctx)
 		input := coldatatestutils.NewRandomDataOp(
-			colmem.NewAllocator(ctx, &inputMemAcc), rng, args,
+			colmem.NewAllocator(ctx, &inputMemAcc, coldata.StandardColumnFactory), rng, args,
 		)
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSource */, nil /* toClose */)
+		outbox, err :=
+			NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSource */, nil /* toClose */)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer inboxMemAcc.Close(ctx)
-		inbox, err := NewInbox(
-			colmem.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
-		)
+		inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		streamHandlerErrCh := handleStream(serverStream.Context(), inbox, serverStream, func() { close(serverStreamNotification.Donec) })
@@ -268,7 +267,7 @@ func TestOutboxInbox(t *testing.T) {
 		deselectorMemAcc := testMemMonitor.MakeBoundAccount()
 		defer deselectorMemAcc.Close(ctx)
 		inputBatches := colexec.NewDeselectorOp(
-			colmem.NewAllocator(ctx, &deselectorMemAcc), inputBuffer, typs,
+			colmem.NewAllocator(ctx, &deselectorMemAcc, coldata.StandardColumnFactory), inputBuffer, typs,
 		)
 		inputBatches.Init()
 		outputBatches := colexecbase.NewBatchBuffer()
@@ -395,9 +394,17 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	// and the Outbox generating random batches.
 	numNextsBeforeDrain := rng.Intn(10)
 
+	expectedError := errors.New("someError")
+
 	testCases := []struct {
 		name       string
 		numBatches int
+		// overrideExpectedMetadata, if set, will override the expected metadata
+		// the test harness uses.
+		overrideExpectedMetadata []execinfrapb.ProducerMetadata
+		// verifyExpectedMetadata, if set, will override the equality check the
+		// metadata test harness uses.
+		verifyExpectedMetadata func([]execinfrapb.ProducerMetadata) bool
 		// test is the body of the test to be run. Metadata should be returned to
 		// be verified.
 		test func(context.Context, *Inbox) []execinfrapb.ProducerMetadata
@@ -433,6 +440,29 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				return inbox.DrainMeta(ctx)
 			},
 		},
+		{
+			// ErrorPropagationDuringExecution is a scenario in which the outbox
+			// returns an error after the last batch.
+			name:                     "ErrorPropagationDuringExecution",
+			numBatches:               4,
+			overrideExpectedMetadata: []execinfrapb.ProducerMetadata{{Err: expectedError}},
+			verifyExpectedMetadata: func(meta []execinfrapb.ProducerMetadata) bool {
+				return len(meta) == 1 && errors.Is(meta[0].Err, expectedError)
+			},
+			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
+				for {
+					var b coldata.Batch
+					if err := colexecerror.CatchVectorizedRuntimeError(func() {
+						b = inbox.Next(ctx)
+					}); err != nil {
+						return []execinfrapb.ProducerMetadata{{Err: err}}
+					}
+					if b.Length() == 0 {
+						return nil
+					}
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -456,14 +486,16 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				)
 			)
 
-			const expectedMeta = "someError"
-
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(ctx)
-			outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, []execinfrapb.MetadataSource{
+			expectedMetadata := []execinfrapb.ProducerMetadata{{RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{LastMsg: true}}}
+			if tc.overrideExpectedMetadata != nil {
+				expectedMetadata = tc.overrideExpectedMetadata
+			}
+			outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, []execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
 					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
-						return []execinfrapb.ProducerMetadata{{Err: errors.New(expectedMeta)}}
+						return expectedMetadata
 					},
 				},
 			}, nil /* toClose */)
@@ -471,10 +503,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer inboxMemAcc.Close(ctx)
-			inbox, err := NewInbox(
-				colmem.NewAllocator(ctx, &inboxMemAcc),
-				typs, execinfrapb.StreamID(0),
-			)
+			inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 			require.NoError(t, err)
 
 			var (
@@ -498,8 +527,12 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			require.True(t, atomic.LoadUint32(&canceled) == 0)
 
 			// Verify that we received the expected metadata.
-			require.True(t, len(meta) == 1)
-			require.True(t, testutils.IsError(meta[0].Err, expectedMeta), meta[0].Err)
+			if tc.verifyExpectedMetadata != nil {
+				require.True(t, tc.verifyExpectedMetadata(meta), "unexpected meta: %v", meta)
+			} else {
+				require.True(t, len(meta) == len(expectedMetadata))
+				require.Equal(t, expectedMetadata, meta, "unexpected meta: %v", meta)
+			}
 		})
 	}
 }
@@ -534,14 +567,13 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err :=
+		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAcc.Close(ctx)
-	inbox, err := NewInbox(
-		colmem.NewAllocator(ctx, &inboxMemAcc), typs, execinfrapb.StreamID(0),
-	)
+	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAcc, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(b, err)
 
 	var wg sync.WaitGroup
@@ -598,7 +630,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err :=
+		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})
@@ -662,7 +695,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 
 			typs := []*types.T{types.Int}
 
-			inbox, err := NewInbox(testAllocator, typs, streamID)
+			inbox, err := NewInbox(ctx, testAllocator, typs, streamID)
 			require.NoError(t, err)
 
 			ctxExtract := make(chan struct{})

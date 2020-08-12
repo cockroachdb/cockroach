@@ -13,11 +13,12 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -142,7 +143,7 @@ func optimizePuts(
 // the results.
 func evaluateBatch(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
@@ -187,7 +188,7 @@ func evaluateBatch(
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
-			// TODO(nvanbenschoten): Let's remove heartbeats from this whitelist when
+			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
 			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
@@ -217,6 +218,14 @@ func evaluateBatch(
 		// cantDeferWTOE is set when a WriteTooOldError cannot be deferred past the
 		// end of the current batch.
 		cantDeferWTOE bool
+
+		// The following fields help with debugging #50317.
+		msg              string
+		initialTxnStatus roachpb.TransactionStatus
+	}
+
+	if baHeader.Txn != nil {
+		writeTooOldState.initialTxnStatus = baHeader.Txn.Status
 	}
 
 	for index, union := range baReqs {
@@ -275,6 +284,7 @@ func evaluateBatch(
 				// other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch
 				// succeeding when it will be retried are increased.
+				writeTooOldState.msg += fmt.Sprintf("request %d (%s) got WriteTooOldErr; ", index, args.Method())
 				if writeTooOldState.err != nil {
 					writeTooOldState.err.ActualTimestamp.Forward(
 						tErr.ActualTimestamp)
@@ -393,7 +403,15 @@ func evaluateBatch(
 
 	if writeTooOldState.err != nil {
 		if baHeader.Txn != nil && baHeader.Txn.Status.IsCommittedOrStaging() {
-			log.Fatalf(ctx, "committed txn with writeTooOld err: %s", writeTooOldState.err)
+			err := errorutil.UnexpectedWithIssueErrorf(
+				50317,
+				"committed txn with writeTooOld; "+
+					"requests: %s, msg: %s, txn: %s, initial txn status: %s, cantDeferErr: %t, err: %s",
+				ba.RequestsSafe(), log.Safe(writeTooOldState.msg), baHeader.Txn,
+				log.Safe(writeTooOldState.initialTxnStatus.String()),
+				writeTooOldState.cantDeferWTOE, writeTooOldState.err)
+			log.Errorf(ctx, "%v", err)
+			errorutil.SendReport(ctx, &rec.ClusterSettings().SV, err)
 		}
 	}
 
@@ -428,7 +446,7 @@ func evaluateBatch(
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
 	ctx context.Context,
-	raftCmdID storagebase.CmdIDKey,
+	raftCmdID kvserverbase.CmdIDKey,
 	index int,
 	readWriter storage.ReadWriter,
 	rec batcheval.EvalContext,
@@ -439,7 +457,7 @@ func evaluateCommand(
 ) (result.Result, *roachpb.Error) {
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
 	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
-		filterArgs := storagebase.FilterArgs{
+		filterArgs := kvserverbase.FilterArgs{
 			Ctx:   ctx,
 			CmdID: raftCmdID,
 			Index: index,
@@ -476,10 +494,6 @@ func evaluateCommand(
 		err = errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if h.ReturnRangeInfo {
-		returnRangeInfo(reply, rec)
-	}
-
 	// TODO(peter): We'd like to assert that the hlc clock is always updated
 	// correctly, but various tests insert versioned data without going through
 	// the proper channels. See TestPushTxnUpgradeExistingTxn for an example.
@@ -494,6 +508,25 @@ func evaluateCommand(
 		log.Infof(ctx, "evaluated %s command %+v: %+v, err=%v", args.Method(), args, reply, err)
 	}
 
+	if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
+		filterArgs := kvserverbase.FilterArgs{
+			Ctx:   ctx,
+			CmdID: raftCmdID,
+			Index: index,
+			Sid:   rec.StoreID(),
+			Req:   args,
+			Hdr:   h,
+			Err:   err,
+		}
+		if pErr := filter(filterArgs); pErr != nil {
+			if pErr.GetTxn() == nil {
+				pErr.SetTxn(h.Txn)
+			}
+			log.Infof(ctx, "test injecting error: %s", pErr)
+			return result.Result{}, pErr
+		}
+	}
+
 	// Create a roachpb.Error by initializing txn from the request/response header.
 	var pErr *roachpb.Error
 	if err != nil {
@@ -505,21 +538,6 @@ func evaluateCommand(
 	}
 
 	return pd, pErr
-}
-
-// returnRangeInfo populates RangeInfos in the response if the batch
-// requested them.
-func returnRangeInfo(reply roachpb.Response, rec batcheval.EvalContext) {
-	header := reply.Header()
-	lease, _ := rec.GetLease()
-	desc := rec.Desc()
-	header.RangeInfos = []roachpb.RangeInfo{
-		{
-			Desc:  *desc,
-			Lease: lease,
-		},
-	}
-	reply.SetHeader(header)
 }
 
 // canDoServersideRetry looks at the error produced by evaluating ba (or the

@@ -61,7 +61,7 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=0.999501832, null(6)=0, distinct(14)=0.786939691, null(14)=0, distinct(16)=0.999901673, null(16)=0, distinct(1-3)=1, null(1-3)=0]
       ├── key: ()
       └── fd: ()-->(1-3,6,14,16)
 
@@ -149,7 +149,7 @@ project
       │    ├── [/4/1400 - /4/1400]
       │    └── [/4/1500 - /4/1500]
       ├── cardinality: [0 - 5]
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0]
+      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.86513081, null(3)=0, distinct(8)=4.8037108, null(8)=0, distinct(14)=0.993262137, null(14)=0, distinct(15)=0.993262137, null(15)=0, distinct(16)=0.993262137, null(16)=0, distinct(17)=4.99972957, null(17)=0, distinct(1,2)=5, null(1,2)=0]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       └── ordering: +1 opt(2) [actual: +1]
@@ -202,7 +202,7 @@ project
       ├── save-table-name: payment_01_scan_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
       ├── constraint: /3/2/6/4/1: [/1/1/'ANTIABLEABLE' - /1/1/'ANTIABLEABLE']
-      ├── stats: [rows=3.165, distinct(1)=3.16334717, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3.15605754, null(4)=0, distinct(6)=1, null(6)=0]
+      ├── stats: [rows=3.165, distinct(1)=3.16334717, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=3.15605754, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
       │   histogram(3)=  0 3.165
       │                <---- 1 -
       ├── key: (1)
@@ -251,7 +251,7 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=0.999106141, null(4)=0, distinct(5)=0.632121172, null(5)=0, distinct(6)=0.999501832, null(6)=0, distinct(17)=0.632121172, null(17)=0, distinct(1-3)=1, null(1-3)=0]
       ├── key: ()
       └── fd: ()-->(1-6,17)
 
@@ -291,7 +291,7 @@ project
  └── index-join customer
       ├── save-table-name: order_status_02_index_join_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
-      ├── stats: [rows=2.853, distinct(1)=2.85165693, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.84573236, null(4)=0, distinct(5)=0.942329734, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.942329734, null(17)=0]
+      ├── stats: [rows=2.853, distinct(1)=2.85165693, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.84573236, null(4)=0, distinct(5)=0.942329734, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.942329734, null(17)=0, distinct(2,3,6)=1, null(2,3,6)=0]
       │   histogram(3)=  0 2.853
       │                <---- 2 -
       ├── key: (1)
@@ -301,7 +301,7 @@ project
            ├── save-table-name: order_status_02_scan_3
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
-           ├── stats: [rows=2.853, distinct(1)=2.85165693, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.84573236, null(4)=0, distinct(6)=1, null(6)=0]
+           ├── stats: [rows=2.853, distinct(1)=2.85165693, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.84573236, null(4)=0, distinct(6)=1, null(6)=0, distinct(2,3,6)=1, null(2,3,6)=0]
            │   histogram(3)=  0 2.853
            │                <---- 2 -
            ├── key: (1)
@@ -339,7 +339,7 @@ project
  ├── save-table-name: order_status_03_project_1
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.974324775, distinct(1)=0.974168103, null(1)=0, distinct(5)=0.622553468, null(5)=0, distinct(6)=0.932422121, null(6)=0.292297432]
+ ├── stats: [rows=0.986644468, distinct(1)=0.986483809, null(1)=0, distinct(5)=0.627174982, null(5)=0, distinct(6)=0.943691252, null(6)=0.29599334]
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  └── scan "order"@order_idx
@@ -347,7 +347,7 @@ project
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
       ├── limit: 1
-      ├── stats: [rows=0.974324775, distinct(1)=0.974168103, null(1)=0, distinct(2)=0.974324775, null(2)=0, distinct(3)=0.974324775, null(3)=0, distinct(4)=0.974324775, null(4)=0, distinct(5)=0.622553468, null(5)=0, distinct(6)=0.932422121, null(6)=0.292297432]
+      ├── stats: [rows=0.986644468, distinct(1)=0.986483809, null(1)=0, distinct(2)=0.986644468, null(2)=0, distinct(3)=0.986644468, null(3)=0, distinct(4)=0.986644468, null(4)=0, distinct(5)=0.627174982, null(5)=0, distinct(6)=0.943691252, null(6)=0.29599334]
       ├── key: ()
       └── fd: ()-->(1-6)
 
@@ -359,13 +359,13 @@ WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
 project
  ├── save-table-name: order_status_04_project_1
  ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
- ├── stats: [rows=9.28687776, distinct(5)=9.28645943, null(5)=0, distinct(6)=6.04928775, null(6)=0, distinct(7)=1.98075105, null(7)=2.78224921, distinct(8)=0.99990737, null(8)=0, distinct(9)=9.2868189, null(9)=0]
+ ├── stats: [rows=9.40430419, distinct(5)=9.40387521, null(5)=0, distinct(6)=6.09540837, null(6)=0, distinct(7)=1.98184869, null(7)=2.81742891, distinct(8)=0.999917632, null(8)=0, distinct(9)=9.40424383, null(9)=0]
  └── scan order_line
       ├── save-table-name: order_status_04_scan_2
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/1/1/1000 - /1/1/1000]
-      ├── stats: [rows=9.28687776, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.28645943, null(5)=0, distinct(6)=6.04928775, null(6)=0, distinct(7)=1.98075105, null(7)=2.78224921, distinct(8)=0.99990737, null(8)=0, distinct(9)=9.2868189, null(9)=0]
-      │   histogram(3)=  0 9.2869
+      ├── stats: [rows=9.40430419, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.40387521, null(5)=0, distinct(6)=6.09540837, null(6)=0, distinct(7)=1.98184869, null(7)=2.81742891, distinct(8)=0.999917632, null(8)=0, distinct(9)=9.40424383, null(9)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(3)=  0 9.4043
       │                <---- 1 --
       └── fd: ()-->(1-3)
 
@@ -449,21 +449,21 @@ WHERE ol_w_id = 8 AND ol_d_id = 6 AND ol_o_id = 1000
 ----
 scalar-group-by
  ├── save-table-name: delivery_02_scalar_group_by_1
- ├── columns: sum:11(decimal)
+ ├── columns: sum:12(decimal)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(11)=1, null(11)=0]
+ ├── stats: [rows=1, distinct(12)=1, null(12)=0]
  ├── key: ()
- ├── fd: ()-->(11)
+ ├── fd: ()-->(12)
  ├── scan order_line
  │    ├── save-table-name: delivery_02_scan_2
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
  │    ├── constraint: /3/2/-1/4: [/8/6/1000 - /8/6/1000]
- │    ├── stats: [rows=9.96737239, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=9.96730459, null(9)=0]
- │    │   histogram(3)=  0 9.9674
+ │    ├── stats: [rows=10.0934032, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(9)=10.0933337, null(9)=0, distinct(1-3)=1, null(1-3)=0]
+ │    │   histogram(3)=  0 10.093
  │    │                <---- 8 --
  │    └── fd: ()-->(1-3)
  └── aggregations
-      └── sum [as=sum:11, type=decimal, outer=(9)]
+      └── sum [as=sum:12, type=decimal, outer=(9)]
            └── ol_amount:9 [type=decimal]
 
 stats table=delivery_02_scan_2
@@ -513,7 +513,7 @@ project
       ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633967659, null(11)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633967659, null(11)=0, distinct(1,2)=1, null(1,2)=0]
       ├── key: ()
       └── fd: ()-->(1,2,11)
 
@@ -541,37 +541,37 @@ WHERE ol_w_id = 1
 ----
 scalar-group-by
  ├── save-table-name: stock_level_02_scalar_group_by_1
- ├── columns: count:28(int!null)
+ ├── columns: count:30(int!null)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(28)=1, null(28)=0]
+ ├── stats: [rows=1, distinct(30)=1, null(30)=0]
  ├── key: ()
- ├── fd: ()-->(28)
+ ├── fd: ()-->(30)
  ├── distinct-on
  │    ├── save-table-name: stock_level_02_distinct_on_2
- │    ├── columns: s_i_id:11(int!null)
- │    ├── grouping columns: s_i_id:11(int!null)
- │    ├── stats: [rows=185.570315, distinct(11)=185.570315, null(11)=0]
- │    ├── key: (11)
+ │    ├── columns: s_i_id:12(int!null)
+ │    ├── grouping columns: s_i_id:12(int!null)
+ │    ├── stats: [rows=187.914589, distinct(12)=187.914589, null(12)=0]
+ │    ├── key: (12)
  │    └── inner-join (lookup stock)
  │         ├── save-table-name: stock_level_02_lookup_join_3
- │         ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
- │         ├── key columns: [3 5] = [12 11]
+ │         ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:12(int!null) s_w_id:13(int!null) s_quantity:14(int!null)
+ │         ├── key columns: [3 5] = [13 12]
  │         ├── lookup columns are key
- │         ├── stats: [rows=216.137889, distinct(1)=19.9995949, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=185.570315, null(5)=0, distinct(11)=185.570315, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=30.3089364, null(13)=0]
- │         ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
+ │         ├── stats: [rows=218.87081, distinct(1)=19.9996466, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=187.914589, null(5)=0, distinct(12)=187.914589, null(12)=0, distinct(13)=1, null(13)=0, distinct(14)=30.3110384, null(14)=0]
+ │         ├── fd: ()-->(2,3,13), (12)-->(14), (5)==(12), (12)==(5), (3)==(13), (13)==(3)
  │         ├── scan order_line
  │         │    ├── save-table-name: stock_level_02_scan_4
  │         │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │         │    ├── constraint: /3/2/-1/4: [/1/1/999 - /1/1/980]
- │         │    ├── stats: [rows=185.737555, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=185.570315, null(5)=0]
- │         │    │   histogram(3)=  0 185.74
+ │         │    ├── stats: [rows=188.086084, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=187.914589, null(5)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=20, null(1-3)=0]
+ │         │    │   histogram(3)=  0 188.09
  │         │    │                <---- 1 --
  │         │    └── fd: ()-->(2,3)
  │         └── filters
- │              ├── s_w_id:12 = 1 [type=bool, outer=(12), constraints=(/12: [/1 - /1]; tight), fd=()-->(12)]
- │              └── s_quantity:13 < 15 [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
+ │              ├── s_w_id:13 = 1 [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
+ │              └── s_quantity:14 < 15 [type=bool, outer=(14), constraints=(/14: (/NULL - /14]; tight)]
  └── aggregations
-      └── count-rows [as=count:28, type=int]
+      └── count-rows [as=count:30, type=int]
 
 stats table=stock_level_02_scan_4
 ----
@@ -582,10 +582,10 @@ column_names  row_count  distinct_count  null_count
 {ol_w_id}     193        1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}     186.00         1.04           1.00                1.00                0.00            1.00
-{ol_i_id}     186.00         1.04           186.00              1.04                0.00            1.00
-{ol_o_id}     186.00         1.04           20.00               1.00                0.00            1.00
-{ol_w_id}     186.00         1.04           1.00                1.00                0.00            1.00
+{ol_d_id}     188.00         1.03           1.00                1.00                0.00            1.00
+{ol_i_id}     188.00         1.03           188.00              1.03                0.00            1.00
+{ol_o_id}     188.00         1.03           20.00               1.00                0.00            1.00
+{ol_w_id}     188.00         1.03           1.00                1.00                0.00            1.00
 
 stats table=stock_level_02_lookup_join_3
 ----
@@ -599,13 +599,13 @@ column_names  row_count  distinct_count  null_count
 {s_w_id}      15         1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}     216.00         14.40 <==      1.00                1.00                0.00            1.00
-{ol_i_id}     216.00         14.40 <==      186.00              12.40 <==           0.00            1.00
-{ol_o_id}     216.00         14.40 <==      20.00               1.82                0.00            1.00
-{ol_w_id}     216.00         14.40 <==      1.00                1.00                0.00            1.00
-{s_i_id}      216.00         14.40 <==      186.00              12.40 <==           0.00            1.00
-{s_quantity}  216.00         14.40 <==      30.00               6.00 <==            0.00            1.00
-{s_w_id}      216.00         14.40 <==      1.00                1.00                0.00            1.00
+{ol_d_id}     219.00         14.60 <==      1.00                1.00                0.00            1.00
+{ol_i_id}     219.00         14.60 <==      188.00              12.53 <==           0.00            1.00
+{ol_o_id}     219.00         14.60 <==      20.00               1.82                0.00            1.00
+{ol_w_id}     219.00         14.60 <==      1.00                1.00                0.00            1.00
+{s_i_id}      219.00         14.60 <==      188.00              12.53 <==           0.00            1.00
+{s_quantity}  219.00         14.60 <==      30.00               6.00 <==            0.00            1.00
+{s_w_id}      219.00         14.60 <==      1.00                1.00                0.00            1.00
 
 # TODO(radu): add stock_level_02_distinct_on_2.
 
@@ -637,19 +637,21 @@ WHERE w_ytd != sum_d_ytd
 ----
 scalar-group-by
  ├── save-table-name: consistency_01_scalar_group_by_1
- ├── columns: count:22(int!null)
+ ├── columns: count:24(int!null)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(22)=1, null(22)=0]
+ ├── immutable
+ ├── stats: [rows=1, distinct(24)=1, null(24)=0]
  ├── key: ()
- ├── fd: ()-->(22)
+ ├── fd: ()-->(24)
  ├── inner-join (merge)
  │    ├── save-table-name: consistency_01_merge_join_2
- │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
+ │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:12(int!null) sum:23(decimal!null)
  │    ├── left ordering: +1
- │    ├── right ordering: +11
- │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333, null(1)=0, distinct(9)=1, null(9)=0, distinct(11)=3.33333333, null(11)=0, distinct(21)=3.33333333, null(21)=0]
- │    ├── key: (11)
- │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
+ │    ├── right ordering: +12
+ │    ├── immutable
+ │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333, null(1)=0, distinct(9)=1, null(9)=0, distinct(12)=3.33333333, null(12)=0, distinct(23)=3.33333333, null(23)=0]
+ │    ├── key: (12)
+ │    ├── fd: (1)-->(9), (12)-->(23), (1)==(12), (12)==(1)
  │    ├── scan warehouse
  │    │    ├── save-table-name: consistency_01_scan_3
  │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
@@ -661,26 +663,26 @@ scalar-group-by
  │    │    └── ordering: +1
  │    ├── group-by
  │    │    ├── save-table-name: consistency_01_group_by_4
- │    │    ├── columns: d_w_id:11(int!null) sum:21(decimal)
- │    │    ├── grouping columns: d_w_id:11(int!null)
- │    │    ├── stats: [rows=10, distinct(11)=10, null(11)=0, distinct(21)=10, null(21)=0]
- │    │    ├── key: (11)
- │    │    ├── fd: (11)-->(21)
- │    │    ├── ordering: +11
+ │    │    ├── columns: d_w_id:12(int!null) sum:23(decimal)
+ │    │    ├── grouping columns: d_w_id:12(int!null)
+ │    │    ├── stats: [rows=10, distinct(12)=10, null(12)=0, distinct(23)=10, null(23)=0]
+ │    │    ├── key: (12)
+ │    │    ├── fd: (12)-->(23)
+ │    │    ├── ordering: +12
  │    │    ├── scan district
  │    │    │    ├── save-table-name: consistency_01_scan_5
- │    │    │    ├── columns: d_w_id:11(int!null) d_ytd:19(decimal)
- │    │    │    ├── stats: [rows=100, distinct(11)=10, null(11)=0, distinct(19)=1, null(19)=0]
- │    │    │    │   histogram(11)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
+ │    │    │    ├── columns: d_w_id:12(int!null) d_ytd:20(decimal)
+ │    │    │    ├── stats: [rows=100, distinct(12)=10, null(12)=0, distinct(20)=1, null(20)=0]
+ │    │    │    │   histogram(12)=  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10  0 10
  │    │    │    │                 <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
- │    │    │    └── ordering: +11
+ │    │    │    └── ordering: +12
  │    │    └── aggregations
- │    │         └── sum [as=sum:21, type=decimal, outer=(19)]
- │    │              └── d_ytd:19 [type=decimal]
+ │    │         └── sum [as=sum:23, type=decimal, outer=(20)]
+ │    │              └── d_ytd:20 [type=decimal]
  │    └── filters
- │         └── w_ytd:9 != sum:21 [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │         └── w_ytd:9 != sum:23 [type=bool, outer=(9,23), immutable, constraints=(/9: (/NULL - ]; /23: (/NULL - ])]
  └── aggregations
-      └── count-rows [as=count_rows:22, type=int]
+      └── count-rows [as=count_rows:24, type=int]
 
 stats table=consistency_01_group_by_4
 ----
@@ -737,11 +739,11 @@ ORDER BY no_w_id, no_d_id
 ----
 group-by
  ├── save-table-name: consistency_03_group_by_1
- ├── columns: max:4(int!null)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
+ ├── columns: max:5(int!null)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
- ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=100, null(4)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(5)=100, null(5)=0, distinct(2,3)=100, null(2,3)=0]
  ├── key: (2,3)
- ├── fd: (2,3)-->(4)
+ ├── fd: (2,3)-->(5)
  ├── ordering: +3,+2
  ├── scan new_order
  │    ├── save-table-name: consistency_03_scan_2
@@ -752,7 +754,7 @@ group-by
  │    ├── key: (1-3)
  │    └── ordering: +3,+2
  └── aggregations
-      └── max [as=max:4, type=int, outer=(1)]
+      └── max [as=max:5, type=int, outer=(1)]
            └── no_o_id:1 [type=int]
 
 stats table=consistency_03_group_by_1
@@ -775,11 +777,11 @@ ORDER BY o_w_id, o_d_id
 ----
 group-by
  ├── save-table-name: consistency_04_group_by_1
- ├── columns: max:9(int!null)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── columns: max:10(int!null)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
- ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(9)=100, null(9)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(10)=100, null(10)=0, distinct(2,3)=100, null(2,3)=0]
  ├── key: (2,3)
- ├── fd: (2,3)-->(9)
+ ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
  ├── scan "order"@order_idx
  │    ├── save-table-name: consistency_04_scan_2
@@ -790,7 +792,7 @@ group-by
  │    ├── key: (1-3)
  │    └── ordering: +3,+2
  └── aggregations
-      └── max [as=max:9, type=int, outer=(1)]
+      └── max [as=max:10, type=int, outer=(1)]
            └── o_id:1 [type=int]
 
 stats table=consistency_04_group_by_1
@@ -817,25 +819,27 @@ WHERE nod != -1
 ----
 scalar-group-by
  ├── save-table-name: consistency_05_scalar_group_by_1
- ├── columns: count:8(int!null)
+ ├── columns: count:9(int!null)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+ ├── immutable
+ ├── stats: [rows=1, distinct(9)=1, null(9)=0]
  ├── key: ()
- ├── fd: ()-->(8)
+ ├── fd: ()-->(9)
  ├── select
  │    ├── save-table-name: consistency_05_select_2
- │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
- │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, distinct(3)=9.8265847, null(3)=0, distinct(4)=33.3333333, null(4)=0, distinct(5)=33.3333333, null(5)=0, distinct(6)=33.3333333, null(6)=0]
+ │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:5(int!null) min:6(int!null) count_rows:7(int!null)
+ │    ├── immutable
+ │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, distinct(3)=9.8265847, null(3)=0, distinct(5)=33.3333333, null(5)=0, distinct(6)=33.3333333, null(6)=0, distinct(7)=33.3333333, null(7)=0]
  │    ├── key: (2,3)
- │    ├── fd: (2,3)-->(4-6)
+ │    ├── fd: (2,3)-->(5-7)
  │    ├── group-by
  │    │    ├── save-table-name: consistency_05_group_by_3
- │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int!null) min:5(int!null) count_rows:6(int!null)
+ │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:5(int!null) min:6(int!null) count_rows:7(int!null)
  │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    ├── internal-ordering: +3,+2
- │    │    ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(5)=100, null(5)=0, distinct(6)=100, null(6)=0, distinct(7)=100, null(7)=0, distinct(2,3)=100, null(2,3)=0]
  │    │    ├── key: (2,3)
- │    │    ├── fd: (2,3)-->(4-6)
+ │    │    ├── fd: (2,3)-->(5-7)
  │    │    ├── scan new_order
  │    │    │    ├── save-table-name: consistency_05_scan_4
  │    │    │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
@@ -845,15 +849,15 @@ scalar-group-by
  │    │    │    ├── key: (1-3)
  │    │    │    └── ordering: +3,+2
  │    │    └── aggregations
- │    │         ├── max [as=max:4, type=int, outer=(1)]
+ │    │         ├── max [as=max:5, type=int, outer=(1)]
  │    │         │    └── no_o_id:1 [type=int]
- │    │         ├── min [as=min:5, type=int, outer=(1)]
+ │    │         ├── min [as=min:6, type=int, outer=(1)]
  │    │         │    └── no_o_id:1 [type=int]
- │    │         └── count-rows [as=count_rows:6, type=int]
+ │    │         └── count-rows [as=count_rows:7, type=int]
  │    └── filters
- │         └── ((max:4 - min:5) - count_rows:6) != -1 [type=bool, outer=(4-6)]
+ │         └── ((max:5 - min:6) - count_rows:7) != -1 [type=bool, outer=(5-7), immutable]
  └── aggregations
-      └── count-rows [as=count_rows:8, type=int]
+      └── count-rows [as=count_rows:9, type=int]
 
 stats table=consistency_05_group_by_3
 ----
@@ -903,11 +907,11 @@ ORDER BY o_w_id, o_d_id
 ----
 group-by
  ├── save-table-name: consistency_06_group_by_1
- ├── columns: sum:9(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── columns: sum:10(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
- ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(9)=100, null(9)=0, distinct(2,3)=100, null(2,3)=0]
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(10)=100, null(10)=0, distinct(2,3)=100, null(2,3)=0]
  ├── key: (2,3)
- ├── fd: (2,3)-->(9)
+ ├── fd: (2,3)-->(10)
  ├── ordering: +3,+2
  ├── scan "order"
  │    ├── save-table-name: consistency_06_scan_2
@@ -917,7 +921,7 @@ group-by
  │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
  │    └── ordering: +3,+2
  └── aggregations
-      └── sum [as=sum:9, type=decimal, outer=(7)]
+      └── sum [as=sum:10, type=decimal, outer=(7)]
            └── o_ol_cnt:7 [type=int]
 
 stats table=consistency_06_group_by_1
@@ -938,38 +942,33 @@ FROM order_line
 GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
-sort
- ├── save-table-name: consistency_07_sort_1
- ├── columns: count:11(int!null)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
- ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
+group-by
+ ├── save-table-name: consistency_07_group_by_1
+ ├── columns: count:12(int!null)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
+ ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+ ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(12)=100, null(12)=0, distinct(2,3)=100, null(2,3)=0]
  ├── key: (2,3)
- ├── fd: (2,3)-->(11)
+ ├── fd: (2,3)-->(12)
  ├── ordering: +3,+2
- └── group-by
-      ├── save-table-name: consistency_07_group_by_2
-      ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int!null)
-      ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
-      ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=100, null(11)=0, distinct(2,3)=100, null(2,3)=0]
-      ├── key: (2,3)
-      ├── fd: (2,3)-->(11)
-      ├── scan order_line@order_line_stock_fk_idx
-      │    ├── save-table-name: consistency_07_scan_3
-      │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
-      │    └── stats: [rows=3001222, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
-      │        histogram(3)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
-      │                     <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
-      └── aggregations
-           └── count-rows [as=count_rows:11, type=int]
+ ├── scan order_line
+ │    ├── save-table-name: consistency_07_scan_2
+ │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    ├── stats: [rows=3001222, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │   histogram(3)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
+ │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    └── ordering: +3,+2
+ └── aggregations
+      └── count-rows [as=count_rows:12, type=int]
 
-stats table=consistency_07_group_by_2
+stats table=consistency_07_group_by_1
 ----
 column_names  row_count  distinct_count  null_count
-{count_rows}  100        93              0
+{count}       100        93              0
 {ol_d_id}     100        10              0
 {ol_w_id}     100        10              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count_rows}  100.00         1.00           100.00              1.08                0.00            1.00
+{count}       100.00         1.00           100.00              1.08                0.00            1.00
 {ol_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
 {ol_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
 
@@ -982,7 +981,7 @@ except-all
  ├── save-table-name: consistency_08_except_all_1
  ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
- ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
+ ├── right columns: o_w_id:7(int) o_d_id:6(int) o_id:5(int)
  ├── stats: [rows=90000, distinct(1)=900, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
  ├── scan new_order
  │    ├── save-table-name: consistency_08_scan_2
@@ -993,25 +992,25 @@ except-all
  │    └── key: (1-3)
  └── project
       ├── save-table-name: consistency_08_project_3
-      ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
-      ├── stats: [rows=90000, distinct(4)=2999, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0]
-      ├── key: (4-6)
+      ├── columns: o_id:5(int!null) o_d_id:6(int!null) o_w_id:7(int!null)
+      ├── stats: [rows=90000, distinct(5)=2999, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=10, null(7)=0]
+      ├── key: (5-7)
       └── select
            ├── save-table-name: consistency_08_select_4
-           ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           ├── stats: [rows=90000, distinct(4)=2999, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=1, null(9)=90000]
-           ├── key: (4-6)
-           ├── fd: ()-->(9)
+           ├── columns: o_id:5(int!null) o_d_id:6(int!null) o_w_id:7(int!null) o_carrier_id:10(int)
+           ├── stats: [rows=90000, distinct(5)=2999, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=10, null(7)=0, distinct(10)=1, null(10)=90000]
+           ├── key: (5-7)
+           ├── fd: ()-->(10)
            ├── scan "order"@order_idx
            │    ├── save-table-name: consistency_08_scan_5
-           │    ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           │    ├── stats: [rows=300000, distinct(4)=2999, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=11, null(9)=90000]
-           │    │   histogram(6)=  0 29280 0 29310 0 31560 0 30000 0 29220 0 30720 0 31110 0 30510 0 29070 0 29220
+           │    ├── columns: o_id:5(int!null) o_d_id:6(int!null) o_w_id:7(int!null) o_carrier_id:10(int)
+           │    ├── stats: [rows=300000, distinct(5)=2999, null(5)=0, distinct(6)=10, null(6)=0, distinct(7)=10, null(7)=0, distinct(10)=11, null(10)=90000]
+           │    │   histogram(7)=  0 29280 0 29310 0 31560 0 30000 0 29220 0 30720 0 31110 0 30510 0 29070 0 29220
            │    │                <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
-           │    ├── key: (4-6)
-           │    └── fd: (4-6)-->(9)
+           │    ├── key: (5-7)
+           │    └── fd: (5-7)-->(10)
            └── filters
-                └── o_carrier_id:9 IS NULL [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
+                └── o_carrier_id:10 IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
 stats table=consistency_08_select_4
 ----
@@ -1048,7 +1047,7 @@ except-all
  ├── save-table-name: consistency_09_except_all_1
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
- ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
+ ├── right columns: no_w_id:12(int) no_d_id:11(int) no_o_id:10(int)
  ├── stats: [rows=90000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
  ├── project
  │    ├── save-table-name: consistency_09_project_2
@@ -1073,11 +1072,11 @@ except-all
  │              └── o_carrier_id:6 IS NULL [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  └── scan new_order
       ├── save-table-name: consistency_09_scan_5
-      ├── columns: no_o_id:9(int!null) no_d_id:10(int!null) no_w_id:11(int!null)
-      ├── stats: [rows=90000, distinct(9)=900, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
-      │   histogram(11)=  0 9333 0 9189 0 9261 0 9162 0 9306 0 8442 0 8946 0 8532 0 9135 0 8694
+      ├── columns: no_o_id:10(int!null) no_d_id:11(int!null) no_w_id:12(int!null)
+      ├── stats: [rows=90000, distinct(10)=900, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0]
+      │   histogram(12)=  0 9333 0 9189 0 9261 0 9162 0 9306 0 8442 0 8946 0 8532 0 9135 0 8694
       │                 <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
-      └── key: (9-11)
+      └── key: (10-12)
 
 stats table=consistency_09_except_all_1
 ----
@@ -1109,7 +1108,7 @@ except-all
  ├── save-table-name: consistency_10_except_all_1
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
- ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
+ ├── right columns: ol_w_id:12(int) ol_d_id:11(int) ol_o_id:10(int) count_rows:21(int)
  ├── stats: [rows=300000, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(7)=11, null(7)=0]
  ├── scan "order"
  │    ├── save-table-name: consistency_10_scan_2
@@ -1121,19 +1120,21 @@ except-all
  │    └── fd: (1-3)-->(7)
  └── group-by
       ├── save-table-name: consistency_10_group_by_3
-      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int!null)
-      ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      ├── stats: [rows=295745, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(19)=295745, null(19)=0, distinct(9-11)=295745, null(9-11)=0]
-      ├── key: (9-11)
-      ├── fd: (9-11)-->(19)
-      ├── scan order_line@order_line_stock_fk_idx
+      ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) count_rows:21(int!null)
+      ├── grouping columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null)
+      ├── internal-ordering: +12,+11,-10
+      ├── stats: [rows=295745, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0, distinct(21)=295745, null(21)=0, distinct(10-12)=295745, null(10-12)=0]
+      ├── key: (10-12)
+      ├── fd: (10-12)-->(21)
+      ├── scan order_line
       │    ├── save-table-name: consistency_10_scan_4
-      │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      │    └── stats: [rows=3001222, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(9-11)=295745, null(9-11)=0]
-      │        histogram(11)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
-      │                      <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+      │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null)
+      │    ├── stats: [rows=3001222, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0, distinct(10-12)=295745, null(10-12)=0]
+      │    │   histogram(12)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
+      │    │                 <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+      │    └── ordering: +12,+11,-10
       └── aggregations
-           └── count-rows [as=count_rows:19, type=int]
+           └── count-rows [as=count_rows:21, type=int]
 
 stats table=consistency_10_group_by_3
 ----
@@ -1179,33 +1180,35 @@ EXCEPT ALL
 ----
 except-all
  ├── save-table-name: consistency_11_except_all_1
- ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
- ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
- ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
- ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=295745, null(11)=0]
+ ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:12(int)
+ ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:12(int)
+ ├── right columns: o_w_id:15(int) o_d_id:14(int) o_id:13(int) o_ol_cnt:19(int)
+ ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(12)=295745, null(12)=0]
  ├── group-by
  │    ├── save-table-name: consistency_11_group_by_2
- │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int!null)
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:12(int!null)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(11)=295745, null(11)=0, distinct(1-3)=295745, null(1-3)=0]
+ │    ├── internal-ordering: +3,+2,-1
+ │    ├── stats: [rows=295745, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(12)=295745, null(12)=0, distinct(1-3)=295745, null(1-3)=0]
  │    ├── key: (1-3)
- │    ├── fd: (1-3)-->(11)
- │    ├── scan order_line@order_line_stock_fk_idx
+ │    ├── fd: (1-3)-->(12)
+ │    ├── scan order_line
  │    │    ├── save-table-name: consistency_11_scan_3
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    │    └── stats: [rows=3001222, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(1-3)=295745, null(1-3)=0]
- │    │        histogram(3)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
- │    │                     <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    ├── stats: [rows=3001222, distinct(1)=2999, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(1-3)=295745, null(1-3)=0]
+ │    │    │   histogram(3)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
+ │    │    │                <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
+ │    │    └── ordering: +3,+2,-1
  │    └── aggregations
- │         └── count-rows [as=count_rows:11, type=int]
+ │         └── count-rows [as=count_rows:12, type=int]
  └── scan "order"
       ├── save-table-name: consistency_11_scan_4
-      ├── columns: o_id:12(int!null) o_d_id:13(int!null) o_w_id:14(int!null) o_ol_cnt:18(int)
-      ├── stats: [rows=300000, distinct(12)=2999, null(12)=0, distinct(13)=10, null(13)=0, distinct(14)=10, null(14)=0, distinct(18)=11, null(18)=0]
-      │   histogram(14)=  0 29280 0 29310 0 31560 0 30000 0 29220 0 30720 0 31110 0 30510 0 29070 0 29220
+      ├── columns: o_id:13(int!null) o_d_id:14(int!null) o_w_id:15(int!null) o_ol_cnt:19(int)
+      ├── stats: [rows=300000, distinct(13)=2999, null(13)=0, distinct(14)=10, null(14)=0, distinct(15)=10, null(15)=0, distinct(19)=11, null(19)=0]
+      │   histogram(15)=  0 29280 0 29310 0 31560 0 30000 0 29220 0 30720 0 31110 0 30510 0 29070 0 29220
       │                 <---- 0 ----- 1 ----- 2 ----- 3 ----- 4 ----- 5 ----- 6 ----- 7 ----- 8 ----- 9 -
-      ├── key: (12-14)
-      └── fd: (12-14)-->(18)
+      ├── key: (13-15)
+      └── fd: (13-15)-->(19)
 
 stats table=consistency_11_except_all_1
 ----
@@ -1240,36 +1243,37 @@ WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
 scalar-group-by
  ├── save-table-name: consistency_12_scalar_group_by_1
- ├── columns: count:19(int!null)
+ ├── columns: count:21(int!null)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1, distinct(19)=1, null(19)=0]
+ ├── stats: [rows=1, distinct(21)=1, null(21)=0]
  ├── key: ()
- ├── fd: ()-->(19)
+ ├── fd: ()-->(21)
  ├── select
  │    ├── save-table-name: consistency_12_select_2
- │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    ├── stats: [rows=299711.333, distinct(1)=2999, null(1)=209767.952, distinct(2)=10, null(2)=209767.952, distinct(3)=10, null(3)=209767.952, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:10(int) ol_d_id:11(int) ol_w_id:12(int)
+ │    ├── stats: [rows=299711.333, distinct(1)=2999, null(1)=209767.952, distinct(2)=10, null(2)=209767.952, distinct(3)=10, null(3)=209767.952, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0]
  │    ├── full-join (hash)
  │    │    ├── save-table-name: consistency_12_full_join_3
- │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629303.857, distinct(2)=10, null(2)=629303.857, distinct(3)=10, null(3)=629303.857, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:10(int) ol_d_id:11(int) ol_w_id:12(int)
+ │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629303.857, distinct(2)=10, null(2)=629303.857, distinct(3)=10, null(3)=629303.857, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0]
  │    │    ├── project
  │    │    │    ├── save-table-name: consistency_12_project_4
- │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
- │    │    │    ├── stats: [rows=899134, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    │    │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null)
+ │    │    │    ├── stats: [rows=899134, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0]
  │    │    │    └── select
  │    │    │         ├── save-table-name: consistency_12_select_5
- │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         ├── stats: [rows=899134, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=899134]
- │    │    │         ├── fd: ()-->(15)
+ │    │    │         ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_delivery_d:16(timestamp)
+ │    │    │         ├── stats: [rows=899134, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0, distinct(16)=1, null(16)=899134]
+ │    │    │         ├── fd: ()-->(16)
  │    │    │         ├── scan order_line
  │    │    │         │    ├── save-table-name: consistency_12_scan_6
- │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         │    └── stats: [rows=3001222, distinct(9)=2999, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=2, null(15)=899134]
- │    │    │         │        histogram(11)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
+ │    │    │         │    ├── columns: ol_o_id:10(int!null) ol_d_id:11(int!null) ol_w_id:12(int!null) ol_delivery_d:16(timestamp)
+ │    │    │         │    └── stats: [rows=3001222, distinct(10)=2999, null(10)=0, distinct(11)=10, null(11)=0, distinct(12)=10, null(12)=0, distinct(16)=2, null(16)=899134]
+ │    │    │         │        histogram(12)=  0 3.1213e+05 0 2.7851e+05 0 2.9892e+05 0 3.0732e+05 0 2.9892e+05 0 2.9622e+05 0 3.1363e+05 0 2.8392e+05 0 2.9892e+05 0 3.1273e+05
  │    │    │         │                      <------ 0 ---------- 1 ---------- 2 ---------- 3 ---------- 4 ---------- 5 ---------- 6 ---------- 7 ---------- 8 ---------- 9 ----
  │    │    │         └── filters
- │    │    │              └── ol_delivery_d:15 IS NULL [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
+ │    │    │              └── ol_delivery_d:16 IS NULL [type=bool, outer=(16), constraints=(/16: [/NULL - /NULL]; tight), fd=()-->(16)]
  │    │    ├── project
  │    │    │    ├── save-table-name: consistency_12_project_7
  │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
@@ -1292,13 +1296,13 @@ scalar-group-by
  │    │    │         └── filters
  │    │    │              └── o_carrier_id:6 IS NULL [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
  │    │    └── filters
- │    │         ├── ol_w_id:11 = o_w_id:3 [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
- │    │         ├── ol_d_id:10 = o_d_id:2 [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
- │    │         └── ol_o_id:9 = o_id:1 [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │         ├── ol_w_id:12 = o_w_id:3 [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ]), fd=(3)==(12), (12)==(3)]
+ │    │         ├── ol_d_id:11 = o_d_id:2 [type=bool, outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ]), fd=(2)==(11), (11)==(2)]
+ │    │         └── ol_o_id:10 = o_id:1 [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │    └── filters
- │         └── (ol_o_id:9 IS NULL) OR (o_id:1 IS NULL) [type=bool, outer=(1,9)]
+ │         └── (ol_o_id:10 IS NULL) OR (o_id:1 IS NULL) [type=bool, outer=(1,10)]
  └── aggregations
-      └── count-rows [as=count_rows:19, type=int]
+      └── count-rows [as=count_rows:21, type=int]
 
 stats table=consistency_12_select_5
 ----

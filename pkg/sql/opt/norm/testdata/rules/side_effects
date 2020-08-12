@@ -1,4 +1,4 @@
-# See Logical.CanHaveSideEffects comment for the optimizer's side-effect policy.
+# See VolatilitySet comment for the optimizer's side-effect policy.
 
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
@@ -17,39 +17,39 @@ norm
 SELECT * FROM a ORDER BY length('foo'), random()+1.0
 ----
 sort
- ├── columns: k:1!null i:2 f:3 s:4 j:5  [hidden: column7:7]
- ├── side-effects
+ ├── columns: k:1!null i:2 f:3 s:4 j:5  [hidden: column8:8]
+ ├── volatile
  ├── key: (1)
- ├── fd: (1)-->(2-5,7)
- ├── ordering: +7
+ ├── fd: (1)-->(2-5,8)
+ ├── ordering: +8
  └── project
-      ├── columns: column7:7 k:1!null i:2 f:3 s:4 j:5
-      ├── side-effects
+      ├── columns: column8:8 k:1!null i:2 f:3 s:4 j:5
+      ├── volatile
       ├── key: (1)
-      ├── fd: (1)-->(2-5,7)
+      ├── fd: (1)-->(2-5,8)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    ├── key: (1)
       │    └── fd: (1)-->(2-5)
       └── projections
-           └── random() + 1.0 [as=column7:7, side-effects]
+           └── random() + 1.0 [as=column8:8, volatile]
 
 # Don't allow GROUP BY column to be eliminated if it has a side effect.
 norm
 SELECT avg(f) FROM a WHERE i=5 GROUP BY i+(random()*10)::int, i+1
 ----
 project
- ├── columns: avg:6
- ├── side-effects
+ ├── columns: avg:7
+ ├── volatile
  └── group-by
-      ├── columns: avg:6 column7:7
-      ├── grouping columns: column7:7
-      ├── side-effects
-      ├── key: (7)
-      ├── fd: (7)-->(6)
+      ├── columns: avg:7 column8:8
+      ├── grouping columns: column8:8
+      ├── volatile
+      ├── key: (8)
+      ├── fd: (8)-->(7)
       ├── project
-      │    ├── columns: column7:7 f:3
-      │    ├── side-effects
+      │    ├── columns: column8:8 f:3
+      │    ├── volatile
       │    ├── select
       │    │    ├── columns: i:2!null f:3
       │    │    ├── fd: ()-->(2)
@@ -58,9 +58,9 @@ project
       │    │    └── filters
       │    │         └── i:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
       │    └── projections
-      │         └── i:2 + (random() * 10.0)::INT8 [as=column7:7, outer=(2), side-effects]
+      │         └── i:2 + (random() * 10.0)::INT8 [as=column8:8, outer=(2), volatile]
       └── aggregations
-           └── avg [as=avg:6, outer=(3)]
+           └── avg [as=avg:7, outer=(3)]
                 └── f:3
 
 # Allow elimination of side effecting expressions during column pruning.
@@ -75,13 +75,14 @@ norm
 SELECT * FROM a INNER JOIN xy ON k=x WHERE k=random()
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6!null y:7
- ├── side-effects
- ├── key: (6)
- ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7!null y:8
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ ├── volatile
+ ├── key: (7)
+ ├── fd: (1)-->(2-5), (7)-->(8), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: k:1!null i:2 f:3 s:4 j:5
- │    ├── side-effects
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-5)
  │    ├── scan a
@@ -89,40 +90,41 @@ inner-join (hash)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         └── k:1 = random() [outer=(1), side-effects, constraints=(/1: (/NULL - ])]
+ │         └── k:1 = random() [outer=(1), volatile, constraints=(/1: (/NULL - ])]
  ├── select
- │    ├── columns: x:6!null y:7
- │    ├── side-effects
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
+ │    ├── columns: x:7!null y:8
+ │    ├── volatile
+ │    ├── key: (7)
+ │    ├── fd: (7)-->(8)
  │    ├── scan xy
- │    │    ├── columns: x:6!null y:7
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
  │    └── filters
- │         └── x:6 = random() [outer=(6), side-effects, constraints=(/6: (/NULL - ])]
+ │         └── x:7 = random() [outer=(7), volatile, constraints=(/7: (/NULL - ])]
  └── filters
-      └── k:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # Decorrelate CASE WHEN branch if there are no side effects.
 norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT 1) ELSE 5 END FROM a
 ----
 project
- ├── columns: case:8
+ ├── columns: case:10
  ├── left-join (hash)
- │    ├── columns: i:2 x:6 y:7
- │    ├── fd: (6)-->(7)
+ │    ├── columns: i:2 x:7 y:8
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── fd: (7)-->(8)
  │    ├── scan a
  │    │    └── columns: i:2
  │    ├── scan xy
- │    │    ├── columns: x:6!null y:7
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
+ │    │    ├── columns: x:7!null y:8
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8)
  │    └── filters
- │         └── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ │         └── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  └── projections
-      └── CASE WHEN i:2 < 0 THEN y:7 ELSE 5 END [as=case:8, outer=(2,7)]
+      └── CASE WHEN i:2 < 0 THEN y:8 ELSE 5 END [as=case:10, outer=(2,8)]
 
 # Decorrelate CASE ELSE branch if there are no side effects.
 norm
@@ -130,69 +132,71 @@ SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i LIM
 ----
 project
  ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-5), (6)-->(7)
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,7,8), (7)-->(8)
       ├── left-join (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:7
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2-5), (6)-->(7)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,7,8), (7)-->(8)
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-5)
       │    ├── scan xy
-      │    │    ├── columns: x:6!null y:7
-      │    │    ├── key: (6)
-      │    │    └── fd: (6)-->(7)
+      │    │    ├── columns: x:7!null y:8
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8)
       │    └── filters
-      │         └── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      │         └── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
       └── filters
-           └── k:1 = CASE WHEN i:2 < 0 THEN 5 ELSE y:7 END [outer=(1,2,7), constraints=(/1: (/NULL - ])]
+           └── k:1 = CASE WHEN i:2 < 0 THEN 5 ELSE y:8 END [outer=(1,2,8), constraints=(/1: (/NULL - ])]
 
 # Don't decorrelate CASE WHEN branch if there are side effects.
 norm
 SELECT CASE WHEN i<0 THEN (SELECT y FROM xy WHERE x=i LIMIT (random()*10)::int) ELSE 5 END FROM a
 ----
 project
- ├── columns: case:8
- ├── side-effects
+ ├── columns: case:10
+ ├── volatile
  ├── scan a
  │    └── columns: i:2
  └── projections
-      └── case [as=case:8, outer=(2), side-effects, correlated-subquery]
+      └── case [as=case:10, outer=(2), volatile, correlated-subquery]
            ├── true
            ├── when
            │    ├── i:2 < 0
            │    └── subquery
            │         └── project
-           │              ├── columns: y:7
+           │              ├── columns: y:8
            │              ├── outer: (2)
            │              ├── cardinality: [0 - 1]
-           │              ├── side-effects
+           │              ├── volatile
            │              ├── key: ()
-           │              ├── fd: ()-->(7)
+           │              ├── fd: ()-->(8)
            │              └── limit
-           │                   ├── columns: x:6!null y:7
+           │                   ├── columns: x:7!null y:8
            │                   ├── outer: (2)
            │                   ├── cardinality: [0 - 1]
-           │                   ├── side-effects
+           │                   ├── volatile
            │                   ├── key: ()
-           │                   ├── fd: ()-->(6,7)
+           │                   ├── fd: ()-->(7,8)
            │                   ├── select
-           │                   │    ├── columns: x:6!null y:7
+           │                   │    ├── columns: x:7!null y:8
            │                   │    ├── outer: (2)
            │                   │    ├── cardinality: [0 - 1]
            │                   │    ├── key: ()
-           │                   │    ├── fd: ()-->(6,7)
+           │                   │    ├── fd: ()-->(7,8)
            │                   │    ├── scan xy
-           │                   │    │    ├── columns: x:6!null y:7
-           │                   │    │    ├── key: (6)
-           │                   │    │    └── fd: (6)-->(7)
+           │                   │    │    ├── columns: x:7!null y:8
+           │                   │    │    ├── key: (7)
+           │                   │    │    └── fd: (7)-->(8)
            │                   │    └── filters
-           │                   │         └── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+           │                   │         └── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
            │                   └── (random() * 10.0)::INT8
            └── 5
 
@@ -202,7 +206,7 @@ SELECT * FROM a WHERE (CASE WHEN i<0 THEN 5 ELSE (SELECT y FROM xy WHERE x=i AND
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -210,7 +214,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── eq [outer=(1,2), side-effects, correlated-subquery, constraints=(/1: (/NULL - ])]
+      └── eq [outer=(1,2), immutable, correlated-subquery, constraints=(/1: (/NULL - ])]
            ├── k:1
            └── case
                 ├── true
@@ -219,26 +223,26 @@ select
                 │    └── 5
                 └── subquery
                      └── project
-                          ├── columns: y:7
+                          ├── columns: y:8
                           ├── outer: (2)
                           ├── cardinality: [0 - 1]
-                          ├── side-effects
+                          ├── immutable
                           ├── key: ()
-                          ├── fd: ()-->(7)
+                          ├── fd: ()-->(8)
                           └── select
-                               ├── columns: x:6!null y:7
+                               ├── columns: x:7!null y:8
                                ├── outer: (2)
                                ├── cardinality: [0 - 1]
-                               ├── side-effects
+                               ├── immutable
                                ├── key: ()
-                               ├── fd: ()-->(6,7)
+                               ├── fd: ()-->(7,8)
                                ├── scan xy
-                               │    ├── columns: x:6!null y:7
-                               │    ├── key: (6)
-                               │    └── fd: (6)-->(7)
+                               │    ├── columns: x:7!null y:8
+                               │    ├── key: (7)
+                               │    └── fd: (7)-->(8)
                                └── filters
-                                    ├── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-                                    └── (5 / y:7) > 1 [outer=(7), side-effects]
+                                    ├── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                                    └── (5 / y:8) > 1 [outer=(8), immutable]
 
 
 # Don't decorrelate IFERROR branch if there are side effects
@@ -247,7 +251,7 @@ SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i AND 5/
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── side-effects
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -255,68 +259,64 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── eq [outer=(1,2), side-effects, correlated-subquery, constraints=(/1: (/NULL - ])]
+      └── eq [outer=(1,2), immutable, correlated-subquery, constraints=(/1: (/NULL - ])]
            ├── k:1
            └── if-err
                 ├── 1 / 0
                 └── else
                      └── subquery
                           └── project
-                               ├── columns: y:8
+                               ├── columns: y:10
                                ├── outer: (2)
                                ├── cardinality: [0 - 1]
-                               ├── side-effects
+                               ├── immutable
                                ├── key: ()
-                               ├── fd: ()-->(8)
+                               ├── fd: ()-->(10)
                                ├── select
-                               │    ├── columns: x:6!null xy.y:7
+                               │    ├── columns: x:7!null xy.y:8
                                │    ├── outer: (2)
                                │    ├── cardinality: [0 - 1]
-                               │    ├── side-effects
+                               │    ├── immutable
                                │    ├── key: ()
-                               │    ├── fd: ()-->(6,7)
+                               │    ├── fd: ()-->(7,8)
                                │    ├── scan xy
-                               │    │    ├── columns: x:6!null xy.y:7
-                               │    │    ├── key: (6)
-                               │    │    └── fd: (6)-->(7)
+                               │    │    ├── columns: x:7!null xy.y:8
+                               │    │    ├── key: (7)
+                               │    │    └── fd: (7)-->(8)
                                │    └── filters
-                               │         ├── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-                               │         └── (5 / xy.y:7) > 1 [outer=(7), side-effects]
+                               │         ├── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                               │         └── (5 / xy.y:8) > 1 [outer=(8), immutable]
                                └── projections
-                                    └── xy.y:7::DECIMAL [as=y:8, outer=(7)]
+                                    └── xy.y:8::DECIMAL [as=y:10, outer=(8), immutable]
 
 # Decorrelate IFERROR branch if there are no side effects
 norm
-SELECT * FROM a WHERE IFERROR(1/0, (SELECT y::DECIMAL FROM xy WHERE x = i))=k
+SELECT * FROM a WHERE IFERROR((1/0)::int, (SELECT y FROM xy WHERE x = i))=k
 ----
 project
  ├── columns: k:1!null i:2 f:3 s:4 j:5
- ├── side-effects
+ ├── immutable
+ ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
-      ├── side-effects
-      ├── key: (1,6)
-      ├── fd: (1)-->(2-5), (6)-->(8)
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,7,8), (7)-->(8)
       ├── left-join (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:6 y:8
-      │    ├── key: (1,6)
-      │    ├── fd: (1)-->(2-5), (6)-->(8)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:7 y:8
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,7,8), (7)-->(8)
       │    ├── scan a
       │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-5)
-      │    ├── project
-      │    │    ├── columns: y:8 x:6!null
-      │    │    ├── key: (6)
-      │    │    ├── fd: (6)-->(8)
-      │    │    ├── scan xy
-      │    │    │    ├── columns: x:6!null xy.y:7
-      │    │    │    ├── key: (6)
-      │    │    │    └── fd: (6)-->(7)
-      │    │    └── projections
-      │    │         └── xy.y:7::DECIMAL [as=y:8, outer=(7)]
+      │    ├── scan xy
+      │    │    ├── columns: x:7!null y:8
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8)
       │    └── filters
-      │         └── x:6 = i:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      │         └── x:7 = i:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
       └── filters
-           └── k:1 = IFERROR(1 / 0, y:8) [outer=(1,8), side-effects, constraints=(/1: (/NULL - ])]
+           └── k:1 = IFERROR((1 / 0)::INT8, y:8) [outer=(1,8), immutable, constraints=(/1: (/NULL - ])]

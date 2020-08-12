@@ -11,7 +11,6 @@
 package a
 
 import (
-	"i/dont/exist/but/ill/be/ignored/because/i/look/like/a/stdlib/pkg"
 	"net/http"
 
 	"example.com/b"

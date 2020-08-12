@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -31,6 +33,7 @@ import (
 
 func TestSavepoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	abortKey := roachpb.Key("abort")
@@ -44,8 +47,8 @@ func TestSavepoints(t *testing.T) {
 		params := base.TestServerArgs{}
 		var doAbort int64
 		params.Knobs.Store = &kvserver.StoreTestingKnobs{
-			EvalKnobs: storagebase.BatchEvalTestingKnobs{
-				TestingEvalFilter: func(args storagebase.FilterArgs) *roachpb.Error {
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				TestingEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
 					key := args.Req.Header().Key
 					if atomic.LoadInt64(&doAbort) != 0 && key.Equal(abortKey) {
 						return roachpb.NewErrorWithTxn(
@@ -129,10 +132,9 @@ func TestSavepoints(t *testing.T) {
 			// "nil".
 			case "cput":
 				expS := td.CmdArgs[2].Key
-				var expVal *roachpb.Value
+				var expVal []byte
 				if expS != "nil" {
-					val := roachpb.MakeValueFromBytes([]byte(expS))
-					expVal = &val
+					expVal = kvclientutils.StrToCPutExistingValue(expS)
 				}
 				if err := txn.CPut(ctx,
 					roachpb.Key(td.CmdArgs[0].Key),

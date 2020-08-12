@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -29,7 +30,7 @@ import (
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	RunLogicTest(t, "testdata/logic_test/[^.]*")
+	RunLogicTest(t, TestServerArgs{}, "testdata/logic_test/[^.]*")
 }
 
 // TestSqlLiteLogic runs the supported SqlLite logic tests. See the comments
@@ -84,7 +85,7 @@ func TestSqlLiteLogic(t *testing.T) {
 // See the comments in logic.go for more details.
 func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 	if !*bigtest {
-		t.Skip("-bigtest flag must be specified to run this test")
+		skip.IgnoreLint(t, "-bigtest flag must be specified to run this test")
 	}
 
 	logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
@@ -105,5 +106,10 @@ func runSQLLiteLogicTest(t *testing.T, globs ...string) {
 		prefixedGlobs[i] = logicTestPath + glob
 	}
 
-	RunLogicTest(t, prefixedGlobs...)
+	// SQLLite logic tests can be very disk (with '-disk' configs) intensive,
+	// so we give them larger temp storage limit than other logic tests get.
+	serverArgs := TestServerArgs{
+		tempStorageDiskLimit: 512 << 20, // 512 MiB
+	}
+	RunLogicTest(t, serverArgs, prefixedGlobs...)
 }

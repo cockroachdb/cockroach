@@ -12,20 +12,12 @@ package rowcontainer
 
 import (
 	"context"
-	"fmt"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-)
-
-const (
-	// SizeOfDatum is the memory size of a Datum reference.
-	SizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
-	// SizeOfDatums is the memory size of a Datum slice.
-	SizeOfDatums = int64(unsafe.Sizeof(tree.Datums(nil)))
+	"github.com/cockroachdb/errors"
 )
 
 // RowContainer is a container for rows of Datums which tracks the
@@ -138,8 +130,8 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCap
 
 	// Precalculate the memory used for a chunk, specifically by the Datums in the
 	// chunk and the slice pointing at the chunk.
-	c.chunkMemSize = SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
-	c.chunkMemSize += SizeOfDatums
+	c.chunkMemSize = tree.SizeOfDatum * int64(c.rowsPerChunk*c.numCols)
+	c.chunkMemSize += tree.SizeOfDatums
 }
 
 // Clear resets the container and releases the associated memory. This allows
@@ -218,7 +210,7 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // Returns an error if the allocation was denied by the MemoryMonitor.
 func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums, error) {
 	if len(row) != c.numCols {
-		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
+		panic(errors.AssertionFailedf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
 		c.numRows++

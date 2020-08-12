@@ -36,6 +36,8 @@ var requireConstMsg = map[string]bool{
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire.newAdminShutdownErr": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/parser/lexer).Error": true,
+
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shout":     true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Info":      true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Warning":   true,
@@ -58,20 +60,29 @@ var requireConstFmt = map[string]bool{
 	"(*log.Logger).Panicf": true,
 	"(*log.Logger).Printf": true,
 
-	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":          true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.Infof":           true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.Warningf":        true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.Errorf":          true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.Eventf":          true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.VEventf":         true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEventf":      true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.InfofDepth":      true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.WarningfDepth":   true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.ErrorfDepth":     true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.FatalfDepth":     true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.VEventfDepth":    true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEventfDepth": true,
-	"github.com/cockroachdb/cockroach/pkg/util/log.ReportOrPanic":   true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":                true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Infof":                 true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Warningf":              true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Errorf":                true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.Eventf":                true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.vEventf":               true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VEventf":               true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEventf":            true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.InfofDepth":            true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.WarningfDepth":         true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.ErrorfDepth":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.FatalfDepth":           true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VEventfDepth":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.VErrEventfDepth":       true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.ReportOrPanic":         true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.MakeEntry":             true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.FormatWithContextTags": true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.renderArgs":            true,
+
+	"(*github.com/cockroachdb/cockroach/pkg/util/log.loggerT).makeStartLine":     true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/log.SecondaryLogger).output":    true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/log.SecondaryLogger).Logf":      true,
+	"(*github.com/cockroachdb/cockroach/pkg/util/log.SecondaryLogger).LogfDepth": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Debugf": true,
 	"(github.com/cockroachdb/cockroach/pkg/rpc.breakerLogger).Infof":  true,
@@ -92,6 +103,9 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Errorf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Fatalf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Panicf":   true,
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver.makeNonDeterministicFailure":     true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver.wrapWithNonDeterministicFailure": true,
 
 	"(go.etcd.io/etcd/raft.Logger).Debugf":   true,
 	"(go.etcd.io/etcd/raft.Logger).Infof":    true,
@@ -141,6 +155,12 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": true,
 	"github.com/cockroachdb/errors.WithSafeDetails":                  true,
 
+	"github.com/cockroachdb/redact.Sprintf":              true,
+	"github.com/cockroachdb/redact.Fprintf":              true,
+	"(github.com/cockroachdb/redact.SafePrinter).Printf": true,
+	"(github.com/cockroachdb/redact.SafeWriter).Printf":  true,
+	"(*github.com/cockroachdb/redact.printer).Printf":    true,
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb.NewErrorf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl.makeRowErr": true,
@@ -150,20 +170,32 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.NewDependentObjectErrorf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.newSourceNotFoundError": true,
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.decorateTypeCheckError": true,
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder.unimplementedWithIssueDetailf": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/sql/pgwire.authPipe).Logf": true,
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.Newf":                true,
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.NewWithDepthf":       true,
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.Noticef":             true,
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.DangerousStatementf": true,
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.Wrapf":               true,
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror.WrapWithDepthf":      true,
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice.Newf":                                   true,
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice.NewWithSeverityf":                       true,
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase.NewProtocolViolationErrorf":           true,
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase.NewInvalidBinaryRepresentationErrorf": true,
+
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil.UnexpectedWithIssueErrorf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.Newf":                  true,
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithDepthf":         true,
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssuef":         true,
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.NewWithIssueDetailf":   true,
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented.unimplementedInternal": true,
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate.inputErrorf": true,
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl.newErrorf": true,
 }

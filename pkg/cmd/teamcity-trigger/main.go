@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/abourget/teamcity"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
@@ -57,6 +58,15 @@ var importPaths = gotool.ImportPaths([]string{baseImportPath + "..."})
 func runTC(queueBuild func(string, map[string]string)) {
 	// Queue stress builds. One per configuration per package.
 	for _, importPath := range importPaths {
+		// By default, run each package for up to 100 iterations.
+		maxRuns := 100
+
+		// By default, run each package for up to 1h.
+		maxTime := 1 * time.Hour
+
+		// By default, fail the stress run on the first test failure.
+		maxFails := 1
+
 		// The stress program by default runs as many instances in parallel as there
 		// are CPUs. Each instance itself can run tests in parallel. The amount of
 		// parallelism needs to be reduced, or we can run into OOM issues,
@@ -68,9 +78,14 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// halve these values.
 		parallelism := 4
 
-		// Stress logic tests with reduced parallelism (to avoid overloading the
-		// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
-		if importPath == baseImportPath+"sql/logictest" {
+		// Conditionally override stressflags.
+		switch importPath {
+		case baseImportPath + "kv/kvnemesis":
+			// Disable -maxruns for kvnemesis. Run for the full 1h.
+			maxRuns = 0
+		case baseImportPath + "sql/logictest":
+			// Stress logic tests with reduced parallelism (to avoid overloading the
+			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
 			parallelism /= 2
 		}
 
@@ -80,14 +95,15 @@ func runTC(queueBuild func(string, map[string]string)) {
 
 		// Run non-race build.
 		opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
-		opts["env.STRESSFLAGS"] = fmt.Sprintf("-p %d", parallelism)
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
+			maxRuns, maxTime, maxFails, parallelism)
 		queueBuild("Cockroach_Nightlies_Stress", opts)
 
 		// Run race build. Reduce the parallelism to avoid overloading the machine.
 		parallelism /= 2
 		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
-		opts["env.STRESSFLAGS"] = fmt.Sprintf("-p %d", parallelism)
-
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
+			maxRuns, maxTime, maxFails, parallelism)
 		queueBuild("Cockroach_Nightlies_Stress", opts)
 	}
 }

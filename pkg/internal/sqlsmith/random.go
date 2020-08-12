@@ -10,6 +10,8 @@
 
 package sqlsmith
 
+import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+
 func (s *Smither) coin() bool {
 	return s.rnd.Intn(2) == 0
 }
@@ -67,9 +69,5 @@ const letters = "abcdefghijklmnopqrstuvwxyz"
 // randString generates a random string with a target length using characters
 // from the input alphabet string.
 func (s *Smither) randString(length int, alphabet string) string {
-	buf := make([]byte, length)
-	for i := range buf {
-		buf[i] = alphabet[s.rnd.Intn(len(alphabet))]
-	}
-	return string(buf)
+	return sqlbase.RandString(s.rnd, length, alphabet)
 }

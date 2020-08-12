@@ -220,12 +220,16 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 func (b *Builder) finishBuildScalar(
 	texpr tree.TypedExpr, scalar opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
 ) (out opt.ScalarExpr) {
+	b.maybeTrackRegclassDependenciesForViews(texpr)
+
 	if outScope == nil {
 		return scalar
 	}
 
 	// Avoid synthesizing a new column if possible.
-	if col := outScope.findExistingCol(texpr, false /* allowSideEffects */); col != nil && col != outCol {
+	if col := outScope.findExistingCol(
+		texpr, false, /* allowSideEffects */
+	); col != nil && col != outCol {
 		outCol.id = col.id
 		outCol.scalar = scalar
 		return scalar
@@ -253,6 +257,8 @@ func (b *Builder) finishBuildScalar(
 func (b *Builder) finishBuildScalarRef(
 	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
+
+	b.trackReferencedColumnForViews(col)
 	// Update the sets of column references and outer columns if needed.
 	if colRefs != nil {
 		colRefs.Add(col.id)

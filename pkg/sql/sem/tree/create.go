@@ -113,10 +113,12 @@ type CreateIndex struct {
 	Sharded     *ShardedIndexDef
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing      NameList
-	Interleave   *InterleaveDef
-	PartitionBy  *PartitionBy
-	Concurrently bool
+	Storing       NameList
+	Interleave    *InterleaveDef
+	PartitionBy   *PartitionBy
+	StorageParams StorageParams
+	Predicate     Expr
+	Concurrently  bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -165,6 +167,15 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 
@@ -643,6 +654,7 @@ type IndexTableDef struct {
 	Interleave  *InterleaveDef
 	Inverted    bool
 	PartitionBy *PartitionBy
+	Predicate   Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -671,6 +683,10 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 
@@ -730,6 +746,10 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.Predicate != nil {
+		ctx.WriteString(" WHERE ")
+		ctx.FormatNode(node.Predicate)
 	}
 }
 
@@ -1053,7 +1073,7 @@ type CreateTable struct {
 	Table         TableName
 	Interleave    *InterleaveDef
 	PartitionBy   *PartitionBy
-	Temporary     bool
+	Persistence   Persistence
 	StorageParams StorageParams
 	OnCommit      CreateTableOnCommitSetting
 	// In CREATE...AS queries, Defs represents a list of ColumnTableDefs, one for
@@ -1087,8 +1107,11 @@ func (node *CreateTable) AsHasUserSpecifiedPrimaryKey() bool {
 // Format implements the NodeFormatter interface.
 func (node *CreateTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
-	if node.Temporary {
+	switch node.Persistence {
+	case PersistenceTemporary:
 		ctx.WriteString("TEMPORARY ")
+	case PersistenceUnlogged:
+		ctx.WriteString("UNLOGGED ")
 	}
 	ctx.WriteString("TABLE ")
 	if node.IfNotExists {
@@ -1204,7 +1227,7 @@ func (node *CreateSchema) Format(ctx *FmtCtx) {
 type CreateSequence struct {
 	IfNotExists bool
 	Name        TableName
-	Temporary   bool
+	Persistence Persistence
 	Options     SequenceOptions
 }
 
@@ -1212,7 +1235,7 @@ type CreateSequence struct {
 func (node *CreateSequence) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE ")
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 
@@ -1512,7 +1535,7 @@ type CreateView struct {
 	ColumnNames NameList
 	AsSource    *Select
 	IfNotExists bool
-	Temporary   bool
+	Persistence Persistence
 	Replace     bool
 }
 
@@ -1524,7 +1547,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteString("OR REPLACE ")
 	}
 
-	if node.Temporary {
+	if node.Persistence == PersistenceTemporary {
 		ctx.WriteString("TEMPORARY ")
 	}
 

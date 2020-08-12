@@ -31,9 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -77,9 +79,7 @@ part of the same cluster. The other nodes do not need to be started
 yet, and if the address of the other nodes to be added are not yet
 known it is legal for the first node to join itself.
 
-If --join is not specified, the cluster will also be initialized.
-THIS BEHAVIOR IS DEPRECATED; consider using 'cockroach init' or
-'cockroach start-single-node' instead.
+To initialize the cluster, use 'cockroach init'.
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 --join=host:port,[host:port]`,
 	Args:    cobra.NoArgs,
@@ -209,7 +209,7 @@ func initMemProfile(ctx context.Context, dir string) {
 	}()
 }
 
-func initCPUProfile(ctx context.Context, dir string) {
+func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 	const cpuprof = "cpuprof."
 	gcProfiles(dir, cpuprof, maxSizePerProfile)
 
@@ -240,33 +240,31 @@ func initCPUProfile(ctx context.Context, dir string) {
 		}()
 
 		for {
-			func() {
+			// Grab a profile.
+			if err := debug.CPUProfileDo(st, cluster.CPUProfileDefault, func() error {
 				const format = "2006-01-02T15_04_05.999"
-				suffix := timeutil.Now().Add(cpuProfileInterval).Format(format)
-				f, err := os.Create(filepath.Join(dir, cpuprof+suffix))
-				if err != nil {
-					log.Warningf(ctx, "error creating go cpu file %s", err)
-					return
+
+				var buf bytes.Buffer
+				// Start the new profile. Write to a buffer so we can name the file only
+				// when we know the time at end of profile.
+				if err := pprof.StartCPUProfile(&buf); err != nil {
+					return err
 				}
 
-				// Stop the current profile if it exists.
-				if currentProfile != nil {
-					pprof.StopCPUProfile()
-					currentProfile.Close()
-					currentProfile = nil
-					gcProfiles(dir, cpuprof, maxSizePerProfile)
-				}
+				<-t.C
 
-				// Start the new profile.
-				if err := pprof.StartCPUProfile(f); err != nil {
-					log.Warningf(ctx, "unable to start cpu profile: %v", err)
-					f.Close()
-					return
-				}
-				currentProfile = f
-			}()
+				pprof.StopCPUProfile()
 
-			<-t.C
+				suffix := timeutil.Now().Format(format)
+				if err := ioutil.WriteFile(filepath.Join(dir, cpuprof+suffix), buf.Bytes(), 0644); err != nil {
+					return err
+				}
+				gcProfiles(dir, cpuprof, maxSizePerProfile)
+				return nil
+			}); err != nil {
+				// Log errors, but continue. There's always next time.
+				log.Infof(ctx, "error during CPU profile: %s", err)
+			}
 		}
 	}()
 }
@@ -301,7 +299,7 @@ func initMutexProfile() {
 }
 
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
-var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
@@ -319,15 +317,11 @@ func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, 
 }
 
 func initTempStorageConfig(
-	ctx context.Context,
-	st *cluster.Settings,
-	stopper *stop.Stopper,
-	firstStore base.StoreSpec,
-	specIdx int,
+	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, useStore base.StoreSpec,
 ) (base.TempStorageConfig, error) {
 	var recordPath string
-	if !firstStore.InMemory {
-		recordPath = filepath.Join(firstStore.Path, server.TempDirsRecordFilename)
+	if !useStore.InMemory {
+		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
 	}
 
 	var err error
@@ -343,8 +337,8 @@ func initTempStorageConfig(
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
-	if !firstStore.InMemory {
-		dir := firstStore.Path
+	if !useStore.InMemory {
+		dir := useStore.Path
 		// Create the store dir, if it doesn't exist. The dir is required to exist
 		// by diskPercentResolverFactory.
 		if err = os.MkdirAll(dir, 0755); err != nil {
@@ -367,7 +361,7 @@ func initTempStorageConfig(
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
-		if startCtx.tempDir == "" && firstStore.InMemory {
+		if startCtx.tempDir == "" && useStore.InMemory {
 			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
 		} else {
 			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
@@ -379,17 +373,16 @@ func initTempStorageConfig(
 	tempStorageConfig := base.TempStorageConfigFromEnv(
 		ctx,
 		st,
-		firstStore,
+		useStore,
 		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
-		specIdx,
 	)
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
 	tempDir := startCtx.tempDir
 	if tempDir == "" && !tempStorageConfig.InMemory {
-		tempDir = firstStore.Path
+		tempDir = useStore.Path
 	}
 	// Create the temporary subdirectory for the temp engine.
 	if tempStorageConfig.Path, err = storage.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
@@ -452,8 +445,13 @@ func runStartSingleNode(cmd *cobra.Command, args []string) error {
 		return errCannotUseJoin
 	}
 	// Now actually set the flag as changed so that the start code
-	// doesn't warn that it was not set.
+	// doesn't warn that it was not set. This is all to let `start-single-node`
+	// get by without the use of --join flags.
 	joinFlag.Changed = true
+
+	// Make the node auto-init the cluster if not done already.
+	serverCfg.AutoInitializeCluster = true
+
 	return runStart(cmd, args, true /*disableReplication*/)
 }
 
@@ -466,9 +464,8 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 //
-// If the argument disableReplication is true and we are starting
-// a fresh cluster, the replication factor will be disabled in
-// all zone configs.
+// If the argument disableReplication is set the replication factor
+// will be set to 1 all zone configs.
 func runStart(cmd *cobra.Command, args []string, disableReplication bool) error {
 	tBegin := timeutil.Now()
 
@@ -498,6 +495,22 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
+
+	// SIGQUIT is handled differently: for SIGQUIT we spawn a goroutine
+	// and we always handle it, no matter at which point during
+	// execution we are. This makes it possible to use SIGQUIT to
+	// inspect a running process and determine what it is currently
+	// doing, even if it gets stuck somewhere.
+	if quitSignal != nil {
+		quitSignalCh := make(chan os.Signal, 1)
+		signal.Notify(quitSignalCh, quitSignal)
+		go func() {
+			for {
+				<-quitSignalCh
+				log.DumpStacks(context.Background())
+			}
+		}()
+	}
 
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
@@ -544,9 +557,10 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 
 	// Check the --join flag.
 	if !flagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
-		log.Shout(ctx, log.Severity_WARNING,
-			"running 'cockroach start' without --join is deprecated.\n"+
-				"Consider using 'cockroach start-single-node' or 'cockroach init' instead.")
+		err := errors.WithHint(
+			errors.New("no --join flags provided to 'cockroach start'"),
+			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
+		return err
 	}
 
 	// Now perform additional configuration tweaks specific to the start
@@ -583,8 +597,10 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 			specIdx = i
 		}
 	}
-	useStore := serverCfg.Stores.Specs[specIdx]
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore, specIdx); err != nil {
+
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(
+		ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[specIdx],
+	); err != nil {
 		return err
 	}
 
@@ -640,7 +656,8 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config, roachpb.SystemTenantID)
+			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return
@@ -693,11 +710,11 @@ If problems persist, please see %s.`
 
 	// Set up the Geospatial library.
 	// We need to make sure this happens before any queries involving geospatial data is executed.
-	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, demoCtx.geoLibsDir)
+	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
 		log.Infof(ctx, "could not initialize GEOS - geospatial functions may not be available: %v", err)
 	} else {
-		log.Infof(ctx, "GEOS initialized at %s", loc)
+		log.Infof(ctx, "GEOS loaded from directory %s", loc)
 	}
 
 	// Beyond this point, the configuration is set and the server is
@@ -763,11 +780,11 @@ If problems persist, please see %s.`
 			// Attempt to start the server.
 			if err := s.Start(ctx); err != nil {
 				if le := (*server.ListenError)(nil); errors.As(err, &le) {
-					const errorPrefix = "consider changing the port via --"
+					const errorPrefix = "consider changing the port via --%s"
 					if le.Addr == serverCfg.Addr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenAddr.Name)
+						err = errors.Wrapf(err, errorPrefix, cliflags.ListenAddr.Name)
 					} else if le.Addr == serverCfg.HTTPAddr {
-						err = errors.Wrap(err, errorPrefix+cliflags.ListenHTTPAddr.Name)
+						err = errors.Wrapf(err, errorPrefix, cliflags.ListenHTTPAddr.Name)
 					}
 				}
 
@@ -812,7 +829,8 @@ If problems persist, please see %s.`
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
 			// at this time the address and port have not been resolved yet.
-			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
+			sCtx := rpc.MakeSecurityContext(serverCfg.Config, roachpb.SystemTenantID)
+			pgURL, err := sCtx.PGURL(url.User(security.RootUser))
 			if err != nil {
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
@@ -824,8 +842,8 @@ If problems persist, please see %s.`
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
 			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-			if serverCfg.SQLAuditLogDirName.IsSet() {
-				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.SQLAuditLogDirName)
+			if serverCfg.AuditLogDirName.IsSet() {
+				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
 			}
 			if serverCfg.Attrs != "" {
 				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
@@ -939,9 +957,6 @@ If problems persist, please see %s.`
 			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 			fmt.Fprintln(os.Stdout, msgDouble)
-
-		case quitSignal:
-			log.DumpStacks(shutdownCtx)
 		}
 
 		// Start the draining process in a separate goroutine so that it
@@ -1042,25 +1057,36 @@ If problems persist, please see %s.`
 	// forcefully terminated.
 
 	const hardShutdownHint = " - node may take longer to restart & clients may need to wait for leases to expire"
-	select {
-	case sig := <-signalCh:
-		// This new signal is not welcome, as it interferes with the graceful
-		// shutdown process.
-		log.Shoutf(shutdownCtx, log.Severity_ERROR,
-			"received signal '%s' during shutdown, initiating hard shutdown%s",
-			log.Safe(sig), log.Safe(hardShutdownHint))
-		handleSignalDuringShutdown(sig)
-		panic("unreachable")
+	for {
+		select {
+		case sig := <-signalCh:
+			switch sig {
+			case termSignal:
+				// Double SIGTERM, or SIGTERM after another signal: continue
+				// the graceful shutdown.
+				log.Infof(shutdownCtx, "received additional signal '%s'; continuing graceful shutdown", sig)
+				continue
+			}
 
-	case <-stopper.IsStopped():
-		const msgDone = "server drained and shutdown completed"
-		log.Infof(shutdownCtx, msgDone)
-		fmt.Fprintln(os.Stdout, msgDone)
+			// This new signal is not welcome, as it interferes with the graceful
+			// shutdown process.
+			log.Shoutf(shutdownCtx, log.Severity_ERROR,
+				"received signal '%s' during shutdown, initiating hard shutdown%s",
+				log.Safe(sig), log.Safe(hardShutdownHint))
+			handleSignalDuringShutdown(sig)
+			panic("unreachable")
 
-	case <-stopWithoutDrain:
-		const msgDone = "too early to drain; used hard shutdown instead"
-		log.Infof(shutdownCtx, msgDone)
-		fmt.Fprintln(os.Stdout, msgDone)
+		case <-stopper.IsStopped():
+			const msgDone = "server drained and shutdown completed"
+			log.Infof(shutdownCtx, msgDone)
+			fmt.Fprintln(os.Stdout, msgDone)
+
+		case <-stopWithoutDrain:
+			const msgDone = "too early to drain; used hard shutdown instead"
+			log.Infof(shutdownCtx, msgDone)
+			fmt.Fprintln(os.Stdout, msgDone)
+		}
+		break
 	}
 
 	return returnErr
@@ -1155,7 +1181,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
-		requestedMem := serverCfg.CacheSize + serverCfg.SQLMemoryPoolSize
+		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Shoutf(ctx, log.Severity_WARNING,
@@ -1177,6 +1203,10 @@ func logOutputDirectory() string {
 func setupAndInitializeLoggingAndProfiling(
 	ctx context.Context, cmd *cobra.Command,
 ) (stopper *stop.Stopper, err error) {
+	if active, firstUse := log.IsActive(); active {
+		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
+	}
+
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
@@ -1226,11 +1256,6 @@ func setupAndInitializeLoggingAndProfiling(
 			return nil, err
 		}
 
-		// NB: this message is a crutch until #33458 is addressed. Without it,
-		// the calls to log.Shout below can be the first use of logging, hitting
-		// the bug described in the issue.
-		log.Infof(ctx, "logging to directory %s", logDir)
-
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
 		log.StartGCDaemon(ctx)
@@ -1244,6 +1269,14 @@ func setupAndInitializeLoggingAndProfiling(
 				stopper.AddCloser(storage.InitRocksDBLogger(ctx))
 			}
 		}()
+	}
+
+	// Initialize the redirection of stderr and log redaction.  Note,
+	// this function must be called even if there is no log directory
+	// configured, to verify whether the combination of requested flags
+	// is valid.
+	if _, err := log.SetupRedactionAndStderrRedirects(); err != nil {
+		return nil, err
 	}
 
 	// We want to be careful to still produce useful debug dumps if the
@@ -1262,7 +1295,7 @@ func setupAndInitializeLoggingAndProfiling(
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
-	if auditLogDir := serverCfg.SQLAuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
+	if auditLogDir := serverCfg.AuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
 		// Make sure the path for the audit log exists, if it's a different path than
 		// the main log.
 		if err := os.MkdirAll(auditLogDir, 0755); err != nil {
@@ -1296,7 +1329,7 @@ func setupAndInitializeLoggingAndProfiling(
 	log.Infof(ctx, "%s", info.Short())
 
 	initMemProfile(ctx, outputDirectory)
-	initCPUProfile(ctx, outputDirectory)
+	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()
 
@@ -1333,13 +1366,14 @@ func getClientGRPCConn(
 	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: cfg.Settings.Tracer},
-		cfg.Config,
-		clock,
-		stopper,
-		cfg.Settings,
-	)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: log.AmbientContext{Tracer: cfg.Settings.Tracer},
+		Config:     cfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   cfg.Settings,
+	})
 	addr, err := addrWithDefaultHost(cfg.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop(ctx)

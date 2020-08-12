@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -56,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -77,8 +77,7 @@ import (
 
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
-	rangeIDAllocCount                 = 10
-	defaultRaftHeartbeatIntervalTicks = 5
+	rangeIDAllocCount = 10
 
 	// defaultRaftEntryCacheSize is the default size in bytes for a
 	// store's Raft log entry cache.
@@ -180,9 +179,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
 		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
-		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
-		TimestampCachePageSize:      tscache.TestSklPageSize,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
@@ -191,6 +188,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
+	sc.RaftHeartbeatIntervalTicks = 1
 	sc.RaftElectionTimeoutTicks = 3
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
@@ -664,9 +662,6 @@ type StoreConfig struct {
 	// the quiesce cadence.
 	CoalescedHeartbeatsInterval time.Duration
 
-	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
-	RaftHeartbeatIntervalTicks int
-
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
 
@@ -700,9 +695,6 @@ type StoreConfig struct {
 	// snapshots and the maximum number of non-empty snapshots that are permitted
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
-
-	// TimestampCachePageSize is (server.Config).TimestampCachePageSize
-	TimestampCachePageSize uint32
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
@@ -755,9 +747,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
-	}
-	if sc.RaftHeartbeatIntervalTicks == 0 {
-		sc.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
@@ -835,23 +824,28 @@ func NewStore(
 	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
 	s.rangefeedReplicas.Unlock()
 
-	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize)
+	s.tsCache = tscache.New(cfg.Clock)
 	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 
-	s.compactor = compactor.NewCompactor(
-		s.cfg.Settings,
-		s.engine,
-		func() (roachpb.StoreCapacity, error) {
-			return s.Capacity(false /* useCached */)
-		},
-		func(ctx context.Context) {
-			s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
-		},
-	)
-	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	// Pebble's compaction picker is aware of range deletions and will account
+	// for them during compaction picking, so don't create a compactor for
+	// Pebble.
+	if s.engine.Type() != enginepb.EngineTypePebble {
+		s.compactor = compactor.NewCompactor(
+			s.cfg.Settings,
+			s.engine,
+			func() (roachpb.StoreCapacity, error) {
+				return s.Capacity(ctx, false /* useCached */)
+			},
+			func(ctx context.Context) {
+				s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction", false /* useCached */)
+			},
+		)
+		s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
+	}
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
@@ -1107,7 +1101,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
 					// leader, so only consider the `Voters` replicas.
 					needsLeaseTransfer := len(r.Desc().Replicas().Voters()) > 1 &&
 						drainingLease.OwnedBy(s.StoreID()) &&
-						r.IsLeaseValid(drainingLease, s.Clock().Now())
+						r.IsLeaseValid(ctx, drainingLease, s.Clock().Now())
 
 					if !needsLeaseTransfer && !needsRaftTransfer {
 						if log.V(1) {
@@ -1241,9 +1235,13 @@ func IterateIDPrefixKeys(
 	reader storage.Reader,
 	keyFn func(roachpb.RangeID) roachpb.Key,
 	msg protoutil.Message,
-	f func(_ roachpb.RangeID) (more bool, _ error),
+	f func(c iterutil.Cur) error,
 ) error {
 	rangeID := roachpb.RangeID(1)
+
+	iterState := iterutil.NewState()
+	iterState.Elem = new(roachpb.RangeID)
+
 	iter := reader.NewIterator(storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
 	})
@@ -1298,9 +1296,12 @@ func IterateIDPrefixKeys(
 			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
 		}
 
-		more, err := f(rangeID)
-		if !more || err != nil {
+		*iterState.Elem.(*roachpb.RangeID) = rangeID
+		if err := f(iterState.Current()); err != nil {
 			return err
+		}
+		if iterState.Done() {
+			return nil
 		}
 		rangeID++
 	}
@@ -1454,12 +1455,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// range which has processed a raft command to remove itself (which is
 				// possible prior to 19.2 or if the DisableEagerReplicaRemoval is
 				// enabled) and has not yet been removed by the replica gc queue.
-				// We treat both cases the same way.
-				//
-				// TODO(ajwerner): Remove this migration in 20.2. It exists in 20.1 to
-				// find and remove any pre-emptive snapshots which may have been sent by
-				// a 19.1 or older node to this node while it was running 19.2.
-				return false /* done */, removePreemptiveSnapshot(ctx, s, &desc)
+				// We treat both cases the same way. These should no longer exist in
+				// 20.2 or after as there was a migration in 20.1 to remove them and
+				// no pre-emptive snapshot should have been sent since 19.2 was
+				// finalized.
+				return false /* done */, errors.AssertionFailedf(
+					"found RangeDescriptor for range %d at generation %d which does not"+
+						" contain this store %d",
+					log.Safe(desc.RangeID),
+					log.Safe(desc.Generation),
+					log.Safe(s.StoreID()))
 			}
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
@@ -1479,7 +1484,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			// Add this range and its stats to our counter.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rep.GetMVCCStats())
+			if tenantID, ok := rep.TenantID(); ok {
+				s.metrics.addMVCCStats(ctx, tenantID, rep.GetMVCCStats())
+			} else {
+				return false, errors.AssertionFailedf("found newly constructed replica"+
+					" for range %d at generation %d with an invalid tenant ID in store %d",
+					log.Safe(desc.RangeID),
+					log.Safe(desc.Generation),
+					log.Safe(s.StoreID()))
+			}
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica
@@ -1563,7 +1576,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	}
 
 	// Start the storage engine compactor.
-	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
+	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) && s.compactor != nil {
 		s.compactor.Start(s.AnnotateCtx(context.Background()), s.stopper)
 	}
 
@@ -1849,7 +1862,7 @@ func (s *Store) GossipStore(ctx context.Context, useCached bool) error {
 	syncutil.StoreFloat64(&s.gossipQueriesPerSecondVal, -1)
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, -1)
 
-	storeDesc, err := s.Descriptor(useCached)
+	storeDesc, err := s.Descriptor(ctx, useCached)
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
@@ -1950,6 +1963,38 @@ func (s *Store) recordNewPerSecondStats(newQPS, newWPS float64) {
 func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 	v := newStoreReplicaVisitor(s)
 	v.Visit(visitor)
+}
+
+// VisitReplicasByKey invokes the visitor on all the replicas for ranges that
+// overlap [startKey, endKey), or until the visitor returns false. Replicas are
+// visited in key order. store.mu is held during the visiting.
+//
+// The argument to the visitor is either a *Replica or *ReplicaPlaceholder.
+// Returned replicas might be IsDestroyed(); if the visitor cares, it needs to
+// protect against it itself.
+func (s *Store) VisitReplicasByKey(
+	ctx context.Context,
+	startKey, endKey roachpb.RKey,
+	visitor func(context.Context, KeyRange) (wantMore bool),
+) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if endKey.Less(startKey) {
+		log.Fatalf(ctx, "endKey < startKey (%s < %s)", endKey, startKey)
+	}
+	// Align startKey on a range start. Otherwise the AscendRange below would skip
+	// startKey's range.
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(startKey), func(item btree.Item) bool {
+		// No-op if startKey is the start of a range.
+		startKey = item.(KeyRange).startKey()
+		return false
+	})
+
+	// Iterate though overlapping replicas.
+	s.mu.replicasByKey.AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey),
+		func(item btree.Item) bool {
+			return visitor(ctx, item.(KeyRange))
+		})
 }
 
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
@@ -2182,6 +2227,16 @@ func (s *Store) Stopper() *stop.Stopper { return s.stopper }
 // TestingKnobs accessor.
 func (s *Store) TestingKnobs() *StoreTestingKnobs { return &s.cfg.TestingKnobs }
 
+// ClosedTimestamp accessor.
+func (s *Store) ClosedTimestamp() *container.Container {
+	return s.cfg.ClosedTimestamp
+}
+
+// NodeLiveness accessor.
+func (s *Store) NodeLiveness() *NodeLiveness {
+	return s.cfg.NodeLiveness
+}
+
 // IsDraining accessor.
 func (s *Store) IsDraining() bool {
 	return s.draining.Load().(bool)
@@ -2205,7 +2260,7 @@ func (s *Store) Attrs() roachpb.Attributes {
 // this does not include reservations.
 // Note that Capacity() has the side effect of updating some of the store's
 // internal statistics about its replicas.
-func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
+func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapacity, error) {
 	if useCached {
 		s.cachedCapacity.Lock()
 		capacity := s.cachedCapacity.StoreCapacity
@@ -2232,7 +2287,7 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	rankingsAccumulator := s.replRankings.newAccumulator()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		rangeCount++
-		if r.OwnsValidLease(now) {
+		if r.OwnsValidLease(ctx, now) {
 			leaseCount++
 		}
 		mvccStats := r.GetMVCCStats()
@@ -2299,8 +2354,8 @@ func (s *Store) Metrics() *StoreMetrics {
 
 // Descriptor returns a StoreDescriptor including current store
 // capacity information.
-func (s *Store) Descriptor(useCached bool) (*roachpb.StoreDescriptor, error) {
-	capacity, err := s.Capacity(useCached)
+func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreDescriptor, error) {
+	capacity, err := s.Capacity(ctx, useCached)
 	if err != nil {
 		return nil, err
 	}
@@ -2465,7 +2520,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 // is returned.
 func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
 	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
-	_ = os.MkdirAll(checkpointBase, 0700)
+	_ = s.engine.MkdirAll(checkpointBase)
 
 	checkpointDir := filepath.Join(checkpointBase, tag)
 	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
@@ -2483,7 +2538,7 @@ func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
 // method. It is used to compute some metrics less frequently than others.
 func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	ctx = s.AnnotateCtx(ctx)
-	if err := s.updateCapacityGauges(); err != nil {
+	if err := s.updateCapacityGauges(ctx); err != nil {
 		return err
 	}
 	if err := s.updateReplicationGauges(ctx); err != nil {
@@ -2506,7 +2561,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 
 	sstables := s.engine.GetSSTables()
 	s.metrics.RdbNumSSTables.Update(int64(sstables.Len()))
-	readAmp := sstables.ReadAmplification()
+	readAmp := sstables.ReadAmplification(int(stats.L0SublevelCount))
 	s.metrics.RdbReadAmplification.Update(int64(readAmp))
 	s.metrics.RdbPendingCompaction.Update(stats.PendingCompactionBytesEstimate)
 	// Log this metric infrequently (with current configurations,
@@ -2599,7 +2654,7 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Rec
 // power an admin debug endpoint.
 func (s *Store) ManuallyEnqueue(
 	ctx context.Context, queueName string, repl *Replica, skipShouldQueue bool,
-) (tracing.Recording, string, error) {
+) (recording tracing.Recording, processError error, enqueueError error) {
 	ctx = repl.AnnotateCtx(ctx)
 
 	var queue queueImpl
@@ -2611,12 +2666,12 @@ func (s *Store) ManuallyEnqueue(
 		}
 	}
 	if queue == nil {
-		return nil, "", errors.Errorf("unknown queue type %q", queueName)
+		return nil, nil, errors.Errorf("unknown queue type %q", queueName)
 	}
 
 	sysCfg := s.cfg.Gossip.GetSystemConfig()
 	if sysCfg == nil {
-		return nil, "", errors.New("cannot run queue without a valid system config; make sure the cluster " +
+		return nil, nil, errors.New("cannot run queue without a valid system config; make sure the cluster " +
 			"has been initialized and all nodes connected to it")
 	}
 
@@ -2625,10 +2680,10 @@ func (s *Store) ManuallyEnqueue(
 	if needsLease {
 		hasLease, pErr := repl.getLeaseForGossip(ctx)
 		if pErr != nil {
-			return nil, "", pErr.GoError()
+			return nil, nil, pErr.GoError()
 		}
 		if !hasLease {
-			return nil, fmt.Sprintf("replica %v does not have the range lease", repl), nil
+			return nil, errors.Newf("replica %v does not have the range lease", repl), nil
 		}
 	}
 
@@ -2641,16 +2696,14 @@ func (s *Store) ManuallyEnqueue(
 		shouldQueue, priority := queue.shouldQueue(ctx, s.cfg.Clock.Now(), repl, sysCfg)
 		log.Eventf(ctx, "shouldQueue=%v, priority=%f", shouldQueue, priority)
 		if !shouldQueue {
-			return collect(), "", nil
+			return collect(), nil, nil
 		}
 	}
 
 	log.Eventf(ctx, "running %s.process", queueName)
-	err := queue.process(ctx, repl, sysCfg)
-	if err != nil {
-		return collect(), err.Error(), nil
-	}
-	return collect(), "", nil
+	processed, processErr := queue.process(ctx, repl, sysCfg)
+	log.Eventf(ctx, "processed: %t", processed)
+	return collect(), processErr, nil
 }
 
 // GetClusterVersion reads the the cluster version from the store-local version

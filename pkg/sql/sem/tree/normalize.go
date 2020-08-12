@@ -118,7 +118,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	right := expr.TypedRight()
 	expectedType := expr.ResolvedType()
 
-	if !expr.fn.NullableArgs && (left == DNull || right == DNull) {
+	if !expr.Fn.NullableArgs && (left == DNull || right == DNull) {
 		return DNull
 	}
 
@@ -451,7 +451,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
-				typedJ, err := dj.TypeCheck(nil, types.Jsonb)
+				typedJ, err := dj.TypeCheck(v.ctx.Context, nil, types.Jsonb)
 				if err != nil {
 					break
 				}
@@ -816,20 +816,35 @@ var _ Visitor = &isConstVisitor{}
 
 func (v *isConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.isConst {
-		if isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+		if !operatorIsImmutable(expr) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 			v.isConst = false
 			return false, expr
 		}
-
-		switch t := expr.(type) {
-		case *FuncExpr:
-			if t.IsImpure() {
-				v.isConst = false
-				return false, expr
-			}
-		}
 	}
 	return true, expr
+}
+
+func operatorIsImmutable(expr Expr) bool {
+	switch t := expr.(type) {
+	case *FuncExpr:
+		return t.fnProps.Class == NormalClass && t.fn.Volatility <= VolatilityImmutable
+
+	case *CastExpr:
+		volatility, ok := LookupCastVolatility(t.Expr.(TypedExpr).ResolvedType(), t.typ)
+		return ok && volatility <= VolatilityImmutable
+
+	case *UnaryExpr:
+		return t.fn.Volatility <= VolatilityImmutable
+
+	case *BinaryExpr:
+		return t.Fn.Volatility <= VolatilityImmutable
+
+	case *ComparisonExpr:
+		return t.fn.Volatility <= VolatilityImmutable
+
+	default:
+		return true
+	}
 }
 
 func (*isConstVisitor) VisitPost(expr Expr) Expr { return expr }
@@ -842,7 +857,7 @@ func (v *isConstVisitor) run(expr Expr) bool {
 
 // IsConst returns whether the expression is constant. A constant expression
 // does not contain variables, as defined by ContainsVars, nor impure functions.
-func IsConst(evalCtx *EvalContext, expr Expr) bool {
+func IsConst(evalCtx *EvalContext, expr TypedExpr) bool {
 	v := isConstVisitor{ctx: evalCtx}
 	return v.run(expr)
 }
@@ -885,20 +900,12 @@ func (v *fastIsConstVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	}
 	v.visited = true
 
-	// If the parent expression is a variable or impure function, we know that it
-	// is not constant.
+	// If the parent expression is a variable or non-immutable operator, we know
+	// that it is not constant.
 
-	if isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+	if !operatorIsImmutable(expr) || isVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr
-	}
-
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsImpure() {
-			v.isConst = false
-			return false, expr
-		}
 	}
 
 	return true, expr
@@ -968,13 +975,13 @@ func ContainsVars(expr Expr) bool {
 var DecimalOne DDecimal
 
 func init() {
-	DecimalOne.SetFinite(1, 0)
+	DecimalOne.SetInt64(1)
 }
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
 func ReType(expr TypedExpr, wantedType *types.T) TypedExpr {
-	if expr.ResolvedType().Equivalent(wantedType) {
+	if wantedType.Family() == types.AnyFamily || expr.ResolvedType().Identical(wantedType) {
 		return expr
 	}
 	res := &CastExpr{Expr: expr, Type: wantedType}

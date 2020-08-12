@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -94,12 +95,11 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:         cte.id,
-				Name:         string(cte.name.Alias),
-				InCols:       inCols,
-				OutCols:      outCols,
-				BindingProps: cte.bindingProps,
-				ID:           b.factory.Metadata().NextUniqueID(),
+				With:    cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      b.factory.Metadata().NextUniqueID(),
 			})
 
 			return outScope
@@ -163,13 +163,13 @@ func (b *Builder) buildDataSource(
 		}
 
 		id := b.factory.Memo().NextWithID()
+		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
 		cte := cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
 			originalExpr: source.Statement,
 			expr:         innerScope.expr,
 			id:           id,
-			bindingProps: innerScope.expr.Relational(),
 		}
 		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
 
@@ -192,12 +192,11 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:         cte.id,
-			Name:         string(cte.name.Alias),
-			InCols:       inCols,
-			OutCols:      outCols,
-			BindingProps: cte.bindingProps,
-			ID:           b.factory.Metadata().NextUniqueID(),
+			With:    cte.id,
+			Name:    string(cte.name.Alias),
+			InCols:  inCols,
+			OutCols: outCols,
+			ID:      b.factory.Metadata().NextUniqueID(),
 		})
 
 		return outScope
@@ -392,7 +391,7 @@ func (b *Builder) buildScanFromTableRef(
 			panic(pgerror.Newf(pgcode.Syntax,
 				"an explicit list of column IDs must include at least one column"))
 		}
-		ordinals = cat.ConvertColumnIDsToOrdinals(tab, ref.Columns)
+		ordinals = resolveNumericColumnRefs(tab, ref.Columns)
 	}
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
@@ -441,29 +440,9 @@ func (b *Builder) buildScan(
 		tabMeta.IgnoreForeignKeys = true
 	}
 
-	colCount := len(ordinals)
-	if colCount == 0 {
-		// If scanning mutation columns, then include writable and deletable
-		// columns in the output, in addition to public columns.
-		if scanMutationCols {
-			colCount = tab.DeletableColumnCount()
-		} else {
-			colCount = tab.ColumnCount()
-		}
-	}
-
-	getOrdinal := func(i int) int {
-		if ordinals == nil {
-			return i
-		}
-		return ordinals[i]
-	}
-
-	var tabColIDs opt.ColSet
 	outScope = inScope.push()
-	outScope.cols = make([]scopeColumn, 0, colCount)
-	for i := 0; i < colCount; i++ {
-		ord := getOrdinal(i)
+	var tabColIDs opt.ColSet
+	addCol := func(ord int) {
 		col := tab.Column(ord)
 		colID := tabID.ColumnID(ord)
 		tabColIDs.Add(colID)
@@ -476,7 +455,25 @@ func (b *Builder) buildScan(
 			typ:      col.DatumType(),
 			hidden:   col.IsHidden() || isMutation,
 			mutation: isMutation,
+			system:   cat.IsSystemColumn(tab, ord),
 		})
+	}
+
+	if ordinals == nil {
+		// If no ordinals are requested, then add in all of the table columns
+		// (including mutation columns if scanMutationCols is true).
+		outScope.cols = make([]scopeColumn, 0, tab.ColumnCount())
+		for i, n := 0, tab.ColumnCount(); i < n; i++ {
+			if scanMutationCols || !cat.IsMutationColumn(tab, i) {
+				addCol(i)
+			}
+		}
+	} else {
+		// Otherwise, just add the ordinals.
+		outScope.cols = make([]scopeColumn, 0, len(ordinals))
+		for _, ord := range ordinals {
+			addCol(ord)
+		}
 	}
 
 	if tab.IsVirtualTable() {
@@ -525,13 +522,21 @@ func (b *Builder) buildScan(
 
 		b.addCheckConstraintsForTable(tabMeta)
 		b.addComputedColsForTable(tabMeta)
+		b.addPartialIndexPredicatesForTable(tabMeta)
 
 		outScope.expr = b.factory.ConstructScan(&private)
 
 		if b.trackViewDeps {
 			dep := opt.ViewDep{DataSource: tab}
-			for i := 0; i < colCount; i++ {
-				dep.ColumnOrdinals.Add(getOrdinal(i))
+			dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
+			// We will track the ColumnID to Ord mapping so Ords can be added
+			// when a column is referenced.
+			for i, col := range outScope.cols {
+				if ordinals == nil {
+					dep.ColumnIDToOrd[col.id] = i
+				} else {
+					dep.ColumnIDToOrd[col.id] = ordinals[i]
+				}
 			}
 			if private.Flags.ForceIndex {
 				dep.SpecificIndex = true
@@ -547,6 +552,9 @@ func (b *Builder) buildScan(
 // apply to the table and adds them to the table metadata (see
 // TableMeta.Constraints). To do this, the scalar expressions of the check
 // constraints are built here.
+//
+// These expressions are used as "known truths" about table data; as such they
+// can only contain immutable operators.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	tab := tabMeta.Table
 
@@ -565,12 +573,13 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 
-	// Find the non-nullable table columns.
+	// Find the non-nullable table columns. Mutation columns can be NULL during
+	// backfill, so they should be excluded.
 	var notNullCols opt.ColSet
 	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
+		if !tab.Column(i).IsNullable() && !cat.IsMutationColumn(tab, i) {
 			notNullCols.Add(tabMeta.MetaID.ColumnID(i))
 		}
 	}
@@ -590,12 +599,20 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		}
 
 		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-		condition := b.buildScalar(texpr, tableScope, nil, nil, nil)
+		var condition opt.ScalarExpr
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			condition = b.buildScalar(texpr, tableScope, nil, nil, nil)
+		})
 		// Check constraints that are guaranteed to not evaluate to NULL
 		// are the only ones converted into filters. This is because a NULL
 		// constraint is interpreted as passing, whereas a NULL filter is not.
 		if memo.ExprIsNeverNull(condition, notNullCols) {
-			filters = append(filters, b.factory.ConstructFiltersItem(condition))
+			// Check if the expression contains non-immutable operators.
+			var sharedProps props.Shared
+			memo.BuildSharedProps(condition, &sharedProps)
+			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
+				filters = append(filters, b.factory.ConstructFiltersItem(condition))
+			}
 		}
 	}
 	if len(filters) > 0 {
@@ -604,7 +621,9 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 }
 
 // addComputedColsForTable finds all computed columns in the given table and
-// caches them in the table metadata as scalar expressions.
+// caches them in the table metadata as scalar expressions. These expressions
+// are used as "known truths" about table data. Any columns for which the
+// expression contains non-immutable operators are omitted.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 	var tableScope *scope
 	tab := tabMeta.Table
@@ -613,21 +632,104 @@ func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
 		if !tabCol.IsComputed() {
 			continue
 		}
+		if cat.IsMutationColumn(tab, i) {
+			// Mutation columns can be NULL during backfill, so they won't equal the
+			// computed column expression value (in general).
+			continue
+		}
 		expr, err := parser.ParseExpr(tabCol.ComputedExprStr())
 		if err != nil {
-			continue
+			panic(err)
 		}
 
 		if tableScope == nil {
 			tableScope = b.allocScope()
-			tableScope.appendColumnsFromTable(tabMeta, &tabMeta.Alias)
+			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
 		}
 
 		if texpr := tableScope.resolveAndRequireType(expr, types.Any); texpr != nil {
 			colID := tabMeta.MetaID.ColumnID(i)
-			scalar := b.buildScalar(texpr, tableScope, nil, nil, nil)
-			tabMeta.AddComputedCol(colID, scalar)
+			var scalar opt.ScalarExpr
+			b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+				scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
+			})
+			// Check if the expression contains non-immutable operators.
+			var sharedProps props.Shared
+			memo.BuildSharedProps(scalar, &sharedProps)
+			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
+				tabMeta.AddComputedCol(colID, scalar)
+			}
 		}
+	}
+}
+
+// addPartialIndexPredicatesForTable finds all partial indexes in the table and
+// adds their predicates to the table metadata (see
+// TableMeta.PartialIndexPredicates). The predicates are converted from strings
+// to ScalarExprs here.
+//
+// The predicates are used as "known truths" about table data. Any predicates
+// containing non-immutable operators are omitted.
+func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
+	tab := tabMeta.Table
+
+	// Find the first partial index.
+	numIndexes := tab.IndexCount()
+	indexOrd := 0
+	for ; indexOrd < numIndexes; indexOrd++ {
+		if _, ok := tab.Index(indexOrd).Predicate(); ok {
+			break
+		}
+	}
+
+	// Return early if there are no partial indexes. Only partial indexes have
+	// predicates.
+	if indexOrd == numIndexes {
+		return
+	}
+
+	// Create a scope that can be used for building the scalar expressions.
+	tableScope := b.allocScope()
+	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+
+	// Skip to the first partial index we found above.
+	for ; indexOrd < numIndexes; indexOrd++ {
+		index := tab.Index(indexOrd)
+		pred, ok := index.Predicate()
+
+		// If the index is not a partial index, do nothing.
+		if !ok {
+			continue
+		}
+
+		expr, err := parser.ParseExpr(pred)
+		if err != nil {
+			panic(err)
+		}
+
+		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
+
+		var scalar opt.ScalarExpr
+		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
+			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
+		})
+
+		// Wrap the scalar in a FiltersItem.
+		filter := b.factory.ConstructFiltersItem(scalar)
+
+		// Expressions with non-immutable operators are not supported as partial
+		// index predicates.
+		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
+			panic(errors.AssertionFailedf("partial index predicate is not immutable"))
+		}
+
+		// Wrap the predicate filter expression in a FiltersExpr and normalize
+		// it.
+		filters := memo.FiltersExpr{filter}
+		filters = b.factory.NormalizePartialIndexPredicate(filters)
+
+		// Add the filters to the table metadata.
+		tabMeta.AddPartialIndexPredicate(indexOrd, &filters)
 	}
 }
 
@@ -720,13 +822,13 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		}
 
 		id := b.factory.Memo().NextWithID()
+		b.factory.Metadata().AddWithBinding(id, cteExpr)
 
 		addedCTEs[i] = cteSource{
 			name:         cte.Name,
 			cols:         cteCols,
 			originalExpr: cte.Stmt,
 			expr:         cteExpr,
-			bindingProps: cteExpr.Relational(),
 			id:           id,
 			mtr:          cte.Mtr,
 		}
@@ -948,6 +1050,7 @@ func (b *Builder) buildSelectClause(
 	inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, locking, inScope)
+
 	b.processWindowDefs(sel, fromScope)
 	b.buildWhere(sel.Where, fromScope)
 
@@ -1197,7 +1300,7 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(asOf, b.semaCtx, b.evalCtx)
+	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
 	if err != nil {
 		panic(err)
 	}

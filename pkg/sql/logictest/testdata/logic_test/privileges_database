@@ -1,3 +1,5 @@
+# LogicTest: !3node-tenant(52567)
+
 # Test default database-level permissions.
 # Default user is root.
 statement ok

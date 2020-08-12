@@ -16,6 +16,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -25,16 +26,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,49 +47,64 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAnonymizeStatementsForReporting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	const stmt = `
-INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see');
-
-select * from crdb_internal.node_runtime_info;
+	const stmt1s = `
+INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 `
+	stmt1, err := parser.ParseOne(stmt1s)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	rUnsafe := "i'm not safe"
-	rSafe := log.Safe("something safe")
+	rUnsafe := errors.New("panic: i'm not safe")
+	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST)
 
-	safeErr := sql.AnonymizeStatementsForReporting("testing", stmt, rUnsafe)
-
-	const (
-		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._; caused by i'm not safe"
-		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._: caused by <redacted>"
-		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, __more2__); SELECT * FROM _._: caused by something safe"
-	)
-
+	const expMessage = "panic: i'm not safe"
 	actMessage := safeErr.Error()
 	if actMessage != expMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expMessage, actMessage)
+		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
-	actSafeRedactedMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
+	const expSafeRedactedMessage = `...conn_executor_test.go:NN: <*errors.errorString>
+wrapper: <*withstack.withStack>
+(more details:)
+github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
+	...conn_executor_test.go:NN
+testing.tRunner
+	...testing.go:NN
+runtime.goexit
+	...asm_amd64.s:NN
+wrapper: <*safedetails.withSafeDetails>
+(more details:)
+while executing: %s
+-- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
+
+	// Edit non-determinstic stack trace filenames from the message.
+	actSafeRedactedMessage := fileref.ReplaceAllString(
+		errors.Redact(safeErr), "...$2:NN")
+
 	if actSafeRedactedMessage != expSafeRedactedMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expSafeRedactedMessage, actSafeRedactedMessage)
-	}
-
-	safeErr = sql.AnonymizeStatementsForReporting("testing", stmt, rSafe)
-
-	actSafeSafeMessage := log.ReportablesToSafeError(0, "", []interface{}{safeErr}).Error()
-	if actSafeSafeMessage != expSafeSafeMessage {
-		t.Fatalf("wanted: %s\ngot: %s", expSafeSafeMessage, actSafeSafeMessage)
+		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A:        difflib.SplitLines(expSafeRedactedMessage),
+			B:        difflib.SplitLines(actSafeRedactedMessage),
+			FromFile: "Expected",
+			FromDate: "",
+			ToFile:   "Actual",
+			ToDate:   "",
+			Context:  1,
+		})
+		t.Errorf("Diff:\n%s", diff)
 	}
 }
+
+var fileref = regexp.MustCompile(`((?:[a-zA-Z0-9\._@-]*/)*)([a-zA-Z0-9._@-]*\.(?:go|s)):\d+`)
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.
@@ -95,6 +114,7 @@ select * from crdb_internal.node_runtime_info;
 // closes the connection more abruptly than that.
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
@@ -144,7 +164,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				}
 			}()
 
-			ctx := context.TODO()
+			ctx := context.Background()
 			conn := c.(driver.ConnBeginTx)
 			txn, err := conn.BeginTx(ctx, driver.TxOptions{})
 			if err != nil {
@@ -249,6 +269,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // errors.
 func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	query := "SELECT 42"
 
@@ -265,7 +286,7 @@ func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 
@@ -286,6 +307,7 @@ func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 // returned to the client and the session state is transitioned to NoTxn.
 func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const targetKeyString string = "/Table/53/1/1/0"
 	var injectedErr int64
@@ -294,7 +316,7 @@ func TestErrorOnRollback(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingProposalFilter: func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					if !fArgs.Req.IsSingleRequest() {
 						return nil
 					}
@@ -319,7 +341,7 @@ func TestErrorOnRollback(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
@@ -359,6 +381,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Populate a sufficiently large number of rows. We want at least as
 	// many rows as an insert can batch in its output buffer (to force a
@@ -383,7 +406,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
@@ -428,11 +451,12 @@ SELECT IF(x::INT::FLOAT = x,
 
 func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Prepare a session with a custom application name.
 	pgURL := url.URL{
@@ -470,6 +494,9 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 
 func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 51356)
 
 	const rows, kvBatchSize = 1000, 50
 
@@ -513,7 +540,7 @@ func TestQueryProgress(t *testing.T) {
 		},
 	}
 	s, rawDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
@@ -568,6 +595,7 @@ func TestQueryProgress(t *testing.T) {
 // detection.
 func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -638,6 +666,7 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 // the user's transaction.
 func TestRetriableErrorDuringPrepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const uniqueString = "'a very unique string'"
 	var failed int64
 	const numToFail = 2 // only fail on the first two attempts
@@ -669,6 +698,7 @@ func TestRetriableErrorDuringPrepare(t *testing.T) {
 // are handled correctly.
 func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	filter := newDynamicRequestFilter()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -734,7 +764,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 		err)
 	var pgErr pgx.PgError
 	require.True(t, errors.As(err, &pgErr))
-	require.Equal(t, pgcode.SerializationFailure, pgErr.Code)
+	require.Equal(t, pgcode.SerializationFailure, pgcode.MakeCode(pgErr.Code))
 
 	// Clear the error producing filter, restart the transaction, and run it to
 	// completion.
@@ -750,34 +780,147 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+// TestTrimFlushedStatements verifies that the conn executor trims the
+// statements buffer once the corresponding results are returned to the user.
+func TestTrimFlushedStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const (
+		countStmt = "SELECT count(*) FROM test"
+		// stmtBufMaxLen is the maximum length the statement buffer should be during
+		// execution of COUNT(*). This includes a SELECT COUNT(*) command as well
+		// as a Sync command.
+		stmtBufMaxLen = 2
+	)
+	// stmtBufLen is set to the length of the statement buffer after each SELECT
+	// COUNT(*) execution.
+	stmtBufLen := 0
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				AfterExecCmd: func(_ context.Context, cmd sql.Command, buf *sql.StmtBuf) {
+					if strings.Contains(cmd.String(), countStmt) {
+						// Only compare statement buffer length on SELECT COUNT(*) queries.
+						stmtBufLen = buf.Len()
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE test (i int)")
+	require.NoError(t, err)
+
+	tx, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		_, err := tx.Exec(countStmt)
+		require.NoError(t, err)
+		if stmtBufLen > stmtBufMaxLen {
+			t.Fatalf("statement buffer grew to %d (> %d) after %dth execution", stmtBufLen, stmtBufMaxLen, i)
+		}
+	}
+	require.NoError(t, tx.Commit())
+}
+
+func TestShowLastQueryStatistics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlConn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlConn.Exec("CREATE TABLE t(a INT)"); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := sqlConn.Query("SHOW LAST QUERY STATISTICS")
+	if err != nil {
+		t.Fatalf("show last query statistics failed: %v", err)
+	}
+	defer rows.Close()
+
+	var parseLatency string
+	var planLatency string
+	var execLatency string
+	var serviceLatency string
+
+	rows.Next()
+	if err := rows.Scan(&parseLatency, &planLatency, &execLatency, &serviceLatency); err != nil {
+		t.Fatalf("unexpected error while reading last query statistics: %v", err)
+	}
+
+	parseInterval, err := tree.ParseDInterval(parseLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planInterval, err := tree.ParseDInterval(planLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execInterval, err := tree.ParseDInterval(execLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceInterval, err := tree.ParseDInterval(serviceLatency)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if parseInterval.AsFloat64() <= 0 || parseInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected parse latency: %v", parseInterval.AsFloat64())
+	}
+
+	if planInterval.AsFloat64() <= 0 || planInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected plan latency: %v", planInterval.AsFloat64())
+	}
+
+	if serviceInterval.AsFloat64() <= 0 || serviceInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected service latency: %v", serviceInterval.AsFloat64())
+	}
+
+	if execInterval.AsFloat64() <= 0 || execInterval.AsFloat64() > 1 {
+		t.Fatalf("unexpected execution latency: %v", execInterval.AsFloat64())
+	}
+
+	if rows.Next() {
+		t.Fatalf("unexpected number of rows returned by last query statistics: %v", err)
+	}
+}
+
 // dynamicRequestFilter exposes a filter method which is a
-// storagebase.ReplicaRequestFilter but can be set dynamically.
+// kvserverbase.ReplicaRequestFilter but can be set dynamically.
 type dynamicRequestFilter struct {
 	v atomic.Value
 }
 
 func newDynamicRequestFilter() *dynamicRequestFilter {
 	f := &dynamicRequestFilter{}
-	f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+	f.v.Store(kvserverbase.ReplicaRequestFilter(noopRequestFilter))
 	return f
 }
 
-func (f *dynamicRequestFilter) setFilter(filter storagebase.ReplicaRequestFilter) {
+func (f *dynamicRequestFilter) setFilter(filter kvserverbase.ReplicaRequestFilter) {
 	if filter == nil {
-		f.v.Store(storagebase.ReplicaRequestFilter(noopRequestFilter))
+		f.v.Store(kvserverbase.ReplicaRequestFilter(noopRequestFilter))
 	} else {
 		f.v.Store(filter)
 	}
 }
 
-// noopRequestFilter is a storagebase.ReplicaRequestFilter.
+// noopRequestFilter is a kvserverbase.ReplicaRequestFilter.
 func (f *dynamicRequestFilter) filter(
 	ctx context.Context, request roachpb.BatchRequest,
 ) *roachpb.Error {
-	return f.v.Load().(storagebase.ReplicaRequestFilter)(ctx, request)
+	return f.v.Load().(kvserverbase.ReplicaRequestFilter)(ctx, request)
 }
 
-// noopRequestFilter is a storagebase.ReplicaRequestFilter that does nothing.
+// noopRequestFilter is a kvserverbase.ReplicaRequestFilter that does nothing.
 func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
 	return nil
 }

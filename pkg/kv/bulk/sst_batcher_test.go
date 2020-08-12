@@ -24,12 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -151,10 +152,10 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
 
-			if err := kvDB.AdminSplit(ctx, key(split1), key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, key(split2), key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */); err != nil {
 				t.Fatal(err)
 			}
 
@@ -167,18 +168,19 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, _, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupRangeDescriptorWithEvictionToken(
-				ctx, addr, nil, false)
+			tok, err := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().LookupWithEvictionToken(
+				ctx, addr, kvcoord.EvictionToken{}, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := mockCache.InsertRangeDescriptors(ctx, *r); err != nil {
-				t.Fatal(err)
+			r := roachpb.RangeInfo{
+				Desc: *tok.Desc(),
 			}
+			mockCache.Insert(ctx, r)
 
 			ts := hlc.Timestamp{WallTime: 100}
 			b, err := bulk.MakeBulkAdder(
-				ctx, kvDB, mockCache, s.ClusterSettings(), ts, storagebase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}, nil, /* bulkMon */
+				ctx, kvDB, mockCache, s.ClusterSettings(), ts, kvserverbase.BulkAdderOptions{MinBufferSize: batchSize(), SSTSize: batchSize}, nil, /* bulkMon */
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -280,10 +282,9 @@ func (m mockSender) SplitAndScatter(ctx context.Context, _ roachpb.Key, _ hlc.Ti
 // spanning SST is being ingested over a span with a lot of splits.
 func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
-	if testing.Short() {
-		t.Skip("this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
-	}
+	skip.UnderShort(t, "this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
 
 	const numKeys, valueSize, splitEvery = 500, 5000, 1
 
@@ -320,9 +321,9 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 				} else if i == len(splits)-earlySplit {
 					late = getMem()
 				}
-				return &roachpb.RangeKeyMismatchError{
-					MismatchedRange: &roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
-				}
+				return roachpb.NewRangeKeyMismatchError(
+					ctx, span.Key, span.EndKey,
+					&roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])}, nil /* lease */)
 			}
 		}
 		return nil
@@ -332,7 +333,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 
 	t.Logf("Adding %dkb sst spanning %d splits from %v to %v", len(sst)/kb, len(splits), start, end)
 	if _, err := bulk.AddSSTable(
-		context.TODO(), mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(),
+		ctx, mock, start, end, sst, false /* disallowShadowing */, enginepb.MVCCStats{}, cluster.MakeTestingClusterSettings(),
 	); err != nil {
 		t.Fatal(err)
 	}

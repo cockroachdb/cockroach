@@ -25,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBasicBuiltinFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Trick to get the init() for the builtins package to run.
 	_ = builtins.AllBuiltinNames
 	ctx := context.Background()
@@ -70,15 +72,14 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
-				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-					return createTestProjectingOperator(
-						ctx, flowCtx, input[0], tc.inputTypes,
-						tc.expr, false, /* canFallbackToRowexec */
-					)
-				})
-		})
+		log.Infof(ctx, "%s", tc.desc)
+		runTests(t, []tuples{tc.inputTuples}, tc.outputTuples, orderedVerifier,
+			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+				return createTestProjectingOperator(
+					ctx, flowCtx, input[0], tc.inputTypes,
+					tc.expr, false, /* canFallbackToRowexec */
+				)
+			})
 	}
 }
 
@@ -179,21 +180,24 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	}
 	inputCols := []int{0, 1, 2}
 	p := &mockTypeContext{typs: typs}
-	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: p}, types.Any)
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.IVarContainer = p
+	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode: NewOneInputNode(source),
-		allocator:    testAllocator,
-		evalCtx:      tctx,
-		funcExpr:     typedExpr.(*tree.FuncExpr),
-		outputIdx:    outputIdx,
-		columnTypes:  typs,
-		outputType:   types.String,
-		converter:    getDatumToPhysicalFn(types.String),
-		row:          make(tree.Datums, outputIdx),
-		argumentCols: inputCols,
+		OneInputNode:        NewOneInputNode(source),
+		allocator:           testAllocator,
+		evalCtx:             tctx,
+		funcExpr:            typedExpr.(*tree.FuncExpr),
+		outputIdx:           outputIdx,
+		columnTypes:         typs,
+		outputType:          types.String,
+		toDatumConverter:    newVecToDatumConverter(len(typs), inputCols),
+		datumToVecConverter: GetDatumToPhysicalFn(types.String),
+		row:                 make(tree.Datums, outputIdx),
+		argumentCols:        inputCols,
 	}
 	defaultOp.Init()
 

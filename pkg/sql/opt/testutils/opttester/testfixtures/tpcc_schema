@@ -75,8 +75,6 @@ CREATE TABLE history
     h_amount decimal(6,2),
     h_data   varchar(24),
     primary key (h_w_id, rowid),
-    index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
-    index history_district_fk_idx (h_w_id, h_d_id),
     foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
     foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
 )
@@ -163,7 +161,6 @@ CREATE TABLE order_line
     ol_amount       decimal(6,2),
     ol_dist_info    char(24),
     primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-    index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id),
     foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
     foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
 ) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)

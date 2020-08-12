@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 )
@@ -48,15 +49,21 @@ func TestS2GeographyIndexBasic(t *testing.T) {
 		case "index-keys":
 			return keysToString(index.InvertedIndexKeys(ctx, shapes[nameArg(t, d)]))
 		case "inner-covering":
-			return cellUnionToString(index.testingInnerCovering(shapes[nameArg(t, d)]))
+			return cellUnionToString(index.TestingInnerCovering(shapes[nameArg(t, d)]))
 		case "covers":
 			return spansToString(index.Covers(ctx, shapes[nameArg(t, d)]))
 		case "intersects":
 			return spansToString(index.Intersects(ctx, shapes[nameArg(t, d)]))
 		case "covered-by":
 			return checkExprAndToString(index.CoveredBy(ctx, shapes[nameArg(t, d)]))
+		case "d-within":
+			var distance int
+			d.ScanArgs(t, "distance", &distance)
+			return spansToString(index.DWithin(ctx, shapes[nameArg(t, d)], float64(distance), geogfn.UseSphere))
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 	})
 }
+
+// TODO(sumeer): more tests, including spheroid for DWithin.

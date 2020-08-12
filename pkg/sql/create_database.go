@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -76,10 +77,9 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 
 func (n *createDatabaseNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("database"))
-	desc := makeDatabaseDesc(n.n)
 
-	created, err := params.p.createDatabase(
-		params.ctx, &desc, n.n.IfNotExists, tree.AsStringWithFQNames(n.n, params.Ann()))
+	desc, created, err := params.p.createDatabase(
+		params.ctx, n.n, tree.AsStringWithFQNames(n.n, params.Ann()))
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			EventLogCreateDatabase,
-			int32(desc.ID),
+			int32(desc.GetID()),
 			int32(params.extendedEvalCtx.NodeID.SQLInstanceID()),
 			struct {
 				DatabaseName string
@@ -100,8 +100,8 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		params.extendedEvalCtx.Tables.addUncommittedDatabase(
-			desc.Name, desc.ID, dbCreated)
+		params.extendedEvalCtx.Descs.AddUncommittedDatabase(
+			desc.GetName(), desc.GetID(), descs.DBCreated)
 	}
 	return nil
 }

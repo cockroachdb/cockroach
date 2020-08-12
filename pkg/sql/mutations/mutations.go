@@ -40,6 +40,10 @@ var (
 	// indexes in CREATE TABLE.
 	IndexStoringMutator MultiStatementMutation = sqlbase.IndexStoringMutator
 
+	// PartialIndexMutator adds random partial index predicate expressions to
+	// indexes.
+	PartialIndexMutator MultiStatementMutation = sqlbase.PartialIndexMutator
+
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
 	// features not supported by Postgres; use PostgresCreateTableMutator
@@ -292,8 +296,12 @@ func statisticsMutator(
 				// Should not happen.
 				panic(err)
 			}
+			j, err := tree.ParseDJSON(string(b))
+			if err != nil {
+				panic(err)
+			}
 			alter.Cmds = append(alter.Cmds, &tree.AlterTableInjectStats{
-				Stats: tree.NewDString(string(b)),
+				Stats: j,
 			})
 			stmts = append(stmts, alter)
 			changed = true
@@ -420,7 +428,7 @@ func foreignKeyMutator(
 				for refI, refCol := range availCols {
 					fkColType := tree.MustBeStaticallyKnownType(fkCol.Type)
 					refColType := tree.MustBeStaticallyKnownType(refCol.Type)
-					if fkColType.Equivalent(refColType) {
+					if fkColType.Equivalent(refColType) && sqlbase.ColumnTypeIsIndexable(refColType) {
 						usingCols = append(usingCols, refCol)
 						availCols = append(availCols[:refI], availCols[refI+1:]...)
 						found = true
@@ -536,7 +544,7 @@ func postgresMutator(rng *rand.Rand, q string) string {
 var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts []tree.Statement) (mutated []tree.Statement, changed bool) {
 	for _, stmt := range stmts {
 		switch stmt := stmt.(type) {
-		case *tree.SetClusterSetting:
+		case *tree.SetClusterSetting, *tree.SetVar:
 			continue
 		case *tree.CreateTable:
 			if stmt.Interleave != nil {

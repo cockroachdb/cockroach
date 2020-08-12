@@ -15,8 +15,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -41,6 +43,10 @@ const (
 )
 
 var uniqueRowIDString = "unique_rowid()"
+
+// creteFKIndexes controls whether we automatically create indexes on the
+// referencing side of foreign keys (like it was required before 20.2).
+const createFKIndexes = false
 
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
@@ -111,6 +117,15 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 			}
 		}
 	}
+
+	// Add the MVCC timestamp system column.
+	tab.SystemColumns = append(tab.SystemColumns, &Column{
+		Ordinal:  len(tab.Columns),
+		Name:     sqlbase.MVCCTimestampColumnName,
+		Type:     sqlbase.MVCCTimestampColumnType,
+		Nullable: true,
+		Hidden:   true,
+	})
 
 	// Add the primary index.
 	if hasPrimaryIndex {
@@ -340,25 +355,27 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		))
 	}
 
-	// 2. Search for an existing index in the source table; add it if necessary.
-	found := false
-	for _, idx := range tab.Indexes {
-		if matches(idx, fromCols, false /* strict */) {
-			found = true
-			break
+	if createFKIndexes {
+		// 2. Search for an existing index in the source table; add it if necessary.
+		found := false
+		for _, idx := range tab.Indexes {
+			if matches(idx, fromCols, false /* strict */) {
+				found = true
+				break
+			}
 		}
-	}
-	if !found {
-		// Add a non-unique index on fromCols.
-		idx := tree.IndexTableDef{
-			Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
-			Columns: make(tree.IndexElemList, len(fromCols)),
+		if !found {
+			// Add a non-unique index on fromCols.
+			idx := tree.IndexTableDef{
+				Name:    tree.Name(fmt.Sprintf("%s_auto_index_%s", tab.TabName.Table(), constraintName)),
+				Columns: make(tree.IndexElemList, len(fromCols)),
+			}
+			for i, c := range fromCols {
+				idx.Columns[i].Column = tab.Columns[c].ColName()
+				idx.Columns[i].Direction = tree.Ascending
+			}
+			tab.addIndex(&idx, nonUniqueIndex)
 		}
-		for i, c := range fromCols {
-			idx.Columns[i].Column = tab.Columns[c].ColName()
-			idx.Columns[i].Direction = tree.Ascending
-		}
-		tab.addIndex(&idx, nonUniqueIndex)
 	}
 
 	fk := ForeignKeyConstraint{
@@ -427,8 +444,9 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	}
 
 	// Add explicit columns and mark primary key columns as not null.
+	// Add the geoConfig if applicable.
 	notNullIndex := true
-	for _, colDef := range def.Columns {
+	for i, colDef := range def.Columns {
 		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
 
 		if typ == primaryIndex {
@@ -438,6 +456,38 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		if col.Nullable {
 			notNullIndex = false
 		}
+
+		if i == 0 && def.Inverted {
+			switch col.Type.Family() {
+			case types.GeometryFamily:
+				// Don't use the default config because it creates a huge number of spans.
+				idx.geoConfig = &geoindex.Config{
+					S2Geometry: &geoindex.S2GeometryConfig{
+						MinX: -5,
+						MaxX: 5,
+						MinY: -5,
+						MaxY: 5,
+						S2Config: &geoindex.S2Config{
+							MinLevel: 0,
+							MaxLevel: 2,
+							LevelMod: 1,
+							MaxCells: 3,
+						},
+					},
+				}
+
+			case types.GeographyFamily:
+				// Don't use the default config because it creates a huge number of spans.
+				idx.geoConfig = &geoindex.Config{
+					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
+						MinLevel: 0,
+						MaxLevel: 2,
+						LevelMod: 1,
+						MaxCells: 3,
+					}},
+				}
+			}
+		}
 	}
 
 	if typ == primaryIndex {
@@ -446,7 +496,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 			pkOrdinals.Add(c.Ordinal)
 		}
 		// Add the rest of the columns in the table.
-		for i, n := 0, tt.DeletableColumnCount(); i < n; i++ {
+		for i, n := 0, tt.ColumnCount(); i < n; i++ {
 			if !pkOrdinals.Contains(i) {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
@@ -505,6 +555,11 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 		if !found {
 			idx.addColumn(tt, string(name), tree.Ascending, nonKeyCol)
 		}
+	}
+
+	// Add partial index predicate.
+	if def.Predicate != nil {
+		idx.predicate = tree.Serialize(def.Predicate)
 	}
 
 	idx.ordinal = len(tt.Indexes)

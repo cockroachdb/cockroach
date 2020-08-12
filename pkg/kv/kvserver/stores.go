@@ -61,7 +61,7 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 
 // IsMeta1Leaseholder returns whether the specified stores owns
 // the meta1 lease. Returns an error if any.
-func (ls *Stores) IsMeta1Leaseholder(now hlc.Timestamp) (bool, error) {
+func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.Timestamp) (bool, error) {
 	repl, _, err := ls.GetReplicaForRangeID(1)
 	if roachpb.IsRangeNotFoundError(err) {
 		return false, nil
@@ -69,7 +69,7 @@ func (ls *Stores) IsMeta1Leaseholder(now hlc.Timestamp) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return repl.OwnsValidLease(now), nil
+	return repl.OwnsValidLease(ctx, now), nil
 }
 
 // GetStoreCount returns the number of stores this node is exporting.

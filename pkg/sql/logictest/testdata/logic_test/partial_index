@@ -1,0 +1,727 @@
+#### Partial Indexes
+
+# TODO(mgartner): remove this once partial indexes are fully supported.
+statement ok
+SET experimental_partial_indexes=on;
+SET experimental_enable_enums = true;
+
+statement ok
+CREATE TABLE t1 (a INT, INDEX (a) WHERE a = 0)
+
+statement ok
+CREATE TABLE t2 (a INT, INDEX (a) WHERE false)
+
+# Allow immutable functions.
+statement ok
+CREATE TABLE t3 (a INT, INDEX (a) WHERE abs(1) > 2)
+
+# Don't allow non-boolean expressions.
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, INDEX (a) WHERE 1)
+
+# Don't allow columns not in table.
+statement error pgcode 42703 column "b" does not exist
+CREATE TABLE error (a INT, INDEX (a) WHERE b = 3)
+
+# Don't allow non-immutable operators.
+# TODO(mgartner): The error code for this should be 42P17, not 0A000.
+statement error pgcode 0A000 now\(\): context-dependent operators are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t < now())
+
+statement error pgcode 0A000 timestamptz::string: context-dependent operators are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, INDEX (t) WHERE t::string = 'foo')
+
+statement error pgcode 0A000 =: context-dependent operators are not allowed in index predicate
+CREATE TABLE error (t TIMESTAMPTZ, i TIMESTAMP, INDEX (t) WHERE i = t)
+
+statement error pgcode 0A000 random\(\): volatile functions are not allowed in index predicate
+CREATE TABLE error (t FLOAT, INDEX (t) WHERE t < random())
+
+# Don't allow variable subexpressions.
+statement error pgcode 42601 variable sub-expressions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE count(*) = 1)
+
+# Don't allow subqueries.
+statement error pgcode 42601 variable sub-expressions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE (SELECT true))
+
+# Don't allow aggregate functions.
+statement error pgcode 42803 aggregate functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE sum(a) > 1)
+
+# Don't allow window functions.
+statement error pgcode 42P20 window functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE row_number() OVER () > 1)
+
+# Don't allow set-returning functions.
+statement error pgcode 0A000 generator functions are not allowed in index predicate
+CREATE TABLE error (a INT, INDEX (a) WHERE generate_series(1, 1))
+
+# Fail on bad types.
+statement error pq: unsupported binary operator: <bool> - <bool>
+CREATE TABLE error (a INT, INDEX (a) WHERE false - true)
+
+# Don't allow references to other tables.
+statement error no data source matches prefix: t1
+CREATE TABLE error (a INT, INDEX (a) WHERE t1.a > 0)
+
+# Don't allow references to unknown tables.
+statement error no data source matches prefix: unknown
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.a > 0)
+
+# Don't allow reference to unknown databases.
+statement error no data source matches prefix: unknown.error
+CREATE TABLE error (a INT, INDEX (a) WHERE unknown.error.a > 9)
+
+# Validate CREATE TABLE ... UNIQUE INDEX predicate.
+
+statement ok
+CREATE TABLE t4 (a INT, UNIQUE INDEX (a) WHERE a = 0)
+
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE TABLE error (a INT, UNIQUE INDEX (a) WHERE 1)
+
+# Validate CREATE INDEX predicate.
+
+statement ok
+CREATE TABLE t5 (a INT)
+
+statement ok
+CREATE INDEX t5i ON t5 (a) WHERE a = 0
+
+# Don't allow invalid predicates.
+statement error expected index predicate expression to have type bool, but '1' has type int
+CREATE INDEX error ON t5 (a) WHERE 1
+
+# Don't allow references to other tables in predicates.
+statement error no data source matches prefix: t4
+CREATE INDEX error ON t5 (a) WHERE t4.a = 1
+
+# Dequalify table references.
+
+statement ok
+CREATE TABLE t6 (
+    a INT,
+    INDEX (a) WHERE a > 0,
+    INDEX (a) WHERE t6.a > 1,
+    INDEX (a DESC) WHERE test.t6.a > 2,
+    UNIQUE INDEX (a) WHERE a > 3,
+    UNIQUE INDEX (a) WHERE t6.a > 4,
+    UNIQUE INDEX (a DESC) WHERE test.t6.a > 5
+)
+
+statement ok
+CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
+CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
+CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+    a INT8 NULL,
+    INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+    INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+    INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+    UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+    INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+    INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+    INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
+    FAMILY "primary" (a, rowid)
+)
+
+# Renaming a column updates the index predicates.
+
+statement ok
+ALTER TABLE t6 RENAME COLUMN a TO b
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+    b INT8 NULL,
+    INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+    INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
+    FAMILY "primary" (b, rowid)
+)
+
+# Renaming a table keeps the index predicates intact.
+
+statement ok
+ALTER TABLE t6 RENAME TO t7
+
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+    b INT8 NULL,
+    INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+    INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+    INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+    UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+    UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+    UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+    INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+    INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
+    FAMILY "primary" (b, rowid)
+)
+
+# Dropping a column referenced in the predicate drops the index.
+
+statement ok
+CREATE TABLE t8 (
+    a INT,
+    b INT,
+    c STRING,
+    INDEX (a) WHERE b > 0,
+    INDEX (a) WHERE c = 'foo',
+    FAMILY (a, b, c)
+)
+
+statement ok
+ALTER TABLE t8 DROP COLUMN c
+
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+    a INT8 NULL,
+    b INT8 NULL,
+    INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+    FAMILY fam_0_a_b_c_rowid (a, b, rowid)
+)
+
+# CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
+# expressions to the new table.
+
+statement ok
+CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
+
+statement ok
+CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
+
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+     a INT8 NULL,
+     b INT8 NULL,
+     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8,
+     FAMILY "primary" (a, b, rowid)
+)
+
+# Update a non-indexed column referenced by the predicate.
+
+statement ok
+CREATE TABLE a (
+    a INT,
+    b INT,
+    c INT,
+    INDEX idx_c_b_gt_1 (c) WHERE b > 1,
+    FAMILY (a),
+    FAMILY (b),
+    FAMILY (c)
+)
+
+statement ok
+INSERT INTO a VALUES (1, 1, 1)
+
+statement ok
+UPDATE a SET b = b + 1 WHERE a = 1
+
+query III rowsort
+SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1
+----
+1  2  1
+
+# Return error if evaluating the predicate errs and do not insert or update the
+# row.
+
+statement ok
+CREATE TABLE b (a INT, b INT, INDEX (a) WHERE 1 / b = 1)
+
+statement error division by zero
+INSERT INTO b VALUES (1, 0)
+
+query I rowsort
+SELECT count(1) FROM b
+----
+0
+
+statement ok
+INSERT INTO b VALUES (1, 1)
+
+statement error division by zero
+UPDATE b SET b = 0 WHERE a = 1
+
+query II rowsort
+SELECT * FROM b
+----
+1  1
+
+# Update two rows where one is in a partial index and one is not.
+
+statement ok
+CREATE TABLE c (
+    k INT PRIMARY KEY,
+    i INT,
+    INDEX i_0_100_idx (i) WHERE i > 0 AND i < 100
+)
+
+statement ok
+INSERT INTO c VALUES (3, 30), (300, 3000)
+
+statement ok
+UPDATE c SET i = i + 1
+
+query II rowsort
+SELECT * FROM c@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  31
+
+# Partial index entries are kept consistent throughout multiple mutations.
+
+statement ok
+CREATE TABLE d (
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    b BOOL,
+    INDEX i_0_100_idx (i) WHERE i > 0 and i < 100,
+    INDEX f_b_s_foo_idx (f) WHERE b AND s = 'foo'
+)
+
+# Inserting values populates partial indexes.
+
+statement ok
+INSERT INTO d VALUES
+    (1, 1, 1.0, 'foo', true),
+    (2, 2, 2.0, 'foo', false),
+    (3, 3, 3.0, 'bar', true),
+    (100, 100, 100.0, 'foo', true),
+    (200, 200, 200.0, 'foo', false),
+    (300, 300, 300.0, 'bar', true)
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  1  1  foo  true
+2  2  2  foo  false
+3  3  3  bar  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    1    1    foo  true
+100  100  100  foo  true
+
+# Updating rows both in an out of partial index without changing partial index
+# eligibility.
+
+statement ok
+UPDATE d SET i = i + 10
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  bar  true
+
+# Updating rows both in an out of partial index updates partial index entries
+# and changing eligibility.
+
+statement ok
+UPDATE d SET s = 'foo'
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  310  300  foo  true
+
+# Upsert a conflicting row, taking it out of the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 320, 300.0, 'bar', true)
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+
+# Upsert a conflicting row, adding it into the second partial index.
+
+statement ok
+UPSERT INTO d VALUES (300, 330, 300.0, 'foo', true)
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+
+# Upsert a non-conflicting row.
+
+statement ok
+UPSERT INTO d VALUES (400, 400, 400.0, 'foo', true)
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+1  11  1  foo  true
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+1    11   1    foo  true
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in both partial indexes.
+
+statement ok
+DELETE FROM d WHERE k = 1
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+2  12  2  foo  false
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row in one partial index.
+
+statement ok
+DELETE FROM d WHERE k = 2
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Delete a row not in either partial index.
+
+statement ok
+DELETE FROM d WHERE k = 200
+
+query IIRTB rowsort
+SELECT * FROM d@i_0_100_idx WHERE i > 0 AND i < 100
+----
+3  13  3  foo  true
+
+query IIRTB rowsort
+SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
+----
+3    13   3    foo  true
+100  110  100  foo  true
+300  330  300  foo  true
+400  400  400  foo  true
+
+# Backfill a partial index.
+
+statement ok
+CREATE TABLE e (a INT, b INT)
+
+statement ok
+INSERT INTO e VALUES
+    (1, 10),
+    (2, 20),
+    (3, 30),
+    (4, 40),
+    (5, 50),
+    (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON e (a) WHERE b > 30
+
+# Note: This is guaranteed to be a full scan over the partial index because b
+# is not an indexed column. Therefore, this is a valid way to retrieve all rows
+# that have entries in the partial index.
+query II rowsort
+SELECT * FROM e@a_b_gt_30_idx WHERE b > 30
+----
+4  40
+5  50
+6  60
+
+# Backfill a partial index when a new table is created in the same transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE f (a INT, b INT)
+
+statement ok
+INSERT INTO f VALUES (1, 10), (6, 60)
+
+statement ok
+CREATE INDEX a_b_gt_30_idx ON f (a) WHERE b > 30
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM f@a_b_gt_30_idx WHERE b > 30
+----
+6  60
+
+# Backfill a partial index with a reference to a new column in the predicate.
+
+statement ok
+CREATE TABLE g (a INT)
+
+statement ok
+INSERT INTO g VALUES (1)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE g ADD COLUMN b INT
+
+statement ok
+CREATE INDEX a_b_null_idx ON g (a) WHERE b IS NULL
+
+statement ok
+COMMIT
+
+query II rowsort
+SELECT * FROM g@a_b_null_idx WHERE b IS NULL
+----
+1  NULL
+
+# Backfill a partial index with a user defined type.
+
+statement ok
+CREATE TYPE enum AS ENUM ('foo', 'bar', 'baz')
+
+statement ok
+CREATE TABLE h (a INT, b enum)
+
+statement ok
+INSERT INTO h VALUES (1, 'foo'), (2, 'bar')
+
+statement ok
+CREATE INDEX a_b_foo_idx ON h (a) WHERE b = 'foo'
+
+query IT rowsort
+SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
+----
+1  foo
+
+# Backfill a partial index with a user defined type when a new table is created
+# in the same transaction.
+# TODO(mgartner): Uncomment this test. This test is fails sporadically with
+# "cannot publish new versions for descriptors ... old versions still in use".
+# This appears unrelated to partial indexes. See issue #52539.
+#
+# statement ok
+# BEGIN
+#
+# statement ok
+# CREATE TABLE i (a INT, b enum)
+#
+# statement ok
+# INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
+#
+# statement ok
+# CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
+#
+# statement ok
+# COMMIT
+#
+# query IT rowsort
+# SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
+# ----
+# 1  foo
+
+# Add a primary key to a table with a partial index.
+
+statement ok
+CREATE TABLE j (k INT NOT NULL, a INT, INDEX a_gt_5_idx (a) WHERE a > 5)
+
+statement ok
+INSERT INTO j VALUES (1, 1), (6, 6)
+
+statement ok
+ALTER TABLE j ADD PRIMARY KEY (k)
+
+query II rowsort
+SELECT * FROM j@a_gt_5_idx WHERE a > 5
+----
+6  6
+
+# Truncate "removes" all entries from a partial index (technically a new table
+# is created). The partial index is preserved correctly in the new table.
+
+statement ok
+CREATE TABLE k (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX a_b_gt_5 (a) WHERE b > 5
+)
+
+statement ok
+INSERT INTO k VALUES (1, 1), (6, 6)
+
+statement ok
+TRUNCATE k
+
+query II rowsort
+SELECT * FROM k@a_b_gt_5 WHERE b > 5
+----
+
+statement ok
+INSERT INTO k VALUES (1, 1), (7, 7)
+
+query II rowsort
+SELECT * FROM k@a_b_gt_5 WHERE b > 5
+----
+7  7
+
+# Test partial indexes with an ENUM in the predicate.
+subtest enum
+
+statement ok
+CREATE TYPE enum_type AS ENUM ('foo', 'bar', 'baz');
+CREATE TABLE enum_table (
+    a INT PRIMARY KEY,
+    b enum_type,
+    INDEX i (a) WHERE b IN ('foo', 'bar')
+);
+
+statement ok
+INSERT INTO enum_table VALUES
+    (1, 'foo'),
+    (2, 'bar'),
+    (3, 'baz')
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+1  foo
+2  bar
+
+statement ok
+UPDATE enum_table SET b = 'baz' WHERE a = 1;
+UPDATE enum_table SET b = 'foo' WHERE a = 3;
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+2  bar
+3  foo
+
+statement ok
+DELETE FROM enum_table WHERE a = 2
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+3  foo
+
+statement ok
+UPSERT INTO enum_table VALUES
+   (1, 'foo'),
+    (2, 'bar'),
+    (3, 'baz')
+
+query IT rowsort
+SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
+----
+1  foo
+2  bar
+
+# User defined types in partial index predicates should be human-readable.
+
+statement ok
+CREATE TABLE enum_table_show (
+    a INT,
+    b enum_type,
+    INDEX i (a) WHERE b IN ('foo', 'bar'),
+    FAMILY (a, b)
+)
+
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                 a INT8 NULL,
+                 b public.enum_type NULL,
+                 INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                 FAMILY fam_0_a_b_rowid (a, b, rowid)
+)
+
+# Regression tests for #52318. Mutations on partial indexes in the
+# DELETE_AND_WRITE_ONLY state should update the indexes correctly.
+subtest regression_52318
+
+statement ok
+CREATE TABLE t52318 (
+    a INT PRIMARY KEY,
+    b INT,
+    INDEX (a)
+)
+
+statement ok
+BEGIN; CREATE INDEX i ON t52318 (a) WHERE b > 5
+
+statement ok
+INSERT INTO t52318 (a, b) VALUES (1, 1), (6, 6)
+
+query II rowsort
+SELECT * FROM t52318 WHERE b > 5
+----
+6  6
+
+statement ok
+UPDATE t52318 SET b = b + 1
+
+query II rowsort
+SELECT * FROM t52318 WHERE b > 5
+----
+6  7
+
+statement ok
+DELETE FROM t52318
+
+statement ok
+COMMIT

@@ -17,54 +17,64 @@ CREATE TABLE kvString (
 build
 SELECT * FROM kv WHERE k IN (1, 3)
 ----
-select
+project
  ├── columns: k:1!null v:2
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── k:1 IN (1, 3)
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── k:1 IN (1, 3)
 
 build
 SELECT * FROM kv WHERE v IN (6)
 ----
-select
+project
  ├── columns: k:1!null v:2!null
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── v:2 IN (6,)
+ └── select
+      ├── columns: k:1!null v:2!null crdb_internal_mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── v:2 IN (6,)
 
 build
 SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
 ----
-select
+project
  ├── columns: k:1!null v:2
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: k:3!null
-           │    └── scan kv
-           │         └── columns: k:3!null v:4
-           └── k:1
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: k:4!null
+                │    └── scan kv
+                │         └── columns: k:4!null v:5 crdb_internal_mvcc_timestamp:6
+                └── k:1
 
 build
 SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
 ----
-select
+project
  ├── columns: k:1!null v:2
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── any: eq
-           ├── project
-           │    ├── columns: column5:5
-           │    ├── scan kv
-           │    │    └── columns: k:3!null v:4
-           │    └── projections
-           │         └── (k:3, v:4) [as=column5:5]
-           └── (k:1, v:2)
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── any: eq
+                ├── project
+                │    ├── columns: column7:7
+                │    ├── project
+                │    │    ├── columns: k:4!null v:5
+                │    │    └── scan kv
+                │    │         └── columns: k:4!null v:5 crdb_internal_mvcc_timestamp:6
+                │    └── projections
+                │         └── (k:4, v:5) [as=column7:7]
+                └── (k:1, v:2)
 
 build
 SELECT * FROM kv WHERE nonexistent = 1
@@ -75,64 +85,66 @@ build
 SELECT 'hello' LIKE v AS r FROM kvString WHERE k LIKE 'like%' ORDER BY k
 ----
 project
- ├── columns: r:3  [hidden: k:1!null]
+ ├── columns: r:4  [hidden: k:1!null]
  ├── ordering: +1
  ├── select
- │    ├── columns: k:1!null v:2
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: k:1!null v:2
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    │    └── ordering: +1
  │    └── filters
  │         └── k:1 LIKE 'like%'
  └── projections
-      └── 'hello' LIKE v:2 [as=r:3]
+      └── 'hello' LIKE v:2 [as=r:4]
 
 build
 SELECT 'hello' SIMILAR TO v AS r FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3  [hidden: k:1!null]
+ ├── columns: r:4  [hidden: k:1!null]
  ├── ordering: +1
  ├── select
- │    ├── columns: k:1!null v:2
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: k:1!null v:2
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    │    └── ordering: +1
  │    └── filters
  │         └── k:1 SIMILAR TO 'like[1-2]'
  └── projections
-      └── 'hello' SIMILAR TO v:2 [as=r:3]
+      └── 'hello' SIMILAR TO v:2 [as=r:4]
 
 build
 SELECT 'hello' ~ replace(v, '%', '.*') AS r FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
 ----
 project
- ├── columns: r:3  [hidden: k:1!null]
+ ├── columns: r:4  [hidden: k:1!null]
  ├── ordering: +1
  ├── select
- │    ├── columns: k:1!null v:2
+ │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: k:1!null v:2
+ │    │    ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
  │    │    └── ordering: +1
  │    └── filters
  │         └── k:1 ~ 'like[1-2]'
  └── projections
-      └── 'hello' ~ replace(v:2, '%', '.*') [as=r:3]
+      └── 'hello' ~ replace(v:2, '%', '.*') [as=r:4]
 
 # Test mixed type tuple comparison.
 
 build
 SELECT * FROM kv WHERE k IN (1, 5.0, 9)
 ----
-select
+project
  ├── columns: k:1!null v:2
- ├── scan kv
- │    └── columns: k:1!null v:2
- └── filters
-      └── k:1 IN (1, 5, 9)
+ └── select
+      ├── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      ├── scan kv
+      │    └── columns: k:1!null v:2 crdb_internal_mvcc_timestamp:3
+      └── filters
+           └── k:1 IN (1, 5, 9)
 
 # Regression tests for #22670.
 exec-ddl
@@ -145,9 +157,9 @@ SELECT * FROM ab WHERE a IN (1, 3, 4)
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 rowid:3!null
+      ├── columns: a:1!null b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       └── filters
            └── a:1 IN (1, 3, 4)
 
@@ -157,9 +169,9 @@ SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
 project
  ├── columns: a:1!null b:2
  └── select
-      ├── columns: a:1!null b:2 rowid:3!null
+      ├── columns: a:1!null b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       └── filters
            └── a:1 IN (1, 3, 4, NULL)
 
@@ -169,9 +181,9 @@ SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
 project
  ├── columns: a:1!null b:2!null
  └── select
-      ├── columns: a:1!null b:2!null rowid:3!null
+      ├── columns: a:1!null b:2!null rowid:3!null crdb_internal_mvcc_timestamp:4
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       └── filters
            └── (a:1, b:2) IN ((1, 10), (3, 30), (4, 40))
 
@@ -181,9 +193,9 @@ SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
 project
  ├── columns: a:1!null b:2!null
  └── select
-      ├── columns: a:1!null b:2!null rowid:3!null
+      ├── columns: a:1!null b:2!null rowid:3!null crdb_internal_mvcc_timestamp:4
       ├── scan ab
-      │    └── columns: a:1 b:2 rowid:3!null
+      │    └── columns: a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
       └── filters
            └── (a:1, b:2) IN ((1, 10), (4, NULL), (NULL, 50))
 

@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,18 +20,15 @@ import (
 
 const ordSyncTmpl = "pkg/sql/colexec/ordered_synchronizer_tmpl.go"
 
-func genOrderedSynchronizer(wr io.Writer) error {
-	d, err := ioutil.ReadFile(ordSyncTmpl)
-	if err != nil {
-		return err
-	}
+func genOrderedSynchronizer(inputFileContents string, wr io.Writer) error {
+	r := strings.NewReplacer(
 
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_TYPE", "{{.VecMethod}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	s = replaceManipulationFuncs(s)
 

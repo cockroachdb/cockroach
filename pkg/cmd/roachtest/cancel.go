@@ -35,6 +35,7 @@ import (
 func registerCancel(r *testRegistry) {
 	runCancel := func(ctx context.Context, t *test, c *cluster,
 		queries []string, warehouses int, useDistsql bool) {
+		t.Skip("skipping flaky cancel/tpcc test", "test needs to be updated see https://github.com/cockroachdb/cockroach/issues/42103")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
 		c.Start(ctx, t, c.All())

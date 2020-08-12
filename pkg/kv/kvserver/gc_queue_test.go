@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/syncmap"
 )
@@ -52,6 +53,7 @@ func makeTS(nanos int64, logical int32) hlc.Timestamp {
 
 func TestGCQueueScoreString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i, c := range []struct {
 		r   gcQueueScore
 		exp string
@@ -83,6 +85,7 @@ likely last GC: never, 0 B non-live, curr. age 0 B*s, min exp. reduction: 0 B*s`
 
 func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rnd, seed := randutil.NewPseudoRand()
 	cfg := quick.Config{
@@ -121,6 +124,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 
 func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	if err := quick.Check(func(keyBytes, valBytes, liveBytes int32, containsEstimates int64) bool {
 		r := makeGCQueueScoreImpl(context.Background(), 0, hlc.Timestamp{}, enginepb.MVCCStats{
 			ContainsEstimates: containsEstimates,
@@ -136,15 +140,32 @@ func TestGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 
 func TestGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const seed = 1
 	var ms enginepb.MVCCStats
-	ms.SysCount += probablyLargeAbortSpanSysCountThreshold
-	ms.SysBytes += probablyLargeAbortSpanSysBytesThreshold
+	ms.AbortSpanBytes += largeAbortSpanBytesThreshold
+	ms.SysBytes += largeAbortSpanBytesThreshold
+	ms.SysCount++
 
 	gcThresh := hlc.Timestamp{WallTime: 1}
-	expiration := storagebase.TxnCleanupThreshold.Nanoseconds() + 1
+	expiration := kvserverbase.TxnCleanupThreshold.Nanoseconds() + 1
 
-	// GC triggered if abort span should all be gc'able and it's likely large.
+	// GC triggered if abort span should all be gc'able and it's large.
+	{
+		r := makeGCQueueScoreImpl(
+			context.Background(), seed,
+			hlc.Timestamp{WallTime: expiration + 1},
+			ms, zonepb.GCPolicy{TTLSeconds: 10000},
+			gcThresh,
+		)
+		require.True(t, r.ShouldQueue)
+		require.NotZero(t, r.FinalScore)
+	}
+
+	// GC triggered if abort span bytes count is 0, but the sys bytes
+	// and sys count exceed a certain threshold (likely large abort span).
+	ms.AbortSpanBytes = 0
+	ms.SysCount = probablyLargeAbortSpanSysCountThreshold
 	{
 		r := makeGCQueueScoreImpl(
 			context.Background(), seed,
@@ -190,11 +211,11 @@ func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
 	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
 		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
 			first: [cacheFirstLen]enginepb.MVCCStats{
-				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 			},
-			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0},
+			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 		},
 	}
 	return &cws
@@ -296,6 +317,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 // and the age of unresolved intents.
 func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cws := newCachedWriteSimulator(t)
 
@@ -403,6 +425,7 @@ func TestGCQueueMakeGCScoreRealistic(t *testing.T) {
 // scales and verifies that scan queue process properly GCs test data.
 func TestGCQueueProcess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -487,7 +510,6 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
 				txn.MinTimestamp = datum.ts
-				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &dArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -505,7 +527,6 @@ func TestGCQueueProcess(t *testing.T) {
 				txn.ReadTimestamp = datum.ts
 				txn.WriteTimestamp = datum.ts
 				txn.MinTimestamp = datum.ts
-				txn.DeprecatedOrigTimestamp = datum.ts
 				assignSeqNumsForReqs(txn, &pArgs)
 			}
 			if _, err := tc.SendWrappedWith(roachpb.Header{
@@ -569,9 +590,11 @@ func TestGCQueueProcess(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	expKVs := []struct {
 		key roachpb.Key
@@ -629,6 +652,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 func TestGCQueueTransactionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	manual := hlc.NewManualClock(123)
@@ -636,7 +660,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	manual.Set(3 * 24 * time.Hour.Nanoseconds())
 
 	testTime := manual.UnixNano() + 2*time.Hour.Nanoseconds()
-	gcExpiration := testTime - storagebase.TxnCleanupThreshold.Nanoseconds()
+	gcExpiration := testTime - kvserverbase.TxnCleanupThreshold.Nanoseconds()
 
 	type spec struct {
 		status      roachpb.TransactionStatus
@@ -741,7 +765,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	// intent resolution.
 	tsc.TestingKnobs.IntentResolverKnobs.MaxIntentResolutionBatchSize = 1
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
 				// Only count finalizing intent resolution attempts in `resolved`.
@@ -804,9 +828,11 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		t.Fatal("config not set")
 	}
 
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	testutils.SucceedsSoon(t, func() error {
 		for strKey, sp := range testCases {
@@ -891,6 +917,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 // intents spanning just two transactions.
 func TestGCQueueIntentResolution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -934,9 +961,11 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		t.Fatal("config not set")
 	}
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	// Iterate through all values to ensure intents have been fully resolved.
 	// This must be done in a SucceedsSoon loop because intent resolution
@@ -960,6 +989,7 @@ func TestGCQueueIntentResolution(t *testing.T) {
 
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -993,9 +1023,11 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
+	assert.True(t, processed, "queue not processed")
 
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
@@ -1018,13 +1050,14 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 // keys and also for many different versions of keys.
 func TestGCQueueChunkRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var gcRequests int32
 	manual := hlc.NewManualClock(123)
 	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
 				atomic.AddInt32(&gcRequests, 1)
 				return nil
@@ -1098,10 +1131,11 @@ func TestGCQueueChunkRequests(t *testing.T) {
 	}
 	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1e9 + 1)
 	gcQ := newGCQueue(tc.store, tc.gossip)
-	if err := gcQ.process(ctx, tc.repl, cfg); err != nil {
+	processed, err := gcQ.process(ctx, tc.repl, cfg)
+	if err != nil {
 		t.Fatal(err)
 	}
-
+	assert.True(t, processed, "queue not processed")
 	// We wrote two batches worth of keys spread out, and two keys that
 	// each have enough old versions to fill a whole batch each in the
 	// first case, and two whole batches in the second, adding up to

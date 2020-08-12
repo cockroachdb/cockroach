@@ -58,8 +58,8 @@ $input
     $filters:[
         ...
         $item:* &
-            (IsDeterminedBy
-                $item
+            (ColsAreDeterminedBy
+                (OuterCols $item)
                 $partitionCols:(WindowPartition $private)
                 $input
             )

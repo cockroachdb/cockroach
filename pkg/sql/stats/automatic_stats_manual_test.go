@@ -20,10 +20,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -53,9 +54,10 @@ var runManual = flag.Bool(
 //
 func TestAdaptiveThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	if !*runManual {
-		t.Skip("manual test with no --run-manual")
+		skip.IgnoreLint(t, "manual test with no --run-manual")
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -98,7 +100,7 @@ func TestAdaptiveThrottling(t *testing.T) {
 
 		// Sleep for 2 * DefaultMetricsSampleInterval, to make sure the runtime
 		// stats reflect the load we want.
-		sleep := 2 * server.DefaultMetricsSampleInterval
+		sleep := 2 * base.DefaultMetricsSampleInterval
 		fmt.Printf("Sleeping for %s\n", sleep)
 		time.Sleep(sleep)
 		step("Create stats", func() {

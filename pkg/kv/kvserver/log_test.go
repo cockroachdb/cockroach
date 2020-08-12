@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -29,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	_ "github.com/lib/pq"
 )
 
 func TestLogSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*server.TestServer)
 	ctx := context.Background()
@@ -43,7 +45,7 @@ func TestLogSplits(t *testing.T) {
 		var count int
 		err := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
-			storagepb.RangeLogEventType_split.String()).Scan(&count)
+			kvserverpb.RangeLogEventType_split.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,7 +56,7 @@ func TestLogSplits(t *testing.T) {
 	initialSplits := countSplits()
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(ctx, "splitkey", "splitkey", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "splitkey", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -69,7 +71,7 @@ func TestLogSplits(t *testing.T) {
 	// are logged correctly)
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storagepb.RangeLogEventType_split.String(),
+		kvserverpb.RangeLogEventType_split.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +94,7 @@ func TestLogSplits(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for split of range %d", rangeID)
 		}
-		var info storagepb.RangeLogEvent_Info
+		var info kvserverpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for split of range %d: %+v", rangeID, err)
 			continue
@@ -138,6 +140,7 @@ func TestLogSplits(t *testing.T) {
 
 func TestLogMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
@@ -159,7 +162,7 @@ func TestLogMerges(t *testing.T) {
 		var count int
 		err := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
-			storagepb.RangeLogEventType_merge.String()).Scan(&count)
+			kvserverpb.RangeLogEventType_merge.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,10 +178,10 @@ func TestLogMerges(t *testing.T) {
 	}
 
 	// Create two ranges, then merge them.
-	if err := kvDB.AdminSplit(ctx, "a", "a", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "a", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.AdminSplit(ctx, "b", "b", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "b", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.AdminMerge(ctx, "a"); err != nil {
@@ -194,7 +197,7 @@ func TestLogMerges(t *testing.T) {
 
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storagepb.RangeLogEventType_merge.String(),
+		kvserverpb.RangeLogEventType_merge.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +219,7 @@ func TestLogMerges(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for merge of range %d", rangeID)
 		}
-		var info storagepb.RangeLogEvent_Info
+		var info kvserverpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for merge of range %d: %+v", rangeID, err)
 			continue
@@ -235,6 +238,7 @@ func TestLogMerges(t *testing.T) {
 
 func TestLogRebalances(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -257,7 +261,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	const details = "test"
-	logEvent := func(changeType roachpb.ReplicaChangeType, reason storagepb.RangeLogEventReason) {
+	logEvent := func(changeType roachpb.ReplicaChangeType, reason kvserverpb.RangeLogEventReason) {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.InternalReplicas[0], *desc, reason, details)
 		}); err != nil {
@@ -272,11 +276,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, kvserverpb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA, storagepb.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_REPLICA, kvserverpb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -292,7 +296,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storagepb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -313,7 +317,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for add replica of range %d", rangeID)
 		}
-		var info storagepb.RangeLogEvent_Info
+		var info kvserverpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for add replica %d: %+v", rangeID, err)
 			continue
@@ -325,7 +329,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storagepb.ReasonRangeUnderReplicated; a != e {
+		if a, e := info.Reason, kvserverpb.ReasonRangeUnderReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -344,7 +348,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that one remove replica event was logged.
 	rows, err = sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storagepb.RangeLogEventType_remove.String(),
+		kvserverpb.RangeLogEventType_remove.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -365,7 +369,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for remove replica of range %d", rangeID)
 		}
-		var info storagepb.RangeLogEvent_Info
+		var info kvserverpb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for remove replica %d: %+v", rangeID, err)
 			continue
@@ -377,7 +381,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storagepb.ReasonRangeOverReplicated; a != e {
+		if a, e := info.Reason, kvserverpb.ReasonRangeOverReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}

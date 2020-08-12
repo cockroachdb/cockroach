@@ -12,35 +12,34 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const castTmpl = "pkg/sql/colexec/cast_tmpl.go"
 
-func genCastOperators(wr io.Writer) error {
-	t, err := ioutil.ReadFile(castTmpl)
-	if err != nil {
-		return err
-	}
+func genCastOperators(inputFileContents string, wr io.Writer) error {
+	r := strings.NewReplacer(
+		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
+		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
+		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
+		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
+		"_R_GO_TYPE", "{{.Right.GoType}}",
+		"_L_TYP", "{{.Left.VecMethod}}",
+		"_R_TYP", "{{.Right.VecMethod}}",
+		"_NAME", "{{.Left.VecMethod}}{{.Right.VecMethod}}",
+	)
+	s := r.Replace(inputFileContents)
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_R_GO_TYPE", "{{.Right.GoType}}")
-	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
-	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
-
-	castRe := makeFunctionRegex("_CAST", 2)
-	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 2))
+	castRe := makeFunctionRegex("_CAST", 3)
+	s = castRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Cast", 3))
 
 	s = strings.ReplaceAll(s, "_L_SLICE", "execgen.SLICE")
 	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
+
+	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
+	s = replaceManipulationFuncsAmbiguous(".Right", s)
 
 	s = strings.ReplaceAll(s, "_R_SET", "execgen.SET")
 	s = replaceManipulationFuncsAmbiguous(".Right", s)

@@ -110,17 +110,18 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		stopper:    stop.NewStopper(),
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
-	rttc.nodeRPCContext = rpc.NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
-		rttc.stopper,
-		cluster.MakeTestingClusterSettings(),
-	)
+	rttc.nodeRPCContext = rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Config:     testutils.NewNodeTestBaseContext(),
+		Clock:      hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Stopper:    rttc.stopper,
+		Settings:   cluster.MakeTestingClusterSettings(),
+	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rttc.nodeRPCContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	rttc.nodeRPCContext.ClusterID.Set(context.Background(), uuid.MakeV4())
 
 	// We are sharing the same RPC context for all simulated nodes, so
 	// we can't enforce some of the RPC check validation.
@@ -135,7 +136,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 }
 
 func (rttc *raftTransportTestContext) Stop() {
-	rttc.stopper.Stop(context.TODO())
+	rttc.stopper.Stop(context.Background())
 }
 
 // AddNode registers a node with the cluster. Nodes must be added
@@ -211,6 +212,7 @@ func (rttc *raftTransportTestContext) Send(
 
 func TestSendAndReceive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -377,6 +379,7 @@ func TestSendAndReceive(t *testing.T) {
 // messages are delivered in order.
 func TestInOrderDelivery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -414,6 +417,7 @@ func TestInOrderDelivery(t *testing.T) {
 // dropped waiting for raft node connection to be established.
 func TestRaftTransportCircuitBreaker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -467,6 +471,7 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 // store.
 func TestRaftTransportIndependentRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -513,6 +518,7 @@ func TestRaftTransportIndependentRanges(t *testing.T) {
 // doesn't get stuck in an endless retry loop against the wrong node.
 func TestReopenConnection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 
@@ -539,7 +545,7 @@ func TestReopenConnection(t *testing.T) {
 
 	// Take down the old server and start a new one at the same address.
 	serverTransport.Stop(serverReplica.StoreID)
-	serverStopper.Stop(context.TODO())
+	serverStopper.Stop(context.Background())
 
 	// With the old server down, nothing is listening no the address right now
 	// so the circuit breaker should trip.
@@ -611,6 +617,7 @@ func TestReopenConnection(t *testing.T) {
 // remote node does not block calls to SendAsync.
 func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rttc := newRaftTransportTestContext(t)
 	defer rttc.Stop()
 

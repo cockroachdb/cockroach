@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -84,7 +85,7 @@ func (r *RepeatableRowSource) ConsumerClosed() {}
 // (currently it would create an import cycle, so this code will need to be
 // moved).
 func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	memMonitor := mon.MakeMonitor(
+	memMonitor := mon.NewMonitor(
 		"test-mem",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -94,13 +95,13 @@ func NewTestMemMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMoni
 		st,
 	)
 	memMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	return &memMonitor
+	return memMonitor
 }
 
 // NewTestDiskMonitor creates and starts a new disk monitor to be used in
 // tests.
 func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -110,7 +111,7 @@ func NewTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 		st,
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	return &diskMonitor
+	return diskMonitor
 }
 
 // GenerateValuesSpec generates a ValuesCoreSpec that encodes the given rows.
@@ -122,7 +123,7 @@ func GenerateValuesSpec(
 	spec.Columns = make([]execinfrapb.DatumInfo, len(colTypes))
 	for i := range spec.Columns {
 		spec.Columns[i].Type = colTypes[i]
-		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
+		spec.Columns[i].Encoding = descpb.DatumEncoding_VALUE
 	}
 
 	var a sqlbase.DatumAlloc

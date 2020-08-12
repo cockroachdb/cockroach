@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2020 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -118,7 +118,7 @@ func (c *CustomFuncs) ExtractDeterminedConditions(
 ) memo.FiltersExpr {
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
-		if c.IsDeterminedBy(&filters[i], cols, input) {
+		if c.ColsAreDeterminedBy(filters[i].ScalarProps().OuterCols, cols, input) {
 			newFilters = append(newFilters, filters[i])
 		}
 	}
@@ -132,9 +132,19 @@ func (c *CustomFuncs) ExtractUndeterminedConditions(
 ) memo.FiltersExpr {
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
-		if !c.IsDeterminedBy(&filters[i], cols, input) {
+		if !c.ColsAreDeterminedBy(filters[i].ScalarProps().OuterCols, cols, input) {
 			newFilters = append(newFilters, filters[i])
 		}
 	}
 	return newFilters
+}
+
+// OrderingSucceeded returns true if an OrderingChoice is not nil.
+func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
+	return result != nil
+}
+
+// DerefOrderingChoice returns an OrderingChoice from a pointer.
+func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
+	return *result
 }

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -158,7 +158,7 @@ func (sc *AbortSpan) CopyTo(
 	// copy them into the new range. We could try to delete them from the LHS
 	// as well, but that could create a large Raft command in itself. Plus,
 	// we'd have to adjust the stats computations.
-	threshold := ts.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
+	threshold := ts.Add(-kvserverbase.TxnCleanupThreshold.Nanoseconds(), 0)
 	var scratch [64]byte
 	if err := sc.Iterate(ctx, r, func(k roachpb.Key, entry roachpb.AbortSpanEntry) error {
 		if entry.Timestamp.Less(threshold) {

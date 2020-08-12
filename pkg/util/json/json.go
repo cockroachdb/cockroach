@@ -22,7 +22,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -240,6 +240,41 @@ func (b *ArrayBuilderWithCounter) Build() JSON {
 
 // Size returns the size in bytes of the JSON Array the builder is going to build.
 func (b *ArrayBuilderWithCounter) Size() uintptr {
+	return b.size
+}
+
+// ObjectBuilderWithCounter builds a JSON object a key/value pair at a time, keeping the memory usage of the object.
+type ObjectBuilderWithCounter struct {
+	ob   *ObjectBuilder
+	size uintptr
+}
+
+// NewObjectBuilderWithCounter creates and instantiates ObjectBuilder with memory counter.
+func NewObjectBuilderWithCounter() *ObjectBuilderWithCounter {
+	ob := NewObjectBuilder(0)
+	return &ObjectBuilderWithCounter{
+		ob: ob,
+		// initial memory allocation
+		size: unsafe.Sizeof(ob) + jsonInterfaceSize,
+	}
+}
+
+// Add appends key value pair to the sequence and updates
+// amount of memory allocated for the overall keys and values.
+func (b *ObjectBuilderWithCounter) Add(k string, v JSON) {
+	b.ob.Add(k, v)
+	// Size of added JSON + overhead of storing key/value pair + the size of the key.
+	b.size += v.Size() + keyValuePairSize + uintptr(len(k))
+}
+
+// Build returns a JSON object built from a key value pair sequence. After that,
+// it should not be modified any longer.
+func (b *ObjectBuilderWithCounter) Build() JSON {
+	return b.ob.Build()
+}
+
+// Size returns the size in bytes of the JSON object the builder is going to build.
+func (b *ObjectBuilderWithCounter) Size() uintptr {
 	return b.size
 }
 
@@ -942,14 +977,14 @@ func fromMap(v map[string]interface{}) (JSON, error) {
 // FromInt returns a JSON value given a int.
 func FromInt(v int) JSON {
 	dec := apd.Decimal{}
-	dec.SetFinite(int64(v), 0)
+	dec.SetInt64(int64(v))
 	return jsonNumber(dec)
 }
 
 // FromInt64 returns a JSON value given a int64.
 func FromInt64(v int64) JSON {
 	dec := apd.Decimal{}
-	dec.SetFinite(v, 0)
+	dec.SetInt64(v)
 	return jsonNumber(dec)
 }
 

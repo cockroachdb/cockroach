@@ -16,222 +16,37 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
-// SchemaResolver abstracts the interfaces needed from the logical
-// planner to perform name resolution below.
-//
-// We use an interface instead of passing *planner directly to make
-// the resolution methods able to work even when we evolve the code to
-// use a different plan builder.
-// TODO(rytaft,andyk): study and reuse this.
-type SchemaResolver interface {
-	tree.ObjectNameExistingResolver
-	tree.ObjectNameTargetResolver
-
-	Txn() *kv.Txn
-	LogicalSchemaAccessor() SchemaAccessor
-	CurrentDatabase() string
-	CurrentSearchPath() sessiondata.SearchPath
-	CommonLookupFlags(required bool) tree.CommonLookupFlags
-	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error)
-}
-
-var _ SchemaResolver = &planner{}
-
-var errNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
-	"requested table does not have a primary key")
+var _ resolver.SchemaResolver = &planner{}
 
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *UncachedDatabaseDescriptor, err error) {
+) (res *sqlbase.ImmutableDatabaseDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
+		var desc sqlbase.DatabaseDescriptor
+		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
 			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
 		)
+		if desc != nil {
+			res = desc.(*sqlbase.ImmutableDatabaseDescriptor)
+		}
 	})
 	return res, err
-}
-
-// GetObjectNames retrieves the names of all objects in the target database/
-// schema. If explicitPrefix is set, the returned table names will have an
-// explicit schema and catalog name.
-func GetObjectNames(
-	ctx context.Context,
-	txn *kv.Txn,
-	sc SchemaResolver,
-	codec keys.SQLCodec,
-	dbDesc *DatabaseDescriptor,
-	scName string,
-	explicitPrefix bool,
-) (res TableNames, err error) {
-	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, codec, dbDesc, scName,
-		tree.DatabaseListFlags{
-			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
-			ExplicitPrefix:    explicitPrefix,
-		})
-}
-
-// ResolveExistingTableObject looks up an existing object.
-// If required is true, an error is returned if the object does not exist.
-// Optionally, if a desired descriptor type is specified, that type is checked.
-//
-// The object name is modified in-place with the result of the name
-// resolution, if successful. It is not modified in case of error or
-// if no object is found.
-func ResolveExistingTableObject(
-	ctx context.Context,
-	sc SchemaResolver,
-	tn *TableName,
-	lookupFlags tree.ObjectLookupFlags,
-	requiredType ResolveRequiredType,
-) (res *ImmutableTableDescriptor, err error) {
-	// TODO: As part of work for #34240, an UnresolvedObjectName should be
-	//  passed as an argument to this function.
-	un := tn.ToUnresolvedObjectName()
-	desc, prefix, err := resolveExistingObjectImpl(ctx, sc, un, lookupFlags, requiredType)
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	tn.ObjectNamePrefix = prefix
-	return desc.(*ImmutableTableDescriptor), nil
-}
-
-// ResolveMutableExistingTableObject looks up an existing mutable object.
-// If required is true, an error is returned if the object does not exist.
-// Optionally, if a desired descriptor type is specified, that type is checked.
-//
-// The object name is modified in-place with the result of the name
-// resolution, if successful. It is not modified in case of error or
-// if no object is found.
-func ResolveMutableExistingTableObject(
-	ctx context.Context,
-	sc SchemaResolver,
-	tn *TableName,
-	required bool,
-	requiredType ResolveRequiredType,
-) (res *MutableTableDescriptor, err error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
-		RequireMutable:    true,
-	}
-	// TODO: As part of work for #34240, an UnresolvedObjectName should be
-	//  passed as an argument to this function.
-	un := tn.ToUnresolvedObjectName()
-	desc, prefix, err := resolveExistingObjectImpl(ctx, sc, un, lookupFlags, requiredType)
-	if err != nil || desc == nil {
-		return nil, err
-	}
-	tn.ObjectNamePrefix = prefix
-	return desc.(*MutableTableDescriptor), nil
-}
-
-// ResolveType implements the TypeReferenceResolver interface.
-func (p *planner) ResolveType(name *tree.UnresolvedObjectName) (*types.T, error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
-		DesiredObjectKind: tree.TypeObject,
-	}
-	// TODO (rohany): The ResolveAnyDescType argument doesn't do anything here
-	//  if we are looking for a type. This should be cleaned up.
-	desc, prefix, err := resolveExistingObjectImpl(context.Background(), p, name, lookupFlags, ResolveAnyDescType)
-	if err != nil {
-		return nil, err
-	}
-	tn := tree.MakeTypeNameFromPrefix(prefix, tree.Name(name.Object()))
-	tdesc := desc.(*sqlbase.TypeDescriptor)
-	// Hydrate the types.T from the resolved descriptor. Once we cache
-	// descriptors, this hydration should install pointers to cached data.
-	switch t := tdesc.Kind; t {
-	case sqlbase.TypeDescriptor_ENUM:
-		typ := types.MakeEnum(uint32(tdesc.ID))
-		if err := tdesc.HydrateTypeInfo(typ); err != nil {
-			return nil, err
-		}
-		typ.TypeMeta.Name = &tn
-		return typ, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
-	}
-}
-
-func resolveExistingObjectImpl(
-	ctx context.Context,
-	sc SchemaResolver,
-	un *tree.UnresolvedObjectName,
-	lookupFlags tree.ObjectLookupFlags,
-	requiredType ResolveRequiredType,
-) (res tree.NameResolutionResult, prefix tree.ObjectNamePrefix, err error) {
-	found, prefix, descI, err := tree.ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
-	if err != nil {
-		return nil, prefix, err
-	}
-	// Construct the resolved table name for use in error messages.
-	resolvedTn := tree.MakeTableNameFromPrefix(prefix, tree.Name(un.Object()))
-	if !found {
-		if lookupFlags.Required {
-			return nil, prefix, sqlbase.NewUndefinedObjectError(&resolvedTn, lookupFlags.DesiredObjectKind)
-		}
-		return nil, prefix, nil
-	}
-
-	obj := descI.(ObjectDescriptor)
-	switch lookupFlags.DesiredObjectKind {
-	case tree.TypeObject:
-		if obj.TypeDesc() == nil {
-			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
-		}
-		return obj.TypeDesc(), prefix, nil
-	case tree.TableObject:
-		if obj.TableDesc() == nil {
-			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
-		}
-		goodType := true
-		switch requiredType {
-		case ResolveRequireTableDesc:
-			goodType = obj.TableDesc().IsTable()
-		case ResolveRequireViewDesc:
-			goodType = obj.TableDesc().IsView()
-		case ResolveRequireTableOrViewDesc:
-			goodType = obj.TableDesc().IsTable() || obj.TableDesc().IsView()
-		case ResolveRequireSequenceDesc:
-			goodType = obj.TableDesc().IsSequence()
-		}
-		if !goodType {
-			return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, requiredTypeNames[requiredType])
-		}
-
-		// If the table does not have a primary key, return an error
-		// that the requested descriptor is invalid for use.
-		if !lookupFlags.AllowWithoutPrimaryKey &&
-			obj.TableDesc().IsTable() &&
-			!obj.TableDesc().HasPrimaryKey() {
-			return nil, prefix, errNoPrimaryKey
-		}
-
-		if lookupFlags.RequireMutable {
-			return descI.(*MutableTableDescriptor), prefix, nil
-		}
-
-		return descI.(*ImmutableTableDescriptor), prefix, nil
-	default:
-		return nil, prefix, errors.AssertionFailedf(
-			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)
-	}
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -251,84 +66,46 @@ func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 		p.avoidCachedDescriptors = true
 	}
+	if flags.contextDatabaseID != descpb.InvalidID {
+		defer func(prev descpb.ID) { p.contextDatabaseID = prev }(p.contextDatabaseID)
+		p.contextDatabaseID = flags.contextDatabaseID
+	}
 	fn()
 }
 
 type resolveFlags struct {
-	skipCache bool
+	skipCache         bool
+	contextDatabaseID descpb.ID
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 ) (table *MutableTableDescriptor, err error) {
-	return ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
+	return resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType ResolveRequiredType,
+	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-		table, err = ResolveExistingTableObject(ctx, p, tn, lookupFlags, requiredType)
+		lookupFlags := tree.ObjectLookupFlags{
+			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+			DesiredObjectKind:    tree.TableObject,
+			DesiredTableDescKind: requiredType,
+		}
+		table, err = resolver.ResolveExistingTableObject(ctx, p, tn, lookupFlags)
 	})
 	return table, err
-}
-
-// ResolveTargetObject determines a valid target path for an object
-// that may not exist yet. It returns the descriptor for the database
-// where the target object lives. It also returns the resolved name
-// prefix for the input object.
-func ResolveTargetObject(
-	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName,
-) (*DatabaseDescriptor, tree.ObjectNamePrefix, error) {
-	found, prefix, descI, err := tree.ResolveTarget(ctx, un, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
-	if err != nil {
-		return nil, prefix, err
-	}
-	if !found {
-		if !un.HasExplicitSchema() && !un.HasExplicitCatalog() {
-			return nil, prefix, pgerror.New(pgcode.InvalidName, "no database specified")
-		}
-		err = pgerror.Newf(pgcode.InvalidSchemaName,
-			"cannot create %q because the target database or schema does not exist",
-			tree.ErrString(un))
-		err = errors.WithHint(err, "verify that the current database and search_path are valid and/or the target database exists")
-		return nil, prefix, err
-	}
-	if prefix.Schema() != tree.PublicSchema {
-		return nil, prefix, pgerror.Newf(pgcode.InvalidName,
-			"schema cannot be modified: %q", tree.ErrString(&prefix))
-	}
-	return descI.(*DatabaseDescriptor), prefix, nil
 }
 
 func (p *planner) ResolveUncachedDatabase(
 	ctx context.Context, un *tree.UnresolvedObjectName,
 ) (res *UncachedDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
+	var prefix *catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		res, namePrefix, err = ResolveTargetObject(ctx, p, un)
+		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
-	return res, namePrefix, err
-}
-
-// ResolveRequiredType can be passed to the ResolveExistingTableObject function to
-// require the returned descriptor to be of a specific type.
-type ResolveRequiredType int
-
-// ResolveRequiredType options have descriptive names.
-const (
-	ResolveAnyDescType ResolveRequiredType = iota
-	ResolveRequireTableDesc
-	ResolveRequireViewDesc
-	ResolveRequireTableOrViewDesc
-	ResolveRequireSequenceDesc
-)
-
-var requiredTypeNames = [...]string{
-	ResolveRequireTableDesc:       "table",
-	ResolveRequireViewDesc:        "view",
-	ResolveRequireTableOrViewDesc: "table or view",
-	ResolveRequireSequenceDesc:    "sequence",
+	return prefix.Database, namePrefix, err
 }
 
 // LookupSchema implements the tree.ObjectNameTargetResolver interface.
@@ -340,11 +117,15 @@ func (p *planner) LookupSchema(
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
-	found, _, err = sc.IsValidSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID, scName)
+	var resolvedSchema sqlbase.ResolvedSchema
+	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
 	if err != nil {
 		return false, nil, err
 	}
-	return found, dbDesc, nil
+	return found, &catalog.ResolvedObjectPrefix{
+		Database: dbDesc.(*sqlbase.ImmutableDatabaseDescriptor),
+		Schema:   resolvedSchema,
+	}, nil
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
@@ -354,9 +135,11 @@ func (p *planner) LookupObject(
 	sc := p.LogicalSchemaAccessor()
 	lookupFlags.CommonLookupFlags = p.CommonLookupFlags(false /* required */)
 	objDesc, err := sc.GetObjectDesc(ctx, p.txn, p.ExecCfg().Settings, p.ExecCfg().Codec, dbName, scName, tbName, lookupFlags)
+
 	return objDesc != nil, objDesc, err
 }
 
+// CommonLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	return tree.CommonLookupFlags{
 		Required:    required,
@@ -364,6 +147,67 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 	}
 }
 
+// GetTypeDescriptor implements the descpb.TypeDescriptorResolver interface.
+func (p *planner) GetTypeDescriptor(
+	ctx context.Context, id descpb.ID,
+) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+	desc, err := p.Descriptors().GetTypeVersionByID(ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return tree.TypeName{}, nil, err
+	}
+	// TODO (lucy): This database access should go through the collection.
+	//  When I try to use the DatabaseCache() here, a nil pointer deref occurs.
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID)
+	if err != nil {
+		return tree.TypeName{}, nil, err
+	}
+	// TODO (rohany): Update this once user defined schemas exist.
+	name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+	return name, desc, nil
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (p *planner) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+		DesiredObjectKind: tree.TypeObject,
+		RequireMutable:    false,
+	}
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
+	if err != nil {
+		return nil, err
+	}
+	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
+	tdesc := desc.(*sqlbase.ImmutableTypeDescriptor)
+
+	// Disllow cross-database type resolution. Note that we check
+	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
+	// accessing types in the database with ID = p.contextDatabaseID by
+	// p.runWithOptions. So, check to see if the resolved descriptor's parentID
+	// matches, unless the descriptor's parentID is invalid. This could happen
+	// when the type being resolved is a builtin type prefaced with a virtual
+	// schema like `pg_catalog.int`. Resolution for these types returns a dummy
+	// TypeDescriptor, so ignore those cases.
+	if p.contextDatabaseID != descpb.InvalidID && tdesc.ParentID != descpb.InvalidID && tdesc.ParentID != p.contextDatabaseID {
+		return nil, pgerror.Newf(
+			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+	}
+
+	return tdesc.MakeTypesT(ctx, &tn, p)
+}
+
+// ResolveTypeByOID implements the tree.TypeResolver interface.
+func (p *planner) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	name, desc, err := p.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
+	if err != nil {
+		return nil, err
+	}
+	return desc.MakeTypesT(ctx, &name, p)
+}
+
+// ObjectLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLookupFlags {
 	return tree.ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(required),
@@ -374,12 +218,12 @@ func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLo
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
 func getDescriptorsFromTargetList(
 	ctx context.Context, p *planner, targets tree.TargetList,
-) ([]sqlbase.DescriptorProto, error) {
+) ([]sqlbase.Descriptor, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
 			return nil, errNoDatabase
 		}
-		descs := make([]sqlbase.DescriptorProto, 0, len(targets.Databases))
+		descs := make([]sqlbase.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
 			descriptor, err := p.ResolveUncachedDatabaseByName(ctx, string(database), true /*required*/)
 			if err != nil {
@@ -396,22 +240,29 @@ func getDescriptorsFromTargetList(
 	if len(targets.Tables) == 0 {
 		return nil, errNoTable
 	}
-	descs := make([]sqlbase.DescriptorProto, 0, len(targets.Tables))
+	descs := make([]sqlbase.Descriptor, 0, len(targets.Tables))
 	for _, tableTarget := range targets.Tables {
 		tableGlob, err := tableTarget.NormalizeTablePattern()
 		if err != nil {
 			return nil, err
 		}
-		tableNames, err := expandTableGlob(ctx, p, tableGlob)
+		objectNames, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
-		for i := range tableNames {
-			descriptor, err := ResolveMutableExistingTableObject(ctx, p, &tableNames[i], true, ResolveAnyDescType)
+
+		for i := range objectNames {
+			// We set required to false here, because there could be type names in
+			// the returned set of names, so we don't want to error out if we
+			// couldn't resolve a name into a table.
+			descriptor, err := resolver.ResolveMutableExistingTableObject(ctx, p,
+				&objectNames[i], false /* required */, tree.ResolveAnyTableKind)
 			if err != nil {
 				return nil, err
 			}
-			descs = append(descs, descriptor)
+			if descriptor != nil {
+				descs = append(descs, descriptor)
+			}
 		}
 	}
 	if len(descs) == 0 {
@@ -424,23 +275,23 @@ func getDescriptorsFromTargetList(
 // or view represented by the provided descriptor. It is a sort of
 // reverse of the Resolve() functions.
 func (p *planner) getQualifiedTableName(
-	ctx context.Context, desc *sqlbase.TableDescriptor,
-) (string, error) {
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID)
+	ctx context.Context, desc sqlbase.TableDescriptor,
+) (*tree.TableName, error) {
+	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID())
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	schemaID := desc.GetParentSchemaID()
-	schemaName, err := schema.ResolveNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID, schemaID)
+	schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, desc.GetParentID(), schemaID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	tbName := tree.MakeTableNameWithSchema(
-		tree.Name(dbDesc.Name),
+		tree.Name(dbDesc.GetName()),
 		tree.Name(schemaName),
-		tree.Name(desc.Name),
+		tree.Name(desc.GetName()),
 	)
-	return tbName.String(), nil
+	return &tbName, nil
 }
 
 // findTableContainingIndex returns the descriptor of a table
@@ -454,7 +305,7 @@ func (p *planner) getQualifiedTableName(
 func findTableContainingIndex(
 	ctx context.Context,
 	txn *kv.Txn,
-	sc SchemaResolver,
+	sc resolver.SchemaResolver,
 	codec keys.SQLCodec,
 	dbName, scName string,
 	idxName tree.UnrestrictedName,
@@ -475,7 +326,7 @@ func findTableContainingIndex(
 	result = nil
 	for i := range tns {
 		tn := &tns[i]
-		tableDesc, err := ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, ResolveAnyDescType)
+		tableDesc, err := resolver.ResolveMutableExistingTableObject(ctx, sc, tn, false /*required*/, tree.ResolveAnyTableKind)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -525,7 +376,7 @@ func expandMutableIndexName(
 func expandIndexName(
 	ctx context.Context,
 	txn *kv.Txn,
-	sc SchemaResolver,
+	sc resolver.SchemaResolver,
 	codec keys.SQLCodec,
 	index *tree.TableIndexName,
 	requireTable bool,
@@ -533,7 +384,7 @@ func expandIndexName(
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
-		desc, err = ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, ResolveRequireTableDesc)
+		desc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, tn, requireTable, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -581,7 +432,7 @@ func expandIndexName(
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
-) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
+) (*MutableTableDescriptor, *descpb.IndexDescriptor, error) {
 	var catalog optCatalog
 	catalog.init(p)
 	catalog.reset()
@@ -599,7 +450,7 @@ func (p *planner) getTableAndIndex(
 	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
-// expandTableGlob expands pattern into a list of tables represented
+// expandTableGlob expands pattern into a list of objects represented
 // as a tree.TableNames.
 func expandTableGlob(
 	ctx context.Context, p *planner, pattern tree.TablePattern,
@@ -617,12 +468,12 @@ func expandTableGlob(
 // of CREATE TABLE with a foreign key self-reference: the target of
 // the FK definition is a table that does not exist yet.
 type fkSelfResolver struct {
-	SchemaResolver
+	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *sqlbase.TableDescriptor
+	newTableDesc *descpb.TableDescriptor
 }
 
-var _ SchemaResolver = &fkSelfResolver{}
+var _ resolver.SchemaResolver = &fkSelfResolver{}
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
@@ -650,60 +501,92 @@ func (r *fkSelfResolver) LookupObject(
 //
 // It only reveals physical descriptors (not virtual descriptors).
 type internalLookupCtx struct {
-	dbNames map[sqlbase.ID]string
-	dbIDs   []sqlbase.ID
-	dbDescs map[sqlbase.ID]*DatabaseDescriptor
-	tbDescs map[sqlbase.ID]*TableDescriptor
-	tbIDs   []sqlbase.ID
+	dbNames     map[descpb.ID]string
+	dbIDs       []descpb.ID
+	dbDescs     map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor
+	schemaDescs map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor
+	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
+	tbIDs       []descpb.ID
+	typDescs    map[descpb.ID]*sqlbase.ImmutableTypeDescriptor
+	typIDs      []descpb.ID
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
 // database descriptor using the table's ID.
 type tableLookupFn = *internalLookupCtx
 
-func newInternalLookupCtx(
-	descs []sqlbase.DescriptorProto, prefix *DatabaseDescriptor,
+// newInternalLookupCtxFromDescriptors "unwraps" the descriptors into the
+// appropriate implementation of Descriptor before constructing a
+// new internalLookupCtx. It is intended only for use when dealing with backups.
+func newInternalLookupCtxFromDescriptors(
+	rawDescs []descpb.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
-	wrappedDescs := make([]sqlbase.Descriptor, len(descs))
-	for i, desc := range descs {
-		wrappedDescs[i] = *sqlbase.WrapDescriptor(desc)
+	descs := make([]sqlbase.Descriptor, len(rawDescs))
+	for i := range rawDescs {
+		desc := &rawDescs[i]
+		switch t := desc.Union.(type) {
+		case *descpb.Descriptor_Database:
+			descs[i] = sqlbase.NewImmutableDatabaseDescriptor(*t.Database)
+		case *descpb.Descriptor_Table:
+			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
+		case *descpb.Descriptor_Type:
+			descs[i] = sqlbase.NewImmutableTypeDescriptor(*t.Type)
+		case *descpb.Descriptor_Schema:
+			descs[i] = sqlbase.NewImmutableSchemaDescriptor(*t.Schema)
+		}
 	}
-	return newInternalLookupCtxFromDescriptors(wrappedDescs, prefix)
+	return newInternalLookupCtx(descs, prefix)
 }
 
-func newInternalLookupCtxFromDescriptors(
-	descs []sqlbase.Descriptor, prefix *DatabaseDescriptor,
+func newInternalLookupCtx(
+	descs []sqlbase.Descriptor, prefix *sqlbase.ImmutableDatabaseDescriptor,
 ) *internalLookupCtx {
-	dbNames := make(map[sqlbase.ID]string)
-	dbDescs := make(map[sqlbase.ID]*DatabaseDescriptor)
-	tbDescs := make(map[sqlbase.ID]*TableDescriptor)
-	var tbIDs, dbIDs []sqlbase.ID
+	dbNames := make(map[descpb.ID]string)
+	dbDescs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
+	schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
+	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
+	typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
+	var tbIDs, typIDs, dbIDs []descpb.ID
 	// Record database descriptors for name lookups.
-	for _, desc := range descs {
-		if database := desc.GetDatabase(); database != nil {
-			dbNames[database.ID] = database.Name
-			dbDescs[database.ID] = database
-			if prefix == nil || prefix.ID == database.ID {
-				dbIDs = append(dbIDs, database.ID)
+	for i := range descs {
+		switch desc := descs[i].(type) {
+		case *sqlbase.ImmutableDatabaseDescriptor:
+			dbNames[desc.GetID()] = desc.GetName()
+			dbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.GetID() {
+				dbIDs = append(dbIDs, desc.GetID())
 			}
-		} else if table := desc.Table(hlc.Timestamp{}); table != nil {
-			tbDescs[table.ID] = table
-			if prefix == nil || prefix.ID == table.ParentID {
+		case *sqlbase.ImmutableTableDescriptor:
+			tbDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
-				tbIDs = append(tbIDs, table.ID)
+				tbIDs = append(tbIDs, desc.ID)
 			}
+		case *sqlbase.ImmutableTypeDescriptor:
+			typDescs[desc.GetID()] = desc
+			if prefix == nil || prefix.GetID() == desc.ParentID {
+				// Only make the type visible for iteration if the prefix was included.
+				typIDs = append(typIDs, desc.GetID())
+			}
+		case *sqlbase.ImmutableSchemaDescriptor:
+			schemaDescs[desc.GetID()] = desc
 		}
 	}
 	return &internalLookupCtx{
-		dbNames: dbNames,
-		dbDescs: dbDescs,
-		tbDescs: tbDescs,
-		tbIDs:   tbIDs,
-		dbIDs:   dbIDs,
+		dbNames:     dbNames,
+		dbDescs:     dbDescs,
+		schemaDescs: schemaDescs,
+		tbDescs:     tbDescs,
+		typDescs:    typDescs,
+		tbIDs:       tbIDs,
+		dbIDs:       dbIDs,
+		typIDs:      typIDs,
 	}
 }
 
-func (l *internalLookupCtx) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error) {
+func (l *internalLookupCtx) getDatabaseByID(
+	id descpb.ID,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -711,7 +594,7 @@ func (l *internalLookupCtx) getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor,
 	return db, nil
 }
 
-func (l *internalLookupCtx) getTableByID(id sqlbase.ID) (*TableDescriptor, error) {
+func (l *internalLookupCtx) getTableByID(id descpb.ID) (sqlbase.TableDescriptor, error) {
 	tb, ok := l.tbDescs[id]
 	if !ok {
 		return nil, sqlbase.NewUndefinedRelationError(
@@ -720,7 +603,17 @@ func (l *internalLookupCtx) getTableByID(id sqlbase.ID) (*TableDescriptor, error
 	return tb, nil
 }
 
-func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
+func (l *internalLookupCtx) getSchemaByID(
+	id descpb.ID,
+) (*sqlbase.ImmutableSchemaDescriptor, error) {
+	sc, ok := l.schemaDescs[id]
+	if !ok {
+		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+	}
+	return sc, nil
+}
+
+func (l *internalLookupCtx) getParentName(table sqlbase.TableDescriptor) string {
 	parentName := l.dbNames[table.GetParentID()]
 	if parentName == "" {
 		// The parent database was deleted. This is possible e.g. when
@@ -736,34 +629,68 @@ func (l *internalLookupCtx) getParentName(table *TableDescriptor) string {
 // given table ID. Used to get the parent table of a table with interleaved
 // indexes.
 func getParentAsTableName(
-	l simpleSchemaResolver, parentTableID sqlbase.ID, dbPrefix string,
+	l simpleSchemaResolver, parentTableID descpb.ID, dbPrefix string,
 ) (tree.TableName, error) {
 	var parentName tree.TableName
 	parentTable, err := l.getTableByID(parentTableID)
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	parentDbDesc, err := l.getDatabaseByID(parentTable.ParentID)
+	var parentSchemaName tree.Name
+	if parentTable.GetParentSchemaID() == keys.PublicSchemaID {
+		parentSchemaName = tree.PublicSchemaName
+	} else {
+		parentSchema, err := l.getSchemaByID(parentTable.GetParentSchemaID())
+		if err != nil {
+			return tree.TableName{}, err
+		}
+		parentSchemaName = tree.Name(parentSchema.Name)
+	}
+	parentDbDesc, err := l.getDatabaseByID(parentTable.GetParentID())
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
-	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	parentName = tree.MakeTableNameWithSchema(tree.Name(parentDbDesc.GetName()),
+		parentSchemaName, tree.Name(parentTable.GetName()))
+	parentName.ExplicitCatalog = parentDbDesc.GetName() != dbPrefix
 	return parentName, nil
 }
 
-// getTableAsTableName returns a TableName object for a given TableDescriptor.
-func getTableAsTableName(
-	l simpleSchemaResolver, table *sqlbase.TableDescriptor, dbPrefix string,
+// getTableNameFromTableDescriptor returns a TableName object for a given TableDescriptor.
+func getTableNameFromTableDescriptor(
+	l simpleSchemaResolver, table sqlbase.TableDescriptor, dbPrefix string,
 ) (tree.TableName, error) {
 	var tableName tree.TableName
-	tableDbDesc, err := l.getDatabaseByID(table.ParentID)
+	tableDbDesc, err := l.getDatabaseByID(table.GetParentID())
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	tableName = tree.MakeTableName(tree.Name(tableDbDesc.Name), tree.Name(table.Name))
-	tableName.ExplicitSchema = tableDbDesc.Name != dbPrefix
+	var parentSchemaName tree.Name
+	if table.GetParentSchemaID() == keys.PublicSchemaID {
+		parentSchemaName = tree.PublicSchemaName
+	} else {
+		parentSchema, err := l.getSchemaByID(table.GetParentSchemaID())
+		if err != nil {
+			return tree.TableName{}, err
+		}
+		parentSchemaName = tree.Name(parentSchema.Name)
+	}
+	tableName = tree.MakeTableNameWithSchema(tree.Name(tableDbDesc.GetName()),
+		parentSchemaName, tree.Name(table.GetName()))
+	tableName.ExplicitCatalog = tableDbDesc.GetName() != dbPrefix
 	return tableName, nil
+}
+
+// ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
+func (p *planner) ResolveMutableTypeDescriptor(
+	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
+) (*sqlbase.MutableTypeDescriptor, error) {
+	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
+	if err != nil {
+		return nil, err
+	}
+	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+	return desc, nil
 }
 
 // The versions below are part of the work for #34240.
@@ -774,10 +701,10 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (*MutableTableDescriptor, error) {
 	tn := name.ToTableName()
-	table, err := ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
+	table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -792,14 +719,16 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (*MutableTableDescriptor, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
 		RequireMutable:         true,
 		AllowWithoutPrimaryKey: true,
+		DesiredObjectKind:      tree.TableObject,
+		DesiredTableDescKind:   requiredType,
 	}
-	desc, prefix, err := resolveExistingObjectImpl(ctx, p, name, lookupFlags, requiredType)
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -813,7 +742,7 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (table *ImmutableTableDescriptor, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = p.ResolveExistingObjectEx(ctx, name, required, requiredType)
@@ -826,10 +755,14 @@ func (p *planner) ResolveExistingObjectEx(
 	ctx context.Context,
 	name *tree.UnresolvedObjectName,
 	required bool,
-	requiredType ResolveRequiredType,
+	requiredType tree.RequiredTableKind,
 ) (res *ImmutableTableDescriptor, err error) {
-	lookupFlags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}}
-	desc, prefix, err := resolveExistingObjectImpl(ctx, p, name, lookupFlags, requiredType)
+	lookupFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: requiredType,
+	}
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -844,6 +777,7 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id sqlbase.ID) (*DatabaseDescriptor, error)
-	getTableByID(id sqlbase.ID) (*TableDescriptor, error)
+	getDatabaseByID(id descpb.ID) (*sqlbase.ImmutableDatabaseDescriptor, error)
+	getSchemaByID(id descpb.ID) (*sqlbase.ImmutableSchemaDescriptor, error)
+	getTableByID(id descpb.ID) (sqlbase.TableDescriptor, error)
 }

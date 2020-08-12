@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 )
@@ -195,7 +196,7 @@ func NewKeyNotPresentError(key string) error {
 }
 
 // AddressResolver is a thin wrapper around gossip's GetNodeIDAddress
-// that allows it to be used as a nodedialer.AddressResolver
+// that allows it to be used as a nodedialer.AddressResolver.
 func AddressResolver(gossip *Gossip) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		return gossip.GetNodeIDAddress(nodeID)
@@ -273,9 +274,9 @@ type Gossip struct {
 	resolverAddrs  map[util.UnresolvedAddr]resolver.Resolver
 	bootstrapAddrs map[util.UnresolvedAddr]roachpb.NodeID
 
-	localityTierMap map[string]struct{}
+	locality roachpb.Locality
 
-	lastConnectivity string
+	lastConnectivity redact.RedactableString
 
 	defaultZoneConfig *zonepb.ZoneConfig
 }
@@ -319,13 +320,10 @@ func New(
 		storeMap:          make(map[roachpb.StoreID]roachpb.NodeID),
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
-		localityTierMap:   map[string]struct{}{},
+		locality:          locality,
 		defaultZoneConfig: defaultZoneConfig,
 	}
 
-	for _, loc := range locality.Tiers {
-		g.localityTierMap[loc.String()] = struct{}{}
-	}
 	stopper.AddCloser(stop.CloserFn(g.server.AmbientContext.FinishEventLog))
 
 	registry.AddMetric(g.outgoing.gauge)
@@ -542,13 +540,6 @@ func (g *Gossip) GetNodeIDSQLAddress(nodeID roachpb.NodeID) (*util.UnresolvedAdd
 	return g.getNodeIDSQLAddressLocked(nodeID)
 }
 
-// GetNodeIDForStoreID looks up the NodeID by StoreID.
-func (g *Gossip) GetNodeIDForStoreID(storeID roachpb.StoreID) (roachpb.NodeID, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getNodeIDForStoreIDLocked(storeID)
-}
-
 // GetNodeDescriptor looks up the descriptor of the node by ID.
 func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
 	g.mu.RLock()
@@ -561,21 +552,23 @@ func (g *Gossip) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescript
 func (g *Gossip) LogStatus() {
 	g.mu.RLock()
 	n := len(g.nodeDescs)
-	status := "ok"
+	status := redact.SafeString("ok")
 	if g.mu.is.getInfo(KeySentinel) == nil {
-		status = "stalled"
+		status = redact.SafeString("stalled")
 	}
 	g.mu.RUnlock()
 
-	var connectivity string
-	if s := g.Connectivity().String(); s != g.lastConnectivity {
+	var connectivity redact.RedactableString
+	if s := redact.Sprint(g.Connectivity()); s != g.lastConnectivity {
 		g.lastConnectivity = s
 		connectivity = s
 	}
 
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
-		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status(), connectivity)
+		status, n, util.Pluralize(int64(n)),
+		g.clientStatus(), g.server.status(),
+		connectivity)
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
@@ -884,13 +877,6 @@ func (g *Gossip) updateStoreMap(key string, content roachpb.Value) {
 	g.storeMap[desc.StoreID] = desc.Node.NodeID
 }
 
-func (g *Gossip) getNodeIDForStoreIDLocked(storeID roachpb.StoreID) (roachpb.NodeID, error) {
-	if nodeID, ok := g.storeMap[storeID]; ok {
-		return nodeID, nil
-	}
-	return 0, errors.Errorf("unable to look up Node ID for store %d", storeID)
-}
-
 func (g *Gossip) updateClients() {
 	nodeID := g.NodeID.Get()
 	if nodeID == 0 {
@@ -977,19 +963,12 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 	if err != nil {
 		return nil, err
 	}
-	for i := range nd.LocalityAddress {
-		locality := &nd.LocalityAddress[i]
-		if _, ok := g.localityTierMap[locality.LocalityTier.String()]; ok {
-			return &locality.Address, nil
-		}
-	}
-	return &nd.Address, nil
+	return nd.AddressForLocality(g.locality), nil
 }
 
-// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex is
-// assumed held by the caller. This method is called externally via
-// GetNodeIDSQLAddress or internally when looking up a "distant" node address to
-// connect directly to.
+// getNodeIDAddressLocked looks up the SQL address of the node by ID. The mutex
+// is assumed held by the caller. This method is called externally via
+// GetNodeIDSQLAddress.
 func (g *Gossip) getNodeIDSQLAddressLocked(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	nd, err := g.getNodeDescriptorLocked(nodeID)
 	if err != nil {
@@ -1141,15 +1120,6 @@ var Redundant redundantCallbacks
 // received. The callback method is invoked with the info key which
 // matched pattern. Returns a function to unregister the callback.
 func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...CallbackOption) func() {
-	if pattern == KeySystemConfig {
-		ctx := g.AnnotateCtx(context.TODO())
-		log.Warningf(
-			ctx,
-			"raw gossip callback registered on %s, consider using RegisterSystemConfigChannel",
-			KeySystemConfig,
-		)
-	}
-
 	g.mu.Lock()
 	unregister := g.mu.is.registerCallback(pattern, method, opts...)
 	g.mu.Unlock()
@@ -1172,19 +1142,18 @@ func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 // system config. It is notified after registration (if a system config is
 // already set), and whenever a new system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
+	// Create channel that receives new system config notifications.
+	// The channel has a size of 1 to prevent gossip from having to block on it.
+	c := make(chan struct{}, 1)
+
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
-
-	// Create channel that receives new system config notifications.
-	// The channel has a size of 1 to prevent gossip from blocking on it.
-	c := make(chan struct{}, 1)
 	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
 	// Notify the channel right away if we have a config.
 	if g.systemConfig != nil {
 		c <- struct{}{}
 	}
-
 	return c
 }
 
@@ -1577,7 +1546,7 @@ func (g *Gossip) startClientLocked(addr net.Addr) {
 	defer g.clientsMu.Unlock()
 	breaker, ok := g.clientsMu.breakers[addr.String()]
 	if !ok {
-		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Addr, addr)
+		name := fmt.Sprintf("gossip %v->%v", g.rpcContext.Config.Addr, addr)
 		breaker = g.rpcContext.NewBreaker(name)
 		g.clientsMu.breakers[addr.String()] = breaker
 	}
@@ -1616,95 +1585,59 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 	return nil
 }
 
-// MakeExposedGossip initializes a DeprecatedGossip instance which exposes a
-// wrapped Gossip instance via Optional(). This is used on SQL servers running
-// inside of a KV server (i.e. single-tenant deployments).
+// A firstRangeMissingError indicates that the first range has not yet
+// been gossiped. This will be the case for a node which hasn't yet
+// joined the gossip network.
+type firstRangeMissingError struct{}
+
+// Error is part of the error interface.
+func (f firstRangeMissingError) Error() string {
+	return "the descriptor for the first range is not available via gossip"
+}
+
+// GetFirstRangeDescriptor implements kvcoord.FirstRangeProvider.
+func (g *Gossip) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	desc := &roachpb.RangeDescriptor{}
+	if err := g.GetInfoProto(KeyFirstRangeDescriptor, desc); err != nil {
+		return nil, firstRangeMissingError{}
+	}
+	return desc, nil
+}
+
+// OnFirstRangeChanged implements kvcoord.FirstRangeProvider.
+func (g *Gossip) OnFirstRangeChanged(cb func(*roachpb.RangeDescriptor)) {
+	g.RegisterCallback(KeyFirstRangeDescriptor, func(_ string, value roachpb.Value) {
+		ctx := context.Background()
+		desc := &roachpb.RangeDescriptor{}
+		if err := value.GetProto(desc); err != nil {
+			log.Errorf(ctx, "unable to parse gossiped first range descriptor: %s", err)
+		} else {
+			cb(desc)
+		}
+	})
+}
+
+// MakeOptionalGossip initializes an OptionalGossip instance wrapping a
+// (possibly nil) *Gossip.
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-func MakeExposedGossip(g *Gossip) DeprecatedGossip {
-	const exposed = true
-	return DeprecatedGossip{
-		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
+func MakeOptionalGossip(g *Gossip) OptionalGossip {
+	return OptionalGossip{
+		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, g != nil),
 	}
 }
 
-// MakeUnexposedGossip initializes a DeprecatedGossip instance for which
-// Optional() does not return the wrapped Gossip instance. This is used on
-// SQL servers not running as part of a KV server, i.e. with multi-tenancy.
+// OptionalGossip is a Gossip instance in a SQL tenant server.
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
 //
 // See TenantSQLDeprecatedWrapper for details.
-//
-// TODO(tbg): once we can start a SQL tenant without gossip, remove this method
-// and rename DeprecatedGossip to OptionalGossip.
-func MakeUnexposedGossip(g *Gossip) DeprecatedGossip {
-	const exposed = false
-	return DeprecatedGossip{
-		w: errorutil.MakeTenantSQLDeprecatedWrapper(g, exposed),
-	}
-}
-
-// DeprecatedGossip is a Gossip instance in a SQL tenant server.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-//
-// See TenantSQLDeprecatedWrapper for details.
-type DeprecatedGossip struct {
+type OptionalGossip struct {
 	w errorutil.TenantSQLDeprecatedWrapper
-}
-
-// deprecated trades a Github issue tracking the removal of the call for the
-// wrapped Gossip instance.
-func (dg DeprecatedGossip) deprecated(issueNo int) *Gossip {
-	// NB: some tests use a nil Gossip.
-	g, _ := dg.w.Deprecated(issueNo).(*Gossip)
-	return g
-}
-
-// DeprecatedSystemConfig calls GetSystemConfig on the wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedSystemConfig(issueNo int) *config.SystemConfig {
-	g := dg.deprecated(issueNo)
-	if g == nil {
-		return nil // a few unit tests
-	}
-	return g.GetSystemConfig()
-}
-
-// DeprecatedOracleGossip trims down *gossip.Gossip for use in the Oracle.
-//
-// NB: we're trying to get rid of this dep altogether, see:
-// https://github.com/cockroachdb/cockroach/issues/48432
-type DeprecatedOracleGossip interface {
-	GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-	GetNodeIDForStoreID(roachpb.StoreID) (roachpb.NodeID, error)
-}
-
-// DeprecatedOracleGossip returns an DeprecatedOracleGossip (a Gossip for use with the
-// replicaoracle package).
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedOracleGossip(issueNo int) DeprecatedOracleGossip {
-	return dg.deprecated(issueNo)
-}
-
-// DeprecatedRegisterSystemConfigChannel calls RegisterSystemConfigChannel on
-// the wrapped Gossip instance.
-//
-// Use of Gossip from within the SQL layer is **deprecated**. Please do not
-// introduce new uses of it.
-func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-chan struct{} {
-	g := dg.deprecated(issueNo)
-	return g.RegisterSystemConfigChannel()
 }
 
 // OptionalErr returns the Gossip instance if the wrapper was set up to allow
@@ -1713,8 +1646,8 @@ func (dg DeprecatedGossip) DeprecatedRegisterSystemConfigChannel(issueNo int) <-
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
-	v, err := dg.w.OptionalErr(issueNos...)
+func (og OptionalGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
+	v, err := og.w.OptionalErr(issueNos...)
 	if err != nil {
 		return nil, err
 	}
@@ -1727,8 +1660,8 @@ func (dg DeprecatedGossip) OptionalErr(issueNos ...int) (*Gossip, error) {
 //
 // Use of Gossip from within the SQL layer is **deprecated**. Please do not
 // introduce new uses of it.
-func (dg DeprecatedGossip) Optional(issueNos ...int) (*Gossip, bool) {
-	v, ok := dg.w.Optional()
+func (og OptionalGossip) Optional(issueNos ...int) (*Gossip, bool) {
+	v, ok := og.w.Optional()
 	if !ok {
 		return nil, false
 	}

@@ -75,10 +75,6 @@ func testLogGC(
 
 	const newLogFiles = 20
 
-	// Prevent writes to stderr from being sent to log files which would screw up
-	// the expected number of log file calculation below.
-	mainLog.noStderrRedirect = true
-
 	// Ensure the main log has at least one entry. This serves two
 	// purposes. One is to serve as baseline for the file size. The
 	// other is to ensure that the TestLogScope does not erase the

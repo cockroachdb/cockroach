@@ -13,24 +13,21 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +35,7 @@ import (
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -59,6 +57,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -81,6 +80,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 
 func TestProjDivFloat64Float64Op(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -101,64 +101,9 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 		})
 }
 
-func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(ctx)
-	flowCtx := &execinfra.FlowCtx{
-		EvalCtx: &evalCtx,
-		Cfg: &execinfra.ServerConfig{
-			Settings: st,
-		},
-	}
-	typs := []*types.T{types.Int, types.Int}
-	batch := testAllocator.NewMemBatch(typs)
-	col := batch.ColVec(0).Int64()
-	for i := 0; i < coldata.BatchSize(); i++ {
-		col[i] = 1
-	}
-	if hasNulls {
-		for i := 0; i < coldata.BatchSize(); i++ {
-			if rand.Float64() < nullProbability {
-				batch.ColVec(0).Nulls().SetNull(i)
-			}
-		}
-	}
-	batch.SetLength(coldata.BatchSize())
-	if useSelectionVector {
-		batch.SetSelection(true)
-		sel := batch.Selection()
-		for i := 0; i < coldata.BatchSize(); i++ {
-			sel[i] = i
-		}
-	}
-	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	plusOp, err := createTestProjectingOperator(
-		ctx, flowCtx, source, []*types.T{types.Int},
-		"@1 + 1" /* projectingExpr */, false, /* canFallbackToRowexec */
-	)
-	require.NoError(b, err)
-	plusOp.Init()
-
-	b.SetBytes(int64(8 * coldata.BatchSize()))
-	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
-	}
-}
-
-func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
-	for _, useSel := range []bool{true, false} {
-		for _, hasNulls := range []bool{true, false} {
-			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
-				benchmarkProjPlusInt64Int64ConstOp(b, useSel, hasNulls)
-			})
-		}
-	}
-}
-
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	binOp := tree.Mult
 	var input colexecbase.Operator
 	colIdx := 3
@@ -166,8 +111,8 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Float, types.Float, types.Float,
-		binOp, input, colIdx, constArg, outputIdx,
+		testAllocator, types.Float, types.Float, types.Float, binOp, input,
+		colIdx, constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
@@ -188,6 +133,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	binOp := tree.GE
 	var input colexecbase.Operator
 	colIdx := 3
@@ -195,8 +141,8 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	constArg := tree.NewDInt(tree.DInt(constVal))
 	outputIdx := 5
 	op, err := GetProjectionRConstOperator(
-		testAllocator, types.Int, types.Int2, types.Int,
-		binOp, input, colIdx, constArg, outputIdx,
+		testAllocator, types.Int, types.Int2, types.Int, binOp, input, colIdx,
+		constArg, outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
@@ -215,11 +161,12 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 }
 
-// TestRandomComparisons runs binary comparisons against all scalar types
-// (supported by the vectorized engine) with random non-null data verifying
-// that the result of Datum.Compare matches the result of the exec projection.
+// TestRandomComparisons runs comparisons against all scalar types with random
+// non-null data verifying that the result of Datum.Compare matches the result
+// of the exec projection.
 func TestRandomComparisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -242,9 +189,6 @@ func TestRandomComparisons(t *testing.T) {
 			// TODO(jordan): #40354 tracks failure to compare infinite dates.
 			continue
 		}
-		if !typeconv.IsTypeSupported(typ) {
-			continue
-		}
 		typs := []*types.T{typ, typ, types.Bool}
 		bytesFixedLength := 0
 		if typ.Family() == types.UuidFamily {
@@ -265,11 +209,13 @@ func TestRandomComparisons(t *testing.T) {
 				},
 			)
 		}
-		for i := range lDatums {
-			lDatums[i] = PhysicalTypeColElemToDatum(lVec, i, &da, typ)
-			rDatums[i] = PhysicalTypeColElemToDatum(rVec, i, &da, typ)
+		ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
+		ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
+		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+		if typ.Family() == types.JsonFamily {
+			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}
 		}
-		for _, cmpOp := range []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+		for _, cmpOp := range supportedCmpOps {
 			for i := range lDatums {
 				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
@@ -295,9 +241,6 @@ func TestRandomComparisons(t *testing.T) {
 				fmt.Sprintf("@1 %s @2", cmpOp), false, /* canFallbackToRowexec */
 			)
 			require.NoError(t, err)
-			if err != nil {
-				t.Fatal(err)
-			}
 			op.Init()
 			var idx int
 			for batch := op.Next(ctx); batch.Length() > 0; batch = op.Next(ctx) {
@@ -315,6 +258,7 @@ func TestRandomComparisons(t *testing.T) {
 
 func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	typ := types.Int2
 	binOp := tree.Mult
 	var input colexecbase.Operator
@@ -322,8 +266,8 @@ func TestGetProjectionOperator(t *testing.T) {
 	col2Idx := 7
 	outputIdx := 9
 	op, err := GetProjectionOperator(
-		testAllocator, typ, typ, types.Int2,
-		binOp, input, col1Idx, col2Idx, outputIdx,
+		testAllocator, typ, typ, types.Int2, binOp, input, col1Idx, col2Idx,
+		outputIdx, nil /* binFn */, nil, /* evalCtx */
 	)
 	if err != nil {
 		t.Error(err)
@@ -344,28 +288,30 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func benchmarkProjOp(
 	b *testing.B,
+	name string,
 	makeProjOp func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error),
 	useSelectionVector bool,
 	hasNulls bool,
-	left, right *types.T,
+	rightConst bool,
 ) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	typs := []*types.T{left, right}
+	typs := []*types.T{types.Int, types.Int}
+	if rightConst {
+		typs = typs[:1]
+	}
 	batch := testAllocator.NewMemBatch(typs)
 	nullProb := 0.0
 	if hasNulls {
 		nullProb = nullProbability
 	}
-	const bytesFixedLength = 8
 	for _, colVec := range batch.ColVecs() {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-			Rand:             rng,
-			Vec:              colVec,
-			N:                coldata.BatchSize(),
-			NullProbability:  nullProb,
-			BytesFixedLength: bytesFixedLength,
+			Rand:            rng,
+			Vec:             colVec,
+			N:               coldata.BatchSize(),
+			NullProbability: nullProb,
 			// We will limit the range of integers so that we won't get "out of
 			// range" errors.
 			IntRange: 64,
@@ -382,68 +328,20 @@ func benchmarkProjOp(
 		}
 	}
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
-	op, err := makeProjOp(source, left, right)
-	if err != nil {
-		// It is possible that we're trying to create an operator for an
-		// invalid projection (for example, int + float) or an operator that is
-		// not supported by the vectorized engine (for example, date +
-		// interval), so we simply skip such configurations.
-		b.Skip()
-		return
-	}
+	op, err := makeProjOp(source, types.Int, types.Int)
+	require.NoError(b, err)
 	op.Init()
 
-	getVecBytesSize := func(vec coldata.Vec, length int64) int64 {
-		switch vec.CanonicalTypeFamily() {
-		case types.BoolFamily:
-			return int64(colmem.SizeOfBool) * length
-		case types.BytesFamily:
-			return bytesFixedLength * length
-		case types.IntFamily:
-			switch vec.Type().Width() {
-			case 16:
-				return int64(colmem.SizeOfInt16) * length
-			case 32:
-				return int64(colmem.SizeOfInt32) * length
-			default:
-				return int64(colmem.SizeOfInt64) * length
-			}
-		case types.FloatFamily:
-			return int64(colmem.SizeOfFloat64) * length
-		case types.DecimalFamily:
-			// We will measure the memory usage of decimals as the length of
-			// the string representation.
-			decs := vec.Decimal()
-			var footprint int64
-			for _, dec := range decs[:length] {
-				footprint += int64(len(dec.String()))
-			}
-			return footprint
-		case types.TimestampTZFamily:
-			return int64(colmem.SizeOfTime) * length
-		case types.IntervalFamily:
-			return int64(colmem.SizeOfDuration) * length
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unsupported type %s", vec.Type()))
-			// This code is unreachable, but the compiler cannot infer that.
-			return 0
-		}
-	}
-	b.SetBytes(getVecBytesSize(batch.ColVec(0), int64(coldata.BatchSize())) +
-		getVecBytesSize(batch.ColVec(1), int64(coldata.BatchSize())))
-	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+	b.Run(name, func(b *testing.B) {
+		b.SetBytes(int64(len(typs) * 8 * coldata.BatchSize()))
 		for i := 0; i < b.N; i++ {
 			op.Next(ctx)
 		}
-	}); err != nil {
-		b.Fatal(err)
-	}
+	})
 }
 
 func BenchmarkProjOp(b *testing.B) {
-	if testing.Short() {
-		b.Skip()
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -467,34 +365,27 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames = append(opNames, execgen.ComparisonOpName[cmpOp])
 		opInfix = append(opInfix, cmpOp.String())
 	}
-	typeName := func(t *types.T) string {
-		return strings.ToTitle(t.String()[0:1]) + t.String()[1:]
-	}
-	// We select a representative type for each physical representation that we
-	// have.
-	typs := []*types.T{
-		types.Int, types.Int4, types.Int2, types.Float, types.Decimal,
-		types.Bool, types.Bytes, types.Timestamp, types.Interval,
-	}
-	// TODO(yuzefovich): add benchmarks for "one-arg-constant" projection
-	// operator variants.
 	for opIdx, opName := range opNames {
 		opInfixForm := opInfix[opIdx]
-		for _, left := range typs {
-			for _, right := range typs {
-				for _, useSel := range []bool{true, false} {
-					for _, hasNulls := range []bool{true, false} {
-						b.Run(fmt.Sprintf("proj%s%s%s/useSel=%t/hasNulls=%t",
-							opName, typeName(left), typeName(right), useSel, hasNulls),
-							func(b *testing.B) {
-								benchmarkProjOp(b, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
-									return createTestProjectingOperator(
-										ctx, flowCtx, source, []*types.T{left, right},
-										fmt.Sprintf("@1 %s @2", opInfixForm), false, /* canFallbackToRowexec */
-									)
-								}, useSel, hasNulls, left, right)
-							})
+		for _, useSel := range []bool{false, true} {
+			for _, hasNulls := range []bool{false, true} {
+				for _, rightConst := range []bool{false, true} {
+					kind := ""
+					if rightConst {
+						kind = "Const"
 					}
+					name := fmt.Sprintf("proj%sInt64Int64%s/useSel=%t/hasNulls=%t", opName, kind, useSel, hasNulls)
+					benchmarkProjOp(b, name, func(source *colexecbase.RepeatableBatchSource, left, right *types.T) (colexecbase.Operator, error) {
+						expr := fmt.Sprintf("@1 %s @2", opInfixForm)
+						typs := []*types.T{left, right}
+						if rightConst {
+							expr = fmt.Sprintf("@1 %s 2", opInfixForm)
+							typs = typs[:1]
+						}
+						return createTestProjectingOperator(
+							ctx, flowCtx, source, typs, expr, false, /* canFallbackToRowexec */
+						)
+					}, useSel, hasNulls, rightConst)
 				}
 			}
 		}

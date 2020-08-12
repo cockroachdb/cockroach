@@ -36,6 +36,8 @@ package optbuilder
 //   post-projection: 1 + col3
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -222,8 +224,10 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
-	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
+func (a *aggregateInfo) TypeCheck(
+	ctx context.Context, semaCtx *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
+	if _, err := a.FuncExpr.TypeCheck(ctx, semaCtx, desired); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -248,7 +252,7 @@ func (a aggregateInfo) isOrderingSensitive() bool {
 		return true
 	}
 	switch a.def.Name {
-	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg":
+	case "array_agg", "concat_agg", "string_agg", "json_agg", "jsonb_agg", "json_object_agg", "jsonb_object_agg":
 		return true
 	default:
 		return false
@@ -264,6 +268,11 @@ func (a aggregateInfo) isCommutative() bool {
 // Eval is part of the tree.TypedExpr interface.
 func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
+}
+
+// ResolvedType is part of the tree.TypedExpr interface.
+func (a *aggregateInfo) ResolvedType() *types.T {
+	return a.col.typ
 }
 
 var _ tree.Expr = &aggregateInfo{}
@@ -672,10 +681,12 @@ func translateAggName(name string) string {
 // buildAggregateFunction returns a pointer to the aggregateInfo containing
 // the function definition, fully built arguments, and the aggregate output
 // column.
+//
+// tempScope is a temporary scope which is used for building the aggregate
+// function arguments before the correct scope is determined.
 func (b *Builder) buildAggregateFunction(
-	f *tree.FuncExpr, def *memo.FunctionPrivate, fromScope *scope,
+	f *tree.FuncExpr, def *memo.FunctionPrivate, tempScope, fromScope *scope,
 ) *aggregateInfo {
-	tempScope := fromScope.startAggFunc()
 	tempScopeColsBefore := len(tempScope.cols)
 
 	info := aggregateInfo{
@@ -804,10 +815,14 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructSum(args[0])
 	case "sqrdiff":
 		return b.factory.ConstructSqrDiff(args[0])
-	case "variance":
+	case "variance", "var_samp":
 		return b.factory.ConstructVariance(args[0])
 	case "stddev", "stddev_samp":
 		return b.factory.ConstructStdDev(args[0])
+	case "stddev_pop":
+		return b.factory.ConstructStdDevPop(args[0])
+	case "var_pop":
+		return b.factory.ConstructVarPop(args[0])
 	case "xor_agg":
 		return b.factory.ConstructXorAgg(args[0])
 	case "json_agg":
@@ -820,7 +835,12 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructPercentileDisc(args[0], args[1])
 	case "percentile_cont_impl":
 		return b.factory.ConstructPercentileCont(args[0], args[1])
+	case "json_object_agg":
+		return b.factory.ConstructJsonObjectAgg(args[0], args[1])
+	case "jsonb_object_agg":
+		return b.factory.ConstructJsonbObjectAgg(args[0], args[1])
 	}
+
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
@@ -834,6 +854,10 @@ func isWindow(def *tree.FunctionDefinition) bool {
 
 func isGenerator(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.GeneratorClass
+}
+
+func isSQLFn(def *tree.FunctionDefinition) bool {
+	return def.Class == tree.SQLClass
 }
 
 func newGroupingError(name *tree.Name) error {

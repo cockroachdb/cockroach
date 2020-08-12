@@ -18,10 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -29,13 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
+func parseTableDesc(createTableStmt string) (sqlbase.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
 	if err != nil {
@@ -46,18 +48,20 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
-	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
+	const parentID = descpb.ID(keys.MaxReservedDescID + 1)
+	const tableID = descpb.ID(keys.MaxReservedDescID + 2)
+	semaCtx := tree.MakeSemaContext()
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
-		ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable()
+	return mutDesc, mutDesc.ValidateTable()
 }
 
-func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
-	semaCtx := &tree.SemaContext{}
+func parseValues(tableDesc *descpb.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := &tree.EvalContext{}
 
 	valuesStmt, err := parser.ParseOne(values)
@@ -79,13 +83,13 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 		for colIdx, expr := range rowTuple {
 			col := &tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				expr, col.Type, "avro", semaCtx, false /* allowImpure */)
+				ctx, expr, col.Type, "avro", &semaCtx, tree.VolatilityStable)
 			if err != nil {
 				return nil, err
 			}
 			datum, err := typedExpr.Eval(evalCtx)
 			if err != nil {
-				return nil, errors.Wrap(err, typedExpr.String())
+				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
 			row = append(row, sqlbase.DatumToEncDatum(col.Type, datum))
 		}
@@ -102,7 +106,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	// This avroDataRecord doesn't have any of the derived fields we need for
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
-	tableDesc := &sqlbase.TableDescriptor{
+	tableDesc := descpb.TableDescriptor{
 		Name: AvroNameToSQLName(s.Name),
 	}
 	for _, f := range s.Fields {
@@ -116,16 +120,18 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		}
 		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
 	}
-	return tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
+	return tableToAvroSchema(sqlbase.NewImmutableTableDescriptor(tableDesc), avroSchemaNoSuffix)
 }
 
-func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, error) {
+func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
 	parsed, err := parser.ParseOne(`ALTER TABLE FOO ADD COLUMN ` + metadata)
 	if err != nil {
 		return nil, err
 	}
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, &tree.EvalContext{})
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext()
+	col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
 
@@ -137,6 +143,7 @@ func randTime(rng *rand.Rand) time.Time {
 
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 
 	type test struct {
@@ -243,7 +250,7 @@ func TestAvroSchema(t *testing.T) {
 			// roundtrippedSchema can be used to recreate the original `CREATE
 			// TABLE`.
 
-			rows, err := parseValues(tableDesc, `VALUES `+test.values)
+			rows, err := parseValues(tableDesc.TableDesc(), `VALUES `+test.values)
 			require.NoError(t, err)
 
 			for _, row := range rows {
@@ -275,7 +282,7 @@ func TestAvroSchema(t *testing.T) {
 				`{"type":["null","long"],"name":"_u0001f366_","default":null,`+
 				`"__crdb__":"🍦 INT8 NOT NULL"}]}`,
 			tableSchema.codec.Schema())
-		indexSchema, err := indexToAvroSchema(tableDesc, &tableDesc.PrimaryIndex)
+		indexSchema, err := indexToAvroSchema(tableDesc, tableDesc.GetPrimaryIndex())
 		require.NoError(t, err)
 		require.Equal(t,
 			`{"type":"record","name":"_u2603_","fields":[`+
@@ -288,22 +295,22 @@ func TestAvroSchema(t *testing.T) {
 	// reference.
 	t.Run("type_goldens", func(t *testing.T) {
 		goldens := map[string]string{
-			`BOOL`:                     `["null","boolean"]`,
-			`BYTES`:                    `["null","bytes"]`,
-			`DATE`:                     `["null",{"type":"int","logicalType":"date"}]`,
-			`FLOAT8`:                   `["null","double"]`,
-			`GEOGRAPHY(GEOMETRY,4326)`: `["null","bytes"]`,
-			`GEOMETRY`:                 `["null","bytes"]`,
-			`INET`:                     `["null","string"]`,
-			`INT8`:                     `["null","long"]`,
-			`JSONB`:                    `["null","string"]`,
-			`STRING`:                   `["null","string"]`,
-			`TIME`:                     `["null",{"type":"long","logicalType":"time-micros"}]`,
-			`TIMETZ`:                   `["null","string"]`,
-			`TIMESTAMP`:                `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`TIMESTAMPTZ`:              `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
-			`UUID`:                     `["null","string"]`,
-			`DECIMAL(3,2)`:             `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
+			`BOOL`:         `["null","boolean"]`,
+			`BYTES`:        `["null","bytes"]`,
+			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
+			`FLOAT8`:       `["null","double"]`,
+			`GEOGRAPHY`:    `["null","bytes"]`,
+			`GEOMETRY`:     `["null","bytes"]`,
+			`INET`:         `["null","string"]`,
+			`INT8`:         `["null","long"]`,
+			`JSONB`:        `["null","string"]`,
+			`STRING`:       `["null","string"]`,
+			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
+			`TIMETZ`:       `["null","string"]`,
+			`TIMESTAMP`:    `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`TIMESTAMPTZ`:  `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
+			`UUID`:         `["null","string"]`,
+			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
 		for _, typ := range types.Scalar {
@@ -317,7 +324,7 @@ func TestAvroSchema(t *testing.T) {
 			colType := typ.SQLString()
 			tableDesc, err := parseTableDesc(`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + colType + `)`)
 			require.NoError(t, err)
-			field, err := columnDescToAvroSchema(&tableDesc.Columns[1])
+			field, err := columnDescToAvroSchema(tableDesc.GetColumnAtIdx(1))
 			require.NoError(t, err)
 			schema, err := json.Marshal(field.SchemaType)
 			require.NoError(t, err)
@@ -434,7 +441,7 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				`CREATE TABLE foo (pk INT PRIMARY KEY, a ` + test.sqlType + `)`)
 			require.NoError(t, err)
-			rows, err := parseValues(tableDesc, `VALUES (1, `+test.sql+`)`)
+			rows, err := parseValues(tableDesc.TableDesc(), `VALUES (1, `+test.sql+`)`)
 			require.NoError(t, err)
 
 			schema, err := tableToAvroSchema(tableDesc, avroSchemaNoSuffix)
@@ -517,6 +524,7 @@ func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avr
 
 func TestAvroMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type test struct {
 		name           string
@@ -547,9 +555,9 @@ func TestAvroMigration(t *testing.T) {
 			readerSchema, err := tableToAvroSchema(readerDesc, avroSchemaNoSuffix)
 			require.NoError(t, err)
 
-			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
+			writerRows, err := parseValues(writerDesc.TableDesc(), `VALUES `+test.writerValues)
 			require.NoError(t, err)
-			expectedRows, err := parseValues(readerDesc, `VALUES `+test.expectedValues)
+			expectedRows, err := parseValues(readerDesc.TableDesc(), `VALUES `+test.expectedValues)
 			require.NoError(t, err)
 
 			for i := range writerRows {
@@ -566,6 +574,7 @@ func TestAvroMigration(t *testing.T) {
 
 func TestDecimalRatRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	t.Run(`table`, func(t *testing.T) {
 		tests := []struct {

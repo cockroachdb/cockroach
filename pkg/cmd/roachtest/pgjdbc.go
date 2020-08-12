@@ -17,6 +17,7 @@ import (
 )
 
 var pgjdbcReleaseTagRegex = regexp.MustCompile(`^REL(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedPGJDBCTag = "REL42.2.9"
 
 // This test runs pgjdbc's full test suite against a single cockroach node.
 
@@ -82,7 +83,7 @@ func registerPgjdbc(r *testRegistry) {
 			c,
 			"https://github.com/pgjdbc/pgjdbc.git",
 			"/mnt/data1/pgjdbc",
-			"REL42.2.9",
+			supportedPGJDBCTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -117,14 +118,14 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignorelistName, ignorelist := pgjdbcBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignorelistName, ignorelist := pgjdbcBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No pgjdbc blacklist defined for cockroach version %s", version)
+			t.Fatalf("No pgjdbc blocklist defined for cockroach version %s", version)
 		}
-		status := fmt.Sprintf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 		if ignorelist != nil {
-			status = fmt.Sprintf("Running cockroach version %s, using blacklist %s, using ignorelist %s",
-				version, blacklistName, ignorelistName)
+			status = fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+				version, blocklistName, ignorelistName)
 		}
 		c.l.Printf("%s", status)
 
@@ -173,15 +174,16 @@ func registerPgjdbc(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "pgjdbc" /* ormName */, output,
-			blacklistName, expectedFailures, ignorelist, version, latestTag,
+			blocklistName, expectedFailures, ignorelist, version, supportedPGJDBCTag,
 		)
 	}
 
 	r.Add(testSpec{
-		Name:    "pgjdbc",
-		Owner:   OwnerAppDev,
-		Cluster: makeClusterSpec(1),
-		Tags:    []string{`default`, `driver`},
+		MinVersion: "v2.1.0",
+		Name:       "pgjdbc",
+		Owner:      OwnerAppDev,
+		Cluster:    makeClusterSpec(1),
+		Tags:       []string{`default`, `driver`},
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPgjdbc(ctx, t, c)
 		},

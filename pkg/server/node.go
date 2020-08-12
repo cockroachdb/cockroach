@@ -35,13 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -333,7 +333,7 @@ func (n *Node) AnnotateCtxWithSpan(
 // NodeDescriptor is available, to help bootstrapping.
 func (n *Node) start(
 	ctx context.Context,
-	addr, sqlAddr net.Addr,
+	addr, sqlAddr, tenantAddr net.Addr,
 	state initState,
 	clusterName string,
 	attrs roachpb.Attributes,
@@ -375,6 +375,7 @@ func (n *Node) start(
 		NodeID:          nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
 		SQLAddress:      util.MakeUnresolvedAddr(sqlAddr.Network(), sqlAddr.String()),
+		TenantAddress:   util.MakeUnresolvedAddr(tenantAddr.Network(), tenantAddr.String()),
 		Attrs:           attrs,
 		Locality:        locality,
 		LocalityAddress: localityAddress,
@@ -405,13 +406,13 @@ func (n *Node) start(
 		if err := s.Start(ctx, n.stopper); err != nil {
 			return errors.Errorf("failed to start store: %s", err)
 		}
-		capacity, err := s.Capacity(false /* useCached */)
+		capacity, err := s.Capacity(ctx, false /* useCached */)
 		if err != nil {
 			return errors.Errorf("could not query store capacity: %s", err)
 		}
 		log.Infof(ctx, "initialized store %s: %+v", s, capacity)
 
-		n.addStore(s)
+		n.addStore(ctx, s)
 	}
 
 	// Verify all initialized stores agree on cluster and node IDs.
@@ -454,7 +455,7 @@ func (n *Node) start(
 		}
 	}
 
-	n.startComputePeriodicMetrics(n.stopper, DefaultMetricsSampleInterval)
+	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
 
 	// Be careful about moving this line above `startStores`; store migrations rely
 	// on the fact that the cluster version has not been updated via Gossip (we
@@ -502,15 +503,15 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 	})
 }
 
-func (n *Node) addStore(store *kvserver.Store) {
+func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
 	cv, err := store.GetClusterVersion(context.TODO())
 	if err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	if cv == (clusterversion.ClusterVersion{}) {
 		// The store should have had a version written to it during the store
 		// bootstrap process.
-		log.Fatal(context.TODO(), "attempting to add a store without a version")
+		log.Fatal(ctx, "attempting to add a store without a version")
 	}
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
@@ -564,7 +565,7 @@ func (n *Node) bootstrapStores(
 			if err := s.Start(ctx, stopper); err != nil {
 				return err
 			}
-			n.addStore(s)
+			n.addStore(ctx, s)
 			log.Infof(ctx, "bootstrapped store %s", s)
 			// Done regularly in Node.startGossip, but this cuts down the time
 			// until this store is used for range allocations.
@@ -947,12 +948,41 @@ func (n *Node) setupSpanForIncomingRPC(
 	return ctx, finishSpan
 }
 
+// RangeLookup implements the roachpb.InternalServer interface.
+func (n *Node) RangeLookup(
+	ctx context.Context, req *roachpb.RangeLookupRequest,
+) (*roachpb.RangeLookupResponse, error) {
+	ctx = n.storeCfg.AmbientCtx.AnnotateCtx(ctx)
+
+	// Proxy the RangeLookup through the local DB. Note that this does not use
+	// the local RangeDescriptorCache itself (for the direct range descriptor).
+	// To be able to do so, we'd have to let tenant's evict descriptors from our
+	// cache in order to avoid serving the same stale descriptor over and over
+	// again. Because of that, using our own cache doesn't seem worth it, at
+	// least for now.
+	sender := n.storeCfg.DB.NonTransactionalSender()
+	rs, preRs, err := kv.RangeLookup(
+		ctx,
+		sender,
+		req.Key.AsRawKey(),
+		req.ReadConsistency,
+		req.PrefetchNum,
+		req.PrefetchReverse,
+	)
+	resp := new(roachpb.RangeLookupResponse)
+	if err != nil {
+		resp.Error = roachpb.NewError(err)
+	} else {
+		resp.Descriptors = rs
+		resp.PrefetchedDescriptors = preRs
+	}
+	return resp, nil
+}
+
 // RangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
-	growstack.Grow()
-
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -962,4 +992,90 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// GossipSubscription implements the roachpb.InternalServer interface.
+func (n *Node) GossipSubscription(
+	args *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer,
+) error {
+	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
+	ctxDone := ctx.Done()
+
+	// Register a callback for each of the requested patterns. We don't want to
+	// block the gossip callback goroutine on a slow consumer, so we instead
+	// handle all communication asynchronously. We could pick a channel size and
+	// say that if the channel ever blocks, terminate the subscription. Doing so
+	// feels fragile, though, especially during the initial information dump.
+	// Instead, we say that if the channel ever blocks for more than some
+	// duration, terminate the subscription.
+	entC := make(chan *roachpb.GossipSubscriptionEvent, 256)
+	entCClosed := false
+	var callbackMu syncutil.Mutex
+	const maxBlockDur = 1 * time.Millisecond
+	for _, pattern := range args.Patterns {
+		pattern := pattern
+		// TODO(nvanbenschoten): add some form of access control here. Tenants
+		// should only be able to subscribe to certain patterns, such as:
+		// - "node:.*"
+		// - "system-db:zones/1/tenants"
+		//
+		// Note that the SystemConfig pattern here doesn't refer to a real key.
+		// Instead, it's keying into the single SystemConfig gossip key. That's
+		// necessary to avoid leaking privileged information to callers, but it
+		// means that we have a little more work to do in order to destructure
+		// and filter system config updates. Luckily, SystemConfigDeltaFilter
+		// supports a "keyPrefix" that should help here. We'll also want to use
+		// RegisterSystemConfigChannel for any SystemConfig patterns.
+		//
+		// UPDATE: the SystemConfig pattern story is even more complicated
+		// because of ZoneConfig inheritance/recursion. We'll also need to
+		// return the default zone config. In that case, it probably makes sense
+		// to perform the filtering here (based on whether a tenant marker is
+		// present in the ctx) without baking it into the protocol itself. So
+		// the request will simply specify "system-db" but we'll only return the
+		// subset of key/values that the tenant is allowed to / needs to see.
+
+		callback := func(key string, content roachpb.Value) {
+			callbackMu.Lock()
+			defer callbackMu.Unlock()
+			if entCClosed {
+				return
+			}
+			event := &roachpb.GossipSubscriptionEvent{
+				Key: key, Content: content, PatternMatched: pattern,
+			}
+			select {
+			case entC <- event:
+			default:
+				select {
+				case entC <- event:
+				case <-time.After(maxBlockDur):
+					// entC blocking for too long. The consumer must not be
+					// keeping up. Terminate the subscription.
+					close(entC)
+					entCClosed = true
+				}
+			}
+		}
+		unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
+		defer unregister()
+	}
+
+	for {
+		select {
+		case e, ok := <-entC:
+			if !ok {
+				// The consumer was not keeping up with gossip updates, so its
+				// subscription was terminated to avoid blocking gossip.
+				err := roachpb.NewErrorf("subscription terminated due to slow consumption")
+				log.Warningf(ctx, "%v", err)
+				e = &roachpb.GossipSubscriptionEvent{Error: err}
+			}
+			if err := stream.Send(e); err != nil {
+				return err
+			}
+		case <-ctxDone:
+			return ctx.Err()
+		}
+	}
 }

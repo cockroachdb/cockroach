@@ -207,8 +207,13 @@ func TestEventLogAndTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	elExpected := "[test1 test2 testerr(err) test6 finish]"
-	if evStr := fmt.Sprint(el.ev); evStr != elExpected {
+	elExpected := regexp.MustCompile(`^\[` +
+		`util/log/trace_test\.go:\d+ test1 ` +
+		`util/log/trace_test\.go:\d+ test2 ` +
+		`util/log/trace_test\.go:\d+ testerr\(err\) ` +
+		`util/log/trace_test\.go:\d+ test6 ` +
+		`finish\]$`)
+	if evStr := fmt.Sprint(el.ev); !elExpected.MatchString(evStr) {
 		t.Errorf("expected events '%s', got '%s'", elExpected, evStr)
 	}
 }

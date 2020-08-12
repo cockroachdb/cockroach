@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,12 +34,13 @@ import (
 
 func TestGossipFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	errors := make(chan error, 1)
 	descs := make(chan *roachpb.RangeDescriptor)
@@ -78,7 +81,7 @@ func TestGossipFirstRange(t *testing.T) {
 				if reflect.DeepEqual(&desc, gossiped) {
 					return
 				}
-				log.Infof(context.TODO(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
+				log.Infof(context.Background(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
 			}
 		}
 	}
@@ -140,10 +143,13 @@ func TestGossipFirstRange(t *testing.T) {
 // restarted after losing its data) without the cluster breaking.
 func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	if testing.Short() {
-		// As of Nov 2018 it takes 3.6s.
-		t.Skip("short")
-	}
+	defer log.Scope(t).Close(t)
+
+	// Skipping as part of test-infra-team flaky test cleanup.
+	skip.WithIssue(t, 50024)
+
+	// As of Nov 2018 it takes 3.6s.
+	skip.UnderShort(t)
 	ctx := context.Background()
 
 	// Shorten the raft tick interval and election timeout to make range leases
@@ -165,7 +171,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 		base.TestClusterArgs{
 			ServerArgs: serverArgs,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	// Take down the first node and replace it with a new one.
 	oldNodeIdx := 0
@@ -199,6 +205,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 // later intents are aborted.
 func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -211,11 +218,17 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txA := db.NewTxn(ctx, "a")
 	txB := db.NewTxn(ctx, "b")
 
-	require.NoError(t, txA.SetSystemConfigTrigger())
-	require.NoError(t, txA.Put(ctx, keys.SystemSQLCodec.DescMetadataKey(1000), &sqlbase.Descriptor{}))
+	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
+	db1000 := sqlbase.NewInitialDatabaseDescriptor(1000, "1000", security.AdminRole)
+	require.NoError(t, txA.Put(ctx,
+		keys.SystemSQLCodec.DescMetadataKey(1000),
+		db1000.DescriptorProto()))
 
-	require.NoError(t, txB.SetSystemConfigTrigger())
-	require.NoError(t, txB.Put(ctx, keys.SystemSQLCodec.DescMetadataKey(2000), &sqlbase.Descriptor{}))
+	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
+	db2000 := sqlbase.NewInitialDatabaseDescriptor(2000, "2000", security.AdminRole)
+	require.NoError(t, txB.Put(ctx,
+		keys.SystemSQLCodec.DescMetadataKey(2000),
+		db2000.DescriptorProto()))
 
 	const someTime = 10 * time.Millisecond
 	clearNotifictions := func(ch <-chan struct{}) {

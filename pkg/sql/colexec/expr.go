@@ -11,10 +11,99 @@
 package colexec
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
+
+// ExprHelper is a utility interface that helps with expression handling in
+// the vectorized engine.
+type ExprHelper interface {
+	// ProcessExpr processes the given expression and returns a well-typed
+	// expression.
+	ProcessExpr(execinfrapb.Expression, *tree.SemaContext, *tree.EvalContext, []*types.T) (tree.TypedExpr, error)
+}
+
+// ExprDeserialization describes how expression deserialization should be
+// handled in the vectorized engine.
+type ExprDeserialization int
+
+const (
+	// DefaultExprDeserialization is the default way of handling expression
+	// deserialization in which case LocalExpr field is used if set.
+	DefaultExprDeserialization ExprDeserialization = iota
+	// ForcedExprDeserialization is the way of handling expression
+	// deserialization in which case LocalExpr field is completely ignored and
+	// the serialized representation is always deserialized.
+	ForcedExprDeserialization
+)
+
+// NewExprHelper returns a new ExprHelper. forceExprDeserialization determines
+// whether LocalExpr field is ignored by the helper.
+func NewExprHelper(exprDeserialization ExprDeserialization) ExprHelper {
+	switch exprDeserialization {
+	case DefaultExprDeserialization:
+		return &defaultExprHelper{}
+	case ForcedExprDeserialization:
+		return &forcedDeserializationExprHelper{}
+	default:
+		colexecerror.InternalError(fmt.Sprintf("unexpected ExprDeserialization %d", exprDeserialization))
+		// This code is unreachable, but the compiler cannot infer that.
+		return nil
+	}
+}
+
+// defaultExprHelper is an ExprHelper that takes advantage of already present
+// well-typed expression in LocalExpr when set.
+type defaultExprHelper struct {
+	helper execinfrapb.ExprHelper
+}
+
+var _ ExprHelper = &defaultExprHelper{}
+
+// NewDefaultExprHelper returns an ExprHelper that takes advantage of an already
+// well-typed expression in LocalExpr when set.
+func NewDefaultExprHelper() ExprHelper {
+	return &defaultExprHelper{}
+}
+
+func (h *defaultExprHelper) ProcessExpr(
+	expr execinfrapb.Expression,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	typs []*types.T,
+) (tree.TypedExpr, error) {
+	if expr.LocalExpr != nil {
+		return expr.LocalExpr, nil
+	}
+	h.helper.Types = typs
+	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
+	return execinfrapb.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
+}
+
+// forcedDeserializationExprHelper is an ExprHelper that always deserializes
+// (namely, parses, type-checks, and evaluates the constants) the provided
+// expression, completely ignoring LocalExpr field if set.
+type forcedDeserializationExprHelper struct {
+	helper execinfrapb.ExprHelper
+}
+
+var _ ExprHelper = &forcedDeserializationExprHelper{}
+
+func (h *forcedDeserializationExprHelper) ProcessExpr(
+	expr execinfrapb.Expression,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	typs []*types.T,
+) (tree.TypedExpr, error) {
+	h.helper.Types = typs
+	tempVars := tree.MakeIndexedVarHelper(&h.helper, len(typs))
+	return execinfrapb.DeserializeExpr(expr.Expr, semaCtx, evalCtx, &tempVars)
+}
 
 // Remove unused warning.
 var _ = findIVarsInRange

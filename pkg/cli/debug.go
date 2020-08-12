@@ -16,7 +16,6 @@ import (
 	"context"
 	gohex "encoding/hex"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -34,9 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -202,7 +200,15 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, printer)
+	results := 0
+	return db.Iterate(debugCtx.startKey.Key, debugCtx.endKey.Key, func(kv storage.MVCCKeyValue) (bool, error) {
+		done, err := printer(kv)
+		if done || err != nil {
+			return done, err
+		}
+		results++
+		return results == debugCtx.maxResults, nil
+	})
 }
 
 func runDebugBallast(cmd *cobra.Command, args []string) error {
@@ -292,6 +298,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 
 	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated, false /* seekEnd */)
 	defer iter.Close()
+	results := 0
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err
@@ -302,6 +309,10 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 			Key:   iter.Key(),
 			Value: iter.Value(),
 		})
+		results++
+		if results == debugCtx.maxResults {
+			break
+		}
 	}
 	return nil
 }
@@ -806,7 +817,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, desc))
 		} else if strings.HasPrefix(key, gossip.KeyNodeLivenessPrefix) {
-			var liveness storagepb.Liveness
+			var liveness kvserverpb.Liveness
 			if err := protoutil.Unmarshal(bytes, &liveness); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
@@ -839,50 +850,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 
 	sort.Strings(output)
 	return strings.Join(output, "\n"), nil
-}
-
-var debugTimeSeriesDumpCmd = &cobra.Command{
-	Use:   "tsdump",
-	Short: "dump all the raw timeseries values in a cluster",
-	Long: `
-Dumps all of the raw timeseries values in a cluster.
-`,
-	RunE: MaybeDecorateGRPCError(runTimeSeriesDump),
-}
-
-func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
-	if err != nil {
-		return err
-	}
-	defer finish()
-
-	tsClient := tspb.NewTimeSeriesClient(conn)
-	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
-	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
-	}
-
-	var name, source string
-	for {
-		data, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if name != data.Name || source != data.Source {
-			name, source = data.Name, data.Source
-			fmt.Printf("%s %s\n", name, source)
-		}
-		for _, d := range data.Datapoints {
-			fmt.Printf("%d %v\n", d.TimestampNanos, d.Value)
-		}
-	}
 }
 
 var debugSyncBenchCmd = &cobra.Command{
@@ -1174,26 +1141,35 @@ the captured parts will be printed.
 	RunE: runDebugMergeLogs,
 }
 
+// TODO(knz): this struct belongs elsewhere.
+// See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
-	from    time.Time
-	to      time.Time
-	filter  *regexp.Regexp
-	program *regexp.Regexp
-	file    *regexp.Regexp
-	prefix  string
+	from           time.Time
+	to             time.Time
+	filter         *regexp.Regexp
+	program        *regexp.Regexp
+	file           *regexp.Regexp
+	prefix         string
+	keepRedactable bool
+	redactInput    bool
 }{
-	program: regexp.MustCompile("^cockroach.*$"),
-	file:    regexp.MustCompile(log.FilePattern),
+	program:        regexp.MustCompile("^cockroach.*$"),
+	file:           regexp.MustCompile(log.FilePattern),
+	keepRedactable: true,
+	redactInput:    false,
 }
 
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 	o := debugMergeLogsOpts
+
+	inputEditMode := log.SelectEditMode(o.redactInput, o.keepRedactable)
+
 	s, err := newMergedStreamFromPatterns(context.Background(),
-		args, o.file, o.program, o.from, o.to)
+		args, o.file, o.program, o.from, o.to, inputEditMode)
 	if err != nil {
 		return err
 	}
-	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix)
+	return writeLogStream(s, cmd.OutOrStdout(), o.filter, o.prefix, o.keepRedactable)
 }
 
 // DebugCmdsForRocksDB lists debug commands that access rocksdb through the engine
@@ -1290,6 +1266,7 @@ func init() {
 	f = debugMergeLogsCommand.Flags()
 	f.Var(flagutil.Time(&debugMergeLogsOpts.from), "from",
 		"time before which messages should be filtered")
+	// TODO(knz): the "to" should be named "until" - it's a time boundary, not a space boundary.
 	f.Var(flagutil.Time(&debugMergeLogsOpts.to), "to",
 		"time after which messages should be filtered")
 	f.Var(flagutil.Regexp(&debugMergeLogsOpts.filter), "filter",
@@ -1301,4 +1278,8 @@ func init() {
 			"if no such group exists, program-filter is ignored")
 	f.StringVar(&debugMergeLogsOpts.prefix, "prefix", "${host}> ",
 		"expansion template (see regexp.Expand) used as prefix to merged log messages evaluated on file-pattern")
+	f.BoolVar(&debugMergeLogsOpts.keepRedactable, "redactable-output", debugMergeLogsOpts.keepRedactable,
+		"keep the output log file redactable")
+	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
+		"redact the input files to remove sensitive information")
 }

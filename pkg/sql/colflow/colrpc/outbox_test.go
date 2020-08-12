@@ -16,7 +16,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,23 +55,23 @@ func TestOutboxCatchesPanics(t *testing.T) {
 
 	inboxMemAccount := testMemMonitor.MakeBoundAccount()
 	defer inboxMemAccount.Close(ctx)
-	inbox, err := NewInbox(
-		colmem.NewAllocator(ctx, &inboxMemAccount), typs, execinfrapb.StreamID(0),
-	)
+	inbox, err := NewInbox(ctx, colmem.NewAllocator(ctx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	streamHandlerErrCh := handleStream(ctx, inbox, rpcLayer.server, func() { close(rpcLayer.server.csChan) })
 
-	// The outbox will be sending the panic as metadata eagerly. This Next call
-	// is valid, but should return a zero-length batch, indicating that the caller
-	// should call DrainMeta.
-	require.True(t, inbox.Next(ctx).Length() == 0)
+	// The outbox will be sending the panic as eagerly. This Next call will
+	// propagate the panic.
+	err = colexecerror.CatchVectorizedRuntimeError(func() {
+		inbox.Next(ctx).Length()
+	})
+	require.Error(t, err)
 
-	// Expect the panic as an error in DrainMeta.
+	// Expect no metadata.
 	meta := inbox.DrainMeta(ctx)
+	require.True(t, len(meta) == 0)
 
-	require.True(t, len(meta) == 1)
-	require.True(t, testutils.IsError(meta[0].Err, "runtime error: index out of range"), meta[0])
+	require.True(t, testutils.IsError(err, "runtime error: index out of range"), err)
 
 	require.NoError(t, <-streamHandlerErrCh)
 	wg.Wait()
@@ -108,7 +110,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		outboxMemAccount := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAccount.Close(ctx)
 		outbox, sourceDrained, err := newOutboxWithMetaSources(
-			colmem.NewAllocator(ctx, &outboxMemAccount),
+			colmem.NewAllocator(ctx, &outboxMemAccount, coldata.StandardColumnFactory),
 		)
 		require.NoError(t, err)
 

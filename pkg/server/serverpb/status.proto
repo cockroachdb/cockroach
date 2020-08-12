@@ -23,9 +23,9 @@ import "server/status/statuspb/status.proto";
 import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/rocksdb.proto";
-import "kv/kvserver/storagepb/lease_status.proto";
-import "kv/kvserver/storagepb/state.proto";
-import "kv/kvserver/storagepb/liveness.proto";
+import "kv/kvserver/kvserverpb/lease_status.proto";
+import "kv/kvserver/kvserverpb/state.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -290,6 +290,13 @@ message AllocatorResponse { repeated AllocatorDryRun dry_runs = 1; }
 
 message JSONResponse { bytes data = 1; }
 
+message ResponseError {
+  string error = 1;
+  int32 code = 2;
+  string message = 3;
+  repeated string details = 4;
+}
+
 message LogsRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -299,6 +306,18 @@ message LogsRequest {
   string end_time = 4;
   string max = 5;
   string pattern = 6;
+  // redact, if true, requests redaction of sensitive data away
+  // from the retrieved log entries.
+  // Only admin users can send a request with redact = false.
+  bool redact = 7;
+  // keep_redactable, if true, requests that retrieved entries preserve
+  // the redaction markers if any were present in the log files.
+  // If false, redaction markers are stripped away.
+  // Note that redact = false && redactable = false implies
+  // "flat" entries with all sensitive information enclosed and
+  // no markers; this is suitable for backward-compatibility with
+  // RPC clients from prior the introduction of redactable logs.
+  bool keep_redactable = 8;
 }
 
 message LogEntriesResponse {
@@ -322,6 +341,18 @@ message LogFileRequest {
   // forwarding is necessary.
   string node_id = 1;
   string file = 2;
+  // redact, if true, requests redaction of sensitive data away
+  // from the retrieved log entries.
+  // Only admin users can send a request with redact = false.
+  bool redact = 3;
+  // keep_redactable, if true, requests that retrieved entries preserve
+  // the redaction markers if any were present in the log files.
+  // If false, redaction markers are stripped away.
+  // Note that redact = false && redactable = false implies
+  // "flat" entries with all sensitive information enclosed and
+  // no markers; this is suitable for backward-compatibility with
+  // RPC clients from prior the introduction of redactable logs.
+  bool keep_redactable = 4;
 }
 
 enum StacksType {
@@ -376,9 +407,14 @@ message ProfileRequest {
   // forwarding is necessary.
   string node_id = 1;
 
-  enum Type { HEAP = 0; }
+  enum Type {
+      HEAP = 0;
+      CPU = 1; // with labels on
+  }
   // The type of profile to retrieve.
   Type type = 5;
+
+  int32 seconds = 6; // applies only to Type=CPU, defaults to 30
 }
 
 message MetricsRequest {
@@ -861,6 +897,9 @@ service Status {
       get : "/_status/details/{node_id}"
     };
   }
+
+  // Don't introduce additional usages of this RPC. See #50707 for more details.
+  // The underlying response type is something we're looking to get rid of.
   rpc Nodes(NodesRequest) returns (NodesResponse) {
     option (google.api.http) = {
       get : "/_status/nodes"

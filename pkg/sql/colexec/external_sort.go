@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -114,17 +113,11 @@ type externalSorter struct {
 	NonExplainable
 	closerHelper
 
-	// mu is used to protect against concurrent IdempotentClose and Next calls,
-	// which are currently allowed.
-	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
-	//  Next, which will simplify this model.
-	mu syncutil.Mutex
-
 	unlimitedAllocator *colmem.Allocator
 	state              externalSorterState
 	inputTypes         []*types.T
 	ordering           execinfrapb.Ordering
-	inMemSorter        resettableOperator
+	inMemSorter        ResettableOperator
 	inMemSorterInput   *inputPartitioningOperator
 	partitioner        colcontainer.PartitionedQueue
 	partitionerCreator func() colcontainer.PartitionedQueue
@@ -151,10 +144,10 @@ type externalSorter struct {
 	}
 }
 
-var _ resettableOperator = &externalSorter{}
+var _ ResettableOperator = &externalSorter{}
 var _ closableOperator = &externalSorter{}
 
-// newExternalSorter returns a disk-backed general sort operator.
+// NewExternalSorter returns a disk-backed general sort operator.
 // - ctx is the same context that standaloneMemAccount was created with.
 // - unlimitedAllocator must have been created with a memory account derived
 // from an unlimited memory monitor. It will be used by several internal
@@ -171,7 +164,7 @@ var _ closableOperator = &externalSorter{}
 // - delegateFDAcquisitions specifies whether the external sorter should let
 // the partitioned disk queue acquire file descriptors instead of acquiring
 // them up front in Next. This should only be true in tests.
-func newExternalSorter(
+func NewExternalSorter(
 	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	standaloneMemAccount *mon.BoundAccount,
@@ -248,8 +241,6 @@ func (s *externalSorter) Init() {
 }
 
 func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	for {
 		switch s.state {
 		case externalSorterNewPartition:
@@ -362,7 +353,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			}
 			return b
 		case externalSorterFinished:
-			if err := s.internalCloseLocked(ctx); err != nil {
+			if err := s.Close(ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -377,16 +368,19 @@ func (s *externalSorter) reset(ctx context.Context) {
 		r.reset(ctx)
 	}
 	s.state = externalSorterNewPartition
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.internalCloseLocked(ctx); err != nil {
+	if err := s.Close(ctx); err != nil {
 		colexecerror.InternalError(err)
 	}
+	// Reset closed so that the sorter may be closed again.
+	s.closed = false
 	s.firstPartitionIdx = 0
 	s.numPartitions = 0
 }
 
-func (s *externalSorter) internalCloseLocked(ctx context.Context) error {
+func (s *externalSorter) Close(ctx context.Context) error {
+	if !s.close() {
+		return nil
+	}
 	var lastErr error
 	if s.partitioner != nil {
 		lastErr = s.partitioner.Close(ctx)
@@ -402,23 +396,14 @@ func (s *externalSorter) internalCloseLocked(ctx context.Context) error {
 	return lastErr
 }
 
-func (s *externalSorter) IdempotentClose(ctx context.Context) error {
-	if !s.close() {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.internalCloseLocked(ctx)
-}
-
 // createMergerForPartitions creates an ordered synchronizer that will merge
 // partitions in [firstIdx, firstIdx+numPartitions) range.
 func (s *externalSorter) createMergerForPartitions(
 	firstIdx, numPartitions int,
 ) (colexecbase.Operator, error) {
-	syncInputs := make([]colexecbase.Operator, numPartitions)
+	syncInputs := make([]SynchronizerInput, numPartitions)
 	for i := range syncInputs {
-		syncInputs[i] = newPartitionerToOperator(
+		syncInputs[i].Op = newPartitionerToOperator(
 			s.unlimitedAllocator, s.inputTypes, s.partitioner, firstIdx+i,
 		)
 	}
@@ -432,7 +417,7 @@ func (s *externalSorter) createMergerForPartitions(
 
 func newInputPartitioningOperator(
 	input colexecbase.Operator, standaloneMemAccount *mon.BoundAccount, memoryLimit int64,
-) resettableOperator {
+) ResettableOperator {
 	return &inputPartitioningOperator{
 		OneInputNode:         NewOneInputNode(input),
 		standaloneMemAccount: standaloneMemAccount,
@@ -469,7 +454,7 @@ type inputPartitioningOperator struct {
 	interceptReset bool
 }
 
-var _ resettableOperator = &inputPartitioningOperator{}
+var _ ResettableOperator = &inputPartitioningOperator{}
 
 func (o *inputPartitioningOperator) Init() {
 	o.input.Init()

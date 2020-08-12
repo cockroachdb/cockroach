@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,12 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
 
 func TestExplainAnalyzeDebug(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
@@ -42,6 +45,13 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 
 	base := "statement.txt trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
+
+	// Set a small chunk size to test splitting into chunks. The bundle files are
+	// on the order of 10KB.
+	r.Exec(t, fmt.Sprintf(
+		"SET CLUSTER SETTING sql.stmt_diagnostics.bundle_chunk_size = '%d'",
+		5000+rand.Intn(10000),
+	))
 
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")

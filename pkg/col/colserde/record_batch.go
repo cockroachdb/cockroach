@@ -33,13 +33,14 @@ const (
 // numBuffersForType returns how many buffers are used to represent an array of
 // the given type.
 func numBuffersForType(t *types.T) int {
-	// Nearly all types are represented by 2 memory.Buffers. One buffer for the
-	// null bitmap and one for the values.
-	numBuffers := 2
+	// Most types are represented by 3 memory.Buffers (because most types are
+	// serialized into flat bytes representation). One buffer for the null
+	// bitmap, one for the values, and one for the offsets.
+	numBuffers := 3
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	case types.BytesFamily, types.DecimalFamily, types.TimestampTZFamily, types.IntervalFamily:
-		// This type has an extra offsets buffer.
-		numBuffers = 3
+	case types.BoolFamily, types.FloatFamily, types.IntFamily:
+		// This type doesn't have an offsets buffer.
+		numBuffers = 2
 	}
 	return numBuffers
 }

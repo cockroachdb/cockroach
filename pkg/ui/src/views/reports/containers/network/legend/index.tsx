@@ -15,6 +15,7 @@ import { getDisplayName } from "src/redux/nodes";
 import React from "react";
 import { NoConnection } from "..";
 import "./legend.styl";
+import { Text, TextTypes } from "src/components";
 
 interface ILegendProps {
   stddevMinus2: number;
@@ -48,35 +49,47 @@ export const Legend: React.SFC <ILegendProps> = ({
               title={`${stddevMinus2.toFixed(2)}ms`}
               type="green"
             />
-            <p>{`< -2`}</p>
+            <span className="Legend--container__body--label">
+              <Text textType={TextTypes.BodyStrong}>{`-2`}</Text>&nbsp;
+              <Text textType={TextTypes.Body} className="Legend--container__body--label-suffix">std dev</Text>
+            </span>
           </div>
           <div className="Legend--container__body--element">
             <Chip
               title={`${stddevMinus1.toFixed(2)}ms`}
               type="lightgreen"
             />
-            <p>{`< -1`}</p>
+            <span className="Legend--container__body--label">
+              <Text textType={TextTypes.BodyStrong}>{`-1`}</Text>&nbsp;
+              <Text textType={TextTypes.Body} className="Legend--container__body--label-suffix">std dev</Text>
+            </span>
           </div>
           <div className="Legend--container__body--element">
              <Chip
               title={`${mean.toFixed(2)}ms`}
               type="grey"
             />
-            <p>MEAN</p>
+            <Text textType={TextTypes.BodyStrong} className="Legend--container__body--label">Mean</Text>
           </div>
           <div className="Legend--container__body--element">
             <Chip
               title={`${stddevPlus1.toFixed(2)}ms`}
               type="lightblue"
             />
-            <p>{`< +1`}</p>
+            <span className="Legend--container__body--label">
+              <Text textType={TextTypes.BodyStrong}>{`+1`}</Text>&nbsp;
+              <Text textType={TextTypes.Body} className="Legend--container__body--label-suffix">std dev</Text>
+            </span>
           </div>
           <div className="Legend--container__body--element">
             <Chip
               title={`${stddevPlus2.toFixed(2)}ms`}
               type="blue"
             />
-            <p>{`< +2`}</p>
+            <span className="Legend--container__body--label">
+              <Text textType={TextTypes.BodyStrong}>{`+2`}</Text>&nbsp;
+              <Text textType={TextTypes.Body} className="Legend--container__body--label-suffix">std dev</Text>
+            </span>
           </div>
         </div>
       </div>

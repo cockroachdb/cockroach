@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant
 query IBT colnames
 SELECT * FROM system.tenants ORDER BY id
 ----
@@ -57,3 +58,56 @@ UPDATE system.tenants SET active = false WHERE id = 10
 
 statement error pgcode 42501 user root does not have DELETE privilege on relation tenants
 DELETE FROM system.tenants WHERE id = 10
+
+# The system tenant cannot be created or destroyed.
+
+query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
+SELECT crdb_internal.create_tenant(1)
+
+query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
+SELECT crdb_internal.destroy_tenant(1)
+
+# Verify that tenants are able to set in-memory cluster settings in logic tests.
+
+statement ok
+SET CLUSTER SETTING sql.defaults.vectorize='off'
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+off
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.vectorize
+
+query T
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
+
+# Manipulate the tenants zone configurations
+
+query TT
+SHOW ZONE CONFIGURATION FOR RANGE tenants
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
+
+statement ok
+ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 300
+
+query TT
+SHOW ZONE CONFIGURATION FOR RANGE tenants
+----
+RANGE tenants  ALTER RANGE tenants CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 300,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'

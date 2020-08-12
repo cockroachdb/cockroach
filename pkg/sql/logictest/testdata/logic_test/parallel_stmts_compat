@@ -27,7 +27,7 @@ INSERT INTO kv VALUES (1, 2) RETURNING NOTHING
 statement ok
 UPSERT INTO kv VALUES (2, 2) RETURNING NOTHING
 
-statement error failed to satisfy CHECK constraint \(v < 100\)
+statement error failed to satisfy CHECK constraint \(v < 100:::INT8\)
 UPSERT INTO kv VALUES (2, 500) RETURNING NOTHING
 
 statement ok
@@ -139,7 +139,7 @@ BEGIN
 statement ok
 UPSERT INTO kv VALUES (1, 8) RETURNING NOTHING
 
-statement error failed to satisfy CHECK constraint \(v < 100\)
+statement error failed to satisfy CHECK constraint \(v < 100:::INT8\)
 UPSERT INTO kv VALUES (4, 500) RETURNING NOTHING
 
 statement error current transaction is aborted, commands ignored until end of transaction block

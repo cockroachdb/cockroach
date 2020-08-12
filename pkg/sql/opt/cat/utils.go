@@ -121,40 +121,6 @@ func ResolveTableIndex(
 	return found, foundTabName, nil
 }
 
-// ConvertColumnIDsToOrdinals converts a list of ColumnIDs (such as from a
-// tree.TableRef), to a list of ordinal positions of columns within the given
-// table. See tree.Table for more information on column ordinals.
-func ConvertColumnIDsToOrdinals(tab Table, columns []tree.ColumnID) (ordinals []int) {
-	ordinals = make([]int, len(columns))
-	for i, c := range columns {
-		ord := 0
-		cnt := tab.ColumnCount()
-		for ord < cnt {
-			if tab.Column(ord).ColID() == StableID(c) {
-				break
-			}
-			ord++
-		}
-		if ord >= cnt {
-			panic(pgerror.Newf(pgcode.UndefinedColumn,
-				"column [%d] does not exist", c))
-		}
-		ordinals[i] = ord
-	}
-	return ordinals
-}
-
-// FindTableColumnByName returns the ordinal of the non-mutation column having
-// the given name, if one exists in the given table. Otherwise, it returns -1.
-func FindTableColumnByName(tab Table, name tree.Name) int {
-	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
-		if tab.Column(ord).ColName() == name {
-			return ord
-		}
-	}
-	return -1
-}
-
 // FormatTable nicely formats a catalog table using a treeprinter for debugging
 // and testing.
 func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
@@ -164,9 +130,9 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	}
 
 	var buf bytes.Buffer
-	for i := 0; i < tab.DeletableColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tab.Column(i), IsMutationColumn(tab, i), &buf)
+		formatColumn(tab.Column(i), tab.ColumnKind(i), &buf)
 		child.Child(buf.String())
 	}
 
@@ -223,7 +189,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 		buf.Reset()
 
 		idxCol := idx.Column(i)
-		formatColumn(idxCol.Column, false /* isMutationCol */, &buf)
+		formatColumn(idxCol.Column, tab.ColumnKind(i), &buf)
 		if idxCol.Descending {
 			fmt.Fprintf(&buf, " desc")
 		}
@@ -260,6 +226,10 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			table, index := idx.InterleavedBy(i)
 			c.Childf("table=%d index=%d", table, index)
 		}
+	}
+	if pred, isPartial := idx.Predicate(); isPartial {
+		c := child.Child("WHERE")
+		c.Childf(pred)
 	}
 }
 
@@ -318,7 +288,7 @@ func formatCatalogFKRef(
 	)
 }
 
-func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
+func formatColumn(col Column, kind ColumnKind, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "%s %s", col.ColName(), col.DatumType())
 	if !col.IsNullable() {
 		fmt.Fprintf(buf, " not null")
@@ -332,8 +302,11 @@ func formatColumn(col Column, isMutationCol bool, buf *bytes.Buffer) {
 	if col.IsHidden() {
 		fmt.Fprintf(buf, " [hidden]")
 	}
-	if isMutationCol {
+	switch kind {
+	case WriteOnly, DeleteOnly:
 		fmt.Fprintf(buf, " [mutation]")
+	case System:
+		fmt.Fprintf(buf, " [system]")
 	}
 }
 
@@ -347,4 +320,42 @@ func formatFamily(family Family, buf *bytes.Buffer) {
 		buf.WriteString(string(col.ColName()))
 	}
 	buf.WriteString(")")
+}
+
+// InterleaveAncestorDescendant returns ok=true if a and b are interleaved
+// indexes and one of them is the ancestor of the other.
+// If a is an ancestor of b, aIsAncestor is true.
+// If b is an ancestor of a, aIsAncestor is false.
+func InterleaveAncestorDescendant(a, b Index) (ok bool, aIsAncestor bool) {
+	aCount := a.InterleaveAncestorCount()
+	bCount := b.InterleaveAncestorCount()
+	// If a is the ancestor of b; then:
+	//  - a has a smaller ancestor count;
+	//  - a's ancestors are a prefix of b's ancestors;
+	//  - a shows up in b's ancestor list on the position that would allow them to
+	//    share a's ancestors.
+	//
+	// For example:
+	//    x
+	//    |
+	//    y
+	//    |
+	//    a  (ancestors: x, y)
+	//    |
+	//    z
+	//    |
+	//    b  (ancestors: x, y, a, z)
+	if aCount < bCount {
+		tabID, idxID, _ := b.InterleaveAncestor(aCount)
+		if tabID == a.Table().ID() && idxID == a.ID() {
+			return true, true // a is the ancestor
+		}
+	} else if bCount < aCount {
+		tabID, idxID, _ := a.InterleaveAncestor(bCount)
+		if tabID == b.Table().ID() && idxID == b.ID() {
+			return true, false // a is not the ancestor
+		}
+	}
+
+	return false, false
 }

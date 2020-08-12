@@ -31,12 +31,31 @@ var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	24*time.Hour,
 )
 
+var consistencyCheckRate = settings.RegisterPublicValidatedByteSizeSetting(
+	"server.consistency_check.max_rate",
+	"the rate limit (bytes/sec) to use for consistency checks; used in "+
+		"conjunction with server.consistency_check.interval to control the "+
+		"frequency of consistency checks. Note that setting this too high can "+
+		"negatively impact performance.",
+	8<<20, // 8MB
+	validatePositive,
+)
+
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
 type consistencyQueue struct {
 	*baseQueue
 	interval       func() time.Duration
 	replicaCountFn func() int
+}
+
+// A data wrapper to allow for the shouldQueue method to be easier to test.
+type consistencyShouldQueueData struct {
+	desc                      *roachpb.RangeDescriptor
+	getQueueLastProcessed     func(ctx context.Context) (hlc.Timestamp, error)
+	isNodeLive                func(nodeID roachpb.NodeID) (bool, error)
+	disableLastProcessedCheck bool
+	interval                  time.Duration
 }
 
 // newConsistencyQueue returns a new instance of consistencyQueue.
@@ -58,6 +77,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 			failures:             store.metrics.ConsistencyQueueFailures,
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
 		},
 	)
 	return q
@@ -66,30 +86,50 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 func (q *consistencyQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
-	interval := q.interval()
-	if interval <= 0 {
+	return consistencyQueueShouldQueueImpl(ctx, now,
+		consistencyShouldQueueData{
+			desc: repl.Desc(),
+			getQueueLastProcessed: func(ctx context.Context) (hlc.Timestamp, error) {
+				return repl.getQueueLastProcessed(ctx, q.name)
+			},
+			isNodeLive: func(nodeID roachpb.NodeID) (bool, error) {
+				if repl.store.cfg.NodeLiveness != nil {
+					return repl.store.cfg.NodeLiveness.IsLive(nodeID)
+				}
+				// Some tests run without a NodeLiveness configured.
+				return true, nil
+			},
+			disableLastProcessedCheck: repl.store.cfg.TestingKnobs.DisableLastProcessedCheck,
+			interval:                  q.interval(),
+		})
+}
+
+// ConsistencyQueueShouldQueueImpl is exposed for testability without having
+// to setup a fully fledged replica.
+func consistencyQueueShouldQueueImpl(
+	ctx context.Context, now hlc.Timestamp, data consistencyShouldQueueData,
+) (bool, float64) {
+	if data.interval <= 0 {
 		return false, 0
 	}
 
 	shouldQ, priority := true, float64(0)
-	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
-		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
+	if !data.disableLastProcessedCheck {
+		lpTS, err := data.getQueueLastProcessed(ctx)
 		if err != nil {
 			return false, 0
 		}
-		if shouldQ, priority = shouldQueueAgain(now, lpTS, interval); !shouldQ {
+		if shouldQ, priority = shouldQueueAgain(now, lpTS, data.interval); !shouldQ {
 			return false, 0
 		}
 	}
-	// Check if all replicas are live. Some tests run without a NodeLiveness configured.
-	if repl.store.cfg.NodeLiveness != nil {
-		for _, rep := range repl.Desc().Replicas().All() {
-			if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
-				log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
-				return false, 0
-			} else if !live {
-				return false, 0
-			}
+	// Check if all replicas are live.
+	for _, rep := range data.desc.Replicas().All() {
+		if live, err := data.isNodeLive(rep.NodeID); err != nil {
+			log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
+			return false, 0
+		} else if !live {
+			return false, 0
 		}
 	}
 	return true, priority
@@ -98,9 +138,9 @@ func (q *consistencyQueue) shouldQueue(
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (bool, error) {
 	if q.interval() <= 0 {
-		return nil
+		return false, nil
 	}
 
 	// Call setQueueLastProcessed because the consistency checker targets a much
@@ -129,19 +169,19 @@ func (q *consistencyQueue) process(
 		default:
 		}
 
-		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
+		if shouldQuiesce && grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the
 			// server is quiescing.
-			err := pErr.GoError()
-			log.Errorf(ctx, "%v", err)
-			return err
+			return false, nil
 		}
-		return nil
+		err := pErr.GoError()
+		log.Errorf(ctx, "%v", err)
+		return false, err
 	}
 	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {
 		fn(resp)
 	}
-	return nil
+	return true, nil
 }
 
 func (q *consistencyQueue) timer(duration time.Duration) time.Duration {

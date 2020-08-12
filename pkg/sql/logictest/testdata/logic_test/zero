@@ -55,7 +55,7 @@ select * FROM f ORDER BY i
 2 -0
 3 0
 4 -0
-5 -0
+5 0
 6 0
 7 -0
 8 0
@@ -76,8 +76,8 @@ SELECT 0.0::float as a,
   '0.0000'::float as j,
  '-0.0000'::float as k
 ----
-a  b   c  d   e   f  g  h  i   j  k
-0  -0  0  -0  -0  0  0  0  -0  0  -0
+a  b   c  d   e  f  g  h  i   j  k
+0  -0  0  -0  0  0  0  0  -0  0  -0
 
 # decimals
 

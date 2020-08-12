@@ -36,7 +36,8 @@ func NewUnorderedDistinct(
 		typs,
 		distinctCols,
 		true, /* allowNullEquality */
-		hashTableDistinctMode,
+		hashTableDistinctBuildMode,
+		hashTableDefaultProbeMode,
 	)
 
 	return &unorderedDistinct{

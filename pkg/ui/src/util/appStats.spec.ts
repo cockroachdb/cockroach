@@ -93,6 +93,7 @@ describe("flattenStatementStats", () => {
             query: "SELECT * FROM foobar",
             app: "foobar",
             distSQL: true,
+            vec: false,
             opt: true,
             failed: false,
           },
@@ -106,6 +107,7 @@ describe("flattenStatementStats", () => {
             query: "UPDATE foobar SET name = 'baz' WHERE id = 42",
             app: "bazzer",
             distSQL: false,
+            vec: false,
             opt: false,
             failed: true,
           },
@@ -123,6 +125,7 @@ describe("flattenStatementStats", () => {
       assert.equal(flattened[i].statement, stats[i].key.key_data.query);
       assert.equal(flattened[i].app, stats[i].key.key_data.app);
       assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
+      assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
       assert.equal(flattened[i].opt, stats[i].key.key_data.opt);
       assert.equal(flattened[i].failed, stats[i].key.key_data.failed);
       assert.equal(flattened[i].node_id, stats[i].key.node_id);

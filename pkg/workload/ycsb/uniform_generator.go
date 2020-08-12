@@ -11,9 +11,8 @@
 package ycsb
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"golang.org/x/exp/rand"
 )
 
 // UniformGenerator is a random number generator that generates draws from a

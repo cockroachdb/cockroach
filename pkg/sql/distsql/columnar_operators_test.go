@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,8 +42,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 20
 	nRows := 100
 	const (
@@ -94,11 +95,9 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							aggregations[i].ColIdx = []uint32{}
 							aggInputTypes = aggInputTypes[:0]
 						}
-						if typeconv.IsTypeSupported(aggTyp) {
-							if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
-								outputTypes[i] = outputType
-								break
-							}
+						if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggInputTypes...); err == nil {
+							outputTypes[i] = outputType
+							break
 						}
 					}
 					inputTypes[i+numGroupingCols] = aggTyp
@@ -123,7 +122,12 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 					GroupCols:    groupingCols[:numGroupingCols],
 					Aggregations: aggregations,
 				}
-				if !hashAgg {
+				if hashAgg {
+					// Let's shuffle the rows for the hash aggregator.
+					rand.Shuffle(nRows, func(i, j int) {
+						rows[i], rows[j] = rows[j], rows[i]
+					})
+				} else {
 					aggregatorSpec.OrderedGroupCols = groupingCols[:numGroupingCols]
 					orderedCols := execinfrapb.ConvertToColumnOrdering(
 						execinfrapb.Ordering{Columns: orderingCols[:numGroupingCols]},
@@ -174,8 +178,7 @@ func TestDistinctAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 10
 	nRows := 10
 	maxCols := 3
@@ -263,8 +266,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 8 * coldata.BatchSize()
 	maxCols := 5
@@ -338,8 +340,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 5
 	nRows := 5 * coldata.BatchSize() / 4
 	maxCols := 3
@@ -413,33 +414,38 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	type hjTestSpec struct {
-		joinType        sqlbase.JoinType
+		joinType        descpb.JoinType
 		onExprSupported bool
 	}
 	testSpecs := []hjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        descpb.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: descpb.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: descpb.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: descpb.FullOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: descpb.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: descpb.LeftAntiJoin,
+		},
+		{
+			joinType: descpb.IntersectAllJoin,
+		},
+		{
+			joinType: descpb.ExceptAllJoin,
 		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -454,7 +460,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 			for _, testSpec := range testSpecs {
 				for nCols := 1; nCols <= maxCols; nCols++ {
 					for nEqCols := 1; nEqCols <= nCols; nEqCols++ {
-						for _, addFilter := range []bool{false, true} {
+						for _, addFilter := range getAddFilterOptions(testSpec.joinType, nEqCols < nCols) {
 							triedWithoutOnExpr, triedWithOnExpr := false, false
 							if !testSpec.onExprSupported {
 								triedWithOnExpr = true
@@ -489,9 +495,10 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									rEqCols = generateEqualityColumns(rng, nCols, nEqCols)
 								}
 
-								outputTypes := append(lInputTypes, rInputTypes...)
-								if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+								var outputTypes []*types.T
+								if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+									outputTypes = append(lInputTypes, rInputTypes...)
+								} else {
 									outputTypes = lInputTypes
 								}
 								outputColumns := make([]uint32, len(outputTypes))
@@ -502,10 +509,9 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 								var filter, onExpr execinfrapb.Expression
 								if addFilter {
 									colTypes := append(lInputTypes, rInputTypes...)
-									forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-										testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 									filter = generateFilterExpr(
-										rng, nCols, nEqCols, colTypes, usingRandomTypes, forceLeftSide,
+										rng, nCols, nEqCols, colTypes, usingRandomTypes,
+										!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 									)
 								}
 								if triedWithoutOnExpr {
@@ -544,7 +550,20 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 									// batch. In such case, the spilling might not occur and that's ok.
 									forcedDiskSpillMightNotOccur: !filter.Empty() || !onExpr.Empty(),
 									numForcedRepartitions:        2,
+									rng:                          rng,
 								}
+								if testSpec.joinType.IsSetOpJoin() && nEqCols < nCols {
+									// The output of set operation joins is not fully
+									// deterministic when there are non-equality
+									// columns, however, the rows must match on the
+									// equality columns between vectorized and row
+									// executions.
+									args.colIdxsToCheckForEquality = make([]int, nEqCols)
+									for i := range args.colIdxsToCheckForEquality {
+										args.colIdxsToCheckForEquality[i] = int(lEqCols[i])
+									}
+								}
+
 								if err := verifyColOperator(args); err != nil {
 									fmt.Printf("--- spillForced = %t join type = %s onExpr = %q"+
 										" filter = %q seed = %d run = %d ---\n",
@@ -591,37 +610,42 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 
 	type mjTestSpec struct {
-		joinType        sqlbase.JoinType
+		joinType        descpb.JoinType
 		anyOrder        bool
 		onExprSupported bool
 	}
 	testSpecs := []mjTestSpec{
 		{
-			joinType:        sqlbase.JoinType_INNER,
+			joinType:        descpb.InnerJoin,
 			onExprSupported: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_OUTER,
+			joinType: descpb.LeftOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_RIGHT_OUTER,
+			joinType: descpb.RightOuterJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_FULL_OUTER,
+			joinType: descpb.FullOuterJoin,
 			// FULL OUTER JOIN doesn't guarantee any ordering on its output (since it
 			// is ambiguous), so we're comparing the outputs as sets.
 			anyOrder: true,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: descpb.LeftSemiJoin,
 		},
 		{
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: descpb.LeftAntiJoin,
+		},
+		{
+			joinType: descpb.IntersectAllJoin,
+		},
+		{
+			joinType: descpb.ExceptAllJoin,
 		},
 	}
 
-	seed := rand.Int()
-	rng := rand.New(rand.NewSource(int64(seed)))
+	rng, seed := randutil.NewPseudoRand()
 	nRuns := 3
 	nRows := 10
 	maxCols := 3
@@ -635,7 +659,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		for _, testSpec := range testSpecs {
 			for nCols := 1; nCols <= maxCols; nCols++ {
 				for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
-					for _, addFilter := range []bool{false, true} {
+					for _, addFilter := range getAddFilterOptions(testSpec.joinType, nOrderingCols < nCols) {
 						triedWithoutOnExpr, triedWithOnExpr := false, false
 						if !testSpec.onExprSupported {
 							triedWithOnExpr = true
@@ -690,9 +714,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								}
 								return cmp < 0
 							})
-							outputTypes := append(lInputTypes, rInputTypes...)
-							if testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-								testSpec.joinType == sqlbase.JoinType_LEFT_ANTI {
+							var outputTypes []*types.T
+							if testSpec.joinType.ShouldIncludeRightColsInOutput() {
+								outputTypes = append(lInputTypes, rInputTypes...)
+							} else {
 								outputTypes = lInputTypes
 							}
 							outputColumns := make([]uint32, len(outputTypes))
@@ -703,10 +728,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 							var filter, onExpr execinfrapb.Expression
 							if addFilter {
 								colTypes := append(lInputTypes, rInputTypes...)
-								forceLeftSide := testSpec.joinType == sqlbase.JoinType_LEFT_SEMI ||
-									testSpec.joinType == sqlbase.JoinType_LEFT_ANTI
 								filter = generateFilterExpr(
-									rng, nCols, nOrderingCols, colTypes, usingRandomTypes, forceLeftSide,
+									rng, nCols, nOrderingCols, colTypes, usingRandomTypes,
+									!testSpec.joinType.ShouldIncludeRightColsInOutput(),
 								)
 							}
 							if triedWithoutOnExpr {
@@ -720,6 +744,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								LeftOrdering:  execinfrapb.Ordering{Columns: lOrderingCols},
 								RightOrdering: execinfrapb.Ordering{Columns: rOrderingCols},
 								Type:          testSpec.joinType,
+								NullEquality:  testSpec.joinType.IsSetOpJoin(),
 							}
 							pspec := &execinfrapb.ProcessorSpec{
 								Input: []execinfrapb.InputSyncSpec{{ColumnTypes: lInputTypes}, {ColumnTypes: rInputTypes}},
@@ -732,6 +757,18 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 								inputs:      []sqlbase.EncDatumRows{lRows, rRows},
 								outputTypes: outputTypes,
 								pspec:       pspec,
+								rng:         rng,
+							}
+							if testSpec.joinType.IsSetOpJoin() && nOrderingCols < nCols {
+								// The output of set operation joins is not fully
+								// deterministic when there are non-equality
+								// columns, however, the rows must match on the
+								// equality columns between vectorized and row
+								// executions.
+								args.colIdxsToCheckForEquality = make([]int, nOrderingCols)
+								for i := range args.colIdxsToCheckForEquality {
+									args.colIdxsToCheckForEquality[i] = int(lOrderingCols[i].ColIdx)
+								}
 							}
 							if err := verifyColOperator(args); err != nil {
 								fmt.Printf("--- join type = %s onExpr = %q filter = %q seed = %d run = %d ---\n",
@@ -774,6 +811,16 @@ func generateColumnOrdering(
 		}
 	}
 	return orderingCols
+}
+
+func getAddFilterOptions(joinType descpb.JoinType, nonEqualityColsPresent bool) []bool {
+	if joinType.IsSetOpJoin() && nonEqualityColsPresent {
+		// Output of set operation join when rows have non equality columns is
+		// not deterministic, so applying a filter on top of it can produce
+		// arbitrary results, and we skip such configuration.
+		return []bool{false}
+	}
+	return []bool{false, true}
 }
 
 // generateFilterExpr populates an execinfrapb.Expression that contains a
@@ -833,8 +880,8 @@ func generateFilterExpr(
 
 func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewPseudoRand()
 
+	rng, seed := randutil.NewPseudoRand()
 	nRows := 2 * coldata.BatchSize()
 	maxCols := 4
 	maxNum := 10
@@ -844,7 +891,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 		// window functions that take in arguments.
 		typs[i] = types.Int
 	}
-	for windowFn := range colexec.SupportedWindowFns {
+	for windowFn := range colbuilder.SupportedWindowFns {
 		for _, partitionBy := range [][]uint32{
 			{},     // No PARTITION BY clause.
 			{0},    // Partitioning on the first input column.
@@ -869,6 +916,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 								Func:         execinfrapb.WindowerSpec_Func{WindowFunc: &windowFn},
 								Ordering:     generateOrderingGivenPartitionBy(rng, nCols, nOrderingCols, partitionBy),
 								OutputColIdx: uint32(nCols),
+								FilterColIdx: tree.NoColumnIdx,
 							},
 						},
 					}
@@ -896,6 +944,7 @@ func TestWindowFunctionsAgainstProcessor(t *testing.T) {
 						pspec:       pspec,
 					}
 					if err := verifyColOperator(args); err != nil {
+						fmt.Printf("seed = %d\n", seed)
 						prettyPrintTypes(inputTypes, "t" /* tableName */)
 						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
 						t.Fatal(err)
@@ -912,9 +961,12 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
 	typs := make([]*types.T, 0, nCols)
 	for len(typs) < nCols {
 		typ := sqlbase.RandType(rng)
-		if typeconv.IsTypeSupported(typ) {
-			typs = append(typs, typ)
+		if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+			// At the moment, we disallow datum-backed types.
+			// TODO(yuzefovich): remove this.
+			continue
 		}
+		typs = append(typs, typ)
 	}
 	return typs
 }
@@ -927,26 +979,29 @@ func generateRandomComparableTypes(rng *rand.Rand, inputTypes []*types.T) []*typ
 	for i, inputType := range inputTypes {
 		for {
 			typ := sqlbase.RandType(rng)
-			if typeconv.IsTypeSupported(typ) {
-				comparable := false
-				for _, cmpOverloads := range tree.CmpOps[tree.LT] {
-					o := cmpOverloads.(*tree.CmpOp)
-					if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
-						if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
-							(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
-							// We map Dates to int64 and don't have casts from int64 to
-							// timestamps (and there is a comparison between dates and
-							// timestamps).
-							continue
-						}
-						comparable = true
-						break
+			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+				// At the moment, we disallow datum-backed types.
+				// TODO(yuzefovich): remove this.
+				continue
+			}
+			comparable := false
+			for _, cmpOverloads := range tree.CmpOps[tree.LT] {
+				o := cmpOverloads.(*tree.CmpOp)
+				if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
+					if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
+						(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
+						// We map Dates to int64 and don't have casts from int64 to
+						// timestamps (and there is a comparison between dates and
+						// timestamps).
+						continue
 					}
-				}
-				if comparable {
-					typs[i] = typ
+					comparable = true
 					break
 				}
+			}
+			if comparable {
+				typs[i] = typ
+				break
 			}
 		}
 	}

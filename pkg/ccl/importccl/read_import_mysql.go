@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,7 +41,7 @@ import (
 
 // mysqldumpReader reads the default output of `mysqldump`, which consists of
 // SQL statements, in MySQL-dialect, namely CREATE TABLE and INSERT statements,
-// with some additional statements that contorl the loading process like LOCK or
+// with some additional statements that control the loading process like LOCK or
 // UNLOCK (which are simply ignored for the purposed of this reader). Data for
 // tables with names that appear in the `tables` map is converted to Cockroach
 // KVs using the mapped converter and sent to kvCh.
@@ -66,7 +68,8 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, table.Desc, nil /* targetColNames */, evalCtx, kvCh)
+		conv, err := row.NewDatumRowConverter(ctx, sqlbase.NewImmutableTableDescriptor(*table.Desc),
+			nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
 		}
@@ -85,8 +88,9 @@ func (m *mysqldumpReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 }
 
 func (m *mysqldumpReader) readFile(
@@ -278,17 +282,17 @@ func readMysqlCreateTable(
 	input io.Reader,
 	evalCtx *tree.EvalContext,
 	p sql.PlanHookState,
-	startingID, parentID sqlbase.ID,
+	startingID, parentID descpb.ID,
 	match string,
 	fks fkHandler,
-	seqVals map[sqlbase.ID]int64,
-) ([]*sqlbase.TableDescriptor, error) {
+	seqVals map[descpb.ID]int64,
+) ([]*sqlbase.MutableTableDescriptor, error) {
 	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
 
-	var ret []*sqlbase.TableDescriptor
+	var ret []*sqlbase.MutableTableDescriptor
 	var fkDefs []delayedFK
 	var found bool
 	var names []string
@@ -312,7 +316,7 @@ func readMysqlCreateTable(
 				names = append(names, name)
 				continue
 			}
-			id := sqlbase.ID(int(startingID) + len(ret))
+			id := descpb.ID(int(startingID) + len(ret))
 			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, p, parentID, id, name, i.TableSpec, fks, seqVals)
 			if err != nil {
 				return nil, err
@@ -354,12 +358,12 @@ func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	p sql.PlanHookState,
-	parentID, id sqlbase.ID,
+	parentID, id descpb.ID,
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
-	seqVals map[sqlbase.ID]int64,
-) ([]*sqlbase.TableDescriptor, []delayedFK, error) {
+	seqVals map[descpb.ID]int64,
+) ([]*sqlbase.MutableTableDescriptor, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
 	}
@@ -390,10 +394,10 @@ func mysqlTableToCockroach(
 		}
 	}
 
-	var seqDesc *sqlbase.TableDescriptor
+	var seqDesc *sqlbase.MutableTableDescriptor
 	// If we have an auto-increment seq, create it and increment the id.
+	owner := security.AdminRole
 	if seqName != "" {
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
@@ -403,6 +407,10 @@ func mysqlTableToCockroach(
 		var err error
 		if p != nil {
 			params := p.RunParams(ctx)
+			if params.SessionData() != nil {
+				owner = params.SessionData().User
+			}
+			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,
@@ -411,10 +419,11 @@ func mysqlTableToCockroach(
 				id,
 				time,
 				priv,
-				false, /* temporary */
+				tree.PersistencePermanent,
 				&params,
 			)
 		} else {
+			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
 			desc, err = sql.MakeSequenceTableDesc(
 				seqName,
 				opts,
@@ -423,14 +432,14 @@ func mysqlTableToCockroach(
 				id,
 				time,
 				priv,
-				false, /* temporary */
-				nil,   /* params */
+				tree.PersistencePermanent,
+				nil, /* params */
 			)
 		}
 		if err != nil {
 			return nil, nil, err
 		}
-		seqDesc = desc.TableDesc()
+		seqDesc = &desc
 		fks.resolver[seqName] = &desc
 		id++
 	}
@@ -474,7 +483,13 @@ func mysqlTableToCockroach(
 		stmt.Defs = append(stmt.Defs, c)
 	}
 
-	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), evalCtx.Settings, stmt, parentID, id, fks, time.WallTime)
+	semaCtx := tree.MakeSemaContext()
+	semaCtxPtr := &semaCtx
+	// p is nil in some tests.
+	if p != nil {
+		semaCtxPtr = p.SemaCtx()
+	}
+	desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, evalCtx.Settings, stmt, parentID, keys.PublicSchemaID, id, fks, time.WallTime)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -514,9 +529,9 @@ func mysqlTableToCockroach(
 	}
 	fks.resolver[desc.Name] = desc
 	if seqDesc != nil {
-		return []*sqlbase.TableDescriptor{seqDesc, desc.TableDesc()}, fkDefs, nil
+		return []*sqlbase.MutableTableDescriptor{seqDesc, desc}, fkDefs, nil
 	}
-	return []*sqlbase.TableDescriptor{desc.TableDesc()}, fkDefs, nil
+	return []*sqlbase.MutableTableDescriptor{desc}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
@@ -543,7 +558,7 @@ func addDelayedFKs(
 ) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault, evalCtx,
+			ctx, nil, resolver, def.tbl, def.def, map[descpb.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault, evalCtx,
 		); err != nil {
 			return err
 		}

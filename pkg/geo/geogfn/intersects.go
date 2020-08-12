@@ -21,15 +21,18 @@ import (
 // This calculation is done on the sphere.
 // Precision of intersect measurements is up to 1cm.
 func Intersects(a *geo.Geography, b *geo.Geography) (bool, error) {
+	if !a.BoundingRect().Intersects(b.BoundingRect()) {
+		return false, nil
+	}
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
 
-	aRegions, err := a.AsS2()
+	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return false, err
 	}
-	bRegions, err := b.AsS2()
+	bRegions, err := b.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return false, err
 	}

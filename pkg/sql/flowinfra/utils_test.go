@@ -50,7 +50,7 @@ func createDummyStream() (
 		return nil, nil, nil, err
 	}
 	client := execinfrapb.NewDistSQLClient(conn)
-	clientStream, err = client.FlowStream(context.TODO())
+	clientStream, err = client.FlowStream(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -58,7 +58,7 @@ func createDummyStream() (
 	serverStream = streamNotification.Stream
 	cleanup = func() {
 		close(streamNotification.Donec)
-		stopper.Stop(context.TODO())
+		stopper.Stop(context.Background())
 	}
 	return serverStream, clientStream, cleanup, nil
 }

@@ -15,16 +15,18 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		input    serverpb.NodesResponse
@@ -123,13 +125,13 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 					{Desc: roachpb.NodeDescriptor{NodeID: 5}},
 					{Desc: roachpb.NodeDescriptor{NodeID: 6}},
 				},
-				LivenessByNodeID: map[roachpb.NodeID]storagepb.NodeLivenessStatus{
-					1: storagepb.NodeLivenessStatus_DEAD,
-					2: storagepb.NodeLivenessStatus_DECOMMISSIONING,
-					3: storagepb.NodeLivenessStatus_UNKNOWN,
-					4: storagepb.NodeLivenessStatus_UNAVAILABLE,
-					5: storagepb.NodeLivenessStatus_LIVE,
-					6: storagepb.NodeLivenessStatus_DECOMMISSIONED,
+				LivenessByNodeID: map[roachpb.NodeID]kvserverpb.NodeLivenessStatus{
+					1: kvserverpb.NodeLivenessStatus_DEAD,
+					2: kvserverpb.NodeLivenessStatus_DECOMMISSIONING,
+					3: kvserverpb.NodeLivenessStatus_UNKNOWN,
+					4: kvserverpb.NodeLivenessStatus_UNAVAILABLE,
+					5: kvserverpb.NodeLivenessStatus_LIVE,
+					6: kvserverpb.NodeLivenessStatus_DECOMMISSIONED,
 				},
 			},
 			[]haProxyNodeInfo{
@@ -153,6 +155,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 
 func TestMatchLocalityRegexp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		locality string // The locality as passed to `start --locality=xx`

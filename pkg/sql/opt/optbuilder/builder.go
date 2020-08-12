@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -58,12 +60,6 @@ type Builder struct {
 	//
 	// These fields can be set before calling Build to control various aspects of
 	// the building process.
-
-	// AllowUnsupportedExpr is a control knob: if set, when building a scalar, the
-	// builder takes any TypedExpr node that it doesn't recognize and wraps that
-	// expression in an UnsupportedExpr node. This is temporary; it is used for
-	// interfacing with the old planning code.
-	AllowUnsupportedExpr bool
 
 	// KeepPlaceholders is a control knob: if set, optbuilder will never replace
 	// a placeholder operator with its assigned value, even when it is available.
@@ -174,6 +170,22 @@ func (b *Builder) Build() (err error) {
 		}
 	}()
 
+	// TODO (rohany): We shouldn't be modifying the semaCtx passed to the builder
+	//  but we unfortunately rely on mutation to the semaCtx. We modify the input
+	//  semaCtx during building of opaque statements, and then expect that those
+	//  mutations are visible on the planner's semaCtx.
+
+	// Hijack the input TypeResolver in the semaCtx to record all of the user
+	// defined types that we resolve while building this query.
+	existingResolver := b.semaCtx.TypeResolver
+	// Ensure that the original TypeResolver is reset after.
+	defer func() { b.semaCtx.TypeResolver = existingResolver }()
+	typeTracker := &optTrackingTypeResolver{
+		res:      b.semaCtx.TypeResolver,
+		metadata: b.factory.Metadata(),
+	}
+	b.semaCtx.TypeResolver = typeTracker
+
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
@@ -237,11 +249,11 @@ func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	if b.insideViewDef {
-		// A black list of statements that can't be used from inside a view.
+		// A blocklist of statements that can't be used from inside a view.
 		switch stmt := stmt.(type) {
 		case *tree.Delete, *tree.Insert, *tree.Update, *tree.CreateTable, *tree.CreateView,
 			*tree.Split, *tree.Unsplit, *tree.Relocate,
-			*tree.ControlJobs, *tree.CancelQueries, *tree.CancelSessions:
+			*tree.ControlJobs, *tree.ControlSchedules, *tree.CancelQueries, *tree.CancelSessions:
 			panic(pgerror.Newf(
 				pgcode.Syntax, "%s cannot be used inside a view definition", stmt.StatementTag(),
 			))
@@ -294,6 +306,9 @@ func (b *Builder) buildStmt(
 	case *tree.ControlJobs:
 		return b.buildControlJobs(stmt, inScope)
 
+	case *tree.ControlSchedules:
+		return b.buildControlSchedules(stmt, inScope)
+
 	case *tree.CancelQueries:
 		return b.buildCancelQueries(stmt, inScope)
 
@@ -343,4 +358,72 @@ func (b *Builder) allocScope() *scope {
 	b.scopeAlloc = b.scopeAlloc[1:]
 	r.builder = b
 	return r
+}
+
+// trackReferencedColumnForViews is used to add a column to the view's
+// dependencies. This should be called whenever a column reference is made in a
+// view query.
+func (b *Builder) trackReferencedColumnForViews(col *scopeColumn) {
+	if b.trackViewDeps {
+		for i := range b.viewDeps {
+			dep := b.viewDeps[i]
+			if ord, ok := dep.ColumnIDToOrd[col.id]; ok {
+				dep.ColumnOrdinals.Add(ord)
+			}
+			b.viewDeps[i] = dep
+		}
+	}
+}
+
+func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
+	if b.trackViewDeps {
+		if texpr.ResolvedType() == types.RegClass {
+			// We do not add a dependency if the RegClass Expr contains variables,
+			// we cannot resolve the variables in this context. This matches Postgres
+			// behavior.
+			if !tree.ContainsVars(texpr) {
+				regclass, err := texpr.Eval(b.evalCtx)
+				if err != nil {
+					panic(err)
+				}
+				tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
+				ds, _ := b.resolveDataSource(&tn, privilege.SELECT)
+
+				b.viewDeps = append(b.viewDeps, opt.ViewDep{
+					DataSource: ds,
+				})
+			}
+		}
+	}
+}
+
+// optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
+// remembers all of the resolved types in the provided Metadata.
+type optTrackingTypeResolver struct {
+	res      tree.TypeReferenceResolver
+	metadata *opt.Metadata
+}
+
+// ResolveType implements the TypeReferenceResolver interface.
+func (o *optTrackingTypeResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	typ, err := o.res.ResolveType(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	o.metadata.AddUserDefinedType(typ)
+	return typ, nil
+}
+
+// ResolveTypeByOID implements the tree.TypeResolver interface.
+func (o *optTrackingTypeResolver) ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid,
+) (*types.T, error) {
+	typ, err := o.res.ResolveTypeByOID(ctx, oid)
+	if err != nil {
+		return nil, err
+	}
+	o.metadata.AddUserDefinedType(typ)
+	return typ, nil
 }

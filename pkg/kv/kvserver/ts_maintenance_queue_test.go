@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -98,6 +99,7 @@ func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 // pass the correct data to the store's TimeSeriesData
 func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	model := &modelTimeSeriesDataStore{t: t}
@@ -215,6 +217,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 // maintenance queue runs correctly on a test server.
 func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -223,7 +226,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 	tsdb := tsrv.TsDB()
 
@@ -251,7 +254,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			Value:          300.0,
 		},
 	}
-	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:       seriesName,
 			Source:     sourceName,
@@ -268,11 +271,11 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force a range split in between near past and far past. This guarantees
 	// that the pruning operation will issue a DeleteRange which spans ranges.
-	if err := db.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
-	memMon := mon.MakeMonitor(
+	memMon := mon.NewMonitor(
 		"test",
 		mon.MemoryResource,
 		nil,           /* curCount */
@@ -281,24 +284,24 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	memMon.Start(context.TODO(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer memMon.Stop(context.TODO())
+	memMon.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer memMon.Stop(context.Background())
 	memContext := ts.MakeQueryMemoryContext(
-		&memMon,
-		&memMon,
+		memMon,
+		memMon,
 		ts.QueryMemoryOptions{
 			BudgetBytes:             math.MaxInt64 / 8,
 			EstimatedSources:        1,
 			InterpolationLimitNanos: 0,
 		},
 	)
-	defer memContext.Close(context.TODO())
+	defer memContext.Close(context.Background())
 
 	// getDatapoints queries all datapoints in the series from the beginning
 	// of time to a point in the near future.
 	getDatapoints := func() ([]tspb.TimeSeriesDatapoint, error) {
 		dps, _, err := tsdb.Query(
-			context.TODO(),
+			context.Background(),
 			tspb.Query{Name: seriesName},
 			ts.Resolution10s,
 			ts.QueryTimespan{

@@ -20,27 +20,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
 
 func TestErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
-	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
+	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax.String()]
 
 	_, err := db.Query("SELECT 1+")
 	if err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
+	count2 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax.String()]
 
 	if count2-count1 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count2-count1)
@@ -56,7 +58,7 @@ func TestErrorCounts(t *testing.T) {
 	}
 	rows.Close()
 
-	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax]
+	count3 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax.String()]
 
 	if count3-count2 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count3-count2)
@@ -65,28 +67,33 @@ func TestErrorCounts(t *testing.T) {
 
 func TestUnimplementedCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec("CREATE TABLE t(x INT8)"); err != nil {
+	if _, err := db.Exec(`
+CREATE TABLE t(x INT8); 
+SET enable_experimental_alter_column_type_general = true;
+BEGIN;
+`); err != nil {
 		t.Fatal(err)
 	}
-
-	if _, err := db.Exec("ALTER TABLE t ALTER COLUMN x SET DATA TYPE STRING USING x::STRING"); err == nil {
+	if _, err := db.Exec("ALTER TABLE t ALTER COLUMN x SET DATA TYPE STRING"); err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	if telemetry.GetRawFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
+	if telemetry.GetRawFeatureCounts()["unimplemented.#49351"] == 0 {
 		t.Fatal("expected unimplemented telemetry, got nothing")
 	}
 }
 
 func TestTransactionRetryErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
@@ -96,7 +103,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec("CREATE TABLE accounts (id INT8 PRIMARY KEY, balance INT8)"); err != nil {
 		t.Fatal(err)
@@ -128,7 +135,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 	for _, txn := range []*gosql.Tx{txn1, txn2} {
 		if _, err := txn.Exec("UPDATE accounts SET balance = balance - 100 WHERE id = 1"); err != nil {
 			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) &&
-				pqErr.Code == pgcode.SerializationFailure {
+				pgcode.MakeCode(string(pqErr.Code)) == pgcode.SerializationFailure {
 				if err := txn.Rollback(); err != nil {
 					t.Fatal(err)
 				}
@@ -138,7 +145,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 		}
 		if err := txn.Commit(); err != nil {
 			if pqErr := (*pq.Error)(nil); !errors.As(err, &pqErr) ||
-				pqErr.Code != pgcode.SerializationFailure {
+				pgcode.MakeCode(string(pqErr.Code)) != pgcode.SerializationFailure {
 				t.Fatal(err)
 			}
 		}

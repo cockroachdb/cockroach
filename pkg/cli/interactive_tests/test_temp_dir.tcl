@@ -4,8 +4,8 @@ source [file join [file dirname $argv0] common.tcl]
 
 set recordfile "temp-dirs-record.txt"
 set tempprefix "cockroach-temp"
-set storedir "mystore"
-set tempdir "mystore/temp"
+set storedir "logs/mystore"
+set tempdir "logs/mystore/temp"
 set cwd ""
 # Ensure that pwd will only return absolute paths.
 cd [file normalize [pwd]]

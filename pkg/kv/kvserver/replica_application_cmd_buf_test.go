@@ -14,12 +14,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestReplicatedCmdBuf verifies the replicatedCmdBuf behavior.
 func TestReplicatedCmdBuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var buf replicatedCmdBuf
 	// numStates is chosen arbitrarily.
 	const numStates = 5*replicatedCmdBufNodeSize + 1

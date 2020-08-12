@@ -16,10 +16,11 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -109,7 +110,7 @@ func newMergeQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *mergeQueue {
 			// hard to determine ahead of time. An alternative would be to calculate
 			// the timeout with a function that additionally considers the replication
 			// factor.
-			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(rebalanceSnapshotRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,
@@ -125,7 +126,7 @@ func newMergeQueue(store *Store, db *kv.DB, gossip *gossip.Gossip) *mergeQueue {
 
 func (mq *mergeQueue) enabled() bool {
 	st := mq.store.ClusterSettings()
-	return storagebase.MergeQueueEnabled.Get(&st.SV)
+	return kvserverbase.MergeQueueEnabled.Get(&st.SV)
 }
 
 func (mq *mergeQueue) shouldQueue(
@@ -142,7 +143,7 @@ func (mq *mergeQueue) shouldQueue(
 		return false, 0
 	}
 
-	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey.Next()) {
+	if sysCfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next()) {
 		// This range would need to be split if it extended just one key further.
 		// There is thus no possible right-hand neighbor that it could be merged
 		// with.
@@ -173,30 +174,42 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
 ) (*roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
-	res, pErr := kv.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
-		ReturnRangeInfo: true,
-	}, &roachpb.RangeStatsRequest{
+
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
+
+	if !mq.store.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionRangeStatsRespHasDesc) {
+		ba.Header.ReturnRangeInfo = true
+	}
+
+	br, pErr := mq.db.NonTransactionalSender().Send(ctx, ba)
 	if pErr != nil {
 		return nil, enginepb.MVCCStats{}, 0, pErr.GoError()
 	}
-	rangeInfos := res.Header().RangeInfos
-	if len(rangeInfos) != 1 {
-		return nil, enginepb.MVCCStats{}, 0, fmt.Errorf(
-			"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
-			len(rangeInfos))
+	res := br.Responses[0].GetInner().(*roachpb.RangeStatsResponse)
+
+	var desc *roachpb.RangeDescriptor
+	if res.RangeInfo != nil {
+		desc = &res.RangeInfo.Desc
+	} else {
+		if len(br.RangeInfos) != 1 {
+			return nil, enginepb.MVCCStats{}, 0, errors.AssertionFailedf(
+				"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
+				len(br.RangeInfos))
+		}
+		desc = &br.RangeInfos[0].Desc
 	}
-	return &rangeInfos[0].Desc, res.(*roachpb.RangeStatsResponse).MVCCStats,
-		res.(*roachpb.RangeStatsResponse).QueriesPerSecond, nil
+	return desc, res.MVCCStats, res.QueriesPerSecond, nil
 }
 
 func (mq *mergeQueue) process(
 	ctx context.Context, lhsRepl *Replica, sysCfg *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	if !mq.enabled() {
 		log.VEventf(ctx, 2, "skipping merge: queue has been disabled")
-		return nil
+		return false, nil
 	}
 
 	lhsStats := lhsRepl.GetMVCCStats()
@@ -204,19 +217,19 @@ func (mq *mergeQueue) process(
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
-		return nil
+		return false, nil
 	}
 
 	lhsDesc := lhsRepl.Desc()
 	lhsQPS := lhsRepl.GetSplitQPS()
 	rhsDesc, rhsStats, rhsQPS, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
-		return err
+		return false, err
 	}
 	if rhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
-		return nil
+		return false, nil
 	}
 
 	// Range was manually split and not expired, so skip merging.
@@ -225,7 +238,7 @@ func (mq *mergeQueue) process(
 		log.VEventf(ctx, 2, "skipping merge: ranges were manually split and sticky bit was not expired")
 		// TODO(jeffreyxiao): Consider returning a purgatory error to avoid
 		// repeatedly processing ranges that cannot be merged.
-		return nil
+		return false, nil
 	}
 
 	mergedDesc := &roachpb.RangeDescriptor{
@@ -245,14 +258,14 @@ func (mq *mergeQueue) process(
 	// in a situation where we keep merging ranges that would be split soon after
 	// by a small increase in load.
 	conservativeLoadBasedSplitThreshold := 0.5 * lhsRepl.SplitByLoadQPSThreshold()
-	shouldSplit, _ := shouldSplitRange(mergedDesc, mergedStats,
+	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
 		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), sysCfg)
 	if shouldSplit || mergedQPS >= conservativeLoadBasedSplitThreshold {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size, estimated QPS: %d, %v)",
 			mergedDesc, mergedStats.Total(), mergedQPS)
-		return nil
+		return false, nil
 	}
 
 	{
@@ -264,13 +277,13 @@ func (mq *mergeQueue) process(
 		lhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, lhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
-			return err
+			return false, err
 		}
 
 		rhsDesc, err = maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, store, rhsDesc)
 		if err != nil {
 			log.VEventf(ctx, 2, `%v`, err)
-			return err
+			return false, err
 		}
 	}
 	lhsReplicas, rhsReplicas := lhsDesc.Replicas().All(), rhsDesc.Replicas().All()
@@ -278,12 +291,12 @@ func (mq *mergeQueue) process(
 	// Defensive sanity check that everything is now a voter.
 	for i := range lhsReplicas {
 		if lhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
+			return false, errors.Errorf(`cannot merge non-voter replicas on lhs: %v`, lhsReplicas)
 		}
 	}
 	for i := range rhsReplicas {
 		if rhsReplicas[i].GetType() != roachpb.VOTER_FULL {
-			return errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
+			return false, errors.Errorf(`cannot merge non-voter replicas on rhs: %v`, rhsReplicas)
 		}
 	}
 
@@ -308,7 +321,7 @@ func (mq *mergeQueue) process(
 		// TODO(benesch): RelocateRange can sometimes fail if it needs to move a replica
 		// from one store to another store on the same node.
 		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -333,17 +346,18 @@ func (mq *mergeQueue) process(
 		// this replica again in case it still needs to be merged.
 		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
 		mq.MaybeAddAsync(ctx, lhsRepl, now)
+		return false, nil
 	} else if err != nil {
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
-		return rangeMergePurgatoryError{err}
+		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
-		if err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
+		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (mq *mergeQueue) timer(time.Duration) time.Duration {

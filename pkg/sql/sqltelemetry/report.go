@@ -56,8 +56,8 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		log.Errorf(ctx, "encountered internal error:\n%+v", err)
 
 		if log.ShouldSendReport(sv) {
-			msg, details, extraDetails := errors.BuildSentryReport(err)
-			log.SendReport(ctx, msg, log.ReportTypeError, extraDetails, details...)
+			event, extraDetails := errors.BuildSentryReport(err)
+			log.SendReport(ctx, log.ReportTypeError, event, extraDetails)
 		}
 	}
 }

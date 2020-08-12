@@ -19,12 +19,13 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
-import "sql/sqlbase/structured.proto";
-import "sql/sqlbase/join_type.proto";
-import "sql/sqlbase/locking.proto";
+import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/descpb/join_type.proto";
+import "sql/catalog/descpb/locking.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
+import "sql/opt/invertedexpr/span_expression.proto";
 import "gogoproto/gogo.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
@@ -82,14 +83,20 @@ message TableReaderSpec {
   optional bool is_check = 6 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to public. Will be set to publicAndNotPublic if the
-  // consumer of this TableReader expects to be able to see in-progress schema
-  // changes.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 
-  // If non-zero, this is a guarantee for the upper bound of rows a TableReader
-  // will read. If 0, the number of results is unbounded.
-  optional uint64 max_results = 8 [(gogoproto.nullable) = false];
+  // This field used to be an upper bound for the number of rows we will read;
+  // replaced by the parallelize field. 
+  reserved 8;
+
+  // If set, the TableReader can read all the spans in parallel, without any
+  // batch limits. This should only be the case when there is a known upper
+  // bound on the number of rows we can read, and when there is no limit or
+  // limit hint.
+  optional bool parallelize = 12 [(gogoproto.nullable) = false];
 
   // If non-zero, this enables inconsistent historical scanning where different
   // batches can be read with different timestamps. This is used for
@@ -130,6 +137,11 @@ message TableReaderSpec {
   // makes it out of the SQL optimizer without throwing an error. If/when other
   // wait policies are supported, this field will be plumbed further.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
+
+  // Indicates what implicit system columns this TableReader is expected to
+  // synthesize. These system columns will be placed at the end of the row
+  // output by the TableReader, in the order specified.
+  repeated sqlbase.SystemColumnKind system_columns = 13;
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that
@@ -146,9 +158,9 @@ message IndexSkipTableReaderSpec {
   repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
 
   // Indicates the visibility level of the columns that should be returned.
-  // Normally, will be set to public. Will be set to publicAndNotPublic if the
-  // consumer of this TableReader expects to be able to see in-progress schema
-  // changes.
+  // Normally, will be set to PUBLIC. Will be set to PUBLIC_AND_NOT_PUBLIC if
+  // the consumer of this TableReader expects to be able to see in-progress
+  // schema changes.
   optional ScanVisibility visibility = 4 [(gogoproto.nullable) = false];
 
   optional bool reverse = 5 [(gogoproto.nullable) = false];
@@ -250,6 +262,15 @@ message JoinReaderSpec {
   // stream. This is only applicable to lookup joins, where doing so is
   // expensive. Index joins do this by default regardless of the parameter.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
+
+  // Indicates what implicit system columns this JoinReader is expected to
+  // synthesize. These system columns will be placed at the end of the row
+  // output by the JoinReader, in the order specified.
+  //
+  // This is only used in the special case of index joins, where the final
+  // result of the secondary index joined against the primary index is
+  // expected to contain the materialized system columns.
+  repeated sqlbase.SystemColumnKind system_columns = 12;
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -492,22 +513,22 @@ message InvertedJoinerSpec {
   // inverted column, and the the remaining columns are the primary key.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  // Index of the column in the input stream that is to be joined with
-  // the inverted index.
-  optional uint32 lookup_column = 3 [(gogoproto.nullable) = false];
+  reserved 3;
 
   // The join expression is a conjunction of inverted_expr and on_expr.
 
-  // Expression involving only the indexed column and the lookup column, where
-  // @1 refers to the lookup column and @2 to the indexed column. The
-  // expression is used to construct an implementation of
-  // RowToInvertedIndexExpr which will be fed each input row and output
-  // an expression to evaluate over the inverted index.
+  // Expression involving the indexed column and columns from the input.
+  // Assuming that the input stream has N columns and the table that has been
+  // indexed has M columns, in this expression variables @1 to @N refer to
+  // columns of the input stream and variables @(N+1) to @(N+M) refer to
+  // columns in the table. Although the numbering includes all columns, only
+  // columns corresponding to the indexed column and the input columns may be
+  // present in this expression. Note that the column numbering matches the
+  // numbering used below by the on expression.
   //
-  // TODO(sumeer): RowToInvertedIndexExpr will be added with the
-  // invertedJoiner implementation. And update this comment when all the
-  // expression generation machinery is in place to refer to actual code
-  // abstractions.
+  // The expression is passed to xform.NewDatumToInvertedExpr to construct an
+  // implementation of invertedexpr.DatumToInvertedExpr, which will be fed each
+  // input row and output an expression to evaluate over the inverted index.
   optional Expression inverted_expr = 4 [(gogoproto.nullable) = false];
 
   // Optional expression involving the columns in the index (other than the
@@ -517,7 +538,8 @@ message InvertedJoinerSpec {
   // input stream and variables @(N+1) to @(N+M) refer to columns in the
   // table. The numbering does not omit the column in the table corresponding
   // to the inverted column, or other table columns absent from the index, but
-  // they cannot be present in this expression.
+  // they cannot be present in this expression. Note that the column numbering
+  // matches the numbering used above by the inverted expression.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
   // Only INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI are supported. For indexes
@@ -527,6 +549,31 @@ message InvertedJoinerSpec {
   // allow the false positives to be eliminated by evaluating the exact
   // expression on the rows output by this join.
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+}
+
+// InvertedFiltererSpec is the specification of a processor that does filtering
+// on a table by evaluating an invertedexpr.SpanExpressionProto on an inverted
+// index of the table. The input consists of the inverted index rows from
+// InvertedExpr.SpansToRead. It is acceptable for a filter on the primary key
+// to be pushed down between the scan and the inverted filterer.
+//
+// Example:
+// Table columns: | a | b | c | d |
+// where a, d are the primary key and b is the column with the inverted index.
+// Inverted index columns: | a | b' | d |
+// where b' is derived from b. For instance, if b is an array, b' will be
+// elements of the array.
+//
+// Internal columns are | a | b | d |. The output sets b to NULL, since it does
+// not have the value of the original column that was indexed in the inverted
+// column.
+message InvertedFiltererSpec {
+  // The index in the input row of the inverted column.
+  optional uint32 inverted_col_idx = 1 [(gogoproto.nullable) = false];
+
+  // The expression to evaluate. The SpansToRead are ignored since they
+  // have already been used to setup the input.
+  optional opt.invertedexpr.SpanExpressionProto inverted_expr = 2 [(gogoproto.nullable) = false];
 }
 
 // AggregatorSpec is the specification for an "aggregator" (processor core
@@ -567,6 +614,13 @@ message AggregatorSpec {
     CORR = 24;
     PERCENTILE_DISC_IMPL = 25;
     PERCENTILE_CONT_IMPL = 26;
+    JSON_OBJECT_AGG = 27;
+    JSONB_OBJECT_AGG = 28;
+    VAR_POP = 29;
+    STDDEV_POP = 30;
+    // NOTE: if you're adding a new aggregate function here, make sure to add
+    // an appropriate entry in execinfrapb.AggregateFuncToNumArguments map.
+    // Also, please keep this note at the very bottom of this enum.
   }
 
   enum Type {
@@ -627,7 +681,7 @@ message AggregatorSpec {
 // performs intermediate filtering on rows from each table, and performs a
 // join on the rows from the 2+ tables.
 //
-// Limitations: the InterleavedReaderJoiner currently supports only equality INNER joins
+// Limitations: the InterleavedReaderJoiner currently supports only equality joins
 // on the full interleave prefix.
 // See https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20171025_interleaved_table_joins.md.
 //
@@ -666,8 +720,8 @@ message InterleavedReaderJoinerSpec {
     repeated TableReaderSpan spans = 5 [(gogoproto.nullable) = false];
   }
 
-  // For the common case of two tables, table at index 0 is the left/parent
-  // table and table at index 1 is the right/child table.
+  // The tables can be in any order. The processor figures out internally the
+  // hierarchy between them.
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 
   // Reader component
@@ -681,7 +735,7 @@ message InterleavedReaderJoinerSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 3 [(gogoproto.nullable) = false];
-  
+
   // Indicates the row-level locking strength to be used by the scan over the
   // tables. If set to FOR_NONE, no row-level locking should be performed.
   optional sqlbase.ScanLockingStrength locking_strength = 6 [(gogoproto.nullable) = false];

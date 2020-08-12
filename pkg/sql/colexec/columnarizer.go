@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // Columnarizer turns an execinfra.RowSource input into an Operator output, by
@@ -32,12 +30,6 @@ import (
 type Columnarizer struct {
 	execinfra.ProcessorBase
 	NonExplainable
-
-	// mu is used to protect against concurrent DrainMeta and Next calls, which
-	// are currently allowed.
-	// TODO(asubiotto): Explore calling DrainMeta from the same goroutine as Next,
-	//  which will simplify this model.
-	mu syncutil.Mutex
 
 	allocator  *colmem.Allocator
 	input      execinfra.RowSource
@@ -80,7 +72,7 @@ func NewColumnarizer(
 		return nil, err
 	}
 	c.typs = c.OutputTypes()
-	return c, typeconv.AreTypesSupported(c.typs)
+	return c, nil
 }
 
 // Init is part of the Operator interface.
@@ -102,8 +94,6 @@ func (c *Columnarizer) Init() {
 
 // Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.batch.ResetInternalBatch()
 	// Buffer up n rows.
 	nRows := 0
@@ -111,8 +101,12 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 	for ; nRows < coldata.BatchSize(); nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
-			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			nRows--
+			if meta.Err != nil {
+				// If an error occurs, return it immediately.
+				colexecerror.ExpectedError(meta.Err)
+			}
+			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			continue
 		}
 		if row == nil {
@@ -121,6 +115,12 @@ func (c *Columnarizer) Next(context.Context) coldata.Batch {
 		// TODO(jordan): evaluate whether it's more efficient to skip the buffer
 		// phase.
 		copy(c.buffered[nRows], row)
+	}
+
+	// Check if we have buffered more rows than the current allocation size
+	// and increase it if so.
+	if nRows > c.da.AllocSize {
+		c.da.AllocSize = nRows
 	}
 
 	// Write each column into the output batch.
@@ -142,13 +142,14 @@ func (c *Columnarizer) Run(context.Context) {
 	colexecerror.InternalError("Columnarizer should not be Run")
 }
 
-var _ colexecbase.Operator = &Columnarizer{}
-var _ execinfrapb.MetadataSource = &Columnarizer{}
+var (
+	_ colexecbase.Operator       = &Columnarizer{}
+	_ execinfrapb.MetadataSource = &Columnarizer{}
+	_ Closer                     = &Columnarizer{}
+)
 
 // DrainMeta is part of the MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.MoveToDraining(nil /* err */)
 	for {
 		meta := c.DrainHelper()
@@ -158,6 +159,12 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 		c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 	}
 	return c.accumulatedMeta
+}
+
+// Close is part of the Operator interface.
+func (c *Columnarizer) Close(ctx context.Context) error {
+	c.input.ConsumerClosed()
+	return nil
 }
 
 // ChildCount is part of the Operator interface.
@@ -179,4 +186,9 @@ func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
+}
+
+// Input returns the input of this columnarizer.
+func (c *Columnarizer) Input() execinfra.RowSource {
+	return c.input
 }

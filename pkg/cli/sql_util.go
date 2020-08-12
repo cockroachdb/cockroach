@@ -27,16 +27,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/lib/pq/auth/kerberos"
 )
+
+func init() {
+	pq.RegisterGSSProvider(func() (pq.GSS, error) { return kerberos.NewGSS() })
+}
 
 type sqlConnI interface {
 	driver.Conn
@@ -607,7 +612,7 @@ func makeSQLClient(appName string, defaultMode defaultSQLDb) (*sqlConn, error) {
 	// Load the application name. It's not a command-line flag, so
 	// anything already in the URL should take priority.
 	if options.Get("application_name") == "" && appName != "" {
-		options.Set("application_name", sqlbase.ReportableAppNamePrefix+appName)
+		options.Set("application_name", catconstants.ReportableAppNamePrefix+appName)
 	}
 
 	// Set a connection timeout if none is provided already. This
@@ -922,7 +927,9 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 			lex.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
-		return t.Format(tree.TimestampOutputFormat)
+		// Since we do not know whether the datum is Timestamp or TimestampTZ,
+		// output the full format.
+		return t.Format(tree.TimestampTZOutputFormat)
 	}
 
 	return fmt.Sprint(val)

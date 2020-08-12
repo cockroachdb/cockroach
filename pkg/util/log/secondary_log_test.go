@@ -79,11 +79,15 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
-	logging.stderrThreshold = Severity_NONE
+	mainLog.stderrThreshold = Severity_NONE
 
-	// Ensure that the main log is initialized. This should take over
-	// stderr.
-	Infof(context.Background(), "test123")
+	// Take over stderr.
+	TestingResetActive()
+	cleanup, err := SetupRedactionAndStderrRedirects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
 
 	// Now create a secondary logger in the same directory.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,8 +102,8 @@ func TestRedirectStderrWithSecondaryLoggersActive(t *testing.T) {
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
 
-	// Check the main log file: we want our stderr text there.
-	contents, err := ioutil.ReadFile(mainLog.mu.file.(*syncBuffer).file.Name())
+	// Check the stderr log file: we want our stderr text there.
+	contents, err := ioutil.ReadFile(stderrLog.mu.file.(*syncBuffer).file.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,14 +137,20 @@ func TestListLogFilesIncludeSecondaryLogs(t *testing.T) {
 	l.Logf(ctx, "story time")
 	Flush()
 
-	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
-
 	results, err := ListLogFiles()
 	if err != nil {
 		t.Fatalf("error in ListLogFiles: %v", err)
 	}
 
-	if len(results) != 1 || results[0].Name != expectedName {
+	expectedName := filepath.Base(l.logger.mu.file.(*syncBuffer).file.Name())
+	foundExpected := false
+	for i := range results {
+		if results[i].Name == expectedName {
+			foundExpected = true
+			break
+		}
+	}
+	if !foundExpected {
 		t.Fatalf("unexpected results; expected file %q, got: %+v", expectedName, results)
 	}
 }

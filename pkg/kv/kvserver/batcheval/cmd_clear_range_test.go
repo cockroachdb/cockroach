@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,6 +47,7 @@ func (wb *wrappedBatch) ClearRange(start, end storage.MVCCKey) error {
 // clear range command to the batch otherwise.
 func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	startKey := roachpb.Key("0000")
 	endKey := roachpb.Key("9999")
@@ -119,8 +121,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 
 			// Verify cArgs.Stats is equal to the stats we wrote.
 			newStats := stats
-			newStats.SysBytes, newStats.SysCount = 0, 0       // ignore these values
-			cArgs.Stats.SysBytes, cArgs.Stats.SysCount = 0, 0 // these too, as GC threshold is updated
+			newStats.SysBytes, newStats.SysCount, newStats.AbortSpanBytes = 0, 0, 0          // ignore these values
+			cArgs.Stats.SysBytes, cArgs.Stats.SysCount, cArgs.Stats.AbortSpanBytes = 0, 0, 0 // these too, as GC threshold is updated
 			newStats.Add(*cArgs.Stats)
 			newStats.AgeTo(0) // pin at LastUpdateNanos==0
 			if !newStats.Equal(enginepb.MVCCStats{}) {

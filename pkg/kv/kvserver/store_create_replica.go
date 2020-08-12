@@ -35,7 +35,6 @@ func (s *Store) getOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
-	isLearner bool,
 ) (_ *Replica, created bool, _ error) {
 	if replicaID == 0 {
 		log.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", rangeID)
@@ -57,7 +56,6 @@ func (s *Store) getOrCreateReplica(
 			rangeID,
 			replicaID,
 			creatingReplica,
-			isLearner,
 		)
 		if errors.Is(err, errRetry) {
 			continue
@@ -80,7 +78,6 @@ func (s *Store) tryGetOrCreateReplica(
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
-	isLearner bool,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
 	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {

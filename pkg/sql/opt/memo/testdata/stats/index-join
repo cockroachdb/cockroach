@@ -38,16 +38,19 @@ opt
 SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s, y
 ----
 project
- ├── columns: count:5(int!null)
+ ├── columns: count:6(int!null)
+ ├── immutable
  ├── stats: [rows=49.2384513]
  └── group-by
-      ├── columns: y:2(int) count_rows:5(int!null)
+      ├── columns: y:2(int) count_rows:6(int!null)
       ├── grouping columns: y:2(int)
+      ├── immutable
       ├── stats: [rows=49.2384513, distinct(2)=49.2384513, null(2)=0]
       ├── key: (2)
-      ├── fd: (2)-->(5)
+      ├── fd: (2)-->(6)
       ├── select
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
+      │    ├── immutable
       │    ├── stats: [rows=66.6666667, distinct(2)=49.2384513, null(2)=0, distinct(3)=1, null(3)=0]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(2)
@@ -63,15 +66,16 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── filters
-      │         └── (x:1 + y:2) = 10 [type=bool, outer=(1,2)]
+      │         └── (x:1 + y:2) = 10 [type=bool, outer=(1,2), immutable]
       └── aggregations
-           └── count-rows [as=count_rows:5, type=int]
+           └── count-rows [as=count_rows:6, type=int]
 
 opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=(1,2,3)
 SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── immutable
  ├── stats: [rows=66.6666667, distinct(1)=66.6666667, null(1)=0, distinct(2)=49.2384513, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=57.5057212, null(4)=0, distinct(1-3)=66.6666667, null(1-3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
@@ -87,7 +91,7 @@ select
  │         ├── key: (1)
  │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
  └── filters
-      └── (x:1 + y:2) = 10 [type=bool, outer=(1,2)]
+      └── (x:1 + y:2) = 10 [type=bool, outer=(1,2), immutable]
 
 opt colstat=1 colstat=2 colstat=3 colstat=(1,2,3)
 SELECT * FROM a WHERE s = 'foo'
@@ -114,7 +118,7 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=400, distinct(1)=400, null(1)=0, distinct(2)=98.8470785, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=360, null(2,3)=0, distinct(1-3)=400, null(1-3)=0]
+ ├── stats: [rows=400, distinct(1)=400, null(1)=0, distinct(2)=98.8470785, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=197.694157, null(2,3)=0, distinct(1-3)=400, null(1-3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── scan a@secondary
@@ -180,6 +184,7 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── immutable
  ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=28.5927601, null(2)=16.6666667, distinct(3)=1, null(3)=0, distinct(4)=30.9412676, null(4)=0, distinct(1-3)=33.3333333, null(1-3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
@@ -195,7 +200,7 @@ select
  │         ├── key: (1)
  │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
  └── filters
-      └── (x:1 + y:2) = 10 [type=bool, outer=(1,2)]
+      └── (x:1 + y:2) = 10 [type=bool, outer=(1,2), immutable]
 
 opt colstat=1 colstat=2 colstat=3 colstat=(1,2,3)
 SELECT * FROM a WHERE s = 'foo'
@@ -226,7 +231,7 @@ SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(2)=88.4618791, null(2)=100, distinct(3)=2, null(3)=0, distinct(2,3)=191.943229, null(2,3)=0, distinct(1-3)=200, null(1-3)=0]
+ ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(2)=88.4618791, null(2)=100, distinct(3)=2, null(3)=0, distinct(2,3)=176.923758, null(2,3)=0, distinct(1-3)=200, null(1-3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── scan a@secondary

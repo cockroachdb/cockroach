@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +42,7 @@ func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 // transaction's provisional commit timestamp moved forward.
 func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 
@@ -111,6 +113,7 @@ func TestTxnSpanRefresherCollectsSpans(t *testing.T) {
 // that indicates that the transaction's timestamp is being pushed.
 func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	txn := makeTxnProto()
 	txn.UpdateObservedTimestamp(1, txn.WriteTimestamp.Add(20, 0))
@@ -294,6 +297,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 // errors back up the stack.
 func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 
@@ -385,6 +389,7 @@ func (s singleRangeIterator) Desc() *roachpb.RangeDescriptor {
 // refresh bytes.
 func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 	tsr.riGen = rangeIteratorFactory{factory: func() condensableSpanSetRangeIterator {
@@ -467,6 +472,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 // headers.
 func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 
@@ -611,6 +617,7 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 // requests, along with the CanForwardReadTimestamp on Batch headers.
 func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 
@@ -753,6 +760,7 @@ func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
 // spans and span validity status are reset on an epoch increment.
 func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, _ := makeMockTxnSpanRefresher()
 	// Disable span condensing.
@@ -813,6 +821,7 @@ func TestTxnSpanRefresherEpochIncrement(t *testing.T) {
 // its state and restore it.
 func TestTxnSpanRefresherSavepoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tsr, mockSender := makeMockTxnSpanRefresher()
 

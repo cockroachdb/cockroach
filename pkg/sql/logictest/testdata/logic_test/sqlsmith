@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(47899)
 # This file contains regression tests discovered by sqlsmith.
 
 

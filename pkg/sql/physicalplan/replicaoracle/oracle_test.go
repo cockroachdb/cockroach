@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,40 +33,16 @@ func TestRandomOracle(t *testing.T) {
 	_ = NewOracleFactory(RandomChoice, Config{})
 }
 
-// Test that the binPackingOracle is consistent in its choices: once a range has
-// been assigned to one node, that choice is reused.
-func TestBinPackingOracleIsConsistent(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	rng := roachpb.RangeDescriptor{RangeID: 99}
-	queryState := MakeQueryState()
-	expRepl := kvcoord.ReplicaInfo{
-		ReplicaDescriptor: roachpb.ReplicaDescriptor{
-			NodeID: 99, StoreID: 99, ReplicaID: 99}}
-	queryState.AssignedRanges[rng.RangeID] = expRepl
-	of := NewOracleFactory(BinPackingChoice, Config{
-		LeaseHolderCache: kvcoord.NewLeaseHolderCache(func() int64 { return 1 }),
-	})
-	// For our purposes, an uninitialized binPackingOracle will do.
-	bp := of.Oracle(nil)
-	repl, err := bp.ChoosePreferredReplica(context.TODO(), rng, queryState)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if repl != expRepl {
-		t.Fatalf("expected replica %+v, got: %+v", expRepl, repl)
-	}
-}
-
 func TestClosest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	g, _ := makeGossip(t, stopper)
 	nd, _ := g.GetNodeDescriptor(1)
 	of := NewOracleFactory(ClosestChoice, Config{
-		Gossip:   g,
-		NodeDesc: *nd,
+		NodeDescs: g,
+		NodeDesc:  *nd,
 	})
 	of.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
 		if strings.HasSuffix(s, "2") {
@@ -76,13 +51,13 @@ func TestClosest(t *testing.T) {
 		return time.Millisecond, true
 	}
 	o := of.Oracle(nil)
-	info, err := o.ChoosePreferredReplica(context.TODO(), roachpb.RangeDescriptor{
+	info, err := o.ChoosePreferredReplica(ctx, &roachpb.RangeDescriptor{
 		InternalReplicas: []roachpb.ReplicaDescriptor{
 			{NodeID: 1, StoreID: 1},
 			{NodeID: 2, StoreID: 2},
 			{NodeID: 3, StoreID: 3},
 		},
-	}, QueryState{})
+	}, nil /* leaseHolder */, QueryState{})
 	if err != nil {
 		t.Fatalf("Failed to choose closest replica: %v", err)
 	}

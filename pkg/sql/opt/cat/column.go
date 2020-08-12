@@ -15,6 +15,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
+// ColumnKind differentiates between different kinds of table columns.
+type ColumnKind uint8
+
+const (
+	// Ordinary columns are "regular" table columns (including hidden columns
+	// like `rowid`).
+	Ordinary ColumnKind = iota
+	// WriteOnly columns are mutation columns that have to be updated on writes
+	// (inserts, updates, deletes) and cannot be otherwise accessed.
+	WriteOnly
+	// DeleteOnly columns are mutation columns that have to be updated only on
+	// deletes and cannot be otherwise accessed.
+	DeleteOnly
+	// System columns are implicit columns that every physical table
+	// contains. These columns can only be read from and must not be included
+	// as part of mutations. They also cannot be part of the lax or key columns
+	// for indexes. System columns are not members of any column family.
+	System
+)
+
 // Column is an interface to a table column, exposing only the information
 // needed by the query optimizer.
 type Column interface {
@@ -85,5 +105,12 @@ type Column interface {
 // IsMutationColumn is a convenience function that returns true if the column at
 // the given ordinal position is a mutation column.
 func IsMutationColumn(table Table, ord int) bool {
-	return ord >= table.ColumnCount()
+	kind := table.ColumnKind(ord)
+	return kind == WriteOnly || kind == DeleteOnly
+}
+
+// IsSystemColumn is a convenience function that returns true if the column at
+// the given ordinal position is a system column.
+func IsSystemColumn(table Table, ord int) bool {
+	return table.ColumnKind(ord) == System
 }

@@ -241,7 +241,7 @@ describe("Nodes Overview page", () => {
         "node count",
         "uptime",
         "replicas",
-        "capacity use",
+        "capacity usage",
         "memory use",
         "cpus",
         "version",
@@ -252,7 +252,7 @@ describe("Nodes Overview page", () => {
       assert.equal(columnCells.length, expectedColumns.length);
 
       expectedColumns.forEach(
-        (columnName, idx) => assert.equal(columnCells.at(idx).text(), columnName));
+        (columnName, idx) => assert.equal(columnCells.at(idx).text().toLowerCase(), columnName));
     });
 
     it("doesn't display 'node count' column when nodes are in single regions", () => {
@@ -261,7 +261,7 @@ describe("Nodes Overview page", () => {
         // should not be displayed "node count",
         "uptime",
         "replicas",
-        "capacity use",
+        "capacity usage",
         "memory use",
         "cpus",
         "version",
@@ -280,7 +280,7 @@ describe("Nodes Overview page", () => {
       const columnCells = wrapper.find(".table-section__content table thead th");
       assert.equal(columnCells.length, expectedColumns.length);
       expectedColumns.forEach(
-        (columnName, idx) => assert.equal(columnCells.at(idx).text(), columnName));
+        (columnName, idx) => assert.equal(columnCells.at(idx).text().toLowerCase(), columnName));
     });
 
     it("displays table with fixed column width", () => {
@@ -340,13 +340,13 @@ describe("Nodes Overview page", () => {
               { node_id: 7, expiration: { wall_time: Long.fromNumber(Date.now()) }},
             ],
             statuses: {
-              1: NodeLivenessStatus.LIVE,
-              2: NodeLivenessStatus.DECOMMISSIONED, // node_id: 2
-              3: NodeLivenessStatus.DEAD,
-              4: NodeLivenessStatus.UNAVAILABLE,
-              5: NodeLivenessStatus.UNKNOWN,
-              6: NodeLivenessStatus.DECOMMISSIONING,
-              7: NodeLivenessStatus.DECOMMISSIONED, // node_id: 7
+              1: NodeLivenessStatus.NODE_STATUS_LIVE,
+              2: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONED, // node_id: 2
+              3: NodeLivenessStatus.NODE_STATUS_DEAD,
+              4: NodeLivenessStatus.NODE_STATUS_UNAVAILABLE,
+              5: NodeLivenessStatus.NODE_STATUS_UNKNOWN,
+              6: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONING,
+              7: NodeLivenessStatus.NODE_STATUS_DECOMMISSIONED, // node_id: 7
             },
             toJSON: () => ({}),
           },

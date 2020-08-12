@@ -23,9 +23,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
@@ -33,26 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
 
 // _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
@@ -70,7 +56,7 @@ const _TYPE_WIDTH = 0
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
 	allocator             *colmem.Allocator
-	inputs                []colexecbase.Operator
+	inputs                []SynchronizerInput
 	ordering              sqlbase.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
@@ -110,7 +96,10 @@ type OrderedSynchronizer struct {
 	outColsMap []int
 }
 
-var _ colexecbase.Operator = &OrderedSynchronizer{}
+var (
+	_ colexecbase.Operator = &OrderedSynchronizer{}
+	_ Closer               = &OrderedSynchronizer{}
+)
 
 // ChildCount implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
@@ -119,13 +108,13 @@ func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return o.inputs[nth]
+	return o.inputs[nth].Op
 }
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
 func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
-	inputs []colexecbase.Operator,
+	inputs []SynchronizerInput,
 	typs []*types.T,
 	ordering sqlbase.ColumnOrdering,
 ) (*OrderedSynchronizer, error) {
@@ -144,7 +133,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Next(ctx)
+			o.inputBatches[i] = o.inputs[i].Op.Next(ctx)
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -181,7 +170,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 						case _TYPE_WIDTH:
 							srcCol := vec._TYPE()
 							outCol := o.out_TYPECols[o.outColsMap[i]]
-							v := execgen.UNSAFEGET(srcCol, srcRowIdx)
+							v := srcCol.Get(srcRowIdx)
 							execgen.SET(outCol, outputIdx, v)
 							// {{end}}
 						}
@@ -196,7 +185,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Next(ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Op.Next(ctx)
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -238,13 +227,28 @@ func (o *OrderedSynchronizer) Init() {
 		}
 	}
 	for i := range o.inputs {
-		o.inputs[i].Init()
+		o.inputs[i].Op.Init()
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
 		typ := o.typs[o.ordering[i].ColIdx]
 		o.comparators[i] = GetVecComparator(typ, len(o.inputs))
 	}
+}
+
+func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var bufferedMeta []execinfrapb.ProducerMetadata
+	for _, input := range o.inputs {
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+	}
+	return bufferedMeta
+}
+
+func (o *OrderedSynchronizer) Close(ctx context.Context) error {
+	for _, input := range o.inputs {
+		input.ToClose.CloseAndLogOnErr(ctx, "ordered synchronizer")
+	}
+	return nil
 }
 
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {

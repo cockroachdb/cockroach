@@ -16,10 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -28,17 +30,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // Test portal implicit destruction. Unless destroying a portal is explicitly
-// requested, portals live until the end of the transaction in which
-// they'recreated. If they're created outside of a transaction, they live until
+// requested, portals live until the end of the transaction in which they're
+// created. If they're created outside of a transaction, they live until
 // the next transaction completes (so until the next statement is executed,
 // which statement is expected to be the execution of the portal that was just
 // created).
@@ -47,6 +51,7 @@ import (
 // protocol command.
 func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	buf, syncResults, finished, stopper, err := startConnExecutor(ctx)
@@ -218,17 +223,9 @@ func TestPortalsDestroyedOnTxnFinish(t *testing.T) {
 func mustParseOne(s string) parser.Statement {
 	stmts, err := parser.Parse(s)
 	if err != nil {
-		log.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return stmts[0]
-}
-
-type dummyLivenessProvider struct {
-}
-
-// IsLive implements the livenessProvider interface.
-func (l dummyLivenessProvider) IsLive(roachpb.NodeID) (bool, error) {
-	return true, nil
 }
 
 // startConnExecutor start a goroutine running a connExecutor. This connExecutor
@@ -253,16 +250,17 @@ func startConnExecutor(
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			return nil, nil
 		})
-	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock)
+	db := kv.NewDB(testutils.MakeAmbientCtx(), factory, clock, stopper)
 	st := cluster.MakeTestingClusterSettings()
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
-	gw := gossip.MakeExposedGossip(nil)
+	gw := gossip.MakeOptionalGossip(nil)
 	cfg := &ExecutorConfig{
 		AmbientCtx:      testutils.MakeAmbientCtx(),
 		Settings:        st,
 		Clock:           clock,
 		DB:              db,
+		SystemConfig:    config.EmptySystemConfigProvider{},
 		SessionRegistry: NewSessionRegistry(),
 		NodeInfo: NodeInfo{
 			NodeID:    nodeID,
@@ -270,7 +268,7 @@ func startConnExecutor(
 		},
 		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, execinfra.Version, st, roachpb.NodeDescriptor{NodeID: 1},
+			ctx, execinfra.Version, st, roachpb.NodeID(1),
 			nil, /* rpcCtx */
 			distsql.NewServer(ctx, execinfra.ServerConfig{
 				AmbientContext: testutils.MakeAmbientCtx(),
@@ -280,23 +278,24 @@ func startConnExecutor(
 				NodeID:         nodeID,
 			}),
 			nil, /* distSender */
+			nil, /* nodeDescs */
 			gw,
 			stopper,
-			dummyLivenessProvider{}, /* liveness */
-			nil,                     /* nodeDialer */
+			func(roachpb.NodeID) (bool, error) { return true, nil }, // everybody is live
+			nil, /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
 		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, gw, st),
 	}
-	pool := mon.MakeUnlimitedMonitor(
+	pool := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
 	)
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 
-	s := NewServer(cfg, &pool)
+	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
 	var cc ClientComm = &internalClientComm{
@@ -319,4 +318,61 @@ func startConnExecutor(
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
 	return buf, syncResults, finished, stopper, nil
+}
+
+// Test that a client session can close without deadlocking when the closing
+// needs to cleanup temp tables and the txn that has created these tables is
+// still open. The act of cleaning up used to block for the open transaction,
+// thus deadlocking.
+func TestSessionCloseWithPendingTempTableInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	srv := s.SQLServer().(*Server)
+	stmtBuf := NewStmtBuf()
+	flushed := make(chan []resWithPos)
+	clientComm := &internalClientComm{
+		sync: func(res []resWithPos) {
+			flushed <- res
+		},
+	}
+	connHandler, err := srv.SetupConn(ctx, SessionArgs{User: security.RootUser}, stmtBuf, clientComm, MemoryMetrics{})
+	require.NoError(t, err)
+
+	stmts, err := parser.Parse(`
+SET experimental_enable_temp_tables = true;
+CREATE DATABASE test;
+USE test;
+BEGIN;
+CREATE TEMPORARY TABLE foo();
+`)
+	require.NoError(t, err)
+	for _, stmt := range stmts {
+		require.NoError(t, stmtBuf.Push(ctx, ExecStmt{Statement: stmt}))
+	}
+	require.NoError(t, stmtBuf.Push(ctx, Sync{}))
+
+	done := make(chan error)
+	go func() {
+		done <- srv.ServeConn(ctx, connHandler, mon.BoundAccount{}, nil /* cancel */)
+	}()
+	results := <-flushed
+	require.Len(t, results, 6) // We expect results for 5 statements + sync.
+	for _, res := range results {
+		require.NoError(t, res.err)
+	}
+
+	// Close the client connection and verify that ServeConn() returns.
+	stmtBuf.Close()
+
+	select {
+	case <-time.After(5 * time.Second):
+		t.Fatal("session close timed out; connExecutor deadlocked?")
+	case err = <-done:
+		require.NoError(t, err)
+	}
 }

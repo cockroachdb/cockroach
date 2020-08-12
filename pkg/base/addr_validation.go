@@ -11,15 +11,13 @@
 package base
 
 import (
-	"bytes"
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
-	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -40,39 +38,55 @@ import (
 func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// Validate the advertise address.
 	advHost, advPort, err := validateAdvertiseAddr(ctx,
-		cfg.AdvertiseAddr, "--listen-addr", cfg.Addr, "")
+		cfg.AdvertiseAddr, cfg.Addr, "", cliflags.ListenAddr)
 	if err != nil {
-		return errors.Wrap(err, "invalid --advertise-addr")
+		return invalidFlagErr(err, cliflags.AdvertiseAddr)
 	}
 	cfg.AdvertiseAddr = net.JoinHostPort(advHost, advPort)
 
 	// Validate the RPC listen address.
 	listenHost, listenPort, err := validateListenAddr(ctx, cfg.Addr, "")
 	if err != nil {
-		return errors.Wrap(err, "invalid --listen-addr")
+		return invalidFlagErr(err, cliflags.ListenAddr)
 	}
 	cfg.Addr = net.JoinHostPort(listenHost, listenPort)
 
 	// Validate the SQL advertise address. Use the provided advertise
 	// addr as default.
 	advSQLHost, advSQLPort, err := validateAdvertiseAddr(ctx,
-		cfg.SQLAdvertiseAddr, "--sql-addr", cfg.SQLAddr, advHost)
+		cfg.SQLAdvertiseAddr, cfg.SQLAddr, advHost, cliflags.ListenSQLAddr)
 	if err != nil {
-		return errors.Wrap(err, "invalid --advertise-sql-addr")
+		return invalidFlagErr(err, cliflags.SQLAdvertiseAddr)
 	}
 	cfg.SQLAdvertiseAddr = net.JoinHostPort(advSQLHost, advSQLPort)
 
 	// Validate the SQL listen address - use the resolved listen addr as default.
 	sqlHost, sqlPort, err := validateListenAddr(ctx, cfg.SQLAddr, listenHost)
 	if err != nil {
-		return errors.Wrap(err, "invalid --sql-addr")
+		return invalidFlagErr(err, cliflags.ListenSQLAddr)
 	}
 	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
+
+	// Validate the tenant advertise address. Use the provided advertise
+	// addr as default.
+	advTenantHost, advTenantPort, err := validateAdvertiseAddr(ctx,
+		cfg.TenantAdvertiseAddr, cfg.TenantAddr, advHost, cliflags.ListenTenantAddr)
+	if err != nil {
+		return invalidFlagErr(err, cliflags.TenantAdvertiseAddr)
+	}
+	cfg.TenantAdvertiseAddr = net.JoinHostPort(advTenantHost, advTenantPort)
+
+	// Validate the tenant listen address - use the resolved listen addr as default.
+	tenantHost, tenantPort, err := validateListenAddr(ctx, cfg.TenantAddr, listenHost)
+	if err != nil {
+		return invalidFlagErr(err, cliflags.ListenTenantAddr)
+	}
+	cfg.TenantAddr = net.JoinHostPort(tenantHost, tenantPort)
 
 	// Validate the HTTP advertise address. Use the provided advertise
 	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
-		cfg.HTTPAdvertiseAddr, "--http-addr", cfg.HTTPAddr, advHost)
+		cfg.HTTPAdvertiseAddr, cfg.HTTPAddr, advHost, cliflags.ListenHTTPAddr)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute public HTTP address")
 	}
@@ -82,7 +96,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// as default.
 	httpHost, httpPort, err := validateListenAddr(ctx, cfg.HTTPAddr, listenHost)
 	if err != nil {
-		return errors.Wrap(err, "invalid --http-addr")
+		return invalidFlagErr(err, cliflags.ListenHTTPAddr)
 	}
 	cfg.HTTPAddr = net.JoinHostPort(httpHost, httpPort)
 	return nil
@@ -129,16 +143,16 @@ func UpdateAddrs(ctx context.Context, addr, advAddr *string, ln net.Addr) error 
 	return nil
 }
 
-// validateAdvertiseAddr validates an normalizes an address suitable
+// validateAdvertiseAddr validates and normalizes an address suitable
 // for use in gossiping - for use by other nodes. This ensures
 // that if the "host" part is empty, it gets filled in with
 // the configured listen address if any, or the canonical host name.
 func validateAdvertiseAddr(
-	ctx context.Context, advAddr, flag, listenAddr, defaultHost string,
+	ctx context.Context, advAddr, listenAddr, defaultHost string, listenFlag cliflags.FlagInfo,
 ) (string, string, error) {
 	listenHost, listenPort, err := getListenAddr(listenAddr, defaultHost)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "invalid %s", flag)
+		return "", "", invalidFlagErr(err, listenFlag)
 	}
 
 	advHost, advPort := "", ""
@@ -268,97 +282,6 @@ func LookupAddr(ctx context.Context, resolver *net.Resolver, host string) (strin
 	return addrs[0].String(), nil
 }
 
-// CheckCertificateAddrs validates the addresses inside the configured
-// certificates to be compatible with the configured listen and
-// advertise addresses. This is an advisory function (to inform/educate
-// the user) and not a requirement for security.
-// This must also be called after ValidateAddrs() and after
-// the certificate manager was initialized.
-func (cfg *Config) CheckCertificateAddrs(ctx context.Context) {
-	if cfg.Insecure {
-		return
-	}
-
-	// By now the certificate manager must be initialized.
-	cm, _ := cfg.GetCertificateManager()
-
-	// Verify that the listen and advertise addresses are compatible
-	// with the provided certificate.
-	certInfo := cm.NodeCert()
-	if certInfo.Error != nil {
-		log.Shoutf(ctx, log.Severity_ERROR,
-			"invalid node certificate: %v", certInfo.Error)
-	} else {
-		cert := certInfo.ParsedCertificates[0]
-		addrInfo := certAddrs(cert)
-
-		// Log the certificate details in any case. This will aid during troubleshooting.
-		log.Infof(ctx, "server certificate addresses: %s", addrInfo)
-
-		var msg bytes.Buffer
-		// Verify the compatibility. This requires that ValidateAddrs() has
-		// been called already.
-		host, _, err := net.SplitHostPort(cfg.AdvertiseAddr)
-		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
-		}
-		if err := cert.VerifyHostname(host); err != nil {
-			fmt.Fprintf(&msg, "advertise address %q not in node certificate (%s)\n", host, addrInfo)
-		}
-		host, _, err = net.SplitHostPort(cfg.SQLAdvertiseAddr)
-		if err != nil {
-			panic("programming error: call ValidateAddrs() first")
-		}
-		if err := cert.VerifyHostname(host); err != nil {
-			fmt.Fprintf(&msg, "advertise SQL address %q not in node certificate (%s)\n", host, addrInfo)
-		}
-		if msg.Len() > 0 {
-			log.Shoutf(ctx, log.Severity_WARNING,
-				"%s"+
-					"Secure client connections are likely to fail.\n"+
-					"Consider extending the node certificate or tweak --listen-addr/--advertise-addr/--sql-addr/--advertise-sql-addr.",
-				msg.String())
-		}
-	}
-
-	// Verify that the http listen and advertise addresses are
-	// compatible with the provided certificate.
-	certInfo = cm.UICert()
-	if certInfo == nil {
-		// A nil UI cert means use the node cert instead;
-		// see details in (*CertificateManager) getEmbeddedUIServerTLSConfig()
-		// and (*CertificateManager) getUICertLocked().
-		certInfo = cm.NodeCert()
-	}
-	if certInfo.Error != nil {
-		log.Shoutf(ctx, log.Severity_ERROR,
-			"invalid UI certificate: %v", certInfo.Error)
-	} else {
-		cert := certInfo.ParsedCertificates[0]
-		addrInfo := certAddrs(cert)
-
-		// Log the certificate details in any case. This will aid during
-		// troubleshooting.
-		log.Infof(ctx, "web UI certificate addresses: %s", addrInfo)
-	}
-}
-
-// certAddrs formats the list of addresses included in a certificate for
-// printing in an error message.
-func certAddrs(cert *x509.Certificate) string {
-	// If an IP address was specified as listen/adv address, the
-	// hostname validation will only use the IPAddresses field. So this
-	// needs to be printed in all cases.
-	addrs := make([]string, len(cert.IPAddresses))
-	for i, ip := range cert.IPAddresses {
-		addrs[i] = ip.String()
-	}
-	// For names, the hostname validation will use DNSNames if
-	// the Subject Alt Name is present in the cert, otherwise
-	// it will use the common name. We can't parse the
-	// extensions here so we print both.
-	return fmt.Sprintf("IP=%s; DNS=%s; CN=%s",
-		strings.Join(addrs, ","),
-		strings.Join(cert.DNSNames, ","),
-		cert.Subject.CommonName)
+func invalidFlagErr(err error, flag cliflags.FlagInfo) error {
+	return errors.Wrapf(err, "invalid --%s", flag.Name)
 }

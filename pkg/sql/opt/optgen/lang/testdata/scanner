@@ -27,7 +27,7 @@ foo define f123 "hello world" 1 0045 foo _ _123foo# comment ()[]
 # Symbols
 #
 scan
-()[]{}$:*==>&,^|.. ...
+()[]{}$:*==>&,^|.. . ...
 ----
 (LPAREN ()
 (RPAREN ))
@@ -44,7 +44,10 @@ scan
 (COMMA ,)
 (CARET ^)
 (PIPE |)
-(ILLEGAL .)
+(ILLEGAL ..)
+(WHITESPACE  )
+(DOT .)
+(WHITESPACE  )
 (ELLIPSES ...)
 
 #
@@ -87,7 +90,7 @@ scan fail=6
 scan fail=3
 ...
 ----
-(ILLEGAL .)
+(ILLEGAL ..)
 (ERROR io: read/write on closed pipe)
 
 #

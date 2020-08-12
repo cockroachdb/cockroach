@@ -21,18 +21,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
-var configID = sqlbase.ID(1)
+var configID = descpb.ID(1)
 var configDescKey = sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxReservedDescID)
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
@@ -40,19 +42,19 @@ var configDescKey = sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.MaxRes
 // just-written descriptor is found.
 func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	configID++
-	configDesc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Database{
-			Database: &sqlbase.DatabaseDescriptor{
+	configDesc := &descpb.Descriptor{
+		Union: &descpb.Descriptor_Database{
+			Database: &descpb.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         configID,
-				Privileges: &sqlbase.PrivilegeDescriptor{},
+				Privileges: &descpb.PrivilegeDescriptor{},
 			},
 		},
 	}
 
 	// This needs to be done in a transaction with the system trigger set.
-	if err := s.DB().Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+	if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		return txn.Put(ctx, configDescKey, configDesc)
@@ -63,7 +65,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 }
 
 func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfig {
-	var foundDesc sqlbase.Descriptor
+	var foundDesc descpb.Descriptor
 	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
 		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
@@ -87,6 +89,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 // TestGetZoneConfig exercises config.getZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	defaultZoneConfig := zonepb.DefaultSystemZoneConfig()
 	defaultZoneConfig.NumReplicas = proto.Int32(1)
@@ -100,7 +103,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
@@ -133,8 +136,9 @@ func TestGetZoneConfig(t *testing.T) {
 
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
+				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
+					ctx, txn, config.SystemTenantObjectID(tc.objectID), &descpb.IndexDescriptor{}, tc.partitionName, false,
+				)
 				if err != nil {
 					return err
 				} else if subzone != nil {
@@ -322,6 +326,7 @@ func TestGetZoneConfig(t *testing.T) {
 // hierarchies.
 func TestCascadingZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 
 	defaultZoneConfig := zonepb.DefaultZoneConfig()
@@ -336,7 +341,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 	}
 
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 
 	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
@@ -369,8 +374,9 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
+				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
+					ctx, txn, config.SystemTenantObjectID(tc.objectID), &descpb.IndexDescriptor{}, tc.partitionName, false,
+				)
 				if err != nil {
 					return err
 				} else if subzone != nil {
@@ -635,10 +641,11 @@ func TestCascadingZoneConfig(t *testing.T) {
 
 func BenchmarkGetZoneConfig(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	params, _ := tests.CreateTestServerParams()
 	srv, _, _ := serverutils.StartServer(b, params)
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	s := srv.(*server.TestServer)
 	cfg := forceNewConfig(b, s)
 

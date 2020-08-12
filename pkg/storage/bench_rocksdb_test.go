@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -51,9 +52,7 @@ func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
 // Read benchmarks. All of them run with on-disk data.
 
 func BenchmarkMVCCScan_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 
 	ctx := context.Background()
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
@@ -79,9 +78,7 @@ func BenchmarkMVCCScan_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCReverseScan_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 
 	ctx := context.Background()
 	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
@@ -135,9 +132,7 @@ func BenchmarkMVCCGet_RocksDB(b *testing.B) {
 }
 
 func BenchmarkMVCCComputeStats_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -318,9 +313,7 @@ func BenchmarkMVCCMergeTimeSeries_RocksDB(b *testing.B) {
 // BenchmarkMVCCGetMergedTimeSeries computes performance of reading merged
 // time series data using `MVCCGet()`. Uses an in-memory engine.
 func BenchmarkMVCCGetMergedTimeSeries_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, numKeys := range []int{1, 16, 256} {
 		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
@@ -336,9 +329,7 @@ func BenchmarkMVCCGetMergedTimeSeries_RocksDB(b *testing.B) {
 // DeleteRange benchmarks below (using on-disk data).
 
 func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, valueSize := range []int{8, 32, 256} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
@@ -348,9 +339,7 @@ func BenchmarkMVCCDeleteRange_RocksDB(b *testing.B) {
 }
 
 func BenchmarkClearRange_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	ctx := context.Background()
 	runClearRange(ctx, b, setupMVCCRocksDB, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearRange(start, end)
@@ -366,44 +355,8 @@ func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 	})
 }
 
-func BenchmarkMVCCGarbageCollect_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
-
-	// NB: To debug #16068, test only 128-128-15000-6.
-	ctx := context.Background()
-	for _, keySize := range []int{128} {
-		b.Run(fmt.Sprintf("keySize=%d", keySize), func(b *testing.B) {
-			for _, valSize := range []int{128} {
-				b.Run(fmt.Sprintf("valSize=%d", valSize), func(b *testing.B) {
-					for _, numKeys := range []int{1, 1024} {
-						b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
-							for _, numVersions := range []int{2, 1024} {
-								b.Run(fmt.Sprintf("numVersions=%d", numVersions), func(b *testing.B) {
-									runMVCCGarbageCollect(ctx, b, setupMVCCInMemRocksDB, benchGarbageCollectOptions{
-										benchDataOptions: benchDataOptions{
-											numKeys:     numKeys,
-											numVersions: numVersions,
-											valueBytes:  valSize,
-										},
-										keyBytes:       keySize,
-										deleteVersions: numVersions - 1,
-									})
-								})
-							}
-						})
-					}
-				})
-			}
-		})
-	}
-}
-
 func BenchmarkBatchApplyBatchRepr_RocksDB(b *testing.B) {
-	if testing.Short() {
-		b.Skip("short flag")
-	}
+	skip.UnderShort(b)
 	ctx := context.Background()
 	for _, indexed := range []bool{false, true} {
 		b.Run(fmt.Sprintf("indexed=%t", indexed), func(b *testing.B) {

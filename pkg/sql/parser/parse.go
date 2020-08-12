@@ -262,6 +262,30 @@ func ParseTableName(sql string) (*tree.UnresolvedObjectName, error) {
 	return rename.Name, nil
 }
 
+// ParseTableNameWithQualifiedNames can be used to parse an input table name that
+// might be prefixed with an unquoted qualified name. The standard ParseTableName
+// cannot do this due to limitations with our parser. In particular, the parser
+// can't parse different productions individually -- it must parse them as part
+// of a top level statement. This causes qualified names that contain keywords
+// to require quotes, which are not required in some cases due to Postgres
+// compatibility (in particular, as arguments to pg_dump). This function gets
+// around this limitation by parsing the input table name as a column name
+// with a fake non-keyword prefix, and then shifting the result down into an
+// UnresolvedObjectName.
+func ParseTableNameWithQualifiedNames(sql string) (*tree.UnresolvedObjectName, error) {
+	stmt, err := ParseOne(fmt.Sprintf("SELECT fakeprefix.%s", sql))
+	if err != nil {
+		return nil, err
+	}
+	un := stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.UnresolvedName)
+	var nameParts [3]string
+	numParts := un.NumParts - 1
+	for i := 0; i < numParts; i++ {
+		nameParts[i] = un.Parts[i]
+	}
+	return tree.NewUnresolvedObjectName(numParts, nameParts, 0 /* annotationIdx */)
+}
+
 // parseExprs parses one or more sql expressions.
 func parseExprs(exprs []string) (tree.Exprs, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))

@@ -2,6 +2,20 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
+# ReorderJoins matches the first expression of an inner join group and adds to
+# the memo all valid join orderings that do not introduce cross joins. If the
+# join has join hints or is the result of a previous join reordering, the join
+# tree is not reordered. For more information, see the comment in
+# join_order_builder.go.
+#
+# Citations: [8]
+[ReorderJoins, Explore]
+(InnerJoin | SemiJoin | AntiJoin | LeftJoin | FullJoin
+    * & (ShouldReorderJoins (Root))
+)
+=>
+(ReorderJoins)
+
 # CommuteJoin creates a Join with the left and right inputs swapped. This is
 # useful for other rules that convert joins to other operators (like merge
 # join).
@@ -103,35 +117,44 @@
 =>
 (GenerateLookupJoins (OpName) $left $scanPrivate $on $private)
 
-# GenerateGeoLookupJoins creates GeoLookupJoin operators for all geospatial
-# indexes (of the Scan table) which allow it. See the GenerateGeoLookupJoins
+# GenerateInvertedJoins creates InvertedJoin operators for all inverted
+# indexes (of the Scan table) which allow it. See the GenerateInvertedJoins
 # custom function for more details.
 # TODO(rytaft): Add support for LeftJoin.
-[GenerateGeoLookupJoins, Explore]
+[GenerateInvertedJoins, Explore]
 (InnerJoin | SemiJoin | AntiJoin
     $left:*
     (Scan $scanPrivate:*) &
         (IsCanonicalScan $scanPrivate) &
         (HasInvertedIndexes $scanPrivate)
-    $on:[
-        ...
-        (FiltersItem
-            $fn:(Function) &
-                (IsGeoIndexFunction $fn) &
-                (HasAllVariableArgs $fn)
-        )
-        ...
-    ]
+    $on:*
     $private:*
 )
 =>
-(GenerateGeoLookupJoins
+(GenerateInvertedJoins (OpName) $left $scanPrivate $on $private)
+
+# GenerateInvertedJoinsFromSelect is similar to GenerateInvertedJoins, but
+# applies when the input is a Select.
+# TODO(rytaft): Add support for LeftJoin.
+[GenerateInvertedJoinsFromSelect, Explore]
+(InnerJoin | SemiJoin | AntiJoin
+    $left:*
+    (Select
+        (Scan $scanPrivate:*) &
+            (IsCanonicalScan $scanPrivate) &
+            (HasInvertedIndexes $scanPrivate)
+        $filters:*
+    )
+    $on:*
+    $private:*
+)
+=>
+(GenerateInvertedJoins
     (OpName)
     $left
     $scanPrivate
-    $on
+    (ConcatFilters $on $filters)
     $private
-    $fn
 )
 
 # GenerateZigzagJoins creates ZigzagJoin operators for all index pairs (of the
@@ -178,9 +201,9 @@
 
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
-# with the ON condition (this is correct for both inner and left join).
+# with the ON condition (this is correct for inner, left, and semi/anti join).
 [GenerateLookupJoinsWithFilter, Explore]
-(InnerJoin | LeftJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     (Select
         (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
@@ -198,43 +221,32 @@
     $private
 )
 
-# AssociateJoin applies the rule of join associativity. It converts an
-# expression like:
-#   (A JOIN B ON A.y = B.y) JOIN C ON B.x = C.x
-# to the logically equivalent expression:
-#   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
+# PushJoinIntoIndexJoin pushes an InnerJoin into an IndexJoin. The IndexJoin is
+# replaced with a LookupJoin, since it now must output columns from the right
+# side of the InnerJoin as well as from the original lookup table. This can
+# be useful when the InnerJoin that is pushed down reduces cardinality, since an
+# index lookup can be expensive.
 #
-# If any of the joins contains a hint, we do not rearrange the joins.
-[AssociateJoin, Explore]
+# Matching conditions:
+# 1. The right input of the InnerJoin does not have outer columns.
+# 2. The ON condition of the InnerJoin only references columns from its right
+#    input and the input of the IndexJoin.
+# 3. The InnerJoin does not have any join hints.
+#
+# TODO(drewk): match LeftJoins as well if a good use case is found.
+[PushJoinIntoIndexJoin, Explore]
 (InnerJoin
-    $left:(InnerJoin
-        $innerLeft:*
-        $innerRight:*
-        $innerOn:*
-        $innerPrivate:* & (NoJoinHints $innerPrivate)
-    )
-    $right:* & (ShouldReorderJoins $left $right)
-    $on:*
-    $private:* & (NoJoinHints $private)
+    $left:(IndexJoin $indexInput:* $indexPrivate:*)
+    $right:* & ^(HasOuterCols $right)
+    $on:* & (FiltersBoundBy $on (OutputCols2 $indexInput $right))
+    $joinPrivate:* & (NoJoinHints $joinPrivate)
 )
 =>
-(InnerJoin
-    $innerLeft
-    (InnerJoin
-        $innerRight
-        $right
-        (SortFilters
-            (ExtractBoundConditions
-                $newOn:(MapJoinOpEqualities
-                    (ConcatFilters $on $innerOn)
-                    (OutputCols $innerLeft)
-                    $cols:(OutputCols2 $innerRight $right)
-                )
-                $cols
-            )
-        )
-        (EmptyJoinPrivate)
+(LookupJoin
+    (InnerJoin $indexInput $right $on $joinPrivate)
+    []
+    (ConvertIndexToLookupJoinPrivate
+        $indexPrivate
+        (OutputCols2 $left $right)
     )
-    (SortFilters (ExtractUnboundConditions $newOn $cols))
-    (EmptyJoinPrivate)
 )

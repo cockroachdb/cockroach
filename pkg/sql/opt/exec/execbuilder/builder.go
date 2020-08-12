@@ -21,16 +21,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ParallelScanResultThreshold is the number of results up to which, if the
+// maximum number of results returned by a scan is known, the scan disables
+// batch limits in the dist sender. This results in the parallelization of these
+// scans.
+const ParallelScanResultThreshold = 10000
+
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {
-	factory            exec.Factory
-	mem                *memo.Memo
-	catalog            cat.Catalog
-	e                  opt.Expr
-	disableTelemetry   bool
-	evalCtx            *tree.EvalContext
-	fastIsConstVisitor fastIsConstVisitor
+	factory          exec.Factory
+	mem              *memo.Memo
+	catalog          cat.Catalog
+	e                opt.Expr
+	disableTelemetry bool
+	evalCtx          *tree.EvalContext
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -61,7 +66,13 @@ type Builder struct {
 	// mutation itself. See canAutoCommit().
 	allowAutoCommit bool
 
+	// initialAllowAutoCommit saves the allowAutoCommit value passed to New; used
+	// for EXPLAIN.
+	initialAllowAutoCommit bool
+
 	allowInsertFastPath bool
+
+	allowInterleavedJoins bool
 
 	// forceForUpdateLocking is conditionally passed through to factory methods
 	// for scan operators that serve as the input for mutation operators. When
@@ -80,22 +91,34 @@ type Builder struct {
 // node tree from the given optimized expression tree.
 //
 // catalog is only needed if the statement contains an EXPLAIN (OPT, CATALOG).
+//
+// If allowAutoCommit is true, mutation operators can pass the auto commit flag
+// to the factory (when the optimizer determines it is correct to do so). It
+// should be false if the statement is executed as part of an explicit
+// transaction.
 func New(
-	factory exec.Factory, mem *memo.Memo, catalog cat.Catalog, e opt.Expr, evalCtx *tree.EvalContext,
+	factory exec.Factory,
+	mem *memo.Memo,
+	catalog cat.Catalog,
+	e opt.Expr,
+	evalCtx *tree.EvalContext,
+	allowAutoCommit bool,
 ) *Builder {
 	b := &Builder{
-		factory:         factory,
-		mem:             mem,
-		catalog:         catalog,
-		e:               e,
-		evalCtx:         evalCtx,
-		allowAutoCommit: true,
+		factory:                factory,
+		mem:                    mem,
+		catalog:                catalog,
+		e:                      e,
+		evalCtx:                evalCtx,
+		allowAutoCommit:        allowAutoCommit,
+		initialAllowAutoCommit: allowAutoCommit,
 	}
 	if evalCtx != nil {
 		if evalCtx.SessionData.SaveTablesPrefix != "" {
 			b.nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
 		}
 		b.allowInsertFastPath = evalCtx.SessionData.InsertFastPath
+		b.allowInterleavedJoins = evalCtx.SessionData.InterleavedJoins
 	}
 	return b
 }
@@ -132,7 +155,14 @@ func (b *Builder) build(e opt.Expr) (_ execPlan, err error) {
 		)
 	}
 
-	b.allowAutoCommit = b.allowAutoCommit && b.canAutoCommit(rel)
+	canAutoCommit := b.canAutoCommit(rel)
+	b.allowAutoCommit = b.allowAutoCommit && canAutoCommit
+
+	// First condition from ConstructFastPathInsert:
+	//  - there are no other mutations in the statement, and the output of the
+	//    insert is not processed through side-effecting expressions (i.e. we can
+	//    auto-commit).
+	b.allowInsertFastPath = b.allowInsertFastPath && canAutoCommit
 
 	return b.buildRelational(rel)
 }
@@ -162,12 +192,10 @@ type builtWithExpr struct {
 	// outputCols maps the output ColumnIDs of the With expression to the ordinal
 	// positions they are output to. See execPlan.outputCols for more details.
 	outputCols opt.ColMap
-	bufferNode exec.BufferNode
+	bufferNode exec.Node
 }
 
-func (b *Builder) addBuiltWithExpr(
-	id opt.WithID, outputCols opt.ColMap, bufferNode exec.BufferNode,
-) {
+func (b *Builder) addBuiltWithExpr(id opt.WithID, outputCols opt.ColMap, bufferNode exec.Node) {
 	b.withExprs = append(b.withExprs, builtWithExpr{
 		id:         id,
 		outputCols: outputCols,

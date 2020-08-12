@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,7 +48,13 @@ var virtualSequenceOpts = tree.SequenceOptions{
 // The ColumnTableDef is not mutated in-place; instead a new one is returned.
 func (p *planner) processSerialInColumnDef(
 	ctx context.Context, d *tree.ColumnTableDef, tableName *TableName,
-) (*tree.ColumnTableDef, *DatabaseDescriptor, *TableName, tree.SequenceOptions, error) {
+) (
+	*tree.ColumnTableDef,
+	*sqlbase.ImmutableDatabaseDescriptor,
+	*TableName,
+	tree.SequenceOptions,
+	error,
+) {
 	if !d.IsSerial {
 		// Column is not SERIAL: nothing to do.
 		return d, nil, nil, nil, nil
@@ -88,7 +95,7 @@ func (p *planner) processSerialInColumnDef(
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
 
-	defType, err := tree.ResolveType(d.Type, p.semaCtx.GetTypeResolver())
+	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -128,7 +135,7 @@ func (p *planner) processSerialInColumnDef(
 		if i > 0 {
 			seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
 		}
-		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, ResolveAnyDescType)
+		res, err := p.ResolveUncachedTableDescriptor(ctx, seqName, false /*required*/, tree.ResolveAnyTableKind)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}

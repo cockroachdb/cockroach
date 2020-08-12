@@ -16,9 +16,11 @@ import (
 	"reflect"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/opentracing/opentracing-go"
 )
 
 // Job manages logging the progress of long-running system processes, like
@@ -38,13 +41,21 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id  *int64
-	txn *kv.Txn
-	mu  struct {
+	id        *int64
+	createdBy *CreatedByInfo
+	txn       *kv.Txn
+	mu        struct {
 		syncutil.Mutex
 		payload  jobspb.Payload
 		progress jobspb.Progress
 	}
+}
+
+// CreatedByInfo encapsulates they type and the ID of the system which created
+// this job.
+type CreatedByInfo struct {
+	Name string
+	ID   int64
 }
 
 // Record bundles together the user-managed fields in jobspb.Payload.
@@ -52,7 +63,7 @@ type Record struct {
 	Description   string
 	Statement     string
 	Username      string
-	DescriptorIDs sqlbase.IDs
+	DescriptorIDs descpb.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
 	RunningStatus RunningStatus
@@ -61,6 +72,9 @@ type Record struct {
 	// a version < 20.1, so it can only be used in cases where all nodes having
 	// versions >= 20.1 is guaranteed.
 	NonCancelable bool
+	// CreatedBy, if set, annotates this record with the information on
+	// this job creator.
+	CreatedBy *CreatedByInfo
 }
 
 // StartableJob is a job created with a transaction to be started later.
@@ -72,6 +86,7 @@ type StartableJob struct {
 	resumerCtx context.Context
 	cancel     context.CancelFunc
 	resultsCh  chan<- tree.Datums
+	span       opentracing.Span
 	starts     int64 // used to detect multiple calls to Start()
 }
 
@@ -176,6 +191,12 @@ func SimplifyInvalidStatusError(err error) error {
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
 	return j.id
+}
+
+// CreatedBy returns name/id of this job creator.  This will be nil if this information
+// was not set.
+func (j *Job) CreatedBy() *CreatedByInfo {
+	return j.createdBy
 }
 
 // Created records the creation of a new job in the system.jobs table and
@@ -361,11 +382,11 @@ func (j *Job) paused(ctx context.Context, fn func(context.Context, *kv.Txn) erro
 	})
 }
 
-// resumed sets the status of the tracked job to running or reverting iff the
+// unpaused sets the status of the tracked job to running or reverting iff the
 // job is currently paused. It does not directly resume the job; rather, it
 // expires the job's lease so that a Registry adoption loop detects it and
 // resumes it.
-func (j *Job) resumed(ctx context.Context) error {
+func (j *Job) unpaused(ctx context.Context) error {
 	return j.Update(ctx, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusRunning || md.Status == StatusReverting {
 			// Already resumed - do nothing.
@@ -673,8 +694,16 @@ func HasJobNotFoundError(err error) bool {
 func (j *Job) load(ctx context.Context) error {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
+	var createdBy *CreatedByInfo
+
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		const stmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
+		const newStmt = "SELECT payload, progress, created_by_type, created_by_id FROM system.jobs WHERE id = $1"
+		const oldStmt = "SELECT payload, progress FROM system.jobs WHERE id = $1"
+		hasCreatedBy := j.registry.settings.Version.IsActive(ctx, clusterversion.VersionAlterSystemJobsAddCreatedByColumns)
+		stmt := oldStmt
+		if hasCreatedBy {
+			stmt = newStmt
+		}
 		row, err := j.registry.ex.QueryRowEx(
 			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 			stmt, *j.ID())
@@ -689,12 +718,20 @@ func (j *Job) load(ctx context.Context) error {
 			return err
 		}
 		progress, err = UnmarshalProgress(row[1])
-		return err
+		if err != nil {
+			return err
+		}
+		if hasCreatedBy {
+			createdBy, err = unmarshalCreatedBy(row[2], row[3])
+			return err
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
 	j.mu.progress = *progress
+	j.createdBy = createdBy
 	return nil
 }
 
@@ -723,9 +760,18 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 			return err
 		}
 
-		const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
+		if j.createdBy == nil {
+			const stmt = "INSERT INTO system.jobs (id, status, payload, progress) VALUES ($1, $2, $3, $4)"
+			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusRunning, payloadBytes, progressBytes)
+			return err
+		}
+		const stmt = `
+INSERT INTO system.jobs (id, status, payload, progress, created_by_type, created_by_id) 
+VALUES ($1, $2, $3, $4, $5, $6)`
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+			id, StatusRunning, payloadBytes, progressBytes, j.createdBy.Name, j.createdBy.ID)
 		return err
+
 	}); err != nil {
 		return err
 	}
@@ -778,6 +824,23 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	return progress, nil
 }
 
+// unnarshalCreatedBy unrmarshals and returns created_by_type and created_by_id datums
+// which may be tree.DNull, or tree.DString and tree.DInt respectively.
+func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, error) {
+	if createdByType == tree.DNull || createdByID == tree.DNull {
+		return nil, nil
+	}
+	if ds, ok := createdByType.(*tree.DString); ok {
+		if id, ok := createdByID.(*tree.DInt); ok {
+			return &CreatedByInfo{Name: string(*ds), ID: int64(*id)}, nil
+		}
+		return nil, errors.Errorf(
+			"Job: failed to unmarshal created_by_type as DInt (was %T)", createdByID)
+	}
+	return nil, errors.Errorf(
+		"Job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
+}
+
 // CurrentStatus returns the current job status from the jobs table or error.
 func (j *Job) CurrentStatus(ctx context.Context) (Status, error) {
 	if j.id == nil {
@@ -822,7 +885,7 @@ func (sj *StartableJob) Start(ctx context.Context) (errCh <-chan error, err erro
 	if err := sj.started(ctx); err != nil {
 		return nil, err
 	}
-	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job)
+	errCh, err = sj.registry.resume(sj.resumerCtx, sj.resumer, sj.resultsCh, sj.Job, sj.cleanup)
 	if err != nil {
 		return nil, err
 	}
@@ -917,4 +980,11 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(*sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, *sj.ID())
+}
+
+// cleanup is passed to registry.resume
+func (sj *StartableJob) cleanup() {
+	if sj.span != nil {
+		sj.span.Finish()
+	}
 }

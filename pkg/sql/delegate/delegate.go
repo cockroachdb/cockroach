@@ -43,6 +43,9 @@ func TryDelegate(
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
 
+	case *tree.ShowEnums:
+		return d.delegateShowEnums(t)
+
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
 
@@ -108,6 +111,18 @@ func TryDelegate(
 
 	case *tree.ShowTransactionStatus:
 		return d.delegateShowVar(&tree.ShowVar{Name: "transaction_status"})
+
+	case *tree.ShowSchedules:
+		return d.delegateShowSchedules(t)
+
+	case *tree.ControlJobsForSchedules:
+		return d.delegateJobControl(t)
+
+	case *tree.ShowLastQueryStatistics:
+		return nil, unimplemented.New(
+			"show last query statistics",
+			"cannot use SHOW LAST QUERY STATISTICS as a statement source",
+		)
 
 	case *tree.ShowSavepointStatus:
 		return nil, unimplemented.NewWithIssue(47333, "cannot use SHOW SAVEPOINT STATUS as a statement source")

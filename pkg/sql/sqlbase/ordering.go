@@ -11,6 +11,8 @@
 package sqlbase
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -26,6 +28,26 @@ type ColumnOrderInfo struct {
 //     []ColumnOrderInfo{ {3, encoding.Descending}, {1, encoding.Ascending} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
+
+func (ordering ColumnOrdering) String(columns ResultColumns) string {
+	var buf bytes.Buffer
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, o := range ordering {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		prefix := byte('+')
+		if o.Direction == encoding.Descending {
+			prefix = byte('-')
+		}
+		buf.WriteByte(prefix)
+
+		fmtCtx.FormatNameP(&columns[o.ColIdx].Name)
+		_, _ = fmtCtx.WriteTo(&buf)
+	}
+	fmtCtx.Close()
+	return buf.String()
+}
 
 // NoOrdering is used to indicate an empty ColumnOrdering.
 var NoOrdering ColumnOrdering

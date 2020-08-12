@@ -45,6 +45,7 @@ import (
 // plan; planning will be performed outside of the transaction.
 func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -101,7 +102,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -138,7 +139,6 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			rw,
 			stmt.AST.StatementType(),
 			execCfg.RangeDescriptorCache,
-			execCfg.LeaseHolderCache,
 			txn,
 			func(ts hlc.Timestamp) {
 				execCfg.Clock.Update(ts)
@@ -155,12 +155,10 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
-		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
-		// We need isLocal = false so that we executing the plan involves marshaling
+		// We need distribute = true so that executing the plan involves marshaling
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
-		planCtx.isLocal = false
-		planCtx.planner = p
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil /* txn */, true /* distribute */)
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
@@ -183,6 +181,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 // come along.
 func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This test goes through the trouble of creating a server because it wants to
 	// create a txn. It creates the txn because it wants to test an interaction
@@ -202,7 +201,6 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		rw,
 		tree.Rows, /* StatementType */
 		nil,       /* rangeCache */
-		nil,       /* leaseCache */
 		txn,
 		func(hlc.Timestamp) {}, /* updateClock */
 		&SessionTracing{},

@@ -12,8 +12,10 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,7 +37,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireViewDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, tree.ResolveRequireViewDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +119,7 @@ func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropViewNode) Close(context.Context)        {}
 
-func descInSlice(descID sqlbase.ID, td []toDelete) bool {
+func descInSlice(descID descpb.ID, td []toDelete) bool {
 	for _, toDel := range td {
 		if descID == toDel.desc.ID {
 			return true
@@ -129,7 +131,7 @@ func descInSlice(descID sqlbase.ID, td []toDelete) bool {
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,
 	from *sqlbase.MutableTableDescriptor,
-	ref sqlbase.TableDescriptor_Reference,
+	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
@@ -139,8 +141,8 @@ func (p *planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID sqlbase.ID,
-	ref sqlbase.TableDescriptor_Reference,
+	parentID descpb.ID,
+	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
@@ -186,7 +188,7 @@ func (p *planner) dropViewImpl(
 
 	// Remove back-references from the tables/views this view depends on.
 	for _, depID := range viewDesc.DependsOn {
-		dependencyDesc, err := p.Tables().getMutableTableVersionByID(ctx, depID, p.txn)
+		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
 		if err != nil {
 			return cascadeDroppedViews,
 				errors.Errorf("error resolving dependency relation ID %d: %v", depID, err)
@@ -197,9 +199,10 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		// TODO (lucy): Have more consistent/informative names for dependent jobs.
 		if err := p.writeSchemaChange(
-			ctx, dependencyDesc, sqlbase.InvalidMutationID, "removing references for view",
+			ctx, dependencyDesc, descpb.InvalidMutationID,
+			fmt.Sprintf("removing references for view %s from table %s(%d)",
+				viewDesc.Name, dependencyDesc.Name, dependencyDesc.ID),
 		); err != nil {
 			return cascadeDroppedViews, err
 		}
@@ -214,7 +217,6 @@ func (p *planner) dropViewImpl(
 			if err != nil {
 				return cascadeDroppedViews, err
 			}
-			// TODO (lucy): Have more consistent/informative names for dependent jobs.
 			cascadedViews, err := p.dropViewImpl(ctx, dependentDesc, queueJob, "dropping dependent view", behavior)
 			if err != nil {
 				return cascadeDroppedViews, err
@@ -222,6 +224,11 @@ func (p *planner) dropViewImpl(
 			cascadeDroppedViews = append(cascadeDroppedViews, cascadedViews...)
 			cascadeDroppedViews = append(cascadeDroppedViews, dependentDesc.Name)
 		}
+	}
+
+	// Remove any references to types that this view has.
+	if err := p.removeBackRefsFromAllTypesInTable(ctx, viewDesc); err != nil {
+		return cascadeDroppedViews, err
 	}
 
 	if err := p.initiateDropTable(ctx, viewDesc, queueJob, jobDesc, true /* drainName */); err != nil {
@@ -235,10 +242,10 @@ func (p *planner) getViewDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, viewID sqlbase.ID,
+	parentID, viewID descpb.ID,
 	behavior tree.DropBehavior,
 ) (*sqlbase.MutableTableDescriptor, error) {
-	viewDesc, err := p.Tables().getMutableTableVersionByID(ctx, viewID, p.txn)
+	viewDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, viewID, p.txn)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
@@ -247,12 +254,13 @@ func (p *planner) getViewDescForCascade(
 		viewName := viewDesc.Name
 		if viewDesc.ParentID != parentID {
 			var err error
-			viewName, err = p.getQualifiedTableName(ctx, viewDesc.TableDesc())
+			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				return nil, sqlbase.NewDependentObjectErrorf(
 					"cannot drop %s %q because a view depends on it", typeName, objName)
 			}
+			viewName = viewFQName.FQString()
 		}
 		return nil, errors.WithHintf(
 			sqlbase.NewDependentObjectErrorf("cannot drop %s %q because view %q depends on it",

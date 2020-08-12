@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestContainsVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		expr     string
 		expected bool
@@ -52,6 +54,7 @@ func TestContainsVars(t *testing.T) {
 
 func TestNormalizeExpr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer tree.MockNameTypes(map[string]*types.T{
 		"a":  types.Int,
 		"b":  types.Int,
@@ -276,6 +279,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`(ROW (a) AS a)`, `((a,) AS a)`}, // Tuple
 	}
 
+	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
@@ -283,7 +287,7 @@ func TestNormalizeExpr(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
-			typedExpr, err := expr.TypeCheck(&semaCtx, types.Any)
+			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}

@@ -163,6 +163,42 @@ func TestIntersects(t *testing.T) {
 			true,
 		},
 		{
+			"LINESTRING intersects POINT across the longitudinal boundary",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(179.1 0)",
+			true,
+		},
+		{
+			"reversed LINESTRING intersects POINT across the longitudinal boundary",
+			"LINESTRING(-179 0, 179 0)",
+			"POINT(179.1 0)",
+			true,
+		},
+		{
+			"LINESTRING does not intersect POINT with linestring crossing the longitudinal boundary but POINT on the other side",
+			"LINESTRING(179 0, -179 0)",
+			"POINT(170 0)",
+			false,
+		},
+		{
+			"reversed LINESTRING does not intersect POINT with linestring crossing the longitudinal boundary but POINT on the other side",
+			"LINESTRING(-179 0, 179 0)",
+			"POINT(170 0)",
+			false,
+		},
+		{
+			"POLYGON intersects POINT lying inside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (150 88)",
+			true,
+		},
+		{
+			"POLYGON does not intersect POINT lying outside latitudinal boundary",
+			"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+			"POINT (170 88)",
+			false,
+		},
+		{
 			"POLYGON intersects itself",
 			"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 			"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
@@ -257,6 +293,24 @@ func TestIntersects(t *testing.T) {
 			"MULTIPOLYGON (((15 5, 40 10, 10 20, 5 10, 15 5)),((30 20, 45 40, 10 40, 30 20)))",
 			"MULTIPOLYGON (((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)))",
 			false,
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY do not intersect with each other",
+			"GEOMETRYCOLLECTION EMPTY",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY do not intersect with a point",
+			"POINT(1.0 2.0)",
+			"GEOMETRYCOLLECTION EMPTY",
+			false,
+		},
+		{
+			"GEOMETRYCOLLECTION EMPTY and POINT intersect",
+			"POINT(1.0 2.0)",
+			"GEOMETRYCOLLECTION (LINESTRING EMPTY, POINT(1.0 2.0))",
+			true,
 		},
 	}
 

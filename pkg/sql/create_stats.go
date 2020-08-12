@@ -20,22 +20,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // createStatsPostEvents controls the cluster setting for logging
@@ -49,6 +50,14 @@ var createStatsPostEvents = settings.RegisterPublicBoolSetting(
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
 	return &createStatsNode{
 		CreateStats: *n,
+		p:           p,
+	}, nil
+}
+
+// Analyze is syntactic sugar for CreateStatistics.
+func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error) {
+	return &createStatsNode{
+		CreateStats: tree.CreateStats{Table: n.Table},
 		p:           p,
 	}, nil
 }
@@ -147,7 +156,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	var err error
 	switch t := n.Table.(type) {
 	case *tree.UnresolvedObjectName:
-		tableDesc, err = n.p.ResolveExistingObjectEx(ctx, t, true /*required*/, ResolveRequireTableDesc)
+		tableDesc, err = n.p.ResolveExistingObjectEx(ctx, t, true /*required*/, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -157,14 +166,15 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 			AvoidCached: n.p.avoidCachedDescriptors,
 		}}
-		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
+		tableDesc, err = n.p.Descriptors().GetTableVersionByID(ctx, n.p.txn, descpb.ID(t.TableID), flags)
 		if err != nil {
 			return nil, err
 		}
-		fqTableName, err = n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
+		fqName, err := n.p.getQualifiedTableName(ctx, tableDesc)
 		if err != nil {
 			return nil, err
 		}
+		fqTableName = fqName.FQString()
 	}
 
 	if tableDesc.IsVirtualTable() {
@@ -196,27 +206,35 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, err
 		}
 
-		columnIDs := make([]sqlbase.ColumnID, len(columns))
+		columnIDs := make([]descpb.ColumnID, len(columns))
 		for i := range columns {
-			if columns[i].Type.Family() == types.JsonFamily {
-				return nil, unimplemented.NewWithIssuef(35844,
-					"CREATE STATISTICS is not supported for JSON columns")
-			}
 			columnIDs[i] = columns[i].ID
 		}
-		colStats = []jobspb.CreateStatsDetails_ColStat{{ColumnIDs: columnIDs, HasHistogram: false}}
-		if len(columnIDs) == 1 && columns[0].Type.Family() != types.ArrayFamily {
+		col, err := tableDesc.FindColumnByID(columnIDs[0])
+		if err != nil {
+			return nil, err
+		}
+		isInvIndex := sqlbase.ColumnTypeIsInvertedIndexable(col.Type)
+		colStats = []jobspb.CreateStatsDetails_ColStat{{
+			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
-			// with a single column. (We cannot create histograms on array columns
-			// because we do not support key encoding arrays.)
-			colStats[0].HasHistogram = true
+			// with a single column that doesn't use an inverted index.
+			HasHistogram: len(columnIDs) == 1 && !isInvIndex,
+		}}
+		// Make histograms for inverted index column types.
+		if len(columnIDs) == 1 && isInvIndex {
+			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+				ColumnIDs:    columnIDs,
+				HasHistogram: true,
+				Inverted:     true,
+			})
 		}
 	}
 
 	// Evaluate the AS OF time, if any.
 	var asOf *hlc.Timestamp
 	if n.Options.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(n.Options.AsOf)
+		asOfTs, err := n.p.EvalAsOfTimestamp(ctx, n.Options.AsOf)
 		if err != nil {
 			return nil, err
 		}
@@ -266,11 +284,13 @@ const maxNonIndexCols = 100
 // useful to have statistics on prefixes of those columns. For example, if a
 // table abc contains indexes on (a ASC, b ASC) and (b ASC, c ASC), we will
 // collect statistics on a, {a, b}, b, and {b, c}. (But if multiColEnabled is
-// false, we will only collect stats on a and b).
+// false, we will only collect stats on a and b). Columns in partial index
+// predicate expressions are also likely to appear in query filters, so stats
+// are collected for those columns as well.
 //
 // In addition to the index columns, we collect stats on up to maxNonIndexCols
 // other columns from the table. We only collect histograms for index columns,
-// plus any other boolean columns (where the "histogram" is tiny).
+// plus any other boolean or enum columns (where the "histogram" is tiny).
 func createStatsDefaultColumns(
 	desc *ImmutableTableDescriptor, multiColEnabled bool,
 ) ([]jobspb.CreateStatsDetails_ColStat, error) {
@@ -278,60 +298,131 @@ func createStatsDefaultColumns(
 
 	requestedStats := make(map[string]struct{})
 
-	// Add column stats for the primary key.
-	for i := range desc.PrimaryIndex.ColumnIDs {
-		if i != 0 && !multiColEnabled {
-			break
+	// trackStatsIfNotExists adds the given column IDs as a set to the
+	// requestedStats set. If the columnIDs were not already in the set, it
+	// returns true.
+	trackStatsIfNotExists := func(colIDs []descpb.ColumnID) bool {
+		key := makeColStatKey(colIDs)
+		if _, ok := requestedStats[key]; ok {
+			return false
+		}
+		requestedStats[key] = struct{}{}
+		return true
+	}
+
+	// addIndexColumnStatsIfNotExists appends column stats for the given column
+	// ID if they have not already been added. Histogram stats are collected for
+	// every indexed column.
+	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) {
+		colList := []descpb.ColumnID{colID}
+
+		// Check for existing stats and remember the requested stats.
+		if !trackStatsIfNotExists(colList) {
+			return
 		}
 
-		// Remember the requested stats so we don't request duplicates.
-		key := makeColStatKey(desc.PrimaryIndex.ColumnIDs[: i+1 : i+1])
-		requestedStats[key] = struct{}{}
+		colStat := jobspb.CreateStatsDetails_ColStat{
+			ColumnIDs:    colList,
+			HasHistogram: !isInverted,
+		}
+		colStats = append(colStats, colStat)
 
+		// Generate histograms for inverted indexes. The above
+		// colStat append is still needed for a basic sketch of
+		// the column. The following colStat is needed for the
+		// sampling and sketch of the inverted index keys of
+		// the column.
+		if isInverted {
+			colStat.Inverted = true
+			colStat.HasHistogram = true
+			colStats = append(colStats, colStat)
+		}
+	}
+
+	// Add column stats for the primary key.
+	for i := range desc.PrimaryIndex.ColumnIDs {
+		// Generate stats for each column in the primary key.
+		addIndexColumnStatsIfNotExists(desc.PrimaryIndex.ColumnIDs[i], false /* isInverted */)
+
+		// Only collect multi-column stats if enabled.
+		if i == 0 || !multiColEnabled {
+			continue
+		}
+
+		colIDs := desc.PrimaryIndex.ColumnIDs[: i+1 : i+1]
+
+		// Remember the requested stats so we don't request duplicates.
+		trackStatsIfNotExists(colIDs)
+
+		// Only generate non-histogram multi-column stats.
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:    desc.PrimaryIndex.ColumnIDs[: i+1 : i+1],
-			HasHistogram: i == 0,
+			ColumnIDs:    colIDs,
+			HasHistogram: false,
 		})
 	}
 
 	// Add column stats for each secondary index.
 	for i := range desc.Indexes {
-		if desc.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
-			// We don't yet support stats on inverted indexes.
-			continue
-		}
-		for j := range desc.Indexes[i].ColumnIDs {
-			if j != 0 && !multiColEnabled {
-				break
-			}
+		isInverted := desc.Indexes[i].Type == descpb.IndexDescriptor_INVERTED
 
-			// Check for existing stats and remember the requested stats.
-			key := makeColStatKey(desc.Indexes[i].ColumnIDs[: j+1 : j+1])
-			if _, ok := requestedStats[key]; ok {
+		for j := range desc.Indexes[i].ColumnIDs {
+			// Generate stats for each indexed column.
+			addIndexColumnStatsIfNotExists(desc.Indexes[i].ColumnIDs[j], isInverted)
+
+			// Only collect multi-column stats if enabled.
+			if j == 0 || !multiColEnabled {
 				continue
 			}
-			requestedStats[key] = struct{}{}
 
+			colIDs := desc.Indexes[i].ColumnIDs[: j+1 : j+1]
+
+			// Check for existing stats and remember the requested stats.
+			if !trackStatsIfNotExists(colIDs) {
+				continue
+			}
+
+			// Only generate non-histogram multi-column stats.
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-				ColumnIDs:    desc.Indexes[i].ColumnIDs[: j+1 : j+1],
-				HasHistogram: j == 0,
+				ColumnIDs:    colIDs,
+				HasHistogram: false,
 			})
+		}
+
+		// Add columns referenced in partial index predicate expressions.
+		if desc.Indexes[i].IsPartial() {
+			expr, err := parser.ParseExpr(desc.Indexes[i].Predicate)
+			if err != nil {
+				return nil, err
+			}
+
+			// Extract the IDs of columns referenced in the predicate.
+			colIDs, err := schemaexpr.ExtractColumnIDs(desc, expr)
+			if err != nil {
+				return nil, err
+			}
+
+			// Generate stats for each column individually.
+			for _, colID := range colIDs.Ordered() {
+				addIndexColumnStatsIfNotExists(colID, isInverted)
+			}
 		}
 	}
 
-	// Add all remaining non-json columns in the table, up to maxNonIndexCols.
+	// Add all remaining columns in the table, up to maxNonIndexCols.
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
-		colList := []sqlbase.ColumnID{col.ID}
-		key := makeColStatKey(colList)
-		if _, ok := requestedStats[key]; !ok && col.Type.Family() != types.JsonFamily {
-			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-				ColumnIDs:    colList,
-				HasHistogram: col.Type.Family() == types.BoolFamily,
-			})
-			nonIdxCols++
+		colList := []descpb.ColumnID{col.ID}
+
+		if !trackStatsIfNotExists(colList) {
+			continue
 		}
+
+		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
+			ColumnIDs:    colList,
+			HasHistogram: col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily,
+		})
+		nonIdxCols++
 	}
 
 	return colStats, nil
@@ -339,7 +430,7 @@ func createStatsDefaultColumns(
 
 // makeColStatKey constructs a unique key representing cols that can be used
 // as the key in a map.
-func makeColStatKey(cols []sqlbase.ColumnID) string {
+func makeColStatKey(cols []descpb.ColumnID) string {
 	var colSet util.FastIntSet
 	for _, c := range cols {
 		colSet.Add(int(c))
@@ -347,14 +438,14 @@ func makeColStatKey(cols []sqlbase.ColumnID) string {
 	return colSet.String()
 }
 
-// makePlanForExplainDistSQL is part of the distSQLExplainable interface.
-func (n *createStatsNode) makePlanForExplainDistSQL(
+// newPlanForExplainDistSQL is part of the distSQLExplainable interface.
+func (n *createStatsNode) newPlanForExplainDistSQL(
 	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	// Create a job record but don't actually start the job.
 	record, err := n.makeJobRecord(planCtx.ctx)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
 
@@ -365,7 +456,7 @@ func (n *createStatsNode) makePlanForExplainDistSQL(
 // jobs. A new instance is created for each job.
 type createStatsResumer struct {
 	job     *jobs.Job
-	tableID sqlbase.ID
+	tableID descpb.ID
 }
 
 var _ jobs.Resumer = &createStatsResumer{}
@@ -397,22 +488,23 @@ func (r *createStatsResumer) Resume(
 
 	dsp := p.DistSQLPlanner()
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Set the transaction on the EvalContext to this txn. This allows for
+		// use of the txn during processor setup during the execution of the flow.
+		evalCtx.Txn = txn
+
 		if details.AsOf != nil {
 			p.semaCtx.AsOfTimestamp = details.AsOf
 			p.extendedEvalCtx.SetTxnTimestamp(details.AsOf.GoTime())
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
-		planCtx.planner = p
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, p, txn, true /* distribute */)
 		if err := dsp.planAndRunCreateStats(
 			ctx, evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
-			if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
-				if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
-					return jobs.NewRetryJobError("node failure")
-				}
+			if grpcutil.IsContextCanceled(err) {
+				return jobs.NewRetryJobError("node failure")
 			}
 
 			// If the job was canceled, any of the distsql processors could have been
@@ -439,10 +531,10 @@ func (r *createStatsResumer) Resume(
 		return err
 	}
 
-	// Invalidate the local cache synchronously; this guarantees that the next
-	// statement in the same session won't use a stale cache (whereas the gossip
-	// update is handled asynchronously).
-	evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
+	// Refresh the local cache if Gossip is not available.
+	if _, ok := evalCtx.ExecCfg.Gossip.Optional(47925); !ok {
+		evalCtx.ExecCfg.TableStatsCache.RefreshTableStats(ctx, r.tableID)
+	}
 
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {

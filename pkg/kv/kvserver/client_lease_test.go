@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -41,6 +41,7 @@ import (
 // expiration-based otherwise.
 func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
 		sc := kvserver.TestStoreConfig(nil)
@@ -92,6 +93,7 @@ func TestStoreRangeLease(t *testing.T) {
 // between expiration and epoch and back.
 func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
@@ -108,8 +110,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 
 	// Allow leases to expire and send commands to ensure we
 	// re-acquire, then check types again.
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -125,8 +127,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = false
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -142,8 +144,8 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 	sc.EnableEpochRangeLeases = true
 	mtc.restartStore(0)
 
-	mtc.advanceClock(context.TODO())
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	mtc.advanceClock(context.Background())
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -159,6 +161,7 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 // data is gossiped at startup.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableMergeQueue = true
 	sc.EnableEpochRangeLeases = true
@@ -171,7 +174,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	if _, err := mtc.dbs[0].Inc(context.TODO(), splitKey, 1); err != nil {
+	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
@@ -181,12 +184,12 @@ func TestStoreGossipSystemData(t *testing.T) {
 		systemConfig := mtc.gossips[0].GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func() storagepb.Liveness {
-		var liveness storagepb.Liveness
+	getNodeLiveness := func() kvserverpb.Liveness {
+		var liveness kvserverpb.Liveness
 		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return storagepb.Liveness{}
+		return kvserverpb.Liveness{}
 	}
 
 	// Clear the system-config and node liveness gossip data. This is necessary
@@ -196,14 +199,14 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.MakeNodeLivenessKey(1), &storagepb.Liveness{}, 0); err != nil {
+		gossip.MakeNodeLivenessKey(1), &kvserverpb.Liveness{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
 		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not empty")
 		}
-		if getNodeLiveness() != (storagepb.Liveness{}) {
+		if getNodeLiveness() != (kvserverpb.Liveness{}) {
 			return errors.New("node liveness not empty")
 		}
 		return nil
@@ -216,7 +219,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness() == (storagepb.Liveness{}) {
+		if getNodeLiveness() == (kvserverpb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil
@@ -230,6 +233,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 // network.
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -251,7 +255,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	}
 
 	newStoreIdx := (initialStoreIdx + 1) % numStores
-	mtc.transferLease(context.TODO(), rangeID, initialStoreIdx, newStoreIdx)
+	mtc.transferLease(context.Background(), rangeID, initialStoreIdx, newStoreIdx)
 
 	testutils.SucceedsSoon(t, func() error {
 		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
@@ -266,6 +270,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 
 func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	sc := kvserver.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -279,7 +284,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	// Turn off liveness heartbeats on all nodes to ensure that updates to node
 	// liveness are not triggering gossiping.
 	for i := range mtc.nodeLivenesses {
-		mtc.nodeLivenesses[i].PauseHeartbeat(true)
+		mtc.nodeLivenesses[i].PauseHeartbeatLoopForTest()
 	}
 
 	nodeLivenessKey := gossip.MakeNodeLivenessKey(1)
@@ -315,6 +320,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 // requests for nodes which are already in the VOTER_OUTGOING state will fail.
 func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	knobs, ltk := makeReplicationTestKnobs()
@@ -327,20 +333,20 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	var scratchRangeID atomic.Value
 	scratchRangeID.Store(roachpb.RangeID(0))
 	changeReplicasChan := make(chan chan struct{}, 1)
-	shouldBlock := func(args storagebase.ProposalFilterArgs) bool {
+	shouldBlock := func(args kvserverbase.ProposalFilterArgs) bool {
 		// Block if a ChangeReplicas command is removing a node from our range.
 		return args.Req.RangeID == scratchRangeID.Load().(roachpb.RangeID) &&
 			args.Cmd.ReplicatedEvalResult.ChangeReplicas != nil &&
 			len(args.Cmd.ReplicatedEvalResult.ChangeReplicas.Removed()) > 0
 	}
-	blockIfShould := func(args storagebase.ProposalFilterArgs) {
+	blockIfShould := func(args kvserverbase.ProposalFilterArgs) {
 		if shouldBlock(args) {
 			ch := make(chan struct{})
 			changeReplicasChan <- ch
 			<-ch
 		}
 	}
-	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		blockIfShould(args)
 		return nil
 	}
@@ -354,7 +360,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 	desc := tc.AddReplicasOrFatal(t, scratchStartKey, tc.Targets(1, 2)...)
 	scratchRangeID.Store(desc.RangeID)
 	// Make sure n1 has the lease to start with.
-	err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+	err := tc.Server(0).DB().AdminTransferLease(context.Background(),
 		scratchStartKey, tc.Target(0).StoreID)
 	require.NoError(t, err)
 
@@ -384,7 +390,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := tc.Server(0).DB().AdminTransferLease(context.TODO(),
+			err := tc.Server(0).DB().AdminTransferLease(context.Background(),
 				scratchStartKey, tc.Target(2).StoreID)
 			require.Error(t, err)
 			require.Regexp(t,
@@ -416,6 +422,7 @@ func TestCannotTransferLeaseToVoterOutgoing(t *testing.T) {
 // transfer.
 func TestTimestampCacheErrorAfterLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)

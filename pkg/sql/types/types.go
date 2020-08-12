@@ -185,7 +185,12 @@ type T struct {
 // UserDefinedTypeMetadata contains metadata needed for runtime
 // operations on user defined types. The metadata must be read only.
 type UserDefinedTypeMetadata struct {
-	Name UserDefinedTypeName
+	// Name is the resolved name of this type.
+	Name *UserDefinedTypeName
+
+	// Version is the descriptor version of the descriptor used to construct
+	// this version of the type metadata.
+	Version uint32
 
 	// enumData is non-nil iff the metadata is for an ENUM type.
 	EnumData *EnumMetadata
@@ -199,6 +204,9 @@ type EnumMetadata struct {
 	// LogicalRepresentations is a slice of the string logical
 	// representations of enum members.
 	LogicalRepresentations []string
+	// IsMemberReadOnly holds whether the enum member at index i is
+	// read only or not.
+	IsMemberReadOnly []bool
 	// TODO (rohany): For small enums, having a map would be slower
 	//  than just an array. Investigate at what point the tradeoff
 	//  should occur, if at all.
@@ -212,13 +220,34 @@ func (e *EnumMetadata) debugString() string {
 	)
 }
 
-// UserDefinedTypeName is an interface for the types package to manipulate
-// qualified type names from higher level packages for name display.
-type UserDefinedTypeName interface {
-	// Basename returns the unqualified name of the type.
-	Basename() string
-	// FQName returns the fully qualified name of the type.
-	FQName() string
+// UserDefinedTypeName is a struct representing a qualified user defined
+// type name. We redefine a common struct from higher level packages. We
+// do so because proto will panic if any members of a proto struct are
+// private. Rather than expose private members of higher level packages,
+// we define a separate type here to be safe.
+type UserDefinedTypeName struct {
+	Catalog        string
+	ExplicitSchema bool
+	Schema         string
+	Name           string
+}
+
+// Basename returns the unqualified name.
+func (u UserDefinedTypeName) Basename() string {
+	return u.Name
+}
+
+// FQName returns the fully qualified name.
+func (u UserDefinedTypeName) FQName() string {
+	var sb strings.Builder
+	// Note that cross-database type references are disabled, so we only
+	// format the qualified name with the schema.
+	if u.ExplicitSchema {
+		sb.WriteString(u.Schema)
+		sb.WriteString(".")
+	}
+	sb.WriteString(u.Name)
+	return sb.String()
 }
 
 // Convenience list of pre-constructed types. Caller code can use any of these
@@ -388,24 +417,20 @@ var (
 	// Geometry is the type of a geospatial Geometry object.
 	Geometry = &T{
 		InternalType: InternalType{
-			Family: GeometryFamily,
-			Oid:    oidext.T_geometry,
-			Locale: &emptyLocale,
-			GeoMetadata: &GeoMetadata{
-				SRID: geopb.DefaultGeometrySRID,
-			},
+			Family:      GeometryFamily,
+			Oid:         oidext.T_geometry,
+			Locale:      &emptyLocale,
+			GeoMetadata: &GeoMetadata{},
 		},
 	}
 
 	// Geography is the type of a geospatial Geography object.
 	Geography = &T{
 		InternalType: InternalType{
-			Family: GeographyFamily,
-			Oid:    oidext.T_geography,
-			Locale: &emptyLocale,
-			GeoMetadata: &GeoMetadata{
-				SRID: geopb.DefaultGeographySRID,
-			},
+			Family:      GeographyFamily,
+			Oid:         oidext.T_geography,
+			Locale:      &emptyLocale,
+			GeoMetadata: &GeoMetadata{},
 		},
 	}
 
@@ -648,9 +673,9 @@ func MakeScalar(family Family, o oid.Oid, precision, width int32, locale string)
 	case StringFamily, BytesFamily, CollatedStringFamily, BitFamily:
 		// These types can have any width.
 	case GeometryFamily:
-		geoMetadata = &GeoMetadata{SRID: geopb.DefaultGeometrySRID}
+		geoMetadata = &GeoMetadata{}
 	case GeographyFamily:
-		geoMetadata = &GeoMetadata{SRID: geopb.DefaultGeographySRID}
+		geoMetadata = &GeoMetadata{}
 	default:
 		if width != 0 {
 			panic(errors.AssertionFailedf("type %s cannot have width", family))
@@ -817,29 +842,55 @@ func MakeTimeTZ(precision int32) *T {
 
 // MakeGeometry constructs a new instance of a GEOMETRY type (oid = T_geometry)
 // that has the given shape and SRID.
-func MakeGeometry(shape geopb.Shape, srid geopb.SRID) *T {
+func MakeGeometry(shape geopb.ShapeType, srid geopb.SRID) *T {
+	// Negative values are promoted to 0.
+	if srid < 0 {
+		srid = 0
+	}
 	return &T{InternalType: InternalType{
 		Family: GeometryFamily,
 		Oid:    oidext.T_geometry,
 		Locale: &emptyLocale,
 		GeoMetadata: &GeoMetadata{
-			Shape: shape,
-			SRID:  srid,
+			ShapeType: shape,
+			SRID:      srid,
 		},
 	}}
 }
 
 // MakeGeography constructs a new instance of a geography-related type.
-func MakeGeography(shape geopb.Shape, srid geopb.SRID) *T {
+func MakeGeography(shape geopb.ShapeType, srid geopb.SRID) *T {
+	// Negative values are promoted to 0.
+	if srid < 0 {
+		srid = 0
+	}
 	return &T{InternalType: InternalType{
 		Family: GeographyFamily,
 		Oid:    oidext.T_geography,
 		Locale: &emptyLocale,
 		GeoMetadata: &GeoMetadata{
-			Shape: shape,
-			SRID:  srid,
+			ShapeType: shape,
+			SRID:      srid,
 		},
 	}}
+}
+
+// GeoMetadata returns the GeoMetadata of the type object if it exists.
+// This should only exist on Geometry and Geography types.
+func (t *T) GeoMetadata() (*GeoMetadata, error) {
+	if t.InternalType.GeoMetadata == nil {
+		return nil, errors.Newf("GeoMetadata does not exist on type")
+	}
+	return t.InternalType.GeoMetadata, nil
+}
+
+// GeoSRIDOrZero returns the geo SRID of the type object if it exists.
+// This should only exist on a subset of Geometry and Geography types.
+func (t *T) GeoSRIDOrZero() geopb.SRID {
+	if t.InternalType.GeoMetadata != nil {
+		return t.InternalType.GeoMetadata.SRID
+	}
+	return 0
 }
 
 var (
@@ -941,23 +992,27 @@ func MakeTimestampTZ(precision int32) *T {
 
 // MakeEnum constructs a new instance of an EnumFamily type with the given
 // stable type ID. Note that it does not hydrate cached fields on the type.
-func MakeEnum(typeID uint32) *T {
+func MakeEnum(typeOID, arrayTypeOID oid.Oid) *T {
 	return &T{InternalType: InternalType{
-		Family:       EnumFamily,
-		StableTypeID: typeID,
-		Locale:       &emptyLocale,
+		Family: EnumFamily,
+		Oid:    typeOID,
+		Locale: &emptyLocale,
+		UDTMetadata: &PersistentUserDefinedTypeMetadata{
+			ArrayTypeOID: arrayTypeOID,
+		},
 	}}
 }
 
 // MakeArray constructs a new instance of an ArrayFamily type with the given
 // element type (which may itself be an ArrayFamily type).
 func MakeArray(typ *T) *T {
-	return &T{InternalType: InternalType{
+	arr := &T{InternalType: InternalType{
 		Family:        ArrayFamily,
 		Oid:           calcArrayOid(typ),
 		ArrayContents: typ,
 		Locale:        &emptyLocale,
 	}}
+	return arr
 }
 
 // MakeTuple constructs a new instance of a TupleFamily type with the given
@@ -1076,9 +1131,13 @@ func (t *T) Precision() int32 {
 // TypeModifier returns the type modifier of the type. This corresponds to the
 // pg_attribute.atttypmod column. atttypmod records type-specific data supplied
 // at table creation time (for example, the maximum length of a varchar column).
+// Array types have the same type modifier as the contents of the array.
 // The value will be -1 for types that do not need atttypmod.
 func (t *T) TypeModifier() int32 {
 	typeModifier := int32(-1)
+	if t.Family() == ArrayFamily {
+		return t.ArrayContents().TypeModifier()
+	}
 	if width := t.Width(); width != 0 {
 		switch t.Family() {
 		case StringFamily:
@@ -1123,15 +1182,75 @@ func (t *T) TupleLabels() []string {
 	return t.InternalType.TupleLabels
 }
 
-// StableTypeID returns the stable ID of the TypeDescriptor that backs this
-// type. This function only returns non-zero data for user defined types.
-func (t *T) StableTypeID() uint32 {
-	return t.InternalType.StableTypeID
+// UserDefinedArrayOID returns the OID of the array type that corresponds to
+// this user defined type. This function only can only be called on user
+// defined types and returns non-zero data only for user defined types that
+// aren't arrays.
+func (t *T) UserDefinedArrayOID() oid.Oid {
+	if t.InternalType.UDTMetadata == nil {
+		return 0
+	}
+	return t.InternalType.UDTMetadata.ArrayTypeOID
+}
+
+// RemapUserDefinedTypeOIDs is used to remap OIDs stored within a types.T
+// that is a user defined type. The newArrayOID argument is ignored if the
+// input type is an Array type. It mutates the input types.T and should only
+// be used when type is known to not be shared. If the input oid values are
+// 0 then the RemapUserDefinedTypeOIDs has no effect.
+func RemapUserDefinedTypeOIDs(t *T, newOID, newArrayOID oid.Oid) {
+	if newOID != 0 {
+		t.InternalType.Oid = newOID
+	}
+	if t.Family() != ArrayFamily && newArrayOID != 0 {
+		t.InternalType.UDTMetadata.ArrayTypeOID = newArrayOID
+	}
 }
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
-	return t.Family() == EnumFamily
+	// Types with OIDs larger than the predefined max are user defined.
+	return t.Oid() > oidext.CockroachPredefinedOIDMax
+}
+
+var familyNames = map[Family]string{
+	AnyFamily:            "any",
+	ArrayFamily:          "array",
+	BitFamily:            "bit",
+	BoolFamily:           "bool",
+	BytesFamily:          "bytes",
+	CollatedStringFamily: "collatedstring",
+	DateFamily:           "date",
+	DecimalFamily:        "decimal",
+	EnumFamily:           "enum",
+	FloatFamily:          "float",
+	GeographyFamily:      "geography",
+	GeometryFamily:       "geometry",
+	INetFamily:           "inet",
+	IntFamily:            "int",
+	IntervalFamily:       "interval",
+	JsonFamily:           "jsonb",
+	OidFamily:            "oid",
+	StringFamily:         "string",
+	TimeFamily:           "time",
+	TimestampFamily:      "timestamp",
+	TimestampTZFamily:    "timestamptz",
+	TimeTZFamily:         "timetz",
+	TupleFamily:          "tuple",
+	UnknownFamily:        "unknown",
+	UuidFamily:           "uuid",
+}
+
+// Name returns a user-friendly word indicating the family type.
+//
+// TODO(radu): investigate whether anything breaks if we use
+// enumvalue_customname and use String() instead.
+func (f Family) Name() string {
+	ret, ok := familyNames[f]
+	if !ok {
+		panic(errors.AssertionFailedf("unexpected Family: %d", f))
+	}
+	return ret
 }
 
 // Name returns a single word description of the type that describes it
@@ -1141,9 +1260,10 @@ func (t *T) UserDefined() bool {
 //
 // TODO(andyk): Should these be changed to be the same as SQLStandardName?
 func (t *T) Name() string {
-	switch t.Family() {
+	switch fam := t.Family(); fam {
 	case AnyFamily:
 		return "anyelement"
+
 	case ArrayFamily:
 		switch t.Oid() {
 		case oid.T_oidvector:
@@ -1152,19 +1272,13 @@ func (t *T) Name() string {
 			return "int2vector"
 		}
 		return t.ArrayContents().Name() + "[]"
+
 	case BitFamily:
 		if t.Oid() == oid.T_varbit {
 			return "varbit"
 		}
 		return "bit"
-	case BoolFamily:
-		return "bool"
-	case BytesFamily:
-		return "bytes"
-	case DateFamily:
-		return "date"
-	case DecimalFamily:
-		return "decimal"
+
 	case FloatFamily:
 		switch t.Width() {
 		case 64:
@@ -1174,12 +1288,7 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown float width: %d", t.Width()))
 		}
-	case GeographyFamily:
-		return "geography"
-	case GeometryFamily:
-		return "geometry"
-	case INetFamily:
-		return "inet"
+
 	case IntFamily:
 		switch t.Width() {
 		case 64:
@@ -1191,12 +1300,10 @@ func (t *T) Name() string {
 		default:
 			panic(errors.AssertionFailedf("programming error: unknown int width: %d", t.Width()))
 		}
-	case IntervalFamily:
-		return "interval"
-	case JsonFamily:
-		return "jsonb"
+
 	case OidFamily:
 		return t.SQLStandardName()
+
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
 		case oid.T_text:
@@ -1212,21 +1319,11 @@ func (t *T) Name() string {
 			return "name"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
-	case TimeFamily:
-		return "time"
-	case TimestampFamily:
-		return "timestamp"
-	case TimestampTZFamily:
-		return "timestamptz"
-	case TimeTZFamily:
-		return "timetz"
+
 	case TupleFamily:
 		// Tuple types are currently anonymous, with no name.
 		return ""
-	case UnknownFamily:
-		return "unknown"
-	case UuidFamily:
-		return "uuid"
+
 	case EnumFamily:
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
@@ -1236,8 +1333,9 @@ func (t *T) Name() string {
 			return "unknown_enum"
 		}
 		return t.TypeMeta.Name.Basename()
+
 	default:
-		panic(errors.AssertionFailedf("unexpected Family: %s", t.Family()))
+		return fam.Name()
 	}
 }
 
@@ -1459,7 +1557,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case UuidFamily:
 		return "uuid"
 	case EnumFamily:
-		return t.TypeMeta.Name.FQName()
+		return t.TypeMeta.Name.Basename()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
@@ -1572,6 +1670,9 @@ func (t *T) SQLString() string {
 		}
 		return t.ArrayContents().SQLString() + "[]"
 	case EnumFamily:
+		if t.Oid() == oid.T_anyenum {
+			return "anyenum"
+		}
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
@@ -1629,12 +1730,51 @@ func (t *T) Equivalent(other *T) bool {
 		if t.Oid() == oid.T_anyenum || other.Oid() == oid.T_anyenum {
 			return true
 		}
-		if t.StableTypeID() != other.StableTypeID() {
+		if t.Oid() != other.Oid() {
 			return false
 		}
 	}
 
 	return true
+}
+
+// EquivalentOrNull is the same as Equivalent, except it returns true if:
+// * `t` is Unknown (i.e., NULL) and `other` is not a tuple,
+// * `t` is a tuple with all non-Unknown elements matching the types in `other`.
+func (t *T) EquivalentOrNull(other *T) bool {
+	// Check normal equivalency first, then check for Null
+	normalEquivalency := t.Equivalent(other)
+	if normalEquivalency {
+		return true
+	}
+
+	switch t.Family() {
+	case UnknownFamily:
+		return other.Family() != TupleFamily
+
+	case TupleFamily:
+		if other.Family() != TupleFamily {
+			return false
+		}
+		// If either tuple is the wildcard tuple, it's equivalent to any other
+		// tuple type. This allows overloads to specify that they take an arbitrary
+		// tuple type.
+		if IsWildcardTupleType(t) || IsWildcardTupleType(other) {
+			return true
+		}
+		if len(t.TupleContents()) != len(other.TupleContents()) {
+			return false
+		}
+		for i := range t.TupleContents() {
+			if !t.TupleContents()[i].EquivalentOrNull(other.TupleContents()[i]) {
+				return false
+			}
+		}
+		return true
+
+	default:
+		return normalEquivalency
+	}
 }
 
 // Identical returns true if every field in this ColumnType is exactly the same
@@ -1693,7 +1833,7 @@ func (t *InternalType) Identical(other *InternalType) bool {
 		return false
 	}
 	if t.GeoMetadata != nil && other.GeoMetadata != nil {
-		if t.GeoMetadata.Shape != other.GeoMetadata.Shape {
+		if t.GeoMetadata.ShapeType != other.GeoMetadata.ShapeType {
 			return false
 		}
 		if t.GeoMetadata.SRID != other.GeoMetadata.SRID {
@@ -1738,7 +1878,13 @@ func (t *InternalType) Identical(other *InternalType) bool {
 			return false
 		}
 	}
-	if t.StableTypeID != other.StableTypeID {
+	if t.UDTMetadata != nil && other.UDTMetadata != nil {
+		if t.UDTMetadata.ArrayTypeOID != other.UDTMetadata.ArrayTypeOID {
+			return false
+		}
+	} else if t.UDTMetadata != nil {
+		return false
+	} else if other.UDTMetadata != nil {
 		return false
 	}
 	return t.Oid == other.Oid
@@ -2107,6 +2253,19 @@ func (t *T) String() string {
 // DebugString returns a detailed dump of the type protobuf struct, suitable for
 // debugging scenarios.
 func (t *T) DebugString() string {
+	if t.Family() == ArrayFamily && t.ArrayContents().UserDefined() {
+		// In the case that this type is an array that contains a user defined
+		// type, the introspection that protobuf performs to generate a string
+		// representation will panic if the UserDefinedTypeMetadata field of the
+		// type is populated. It seems to not understand that fields in the element
+		// T could be not generated by proto, and panics trying to operate on the
+		// TypeMeta field of the T. To get around this, we just deep copy the T and
+		// zero out the type metadata to placate proto. See the following issue for
+		// details: https://github.com/gogo/protobuf/issues/693.
+		internalTypeCopy := protoutil.Clone(&t.InternalType).(*InternalType)
+		internalTypeCopy.ArrayContents.TypeMeta = UserDefinedTypeMetadata{}
+		return internalTypeCopy.String()
+	}
 	return t.InternalType.String()
 }
 
@@ -2140,22 +2299,22 @@ func (t *T) IsAmbiguous() bool {
 
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
 // enum physical representations that matches the input byte slice.
-func (t *T) EnumGetIdxOfPhysical(phys []byte) int {
+func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 	t.ensureHydratedEnum()
 	// TODO (rohany): We can either use a map or just binary search here
 	//  since the physical representations are sorted.
 	reps := t.TypeMeta.EnumData.PhysicalRepresentations
 	for i := range reps {
 		if bytes.Equal(phys, reps[i]) {
-			return i
+			return i, nil
 		}
 	}
-	err := errors.AssertionFailedf(
+	err := errors.Newf(
 		"could not find %v in enum representation %s",
 		phys,
 		t.TypeMeta.EnumData.debugString(),
 	)
-	panic(err)
+	return 0, err
 }
 
 // EnumGetIdxOfLogical returns the index within the TypeMeta's slice of
@@ -2419,13 +2578,13 @@ func (m *GeoMetadata) SQLString() string {
 	// If SRID is available, display both shape and SRID.
 	// If shape is available but not SRID, just display shape.
 	if m.SRID != 0 {
-		shapeName := strings.ToLower(m.Shape.String())
-		if m.Shape == geopb.Shape_Unset {
+		shapeName := strings.ToLower(m.ShapeType.String())
+		if m.ShapeType == geopb.ShapeType_Unset {
 			shapeName = "geometry"
 		}
 		return fmt.Sprintf("(%s,%d)", shapeName, m.SRID)
-	} else if m.Shape != geopb.Shape_Unset {
-		return fmt.Sprintf("(%s)", m.Shape)
+	} else if m.ShapeType != geopb.ShapeType_Unset {
+		return fmt.Sprintf("(%s)", m.ShapeType)
 	}
 	return ""
 }

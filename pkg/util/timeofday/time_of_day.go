@@ -87,6 +87,16 @@ func FromTime(t time.Time) TimeOfDay {
 	return FromInt(nanos / nanosPerMicro)
 }
 
+// FromTimeAllow2400 assumes 24:00 time is possible from the given input,
+// otherwise falling back to FromTime.
+// It assumes time.Time is represented as lib/pq or as unix time.
+func FromTimeAllow2400(t time.Time) TimeOfDay {
+	if t.Day() != 1 {
+		return Time2400
+	}
+	return FromTime(t)
+}
+
 // ToTime converts a TimeOfDay to a time.Time, using the Unix epoch as the date.
 func (t TimeOfDay) ToTime() time.Time {
 	return timeutil.Unix(0, int64(t)*nanosPerMicro)

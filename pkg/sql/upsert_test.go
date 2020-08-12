@@ -19,22 +19,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestUpsertFastPath(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This filter increments scans and endTxn for every ScanRequest and
 	// EndTxnRequest that hits user table data.
 	var scans uint64
 	var endTxn uint64
-	filter := func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	filter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if bytes.Compare(filterArgs.Req.Header().Key, keys.UserTableDataMin) >= 0 {
 			switch filterArgs.Req.Method() {
 			case roachpb.Scan:
@@ -52,12 +54,12 @@ func TestUpsertFastPath(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			EvalKnobs: storagebase.BatchEvalTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 				TestingEvalFilter: filter,
 			},
 		}},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.kv (k INT PRIMARY KEY, v INT)`)
@@ -131,9 +133,10 @@ func TestUpsertFastPath(t *testing.T) {
 
 func TestConcurrentUpsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)

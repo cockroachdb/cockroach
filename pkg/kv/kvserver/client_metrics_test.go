@@ -28,13 +28,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
+type gaugeValuer interface {
+	GetName() string
+	Value() int64
+}
+
+func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 	t.Helper()
 	if a := g.Value(); a != e {
 		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))
@@ -113,6 +119,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
 		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
 		checkGauge(t, idString, m.SysCount, realStats.SysCount)
+		checkGauge(t, idString, m.AbortSpanBytes, realStats.AbortSpanBytes)
 		// "Ages" will be different depending on how much time has passed. Even with
 		// a manual clock, this can be an issue in tests. Therefore, we do not
 		// verify them in this test.
@@ -129,7 +136,7 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 }
 
 func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
-	if err := s.ComputeMetrics(context.TODO(), 0); err != nil {
+	if err := s.ComputeMetrics(context.Background(), 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,6 +167,7 @@ func verifyRocksDBStats(t *testing.T, s *kvserver.Store) {
 // are tracked properly.
 func TestStoreResolveMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// First prevent rot that would result from adding fields without handling
 	// them everywhere.
@@ -240,6 +248,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -289,7 +298,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Add some data to the "right" range.
 	dataKey := []byte("z")
-	if _, err := mtc.dbs[0].Inc(context.TODO(), dataKey, 5); err != nil {
+	if _, err := mtc.dbs[0].Inc(context.Background(), dataKey, 5); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
@@ -298,11 +307,11 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStats(t, mtc, 0, 1, 2)
 
 	// Create a transaction statement that fails. Regression test for #4969.
-	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := mtc.dbs[0].Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		var expVal roachpb.Value
 		expVal.SetInt(6)
-		b.CPut(dataKey, 7, &expVal)
+		b.CPut(dataKey, 7, expVal.TagAndDataBytes())
 		return txn.Run(ctx, b)
 	}); err == nil {
 		t.Fatal("Expected transaction error, but none received")
@@ -315,7 +324,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Unreplicate range from the first store.
 	testutils.SucceedsSoon(t, func() error {
 		// This statement can fail if store 0 is not the leaseholder.
-		if err := mtc.transferLeaseNonFatal(context.TODO(), replica.RangeID, 0, 1); err != nil {
+		if err := mtc.transferLeaseNonFatal(context.Background(), replica.RangeID, 0, 1); err != nil {
 			t.Log(err)
 		}
 		// This statement will fail if store 0 IS the leaseholder. This can happen
@@ -344,6 +353,7 @@ func TestStoreMetrics(t *testing.T) {
 // based leases. Expiration based leases don't publish closed timestamps.
 func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{

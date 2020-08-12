@@ -947,6 +947,13 @@ func (g *newRuleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
 		// looking up op name at runtime.
 		ref := customFunc.Args[0].(*lang.RefExpr)
 		g.w.write("%s.Op()", ref.Label)
+	} else if customFunc.Name == "Root" {
+		// Handle Root function.
+		if g.normalize {
+			// The root expression can only be accessed during exploration.
+			panic(fmt.Sprint("the root expression can only be accessed during exploration"))
+		}
+		g.w.write("_root")
 	} else {
 		funcName := string(customFunc.Name)
 		g.w.write("%s.funcs.%s(", g.thisVar, funcName)

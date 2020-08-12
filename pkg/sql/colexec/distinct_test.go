@@ -21,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 	tcs := []struct {
 		distinctCols            []uint32
@@ -36,7 +38,7 @@ func TestDistinct(t *testing.T) {
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
+			typs:         []*types.T{types.Float, types.Int, types.String, types.Int},
 			tuples: tuples{
 				{nil, nil, nil, nil},
 				{nil, nil, nil, nil},
@@ -84,7 +86,7 @@ func TestDistinct(t *testing.T) {
 		},
 		{
 			distinctCols: []uint32{0, 1, 2},
-			typs:         []*types.T{types.Float, types.Int, types.Bytes, types.Int},
+			typs:         []*types.T{types.Float, types.Int, types.String, types.Int},
 			tuples: tuples{
 				{1.0, 2, "30", 4},
 				{1.0, 2, "30", 4},
@@ -132,7 +134,7 @@ func TestDistinct(t *testing.T) {
 			// This is to test hashTable deduplication with various batch size
 			// boundaries and ensure it always emits the first tuple it encountered.
 			distinctCols: []uint32{0},
-			typs:         []*types.T{types.Int, types.Bytes},
+			typs:         []*types.T{types.Int, types.String},
 			tuples: tuples{
 				{1, "1"},
 				{1, "2"},
@@ -157,41 +159,61 @@ func TestDistinct(t *testing.T) {
 				{0, "11"},
 			},
 		},
+		{
+			distinctCols: []uint32{0},
+			typs:         []*types.T{types.Jsonb, types.String},
+			tuples: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": 1}`, "1"},
+				{`{"id": null}`, "d"},
+				{`{"id": 2}`, "2"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+				{`{"id": 3}`, "3"},
+			},
+			expected: tuples{
+				{`{"id": 1}`, "a"},
+				{`{"id": 2}`, "b"},
+				{`{"id": 3}`, "c"},
+				{`{"id": null}`, "d"},
+				{`{"id": 5}`, "e"},
+				{`{"id": 6}`, "f"},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
-		for _, numOfBuckets := range []uint64{1, 3, 5, hashTableNumBuckets} {
-			t.Run(fmt.Sprintf("unordered/numOfBuckets=%d", numOfBuckets), func(t *testing.T) {
-				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return NewUnorderedDistinct(
-							testAllocator, input[0], tc.distinctCols, tc.typs,
-							numOfBuckets), nil
-					})
-			})
+		for _, numOfBuckets := range []uint64{1, 3, 5, HashTableNumBuckets} {
+			log.Infof(context.Background(), "unordered/numOfBuckets=%d", numOfBuckets)
+			runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					return NewUnorderedDistinct(
+						testAllocator, input[0], tc.distinctCols, tc.typs,
+						numOfBuckets), nil
+				})
 		}
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
-				t.Run(fmt.Sprintf("partiallyOrdered/ordCols=%d", numOrderedCols), func(t *testing.T) {
-					orderedCols := make([]uint32, numOrderedCols)
-					for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
-						orderedCols[i] = tc.distinctCols[j]
-					}
-					runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
-						func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-							return newPartiallyOrderedDistinct(
-								testAllocator, input[0], tc.distinctCols,
-								orderedCols, tc.typs,
-							)
-						})
-				})
-			}
-			t.Run("ordered", func(t *testing.T) {
-				runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier,
+				log.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
+				orderedCols := make([]uint32, numOrderedCols)
+				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
+					orderedCols[i] = tc.distinctCols[j]
+				}
+				runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-						return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+						return newPartiallyOrderedDistinct(
+							testAllocator, input[0], tc.distinctCols,
+							orderedCols, tc.typs,
+						)
 					})
-			})
+			}
+			log.Info(context.Background(), "ordered")
+			runTestsWithTyps(t, []tuples{tc.tuples}, [][]*types.T{tc.typs}, tc.expected, orderedVerifier,
+				func(input []colexecbase.Operator) (colexecbase.Operator, error) {
+					return NewOrderedDistinct(input[0], tc.distinctCols, tc.typs)
+				})
 		}
 	}
 }
@@ -202,7 +224,7 @@ func BenchmarkDistinct(b *testing.B) {
 
 	distinctConstructors := []func(*colmem.Allocator, colexecbase.Operator, []uint32, int, []*types.T) (colexecbase.Operator, error){
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
-			return NewUnorderedDistinct(allocator, input, distinctCols, typs, hashTableNumBuckets), nil
+			return NewUnorderedDistinct(allocator, input, distinctCols, typs, HashTableNumBuckets), nil
 		},
 		func(allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecbase.Operator, error) {
 			return newPartiallyOrderedDistinct(allocator, input, distinctCols, distinctCols[:numOrderedCols], typs)

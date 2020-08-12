@@ -15,12 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,16 +50,17 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	toFn, err := p.TypeAsString(backup.Path, "SHOW BACKUP")
+	toFn, err := p.TypeAsString(ctx, backup.Path, "SHOW BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	expected := map[string]sql.KVStringOptValidate{
 		backupOptEncPassphrase:  sql.KVStringOptRequireValue,
+		backupOptEncKMS:         sql.KVStringOptRequireValue,
 		backupOptWithPrivileges: sql.KVStringOptRequireNoValue,
 	}
-	optsFn, err := p.TypeAsStringOpts(backup.Options, expected)
+	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -86,25 +89,41 @@ func showBackupPlanHook(
 			return err
 		}
 
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str)
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
 		if err != nil {
 			return errors.Wrapf(err, "make storage")
 		}
 		defer store.Close()
 
-		var encryption *roachpb.FileEncryptionOptions
+		var encryption *jobspb.BackupEncryptionOptions
 		if passphrase, ok := opts[backupOptEncPassphrase]; ok {
 			opts, err := readEncryptionOptions(ctx, store)
 			if err != nil {
 				return err
 			}
 			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-			encryption = &roachpb.FileEncryptionOptions{Key: encryptionKey}
+			encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
+				Key: encryptionKey}
+		} else if kms, ok := opts[backupOptEncKMS]; ok {
+			opts, err := readEncryptionOptions(ctx, store)
+			if err != nil {
+				return err
+			}
+
+			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
+			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup([]string{kms},
+				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), env)
+			if err != nil {
+				return err
+			}
+			encryption = &jobspb.BackupEncryptionOptions{
+				Mode:    jobspb.EncryptionMode_KMS,
+				KMSInfo: defaultKMSInfo}
 		}
 
 		incPaths, err := findPriorBackups(ctx, store)
 		if err != nil {
-			if errors.Is(err, cloud.ErrListingUnsupported) {
+			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
 				// and show the specified base.
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", store)
@@ -126,7 +145,7 @@ func showBackupPlanHook(
 				return err
 			}
 			// Blank the stats to prevent memory blowup.
-			m.Statistics = nil
+			m.DeprecatedStatistics = nil
 			manifests[i+1] = m
 		}
 
@@ -189,15 +208,17 @@ func backupShowerDefault(
 		fn: func(manifests []BackupManifest) ([]tree.Datums, error) {
 			var rows []tree.Datums
 			for _, manifest := range manifests {
-				descs := make(map[sqlbase.ID]string)
-				for _, descriptor := range manifest.Descriptors {
-					if database := descriptor.GetDatabase(); database != nil {
-						if _, ok := descs[database.ID]; !ok {
-							descs[database.ID] = database.Name
+				descs := make(map[descpb.ID]string)
+				for i := range manifest.Descriptors {
+					descriptor := &manifest.Descriptors[i]
+					if descriptor.GetDatabase() != nil {
+						id := sqlbase.GetDescriptorID(descriptor)
+						if _, ok := descs[id]; !ok {
+							descs[id] = sqlbase.GetDescriptorName(descriptor)
 						}
 					}
 				}
-				descSizes := make(map[sqlbase.ID]RowCount)
+				descSizes := make(map[descpb.ID]RowCount)
 				for _, file := range manifest.Files {
 					// TODO(dan): This assumes each file in the backup only contains
 					// data from a single table, which is usually but not always
@@ -208,9 +229,9 @@ func backupShowerDefault(
 					if err != nil {
 						continue
 					}
-					s := descSizes[sqlbase.ID(tableID)]
+					s := descSizes[descpb.ID(tableID)]
 					s.add(file.EntryCounts)
-					descSizes[sqlbase.ID(tableID)] = s
+					descSizes[descpb.ID(tableID)] = s
 				}
 				start := tree.DNull
 				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
@@ -224,8 +245,9 @@ func backupShowerDefault(
 					}
 				}
 				var row tree.Datums
-				for _, descriptor := range manifest.Descriptors {
-					if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+				for i := range manifest.Descriptors {
+					descriptor := &manifest.Descriptors[i]
+					if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 						dbName := descs[table.ParentID]
 						row = tree.Datums{
 							tree.NewDString(dbName),
@@ -241,7 +263,8 @@ func backupShowerDefault(
 								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
 								IgnoreComments: true,
 							}
-							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors, table, displayOptions)
+							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
+								sqlbase.NewImmutableTableDescriptor(*table), displayOptions)
 							if err != nil {
 								continue
 							}
@@ -253,18 +276,29 @@ func backupShowerDefault(
 						rows = append(rows, row)
 					}
 				}
+				for _, t := range manifest.Tenants {
+					rows = append(rows, tree.Datums{
+						tree.NewDString("TENANT"),
+						tree.NewDString(roachpb.MakeTenantID(t.ID).String()),
+						start,
+						end,
+						tree.DNull,
+						tree.DNull,
+						tree.DNull,
+					})
+				}
 			}
 			return rows, nil
 		},
 	}
 }
 
-func showPrivileges(descriptor sqlbase.Descriptor) string {
+func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privStringBuilder strings.Builder
-	var privDesc *sqlbase.PrivilegeDescriptor
+	var privDesc *descpb.PrivilegeDescriptor
 	if db := descriptor.GetDatabase(); db != nil {
 		privDesc = db.GetPrivileges()
-	} else if table := descriptor.Table(hlc.Timestamp{}); table != nil {
+	} else if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
 	}
 	if privDesc == nil {
@@ -285,7 +319,7 @@ func showPrivileges(descriptor sqlbase.Descriptor) string {
 			privStringBuilder.WriteString(priv)
 		}
 		privStringBuilder.WriteString(" ON ")
-		privStringBuilder.WriteString(descriptor.GetName())
+		privStringBuilder.WriteString(sqlbase.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
 		privStringBuilder.WriteString(user)
 		privStringBuilder.WriteString("; ")

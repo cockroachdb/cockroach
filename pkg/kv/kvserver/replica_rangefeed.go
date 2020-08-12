@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -71,7 +71,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -94,7 +94,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		return nil, pErr.GoError()
 	}
 
-	pushedTxns := make([]roachpb.Transaction, 0, len(pushedTxnMap))
+	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
@@ -103,11 +103,11 @@ func (tp *rangefeedTxnPusher) PushTxns(
 
 // CleanupTxnIntentsAsync is part of the rangefeed.TxnPusher interface.
 func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
-	ctx context.Context, txns []roachpb.Transaction,
+	ctx context.Context, txns []*roachpb.Transaction,
 ) error {
 	endTxns := make([]result.EndTxnIntents, len(txns))
-	for i := range txns {
-		endTxns[i].Txn = &txns[i]
+	for i, txn := range txns {
+		endTxns[i].Txn = txn
 		endTxns[i].Poison = true
 	}
 	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
@@ -136,13 +136,7 @@ func (r *Replica) RangeFeed(
 	}
 	ctx := r.AnnotateCtx(stream.Context())
 
-	var rSpan roachpb.RSpan
-	var err error
-	rSpan.Key, err = keys.Addr(args.Span.Key)
-	if err != nil {
-		return roachpb.NewError(err)
-	}
-	rSpan.EndKey, err = keys.Addr(args.Span.EndKey)
+	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
 		return roachpb.NewError(err)
 	}
@@ -194,7 +188,7 @@ func (r *Replica) RangeFeed(
 	// critical-section as the registration is established. This ensures that
 	// the registration doesn't miss any events.
 	r.raftMu.Lock()
-	if err := r.checkExecutionCanProceedForRangeFeed(rSpan, checkTS); err != nil {
+	if err := r.checkExecutionCanProceedForRangeFeed(ctx, rSpan, checkTS); err != nil {
 		r.raftMu.Unlock()
 		return roachpb.NewError(err)
 	}
@@ -440,7 +434,7 @@ func (r *Replica) numRangefeedRegistrations() int {
 // the state of the Replica before the operations in the logical op log are
 // applied. No-op if a rangefeed is not active. Requires raftMu to be locked.
 func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *storagepb.LogicalOpLog, prevReader storage.Reader,
+	ctx context.Context, ops *kvserverpb.LogicalOpLog, prevReader storage.Reader,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
@@ -498,7 +492,7 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 // them to the rangefeed processor. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
 func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *storagepb.LogicalOpLog, reader storage.Reader,
+	ctx context.Context, ops *kvserverpb.LogicalOpLog, reader storage.Reader,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {

@@ -13,8 +13,8 @@ package concurrency
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -35,6 +35,6 @@ func (m *latchManagerImpl) Release(lg latchGuard) {
 	m.m.Release(lg.(*spanlatch.Guard))
 }
 
-func (m *latchManagerImpl) Info() (global, local storagepb.LatchManagerInfo) {
+func (m *latchManagerImpl) Info() (global, local kvserverpb.LatchManagerInfo) {
 	return m.m.Info()
 }

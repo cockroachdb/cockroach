@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20200421-180956
+version=20200804-160354
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
@@ -173,18 +173,32 @@ set +e
 # -i causes some commands (including `git diff`) to attempt to use
 # a pager, so we override $PAGER to disable.
 
+# When running in CI (and generally in automated processes) we want
+# to avoid the "troubleshooting mode" of datadriven tests, which
+# echoes on stderr everything it does (not just failures).
+# The caller can override the env var on the way in; this default
+# is only used if the env var is not set already.
+DATADRIVEN_QUIET_LOG=${DATADRIVEN_QUIET_LOG-true}
+
+# NB: for some mysterious reason, TMPDIR gets lost if passed via --env into
+# docker run below, hence the workaround to invoke `env` inside of the
+# container. See:
+#
+# https://github.com/cockroachdb/cockroach/issues/50507
+# https://github.com/benesch/autouseradd/issues/2
+#
 # shellcheck disable=SC2086
 docker run --init --privileged -i ${tty-} --rm \
   -u "$uid:$gid" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
-  --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
   --env="TZ=America/New_York" \
+  --env="DATADRIVEN_QUIET_LOG=${DATADRIVEN_QUIET_LOG}" \
   --env=COCKROACH_BUILDER_CCACHE \
   --env=COCKROACH_BUILDER_CCACHE_MAXSIZE \
-  "${image}:${version}" "$@"
+  "${image}:${version}" env TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts "$@"
 
 # Build container needs to have at least 4GB of RAM available to compile the project
 # successfully, which is not true in some cases (i.e. Docker for MacOS by default).

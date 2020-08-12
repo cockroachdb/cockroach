@@ -14,7 +14,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -37,7 +37,7 @@ func CompareVals(a, b []interface{}) error {
 		return nil
 	}
 	if diff := cmp.Diff(a, b, cmpOptions...); diff != "" {
-		return errors.New(diff)
+		return errors.Newf("unexpected diff:\n%s", diff)
 	}
 	return nil
 }

@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -50,6 +51,7 @@ import (
 // [1]: https://github.com/cockroachdb/cockroach/issues/34025#issuecomment-460934278
 func TestWaiterOnRejectedCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// The txn id whose commit we're going to reject. A uuid.UUID.
@@ -69,7 +71,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 				DisableSplitQueue: true,
-				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 					// We'll recognize the attempt to commit our transaction and store the
 					// respective command id.
 					ba := args.Req
@@ -90,14 +92,14 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					commitCmdID.Store(args.CmdID)
 					return nil
 				},
-				TestingApplyFilter: func(args storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+				TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 					// We'll trap the processing of the commit command and return an error
 					// for it.
 					v := commitCmdID.Load()
 					if v == nil {
 						return 0, nil
 					}
-					cmdID := v.(storagebase.CmdIDKey)
+					cmdID := v.(kvserverbase.CmdIDKey)
 					if args.CmdID == cmdID {
 						if illegalLeaseIndex {
 							illegalLeaseIndex = false

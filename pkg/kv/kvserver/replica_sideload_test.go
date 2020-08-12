@@ -27,14 +27,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,7 +54,7 @@ func entryEq(l, r raftpb.Entry) error {
 	}
 	_, lData := DecodeRaftCommand(l.Data)
 	_, rData := DecodeRaftCommand(r.Data)
-	var lc, rc storagepb.RaftCommand
+	var lc, rc kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
 	}
@@ -61,16 +62,16 @@ func entryEq(l, r raftpb.Entry) error {
 		return errors.Wrap(err, "unmarshalling RHS")
 	}
 	if !reflect.DeepEqual(lc, rc) {
-		return errors.New(strings.Join(pretty.Diff(lc, rc), "\n"))
+		return errors.Newf("unexpected:\n%s", strings.Join(pretty.Diff(lc, rc), "\n"))
 	}
 	return nil
 }
 
 func mkEnt(
-	v raftCommandEncodingVersion, index, term uint64, as *storagepb.ReplicatedEvalResult_AddSSTable,
+	v raftCommandEncodingVersion, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
 	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
-	var cmd storagepb.RaftCommand
+	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
 	if err != nil {
@@ -78,12 +79,13 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = encodeRaftCommand(v, storagebase.CmdIDKey(cmdIDKey), b)
+	ent.Data = encodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
 func TestSideloadingSideloadedStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	t.Run("Mem", func(t *testing.T) {
 		testSideloadingSideloadedStorage(t, newInMemSideloadStorage)
 	})
@@ -280,7 +282,7 @@ func testSideloadingSideloadedStorage(
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
-		f, err := os.Create(nonRemovableFile)
+		f, err := eng.Create(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %+v", err)
 		}
@@ -290,12 +292,11 @@ func testSideloadingSideloadedStorage(
 		if err == nil {
 			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
 		}
-		expectedTruncateError := "while purging %q: remove %s: directory not empty"
-		if err.Error() != fmt.Sprintf(expectedTruncateError, ss.(*diskSideloadStorage).dir, ss.(*diskSideloadStorage).dir) {
+		if !strings.HasSuffix(strings.ToLower(err.Error()), "directory not empty") {
 			t.Fatalf("error truncating sideloaded storage: %+v", err)
 		}
 		// Now remove extra file and let truncation proceed to remove directory.
-		err = os.Remove(nonRemovableFile)
+		err = eng.Remove(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not remove %s: %+v", nonRemovableFile, err)
 		}
@@ -305,7 +306,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatal(err)
 		}
 		// Ensure directory is removed, now that all files should be gone.
-		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		_, err = eng.Stat(ss.(*diskSideloadStorage).dir)
 		if err == nil {
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
@@ -329,7 +330,7 @@ func testSideloadingSideloadedStorage(
 			t.Fatal(err)
 		}
 		// Ensure directory is removed when all records are removed.
-		_, err = os.Stat(ss.(*diskSideloadStorage).dir)
+		_, err = eng.Stat(ss.(*diskSideloadStorage).dir)
 		if err == nil {
 			t.Fatalf("expected %q to be removed after truncating full range", ss.(*diskSideloadStorage).dir)
 		}
@@ -387,6 +388,7 @@ func testSideloadingSideloadedStorage(
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	v1, v2 := raftVersionStandard, raftVersionSideloaded
 	rangeID := roachpb.RangeID(1)
@@ -403,11 +405,11 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		expTrace string
 	}
 
-	sstFat := storagepb.ReplicatedEvalResult_AddSSTable{
+	sstFat := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data:  []byte("foo"),
 		CRC32: 0, // not checked
 	}
-	sstThin := storagepb.ReplicatedEvalResult_AddSSTable{
+	sstThin := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		CRC32: 0, // not checked
 	}
 
@@ -500,8 +502,9 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 
 func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	addSST := storagepb.ReplicatedEvalResult_AddSSTable{
+	addSST := kvserverpb.ReplicatedEvalResult_AddSSTable{
 		Data: []byte("foo"), CRC32: 0, // not checked
 	}
 
@@ -595,7 +598,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "engineInMem", func(t *testing.T, engineInMem bool) {
 		testutils.RunTrueAndFalse(t, "mockSideloaded", func(t *testing.T, mockSideloaded bool) {
 			if engineInMem && !mockSideloaded {
-				t.Skip("https://github.com/cockroachdb/cockroach/issues/31913")
+				skip.WithIssue(t, 31913)
 			}
 			testRaftSSTableSideloadingProposal(t, engineInMem, mockSideloaded)
 		})
@@ -605,6 +608,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloaded bool) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	dir, cleanup := testutils.TempDir(t)
@@ -627,7 +631,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 		}
 		stopper.AddCloser(tc.engine)
 	}
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 
 	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
@@ -770,6 +774,7 @@ func newEngine(t *testing.T) (func(), storage.Engine) {
 // inlined.
 func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	ctx := context.Background()
@@ -833,7 +838,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		}
 
 		var ent raftpb.Entry
-		var cmd storagepb.RaftCommand
+		var cmd kvserverpb.RaftCommand
 		var finalEnt raftpb.Entry
 		for _, entryBytes := range mockSender.logEntries {
 			if err := protoutil.Unmarshal(entryBytes, &ent); err != nil {
@@ -959,11 +964,12 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 
 func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer SetMockAddSSTable()()
 
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
 	makeInMemSideloaded(tc.repl)
 	ctx := context.Background()

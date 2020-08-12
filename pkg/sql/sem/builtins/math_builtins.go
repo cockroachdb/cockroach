@@ -14,7 +14,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -334,7 +334,7 @@ var mathBuiltins = map[string]builtinDefinition{
 		}, "Calculates `x`%`y`.", tree.VolatilityImmutable),
 		decimalOverload2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			if y.Sign() == 0 {
-				return nil, tree.ErrZeroModulus
+				return nil, tree.ErrDivByZero
 			}
 			dd := &tree.DDecimal{}
 			_, err := tree.HighPrecisionCtx.Rem(&dd.Decimal, x, y)
@@ -346,7 +346,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				y := tree.MustBeDInt(args[1])
 				if y == 0 {
-					return nil, tree.ErrZeroModulus
+					return nil, tree.ErrDivByZero
 				}
 				x := tree.MustBeDInt(args[0])
 				return tree.NewDInt(x % y), nil
@@ -463,7 +463,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			"negative.", tree.VolatilityImmutable),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 			d := &tree.DDecimal{}
-			d.Decimal.SetFinite(int64(x.Sign()), 0)
+			d.Decimal.SetInt64(int64(x.Sign()))
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative.", tree.VolatilityImmutable),

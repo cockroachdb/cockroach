@@ -17,12 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestDepWhitelist(t *testing.T) {
+func TestDepAllowlist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We want workload to be lightweight. If you need to add a package to this
 	// set of deps, run it by danhhz first.
-	buildutil.VerifyTransitiveWhitelist(t, "github.com/cockroachdb/cockroach/pkg/workload",
+	buildutil.VerifyTransitiveAllowlist(t, "github.com/cockroachdb/cockroach/pkg/workload",
 		[]string{
 			`github.com/cockroachdb/cockroach/pkg/col/coldata`,
 			`github.com/cockroachdb/cockroach/pkg/col/typeconv`,
@@ -39,7 +39,6 @@ func TestDepWhitelist(t *testing.T) {
 			`github.com/cockroachdb/cockroach/pkg/util/humanizeutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/protoutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/randutil`,
-			`github.com/cockroachdb/cockroach/pkg/util/stacktrace`,
 			`github.com/cockroachdb/cockroach/pkg/util/stringencoding`,
 			`github.com/cockroachdb/cockroach/pkg/util/syncutil`,
 			`github.com/cockroachdb/cockroach/pkg/util/timeutil`,

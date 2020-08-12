@@ -12,14 +12,17 @@ package memo
 
 import (
 	"math"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -146,6 +149,16 @@ func TestInterner(t *testing.T) {
 		Function:           RankSingleton,
 		WindowsItemPrivate: WindowsItemPrivate{Col: 0, Frame: frame2},
 	}}
+
+	invSpan1 := invertedexpr.MakeSingleInvertedValSpan([]byte("abc"))
+	invSpan2 := invertedexpr.MakeSingleInvertedValSpan([]byte("abc"))
+	invSpan3 := invertedexpr.InvertedSpan{Start: []byte("abc"), End: []byte("def")}
+	invSpans1 := invertedexpr.InvertedSpans{invSpan1}
+	invSpans2 := invertedexpr.InvertedSpans{invSpan2}
+	invSpans3 := invertedexpr.InvertedSpans{invSpan3}
+	invSpans4 := invertedexpr.InvertedSpans{invSpan1, invSpan2}
+	invSpans5 := invertedexpr.InvertedSpans{invSpan2, invSpan1}
+	invSpans6 := invertedexpr.InvertedSpans{invSpan1, invSpan3}
 
 	type testVariation struct {
 		val1  interface{}
@@ -501,6 +514,14 @@ func TestInterner(t *testing.T) {
 			{val1: wins3, val2: wins4, equal: false},
 			{val1: wins1, val2: wins5, equal: false},
 		}},
+
+		{hashFn: in.hasher.HashInvertedSpans, eqFn: in.hasher.IsInvertedSpansEqual, variations: []testVariation{
+			{val1: invSpans1, val2: invSpans2, equal: true},
+			{val1: invSpans1, val2: invSpans3, equal: false},
+			{val1: invSpans2, val2: invSpans4, equal: false},
+			{val1: invSpans4, val2: invSpans5, equal: true},
+			{val1: invSpans5, val2: invSpans6, equal: false},
+		}},
 	}
 
 	computeHashValue := func(hashFn reflect.Value, val interface{}) internHash {
@@ -643,5 +664,36 @@ func TestInternerCollision(t *testing.T) {
 	// Should be no more items.
 	if in.cache.Next() {
 		t.Errorf("expected no more colliding items in cache")
+	}
+}
+
+func BenchmarkEncodeDatum(b *testing.B) {
+	r := rand.New(rand.NewSource(0))
+	datums := make([]tree.Datum, 10000)
+	for i := range datums {
+		datums[i] = sqlbase.RandDatumWithNullChance(r, sqlbase.RandEncodableType(r), 0)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, d := range datums {
+			encodeDatum(nil, d)
+		}
+	}
+}
+
+func BenchmarkIsDatumEqual(b *testing.B) {
+	r := rand.New(rand.NewSource(0))
+	datums := make([]tree.Datum, 1000)
+	for i := range datums {
+		datums[i] = sqlbase.RandDatumWithNullChance(r, sqlbase.RandEncodableType(r), 0)
+	}
+	b.ResetTimer()
+	var h hasher
+	for i := 0; i < b.N; i++ {
+		for _, d := range datums {
+			// IsDatumEqual is only called on values that hash the
+			// same, so only benchmark it on identical datums.
+			h.IsDatumEqual(d, d)
+		}
 	}
 }

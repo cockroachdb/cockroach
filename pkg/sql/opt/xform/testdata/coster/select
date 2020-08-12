@@ -8,7 +8,7 @@ SELECT k, s FROM a WHERE s >= 'foo'
 select
  ├── columns: k:1!null s:3!null
  ├── stats: [rows=333.333333, distinct(3)=33.3333333, null(3)=0]
- ├── cost: 1070.03
+ ├── cost: 1070.04
  ├── key: (1)
  ├── fd: (1)-->(3)
  ├── scan a

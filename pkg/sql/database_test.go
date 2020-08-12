@@ -19,50 +19,69 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
-
-func TestMakeDatabaseDesc(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stmt, err := parser.ParseOne("CREATE DATABASE test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	desc := makeDatabaseDesc(stmt.AST.(*tree.CreateDatabase))
-	if desc.Name != "test" {
-		t.Fatalf("expected Name == test, got %s", desc.Name)
-	}
-	// ID is not set yet.
-	if desc.ID != 0 {
-		t.Fatalf("expected ID == 0, got %d", desc.ID)
-	}
-	if len(desc.GetPrivileges().Users) != 2 {
-		t.Fatalf("wrong number of privilege users, expected 2, got: %d", len(desc.GetPrivileges().Users))
-	}
-}
 
 func TestDatabaseAccessors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
-	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
-		if _, err := getDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		if _, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
 			return err
 		}
-		if _, err := MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, sqlbase.SystemDB.ID); err != nil {
+		if _, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, keys.SystemDatabaseID); err != nil {
 			return err
 		}
 
-		databaseCache := newDatabaseCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
-		_, err := databaseCache.getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID)
+		databaseCache := database.NewCache(keys.SystemSQLCodec, config.NewSystemConfig(zonepb.DefaultZoneConfigRef()))
+		_, err := databaseCache.GetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID)
 		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDatabaseHasChildSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a database and schema.
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_user_defined_schemas = true;
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now get the database descriptor from disk.
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
+		if err != nil {
+			return err
+		}
+		db, err := catalogkv.GetDatabaseDescByID(ctx, txn, keys.SystemSQLCodec, dbID)
+		if err != nil {
+			return err
+		}
+		if _, ok := db.Schemas["sc"]; !ok {
+			return errors.New("expected to find child schema sc in db")
+		}
+		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}

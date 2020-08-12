@@ -14,10 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -35,7 +36,7 @@ type indexBackfiller struct {
 
 	backfill.IndexBackfiller
 
-	adder storagebase.BulkAdder
+	adder kvserverbase.BulkAdder
 
 	desc *sqlbase.ImmutableTableDescriptor
 }
@@ -60,6 +61,7 @@ var backillerSSTSize = settings.RegisterByteSizeSetting(
 )
 
 func newIndexBackfiller(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
@@ -79,7 +81,7 @@ func newIndexBackfiller(
 	}
 	ib.backfiller.chunks = ib
 
-	if err := ib.IndexBackfiller.Init(flowCtx.NewEvalCtx(), ib.desc); err != nil {
+	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc); err != nil {
 		return nil, err
 	}
 
@@ -91,7 +93,7 @@ func (ib *indexBackfiller) prepare(ctx context.Context) error {
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	sstSize := func() int64 { return backillerSSTSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
 	stepSize := backfillerBufferIncrementSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	opts := storagebase.BulkAdderOptions{
+	opts := kvserverbase.BulkAdderOptions{
 		SSTSize:        sstSize,
 		MinBufferSize:  minBufferSize,
 		MaxBufferSize:  maxBufferSize,
@@ -122,7 +124,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	if orig == nil {
 		return nil
 	}
-	var typed *storagebase.DuplicateKeyError
+	var typed *kvserverbase.DuplicateKeyError
 	if !errors.As(orig, &typed) {
 		return orig
 	}
@@ -138,7 +140,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 
 func (ib *indexBackfiller) runChunk(
 	tctx context.Context,
-	mutations []sqlbase.DescriptorMutation,
+	mutations []descpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,

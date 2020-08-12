@@ -109,11 +109,11 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
+		blocklistName, expectedFailures, _, _ := hibernateBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
+			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
@@ -123,8 +123,8 @@ func registerHibernate(r *testRegistry) {
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
 		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/hibernate-core/ && `+
-				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb`,
+			`cd /mnt/data1/hibernate/ && `+
+				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./gradlew test -Pdb=cockroachdb`,
 		)
 
 		t.Status("collecting the test results")
@@ -161,7 +161,7 @@ func registerHibernate(r *testRegistry) {
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
+			`ls /mnt/data1/hibernate/*/target/test-results/test/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -172,7 +172,7 @@ func registerHibernate(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blacklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
+			blocklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
 		)
 	}
 

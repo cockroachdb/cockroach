@@ -12,36 +12,32 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const selectionOpsTmpl = "pkg/sql/colexec/selection_ops_tmpl.go"
 
-func getSelectionOpsTmpl() (*template.Template, error) {
-	t, err := ioutil.ReadFile(selectionOpsTmpl)
-	if err != nil {
-		return nil, err
-	}
+func getSelectionOpsTmpl(inputFileContents string) (*template.Template, error) {
+	r := strings.NewReplacer(
+		"_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}",
+		"_LEFT_TYPE_WIDTH", typeWidthReplacement,
+		"_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}",
+		"_RIGHT_TYPE_WIDTH", typeWidthReplacement,
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_LEFT_CANONICAL_TYPE_FAMILY", "{{.LeftCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_LEFT_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_RIGHT_CANONICAL_TYPE_FAMILY", "{{.RightCanonicalFamilyStr}}")
-	s = strings.ReplaceAll(s, "_RIGHT_TYPE_WIDTH", typeWidthReplacement)
-
-	s = strings.ReplaceAll(s, "_OP_CONST_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}ConstOp")
-	s = strings.ReplaceAll(s, "_OP_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op")
-	s = strings.ReplaceAll(s, "_NAME", "{{.Name}}")
-	s = strings.ReplaceAll(s, "_R_GO_TYPE", "{{.Right.GoType}}")
-	s = strings.ReplaceAll(s, "_L_TYP", "{{.Left.VecMethod}}")
-	s = strings.ReplaceAll(s, "_R_TYP", "{{.Right.VecMethod}}")
+		"_OP_CONST_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}ConstOp",
+		"_OP_NAME", "sel{{.Name}}{{.Left.VecMethod}}{{.Right.VecMethod}}Op",
+		"_NAME", "{{.Name}}",
+		"_R_GO_TYPE", "{{.Right.GoType}}",
+		"_L_TYP", "{{.Left.VecMethod}}",
+		"_R_TYP", "{{.Right.VecMethod}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	assignCmpRe := makeFunctionRegex("_ASSIGN_CMP", 6)
 	s = assignCmpRe.ReplaceAllString(s, makeTemplateFunctionCall("Right.Assign", 6))
 
+	s = strings.ReplaceAll(s, "_L_UNSAFEGET", "execgen.UNSAFEGET")
 	s = replaceManipulationFuncsAmbiguous(".Left", s)
 	s = strings.ReplaceAll(s, "_R_UNSAFEGET", "execgen.UNSAFEGET")
 	s = strings.ReplaceAll(s, "_R_SLICE", "execgen.SLICE")
@@ -56,8 +52,8 @@ func getSelectionOpsTmpl() (*template.Template, error) {
 	return template.New("selection_ops").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 }
 
-func genSelectionOps(wr io.Writer) error {
-	tmpl, err := getSelectionOpsTmpl()
+func genSelectionOps(inputFileContents string, wr io.Writer) error {
+	tmpl, err := getSelectionOpsTmpl(inputFileContents)
 	if err != nil {
 		return err
 	}

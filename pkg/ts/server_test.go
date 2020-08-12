@@ -43,12 +43,12 @@ func TestServerQuery(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data directly.
 	tsdb := tsrv.TsDB()
-	if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
 			Name:   "test.metric",
 			Source: "source1",
@@ -262,7 +262,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
@@ -319,7 +319,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		TimeSeriesQueryWorkerMax:    workerCount,
 		TimeSeriesQueryMemoryBudget: budget,
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
@@ -359,7 +359,7 @@ func TestServerDump(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	seriesCount := 10
@@ -381,7 +381,7 @@ func TestServerDump(t *testing.T) {
 	}
 	client := tspb.NewTimeSeriesClient(conn)
 
-	dumpClient, err := client.Dump(context.TODO(), nil)
+	dumpClient, err := client.Dump(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestServerDump(t *testing.T) {
 
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	tsrv := s.(*server.TestServer)
 
 	// Populate data for large number of time series.
@@ -502,7 +502,7 @@ func generateTimeSeriesDatapoints(valueCount int) []tspb.TimeSeriesDatapoint {
 func populateSeries(seriesCount, sourceCount, valueCount int, tsdb *ts.DB) error {
 	for series := 0; series < seriesCount; series++ {
 		for source := 0; source < sourceCount; source++ {
-			if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
+			if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 				{
 					Name:       seriesName(series),
 					Source:     sourceName(source),

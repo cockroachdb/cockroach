@@ -60,10 +60,7 @@ func runProcessorTest(
 	switch pt := p.(type) {
 	case *joinReader:
 		// Reduce batch size to exercise batching logic.
-		pt.SetBatchSize(2 /* batchSize */)
-	case *indexJoiner:
-		//	Reduce batch size to exercise batching logic.
-		pt.SetBatchSize(2 /* batchSize */)
+		pt.SetBatchSizeBytes(2 * int64(inputRows[0].Size()))
 	}
 
 	p.Run(context.Background())
@@ -72,7 +69,11 @@ func runProcessorTest(
 	}
 	var res sqlbase.EncDatumRows
 	for {
-		row := out.NextNoMeta(t).Copy()
+		row, meta := out.Next()
+		if meta != nil && meta.Metrics == nil {
+			t.Fatalf("unexpected metadata %+v", meta)
+		}
+		row = row.Copy()
 		if row == nil {
 			break
 		}

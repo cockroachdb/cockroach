@@ -1,4 +1,5 @@
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(52567)
+
 query T
 SHOW DATABASES
 ----
@@ -124,10 +125,10 @@ user root
 statement ok
 CREATE VIEW t.v AS SELECT k,v FROM u.kv
 
-query TTT
+query TTTI
 SHOW TABLES FROM u
 ----
-public  kv  table
+public  kv  table  0
 
 statement error cannot rename database because relation "t.public.v" depends on relation "u.public.kv"
 ALTER DATABASE u RENAME TO v
@@ -162,9 +163,9 @@ v
 query TTT
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
-·                distributed  false
-·                vectorized   false
-rename database  ·            ·
+·                distribution  local
+·                vectorized    false
+rename database  ·             ·
 
 # Verify that the EXPLAIN above does not actually rename the database (#30543)
 query T colnames

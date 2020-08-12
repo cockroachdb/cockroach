@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -43,14 +45,14 @@ import (
 // TestingGetDescriptorFromDB is a wrapper for getDescriptorFromDB.
 func TestingGetDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	return getDescriptorFromDB(ctx, db, dbName)
 }
 
 // getDescriptorFromDB returns the descriptor in bytes of the given table name.
 func getDescriptorFromDB(
 	ctx context.Context, db *gosql.DB, dbName string,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
 	var dbDescBytes []byte
 	// Due to the namespace migration, the row may not exist in system.namespace
 	// so a fallback to system.namespace_deprecated is required.
@@ -79,30 +81,33 @@ func getDescriptorFromDB(
 			}
 			return nil, errors.Wrap(err, "fetch database descriptor")
 		}
-		var dbDescWrapper sqlbase.Descriptor
-		if err := protoutil.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
+		var desc descpb.Descriptor
+		if err := protoutil.Unmarshal(dbDescBytes, &desc); err != nil {
 			return nil, errors.Wrap(err, "unmarshal database descriptor")
 		}
-		return dbDescWrapper.GetDatabase(), nil
+		dbDesc := desc.GetDatabase()
+		if dbDesc == nil {
+			return nil, errors.Errorf("found non-database descriptor: %v", desc)
+		}
+		return sqlbase.NewImmutableDatabaseDescriptor(*dbDesc), nil
 	}
 	return nil, gosql.ErrNoRows
 }
 
 // Load converts r into SSTables and backup descriptors. database is the name
-// of the database into which the SSTables will eventually be written. uri
-// is the storage location. ts is the time at which the MVCC data will
-// be set. loadChunkBytes is the size at which to create a new SSTable
+// of the database into which the SSTables will eventually be written.
+// - uri is the storage location (e.g. nodelocal://0/my/dir).
+// - ts is the time at which the MVCC data will be set.
+// - loadChunkBytes is the size at which to create a new SSTable
 // (which will translate into a new range during restore); set to 0 to use
 // the zone's default range max / 2.
 func Load(
 	ctx context.Context,
 	db *gosql.DB,
 	r io.Reader,
-	database, uri string,
+	database, user, externalIODir, uri string,
 	ts hlc.Timestamp,
 	loadChunkBytes int64,
-	tempPrefix string,
-	writeToDir string,
 ) (backupccl.BackupManifest, error) {
 	if loadChunkBytes == 0 {
 		loadChunkBytes = *zonepb.DefaultZoneConfig().RangeMaxBytes / 2
@@ -114,14 +119,15 @@ func Load(
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 	evalCtx.Codec = keys.TODOSQLCodec
+	semaCtx := tree.MakeSemaContext()
 
-	blobClientFactory := blobs.TestBlobServiceClient(writeToDir)
-	conf, err := cloud.ExternalStorageConfFromURI(uri)
+	blobClientFactory := blobs.TestBlobServiceClient(externalIODir)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
-	dir, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIOConfig{},
-		cluster.NoSettings, blobClientFactory)
+	dir, err := cloudimpl.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{},
+		cluster.NoSettings, blobClientFactory, nil, nil)
 	if err != nil {
 		return backupccl.BackupManifest{}, errors.Wrap(err, "export storage from URI")
 	}
@@ -140,15 +146,15 @@ func Load(
 	scanner := bufio.NewReader(r)
 	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
-	var cols []sqlbase.ColumnDescriptor
+	var cols []descpb.ColumnDescriptor
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 	var tableName string
 	var prevKey roachpb.Key
 	var kvs []storage.MVCCKeyValue
 	var kvBytes int64
 	backup := backupccl.BackupManifest{
-		Descriptors: []sqlbase.Descriptor{
-			{Union: &sqlbase.Descriptor_Database{Database: dbDesc}},
+		Descriptors: []descpb.Descriptor{
+			{Union: &descpb.Descriptor_Database{Database: dbDesc.DatabaseDesc()}},
 		},
 	}
 	for {
@@ -173,7 +179,7 @@ func Load(
 		switch s := stmt.AST.(type) {
 		case *tree.CreateTable:
 			if tableDesc != nil {
-				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 					return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -197,23 +203,38 @@ func Load(
 			// rejected during restore.
 			st := cluster.MakeTestingClusterSettings()
 
-			affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+			affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
 			var txn *kv.Txn
 			// At this point the CREATE statements in the loaded SQL do not
 			// use the SERIAL type so we need not process SERIAL types here.
-			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID, keys.PublicSchemaID,
-				0 /* table ID */, ts, privs, affected, nil, evalCtx, evalCtx.SessionData, false /* temporary */)
+			desc, err := sql.MakeTableDesc(
+				ctx,
+				txn,
+				nil, /* vt */
+				st,
+				s,
+				dbDesc.GetID(),
+				keys.PublicSchemaID,
+				0, /* table ID */
+				ts,
+				privs,
+				affected,
+				nil,
+				evalCtx,
+				evalCtx.SessionData,
+				tree.PersistencePermanent,
+			)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make table desc")
 			}
 
 			tableDesc = sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
 			tableDescs[tableName] = tableDesc
-			backup.Descriptors = append(backup.Descriptors, sqlbase.Descriptor{
-				Union: &sqlbase.Descriptor_Table{Table: desc.TableDesc()},
+			backup.Descriptors = append(backup.Descriptors, descpb.Descriptor{
+				Union: &descpb.Descriptor_Table{Table: desc.TableDesc()},
 			})
 
 			for i := range tableDesc.Columns {
@@ -224,13 +245,13 @@ func Load(
 			}
 
 			ri, err = row.MakeInserter(
-				ctx, nil, evalCtx.Codec, tableDesc, tableDesc.Columns, row.SkipFKs, nil /* fkTables */, &sqlbase.DatumAlloc{},
+				ctx, nil /* txn */, evalCtx.Codec, tableDesc, tableDesc.Columns, &sqlbase.DatumAlloc{},
 			)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, evalCtx)
+				sqlbase.ProcessDefaultColumns(ctx, tableDesc.Columns, tableDesc, &txCtx, evalCtx, &semaCtx)
 			if err != nil {
 				return backupccl.BackupManifest{}, errors.Wrap(err, "process default columns")
 			}
@@ -264,7 +285,7 @@ func Load(
 			}
 
 			if kvBytes > loadChunkBytes {
-				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+				if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 					return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
@@ -277,7 +298,7 @@ func Load(
 	}
 
 	if tableDesc != nil {
-		if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
+		if err := writeSST(ctx, &backup, dir, kvs, ts); err != nil {
 			return backupccl.BackupManifest{}, errors.Wrap(err, "writeSST")
 		}
 	}
@@ -297,7 +318,7 @@ func insertStmtToKVs(
 	ctx context.Context,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	defaultExprs []tree.TypedExpr,
-	cols []sqlbase.ColumnDescriptor,
+	cols []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
 	ri row.Inserter,
 	stmt *tree.Insert,
@@ -346,8 +367,11 @@ func insertStmtToKVs(
 			if !ok {
 				return errors.Errorf("unsupported expr: %q", expr)
 			}
-			var err error
-			insertRow[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type)
+			typedExpr, err := c.ResolveAsType(ctx, nil /* semaCtx */, tableDesc.Columns[i].Type)
+			if err != nil {
+				return err
+			}
+			insertRow[i], err = typedExpr.Eval(evalCtx)
 			if err != nil {
 				return err
 			}
@@ -355,7 +379,7 @@ func insertStmtToKVs(
 
 		// We have disallowed computed exprs.
 		var computeExprs []tree.TypedExpr
-		var computedCols []sqlbase.ColumnDescriptor
+		var computedCols []descpb.ColumnDescriptor
 
 		insertRow, err := row.GenerateInsertRow(
 			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, insertRow, &computedIVarContainer,
@@ -363,9 +387,10 @@ func insertStmtToKVs(
 		if err != nil {
 			return errors.Wrapf(err, "process insert %q", insertRow)
 		}
-		// TODO(bram): Is the checking of FKs here required? If not, turning them
-		// off may provide a speed boost.
-		if err := ri.InsertRow(ctx, b, insertRow, true, row.CheckFKs, false /* traceKV */); err != nil {
+		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
+		// not add entries to.
+		var pm row.PartialIndexUpdateHelper
+		if err := ri.InsertRow(ctx, b, insertRow, pm, true, false /* traceKV */); err != nil {
 			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}
@@ -376,7 +401,6 @@ func writeSST(
 	ctx context.Context,
 	backup *backupccl.BackupManifest,
 	base cloud.ExternalStorage,
-	tempPrefix string,
 	kvs []storage.MVCCKeyValue,
 	ts hlc.Timestamp,
 ) error {

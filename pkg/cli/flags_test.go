@@ -28,13 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/spf13/cobra"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
@@ -55,6 +58,7 @@ func TestStdFlagToPflag(t *testing.T) {
 
 func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Verify that the cockroach binary doesn't depend on certain packages.
 	buildutil.VerifyNoImports(t,
 		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach", true,
@@ -66,16 +70,17 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
 		},
-		// Raven (Sentry) and the errors library use go/build to determine
+		// Sentry and the errors library use go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/getsentry/raven-go",
+		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }
 
 func TestCacheFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -94,6 +99,7 @@ func TestCacheFlagValue(t *testing.T) {
 
 func TestClusterNameFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -135,6 +141,7 @@ func TestClusterNameFlag(t *testing.T) {
 
 func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
@@ -155,8 +162,8 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 		if err := f.Parse(args); err != nil {
 			t.Fatal(err)
 		}
-		if c.expected != serverCfg.SQLMemoryPoolSize {
-			t.Errorf("expected %d, but got %d", c.expected, serverCfg.SQLMemoryPoolSize)
+		if c.expected != serverCfg.MemoryPoolSize {
+			t.Errorf("expected %d, but got %d", c.expected, serverCfg.MemoryPoolSize)
 		}
 	}
 
@@ -167,21 +174,22 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 		}
 
 		// Check fractional values.
-		maxMem, err := status.GetTotalMemory(context.TODO())
+		maxMem, err := status.GetTotalMemory(context.Background())
 		if err != nil {
 			t.Logf("total memory unknown: %v", err)
 			return
 		}
 		expectedLow := (maxMem * 28) / 100
 		expectedHigh := (maxMem * 32) / 100
-		if serverCfg.SQLMemoryPoolSize < expectedLow || serverCfg.SQLMemoryPoolSize > expectedHigh {
-			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.SQLMemoryPoolSize)
+		if serverCfg.MemoryPoolSize < expectedLow || serverCfg.MemoryPoolSize > expectedHigh {
+			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.MemoryPoolSize)
 		}
 	}
 }
 
 func TestClockOffsetFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -209,6 +217,7 @@ func TestClockOffsetFlagValue(t *testing.T) {
 
 func TestClientURLFlagEquivalence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -417,6 +426,7 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 
 func TestServerConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -428,44 +438,56 @@ func TestServerConnSettings(t *testing.T) {
 		expectedAdvertiseAddr string
 		expSQLAddr            string
 		expSQLAdvAddr         string
+		expTenantAddr         string
+		expTenantAdvAddr      string
 	}{
 		{[]string{"start"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1"},
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "192.168.0.111"},
+			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", ":"},
 			":", ":",
 			":", ":",
+			":", ":",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:"},
+			"127.0.0.1:", "127.0.0.1:",
 			"127.0.0.1:", "127.0.0.1:",
 			"127.0.0.1:", "127.0.0.1:",
 		},
 		{[]string{"start", "--listen-addr", ":12345"},
 			":12345", ":12345",
 			":12345", ":12345",
+			":12345", ":12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:12345"},
+			"127.0.0.1:12345", "127.0.0.1:12345",
 			"127.0.0.1:12345", "127.0.0.1:12345",
 			"127.0.0.1:12345", "127.0.0.1:12345",
 		},
 		{[]string{"start", "--listen-addr", "[::1]"},
 			"[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort,
 			"[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort,
+			"[::1]:" + base.DefaultPort, "[::1]:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "[::1]:12345"},
 			"[::1]:12345", "[::1]:12345",
 			"[::1]:12345", "[::1]:12345",
+			"[::1]:12345", "[::1]:12345",
 		},
 		{[]string{"start", "--listen-addr", "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]"},
+			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort,
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort,
 			"[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort, "[2622:6221:e663:4922:fc2b:788b:fadd:7b48]:" + base.DefaultPort,
 		},
@@ -473,8 +495,10 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--listen-addr", "my.host.name"},
 			"my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort,
 			"my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort,
+			"my.host.name:" + base.DefaultPort, "my.host.name:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "myhostname"},
+			"myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort,
 			"myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort,
 			"myhostname:" + base.DefaultPort, "myhostname:" + base.DefaultPort,
 		},
@@ -483,71 +507,138 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--sql-addr", "127.0.0.1"},
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--sql-addr", ":1234"},
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			":1234", ":1234",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--sql-addr", "127.0.0.1:1234"},
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			"127.0.0.1:1234", "127.0.0.1:1234",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--sql-addr", "[::2]"},
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 		{[]string{"start", "--sql-addr", "[::2]:1234"},
 			":" + base.DefaultPort, ":" + base.DefaultPort,
 			"[::2]:1234", "[::2]:1234",
+			":" + base.DefaultPort, ":" + base.DefaultPort,
 		},
 
 		// Configuring the components of the SQL address separately.
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", "127.0.0.2"},
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 			"127.0.0.2:" + base.DefaultPort, "127.0.0.2:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", ":1234"},
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 			"127.0.0.1:1234", "127.0.0.1:1234",
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--sql-addr", "127.0.0.2:1234"},
 			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 			"127.0.0.2:1234", "127.0.0.2:1234",
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "[::2]", "--sql-addr", ":1234"},
 			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
-			"[::2]:1234", "[::2]:1234"},
+			"[::2]:1234", "[::2]:1234",
+			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
+		},
+
+		// Tenant address override.
+		{[]string{"start", "--tenant-addr", "127.0.0.1"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+		},
+		{[]string{"start", "--tenant-addr", ":1234"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":1234", ":1234",
+		},
+		{[]string{"start", "--tenant-addr", "127.0.0.1:1234"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			"127.0.0.1:1234", "127.0.0.1:1234",
+		},
+		{[]string{"start", "--tenant-addr", "[::2]"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
+		},
+		{[]string{"start", "--tenant-addr", "[::2]:1234"},
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			":" + base.DefaultPort, ":" + base.DefaultPort,
+			"[::2]:1234", "[::2]:1234",
+		},
+
+		// Configuring the components of the Tenant address separately.
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", "127.0.0.2"},
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.2:" + base.DefaultPort, "127.0.0.2:" + base.DefaultPort,
+		},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", ":1234"},
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:1234", "127.0.0.1:1234",
+		},
+		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", "127.0.0.2:1234"},
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
+			"127.0.0.2:1234", "127.0.0.2:1234",
+		},
+		{[]string{"start", "--listen-addr", "[::2]", "--tenant-addr", ":1234"},
+			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
+			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
+			"[::2]:1234", "[::2]:1234",
+		},
 
 		// --advertise-addr overrides.
 		{[]string{"start", "--advertise-addr", "192.168.0.111"},
+			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111:12345"},
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			":" + base.DefaultPort, "192.168.0.111:12345",
+			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111"},
+			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--advertise-addr", "192.168.0.111"},
 			"127.0.0.1:12345", "192.168.0.111:12345",
 			"127.0.0.1:12345", "192.168.0.111:12345",
+			"127.0.0.1:12345", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111:12345"},
+			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:54321", "--advertise-addr", "192.168.0.111:12345"},
 			"127.0.0.1:54321", "192.168.0.111:12345",
 			"127.0.0.1:54321", "192.168.0.111:12345",
+			"127.0.0.1:54321", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--listen-addr", ":12345"},
 			":12345", "192.168.0.111:12345",
 			":12345", "192.168.0.111:12345",
+			":12345", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--listen-addr", ":54321"},
+			":54321", "192.168.0.111:12345",
 			":54321", "192.168.0.111:12345",
 			":54321", "192.168.0.111:12345",
 		},
@@ -557,6 +648,7 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--sql-addr", ":54321"},
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			":54321", "192.168.0.111:54321",
+			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 
 		// Show that if the SQL address is overridden, its advertised form picks the
@@ -564,66 +656,82 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--sql-addr", "127.0.0.1:54321"},
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			"127.0.0.1:54321", "192.168.0.111:54321",
+			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111:12345", "--sql-addr", "127.0.0.1"},
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
+			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--sql-addr", "127.0.0.1:12345"},
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"127.0.0.1:12345", "192.168.0.111:12345",
+			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 
 		// Backward-compatibility flag combinations.
 		{[]string{"start", "--host", "192.168.0.111"},
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
+			"192.168.0.111:" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--port", "12345"},
+			":12345", ":12345",
 			":12345", ":12345",
 			":12345", ":12345",
 		},
 		{[]string{"start", "--advertise-host", "192.168.0.111"},
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
+			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"},
+			":" + base.DefaultPort, "192.168.0.111:12345",
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--port", "12345"},
 			"127.0.0.1:12345", "127.0.0.1:12345",
 			"127.0.0.1:12345", "127.0.0.1:12345",
+			"127.0.0.1:12345", "127.0.0.1:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1:12345", "--port", "55555"},
 			"127.0.0.1:55555", "127.0.0.1:55555",
 			"127.0.0.1:55555", "127.0.0.1:55555",
+			"127.0.0.1:55555", "127.0.0.1:55555",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"},
 			"127.0.0.1:12345", "192.168.0.111:12345",
 			"127.0.0.1:12345", "192.168.0.111:12345",
+			"127.0.0.1:12345", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "12345"},
+			"127.0.0.1:12345", "192.168.0.111:12345",
 			"127.0.0.1:12345", "192.168.0.111:12345",
 			"127.0.0.1:12345", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"},
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
 			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
+			"127.0.0.1:" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--listen-addr", "127.0.0.1", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"},
+			"127.0.0.1:54321", "192.168.0.111:12345",
 			"127.0.0.1:54321", "192.168.0.111:12345",
 			"127.0.0.1:54321", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"},
 			":12345", "192.168.0.111:12345",
 			":12345", "192.168.0.111:12345",
+			":12345", "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"},
 			":" + base.DefaultPort, "192.168.0.111:12345",
 			":" + base.DefaultPort, "192.168.0.111:12345",
+			":" + base.DefaultPort, "192.168.0.111:12345",
 		},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"},
+			":54321", "192.168.0.111:12345",
 			":54321", "192.168.0.111:12345",
 			":54321", "192.168.0.111:12345",
 		},
@@ -649,14 +757,20 @@ func TestServerConnSettings(t *testing.T) {
 			}
 
 			wantSQLSplit := false
+			wantTenantSplit := false
 			for _, r := range td.args {
-				if r == "--sql-addr" {
+				switch r {
+				case "--sql-addr":
 					wantSQLSplit = true
-					break
+				case "--tenant-addr":
+					wantTenantSplit = true
 				}
 			}
 			if wantSQLSplit != serverCfg.SplitListenSQL {
 				t.Errorf("%d. expected combined RPC/SQL listen = %v, found %v", i, wantSQLSplit, serverCfg.SplitListenSQL)
+			}
+			if wantTenantSplit != serverCfg.SplitListenTenant {
+				t.Errorf("%d. expected split tenant KV listen = %v, found %v", i, wantTenantSplit, serverCfg.SplitListenTenant)
 			}
 
 			if td.expSQLAddr != serverCfg.SQLAddr {
@@ -673,6 +787,7 @@ func TestServerConnSettings(t *testing.T) {
 
 func TestServerSocketSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -716,6 +831,7 @@ func TestServerSocketSettings(t *testing.T) {
 
 func TestLocalityAdvAddrFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -770,6 +886,7 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 
 func TestServerJoinSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -824,12 +941,11 @@ func TestServerJoinSettings(t *testing.T) {
 
 func TestClientConnSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// For some reason, when run under stress all these test cases fail due to the
 	// `--host` flag being unknown to quitCmd. Just skip this under stress.
-	if testutils.NightlyStress() {
-		t.Skip()
-	}
+	skip.UnderStress(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()
@@ -875,6 +991,7 @@ func TestClientConnSettings(t *testing.T) {
 
 func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Avoid leaking configuration changes after the tests end.
 	defer initCLIDefaults()

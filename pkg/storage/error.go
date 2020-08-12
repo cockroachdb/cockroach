@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // A Error wraps an error returned from a RocksDB operation.
@@ -22,7 +22,7 @@ type Error struct {
 	msg string
 }
 
-var _ log.SafeMessager = (*Error)(nil)
+var _ errors.SafeMessager = (*Error)(nil)
 
 // Error implements the error interface.
 func (err *Error) Error() string {

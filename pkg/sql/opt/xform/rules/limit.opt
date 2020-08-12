@@ -31,20 +31,61 @@
 =>
 (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
 
-# PushLimitIntoIndexJoin pushes a limit through an index join and constructs a
-# new Scan operator that incorporates it. Since index lookup can be expensive,
-# it's always better to discard rows beforehand.
+# PushLimitIntoIndexJoin pushes a limit through an index join. Since index
+# lookup can be expensive, it's always better to discard rows beforehand.
 #
 # TODO(radu): we can similarly push Offset too.
 [PushLimitIntoIndexJoin, Explore]
 (Limit
-    (IndexJoin (Scan $scanPrivate:*) $indexJoinPrivate:*)
-    (Const $limit:* & (IsPositiveInt $limit))
+    (IndexJoin $input:* $indexJoinPrivate:*)
+    $limitExpr:(Const $limit:* & (IsPositiveInt $limit))
     $ordering:* &
-        (CanLimitConstrainedScan $scanPrivate $ordering)
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
 (IndexJoin
-    (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+    (Limit $input $limitExpr (PruneOrdering $ordering $cols))
     $indexJoinPrivate
 )
+
+# SplitScanIntoUnionScans splits a non-inverted scan under a limit into a union
+# of limited scans. Example:
+#
+#    CREATE TABLE tab (region STRING, data INT NOT NULL, INDEX (region, data));
+#
+#    SELECT data
+#    FROM tab
+#    WHERE region='ASIA' OR region='EUROPE'
+#    ORDER BY data DESC
+#    LIMIT 1;
+#
+#    =>
+#
+#    SELECT data
+#    FROM (SELECT * FROM tab WHERE region='ASIA' ORDER BY data LIMIT 1)
+#    UNION ALL (SELECT * FROM tab WHERE region='EUROPE' ORDER BY data LIMIT 1)
+#    ORDER BY data
+#    LIMIT 1;
+#
+# See the SplitScanIntoUnionScans function in xform/custom_funcs for details.
+[SplitScanIntoUnionScans, Explore]
+(Limit
+    $scan:(Scan $scanPrivate:*) &
+        ^(ScanIsLimited $scanPrivate) &
+        ^(ScanIsInverted $scanPrivate)
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:* &
+        (Succeeded
+            $unionScans:(SplitScanIntoUnionScans
+                $ordering
+                $scan
+                $scanPrivate
+                $limit
+            )
+        )
+)
+=>
+(Limit $unionScans $limitExpr $ordering)

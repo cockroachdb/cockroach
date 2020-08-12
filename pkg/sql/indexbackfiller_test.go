@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestIndexBackfiller tests the scenarios described in docs/tech-notes/index-backfill.md
 func TestIndexBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -63,7 +65,7 @@ func TestIndexBackfiller(t *testing.T) {
 		base.TestClusterArgs{
 			ServerArgs: params,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 	sqlDB := tc.ServerConn(0)
 
 	execOrFail := func(query string) gosql.Result {

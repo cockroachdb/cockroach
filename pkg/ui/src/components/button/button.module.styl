@@ -1,0 +1,118 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require '~src/components/core/index.styl'
+
+.crl-button
+  border-radius 3px
+  cursor pointer
+  width max-content
+
+.crl-button--type-flat
+  border solid 1px transparent
+  background-color transparent
+  color $colors--primary-blue-3
+
+  &:hover
+    color $colors--primary-blue-4
+
+  &:active
+    border solid 2px $colors--primary-blue-1
+
+  &:focus
+    outline none
+    border solid 1px $colors--primary-blue-3
+
+  &.crl-button--disabled
+    color $colors--neutral-4
+    pointer-events none
+    cursor default
+
+.crl-button--type-unstyled-link
+  @extends .crl-button--type-flat
+  margin-bottom 17px
+    font-family $font-family--base
+    font-size $font-size--medium
+    line-height 22px
+    letter-spacing 0.1px
+    color $colors--neutral-7
+    &:hover
+      text-decoration underline
+
+.crl-button--type-primary
+  background-color $colors--primary-green-3
+  color $colors--white
+  border solid 1px $colors--primary-green-3
+
+  &:hover
+    color $colors--white
+
+  &:active
+    border solid 1px $colors--primary-green-4
+
+  &:focus
+    outline none
+    border solid 1px $colors--primary-green-4
+
+  &.crl-button--disabled
+    border solid 1px #c4e6ba
+    background #c4e6ba
+    color $colors--white
+    pointer-events none
+    cursor default
+
+
+.crl-button--type-secondary
+  background-color $colors--white
+  color $colors--primary-text
+  border solid 1px $colors--neutral-4
+
+  &:hover, &:active, &:focus
+    color $colors--primary-text
+    background $colors--neutral-1
+
+  &:active
+    border solid 1px $colors--neutral-5
+
+  &:focus
+    outline none
+    border solid 1px $colors--neutral-5
+
+  &.crl-button--disabled
+    border solid 1px $colors--neutral-4
+    background $colors--neutral-1
+    color $colors--neutral-5
+    pointer-events none
+    cursor default
+
+.crl-button--size-default
+  height $line-height--larger
+  min-width $line-height--larger
+  padding-left $spacing-small
+  padding-right $spacing-small
+
+.crl-button--size-small
+  height $line-height--medium
+  min-width $line-height--medium
+  padding 0 $spacing-xx-small
+
+.crl-button__container
+  display flex
+  flex-direction row
+  flex-wrap nowrap
+
+.crl-button__content  
+  flex: 1
+
+.crl-button__icon--push-left
+  order -1
+
+.crl-button__icon--push-right
+  order 1

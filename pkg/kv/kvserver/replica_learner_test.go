@@ -27,11 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -135,6 +136,7 @@ func getFirstStoreMetric(t *testing.T, s serverutils.TestServerInterface, name s
 
 func TestAddReplicaViaLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// The happy case! \o/
 
 	blockUntilSnapshotCh := make(chan struct{})
@@ -192,6 +194,7 @@ func TestAddReplicaViaLearner(t *testing.T) {
 
 func TestLearnerRaftConfState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	verifyLearnerInRaftOnNodes := func(
 		key roachpb.Key, id roachpb.ReplicaID, servers []*server.TestServer,
@@ -275,6 +278,7 @@ func TestLearnerRaftConfState(t *testing.T) {
 
 func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var rejectSnapshots int64
 	knobs, ltk := makeReplicationTestKnobs()
@@ -309,6 +313,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	knobs, ltk := makeReplicationTestKnobs()
@@ -359,6 +364,7 @@ func TestSplitWithLearnerOrJointConfig(t *testing.T) {
 
 func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
 
 	ctx := context.Background()
@@ -380,9 +386,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	{
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		_, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		_, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
 		// Make sure it deleted the learner.
@@ -398,9 +404,9 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	ltk.withStopAfterJointConfig(func() {
 		desc := tc.RemoveReplicasOrFatal(t, scratchStartKey, tc.Target(2))
 		require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`transitioning out of joint configuration`,
@@ -418,6 +424,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -436,9 +443,9 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicaGC queue.
 	checkNoGC := func() roachpb.RangeDescriptor {
 		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "replicaGC", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
 		require.Contains(t, trace.String(), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -461,6 +468,7 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 
 func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
@@ -495,12 +503,12 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	// raft to figure out that the replica needs a snapshot.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	testutils.SucceedsSoon(t, func() error {
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "raftsnapshot", repl, true /* skipShouldQueue */)
 		if err != nil {
 			return err
 		}
-		if errMsg != `` {
-			return errors.New(errMsg)
+		if processErr != nil {
+			return processErr
 		}
 		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
 		formattedTrace := trace.String()
@@ -522,6 +530,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 // while an AdminChangeReplicas is adding a replica.
 func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	blockUntilSnapshotCh := make(chan struct{}, 2)
 	blockSnapshotsCh := make(chan struct{})
@@ -580,6 +589,7 @@ func TestLearnerAdminChangeReplicasRace(t *testing.T) {
 // leadership changes.
 func TestLearnerReplicateQueueRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var skipReceiveSnapshotKnobAtomic int64 = 1
 	blockUntilSnapshotCh := make(chan struct{}, 2)
@@ -620,16 +630,16 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	queue1ErrCh := make(chan error, 1)
 	go func() {
 		queue1ErrCh <- func() error {
-			trace, errMsg, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.ManuallyEnqueue(ctx, "replicate", repl, true /* skipShouldQueue */)
 			if err != nil {
 				return err
 			}
-			if !strings.Contains(errMsg, `descriptor changed`) {
-				return errors.Errorf(`expected "descriptor changed" error got: %s`, errMsg)
+			if !strings.Contains(processErr.Error(), `descriptor changed`) {
+				return errors.Errorf(`expected "descriptor changed" error got: %+v`, processErr)
 			}
 			formattedTrace := trace.String()
 			expectedMessages := []string{
-				`could not promote .*n3,s3.* to voter, rolling back: change replicas of r\d+ failed: descriptor changed`,
+				`could not promote .*n3,s3.* to voter, rolling back:.*change replicas of r\d+ failed: descriptor changed`,
 				`learner to roll back not found`,
 			}
 			return testutils.MatchInOrder(formattedTrace, expectedMessages...)
@@ -660,6 +670,7 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 
 func TestLearnerNoAcceptLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -686,6 +697,7 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 // lease transferred to them.
 func TestJointConfigLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -715,12 +727,11 @@ func TestJointConfigLease(t *testing.T) {
 
 func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	if util.RaceEnabled {
-		// Limiting how long transactions can run does not work well with race
-		// unless we're extremely lenient, which drives up the test duration.
-		t.Skip("skipping under race")
-	}
+	// Limiting how long transactions can run does not work well with race
+	// unless we're extremely lenient, which drives up the test duration.
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -731,7 +742,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`, testingTargetDuration)
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, closeFraction)
+	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1`, testingCloseFraction)
 	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
@@ -798,6 +809,7 @@ func TestLearnerAndJointConfigFollowerRead(t *testing.T) {
 
 func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -853,6 +865,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
@@ -939,6 +952,7 @@ func TestLearnerAndJointConfigAdminMerge(t *testing.T) {
 
 func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	knobs, ltk := makeReplicationTestKnobs()
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
@@ -971,9 +985,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		})
 
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+		trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 		require.NoError(t, err)
-		require.Equal(t, ``, errMsg)
+		require.NoError(t, processErr)
 		formattedTrace := trace.String()
 		expectedMessages := []string{
 			`removing learner replicas \[n2,s2\]`,
@@ -1006,9 +1020,9 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		checkTransitioningOut := func() {
 			t.Helper()
 			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-			trace, errMsg, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
+			trace, processErr, err := store.ManuallyEnqueue(ctx, "merge", repl, true /* skipShouldQueue */)
 			require.NoError(t, err)
-			require.Equal(t, ``, errMsg)
+			require.NoError(t, processErr)
 			formattedTrace := trace.String()
 			expectedMessages := []string{
 				`transitioning out of joint configuration`,

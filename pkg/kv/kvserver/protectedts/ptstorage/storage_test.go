@@ -428,6 +428,10 @@ func TestCorruptData(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("corrupt spans", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
 
@@ -448,10 +452,6 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
 
-		// Set the log scope so we can introspect the logged errors.
-		scope := log.Scope(t)
-		defer scope.Close(t)
-
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to unmarshal spans for " + rec.ID.String() + ": ")
 		require.Regexp(t, msg,
@@ -465,7 +465,8 @@ func TestCorruptData(t *testing.T) {
 			return err
 		}))
 		log.Flush()
-		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg)
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
+			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {
@@ -473,6 +474,10 @@ func TestCorruptData(t *testing.T) {
 		}
 	})
 	t.Run("corrupt hlc timestamp", func(t *testing.T) {
+		// Set the log scope so we can introspect the logged errors.
+		scope := log.Scope(t)
+		defer scope.Close(t)
+
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer tc.Stopper().Stop(ctx)
 
@@ -497,10 +502,6 @@ func TestCorruptData(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, affected)
 
-		// Set the log scope so we can introspect the logged errors.
-		scope := log.Scope(t)
-		defer scope.Close(t)
-
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +
 			": logical part has too many digits")
@@ -516,7 +517,8 @@ func TestCorruptData(t *testing.T) {
 		}))
 		log.Flush()
 
-		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg)
+		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
+			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
 		require.Len(t, entries, 1)
 		for _, e := range entries {

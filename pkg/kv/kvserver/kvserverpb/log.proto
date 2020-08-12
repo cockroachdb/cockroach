@@ -1,0 +1,64 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "kvserverpb";
+
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+enum RangeLogEventType {
+  // These are lower case to maintain compatibility with how they were
+  // originally stored.
+  // Split is the event type recorded when a range splits.
+  split = 0;
+  // Merge is the event type recorded when a range merges.
+  merge = 3;
+  // Add is the event type recorded when a range adds a new replica.
+  add = 1;
+  // Remove is the event type recorded when a range removed an existing replica.
+  remove = 2;
+}
+
+message RangeLogEvent {
+  message Info {
+      roachpb.RangeDescriptor updated_desc = 1 [(gogoproto.jsontag) = "UpdatedDesc,omitempty"];
+      roachpb.RangeDescriptor new_desc = 2 [(gogoproto.jsontag) = "NewDesc,omitempty"];
+      roachpb.RangeDescriptor removed_desc = 7 [(gogoproto.jsontag) = "RemovedDesc,omitempty"];
+      roachpb.ReplicaDescriptor added_replica = 3 [(gogoproto.jsontag) = "AddReplica,omitempty"];
+      roachpb.ReplicaDescriptor removed_replica = 4 [(gogoproto.jsontag) = "RemovedReplica,omitempty"];
+      string reason = 5 [
+        (gogoproto.jsontag) = "Reason,omitempty",
+        (gogoproto.casttype) = "RangeLogEventReason"
+      ];
+      string details = 6 [(gogoproto.jsontag) = "Details,omitempty"];
+  }
+
+  google.protobuf.Timestamp timestamp = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdtime) = true
+  ];
+  int64 range_id = 2 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  int32 store_id = 3 [
+    (gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+  RangeLogEventType event_type = 4;
+  int64 other_range_id = 5 [
+    (gogoproto.customname) = "OtherRangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  Info info = 6;
+}

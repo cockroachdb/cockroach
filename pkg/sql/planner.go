@@ -18,10 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -59,7 +64,7 @@ type extendedEvalContext struct {
 	MemMetrics *MemoryMetrics
 
 	// Tables points to the Session's table collection (& cache).
-	Tables *TableCollection
+	Descs *descs.Collection
 
 	ExecCfg *ExecutorConfig
 
@@ -67,7 +72,13 @@ type extendedEvalContext struct {
 
 	TxnModesSetter txnModesSetter
 
+	// Jobs refers to jobs in extraTxnState. Jobs is a pointer to a jobsCollection
+	// which is a slice because we need calls to resetExtraTxnState to reset the
+	// jobsCollection.
 	Jobs *jobsCollection
+
+	// SchemaChangeJobCache refers to schemaChangeJobsCache in extraTxnState.
+	SchemaChangeJobCache map[descpb.ID]*jobs.Job
 
 	schemaAccessors *schemaInterface
 
@@ -99,8 +110,8 @@ func (ctx *extendedEvalContext) QueueJob(record jobs.Record) (*jobs.Job, error) 
 // schemaInterface provides access to the database and table descriptors.
 // See schema_accessors.go.
 type schemaInterface struct {
-	physical SchemaAccessor
-	logical  SchemaAccessor
+	physical catalog.Accessor
+	logical  catalog.Accessor
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -113,6 +124,10 @@ type schemaInterface struct {
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
 	txn *kv.Txn
+
+	// isInternalPlanner is set to true when this planner is not bound to
+	// a SQL session.
+	isInternalPlanner bool
 
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
@@ -194,6 +209,12 @@ type planner struct {
 	noticeSender noticeSender
 
 	queryCacheSession querycache.Session
+
+	// contextDatabaseID is the ID of a database. It is set during some name
+	// resolution processes to disallow cross database references. In particular,
+	// the type resolution steps will disallow resolution of types that have a
+	// parentID != contextDatabaseID when it is set.
+	contextDatabaseID descpb.ID
 }
 
 func (ctx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
@@ -234,7 +255,7 @@ func newInternalPlanner(
 	ctx := logtags.AddTag(context.Background(), opName, "")
 
 	sd := &sessiondata.SessionData{
-		SearchPath:    sqlbase.DefaultSearchPath,
+		SearchPath:    catconstants.DefaultSearchPath,
 		User:          user,
 		Database:      "system",
 		SequenceState: sessiondata.NewSequenceState(),
@@ -243,12 +264,9 @@ func newInternalPlanner(
 		},
 	}
 	// The table collection used by the internal planner does not rely on the
-	// databaseCache and there are no subscribers to the databaseCache, so we can
+	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
 	// leave it uninitialized.
-	tables := &TableCollection{
-		leaseMgr: execCfg.LeaseManager,
-		settings: execCfg.Settings,
-	}
+	tables := descs.NewCollection(execCfg.LeaseManager, execCfg.Settings)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
@@ -274,20 +292,20 @@ func newInternalPlanner(
 	p.txn = txn
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	p.isInternalPlanner = true
 
 	p.semaCtx = tree.MakeSemaContext()
-	p.semaCtx.Location = &sd.DataConversion.Location
 	p.semaCtx.SearchPath = sd.SearchPath
 	p.semaCtx.TypeResolver = p
 
-	plannerMon := mon.MakeUnlimitedMonitor(ctx,
+	plannerMon := mon.NewUnlimitedMonitor(ctx,
 		fmt.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(
-		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, &plannerMon,
+		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, plannerMon,
 	)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
@@ -307,7 +325,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.extendedEvalCtx.Tables = tables
+	p.extendedEvalCtx.Descs = tables
 
 	p.queryCacheSession.Init()
 	p.optPlanningCtx.init(p)
@@ -327,7 +345,7 @@ func internalExtendedEvalCtx(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
 	dataMutator *sessionDataMutator,
-	tables *TableCollection,
+	tables *descs.Collection,
 	txn *kv.Txn,
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
@@ -355,19 +373,25 @@ func internalExtendedEvalCtx(
 		VirtualSchemas:  execCfg.VirtualSchemas,
 		Tracing:         &SessionTracing{},
 		StatusServer:    execCfg.StatusServer,
-		Tables:          tables,
+		Descs:           tables,
 		ExecCfg:         execCfg,
 		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
 		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
 
-func (p *planner) PhysicalSchemaAccessor() SchemaAccessor {
+func (p *planner) PhysicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.physical
 }
 
-func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
+// LogicalSchemaAccessor is part of the resolver.SchemaResolver interface.
+func (p *planner) LogicalSchemaAccessor() catalog.Accessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
+}
+
+// SemaCtx provides access to the planner's SemaCtx.
+func (p *planner) SemaCtx() *tree.SemaContext {
+	return &p.semaCtx
 }
 
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
@@ -379,10 +403,12 @@ func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
 	return p.extendedEvalCtx.copy()
 }
 
+// CurrentDatabase is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentDatabase() string {
 	return p.SessionData().Database
 }
 
+// CurrentSearchPath is part of the resolver.SchemaResolver interface.
 func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
 	return p.SessionData().SearchPath
 }
@@ -392,8 +418,8 @@ func (p *planner) EvalContext() *tree.EvalContext {
 	return &p.extendedEvalCtx.EvalContext
 }
 
-func (p *planner) Tables() *TableCollection {
-	return p.extendedEvalCtx.Tables
+func (p *planner) Descriptors() *descs.Collection {
+	return p.extendedEvalCtx.Descs
 }
 
 // ExecCfg implements the PlanHookState interface.
@@ -401,8 +427,8 @@ func (p *planner) ExecCfg() *ExecutorConfig {
 	return p.extendedEvalCtx.ExecCfg
 }
 
-func (p *planner) LeaseMgr() *LeaseManager {
-	return p.Tables().leaseMgr
+func (p *planner) LeaseMgr() *lease.Manager {
+	return p.Descriptors().LeaseManager()
 }
 
 func (p *planner) Txn() *kv.Txn {
@@ -429,7 +455,7 @@ func (p *planner) ParseType(sql string) (*types.T, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tree.ResolveType(ref, p.semaCtx.GetTypeResolver())
+	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
 }
 
 // ParseQualifiedTableName implements the tree.EvalDatabase interface.
@@ -443,7 +469,8 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 
 // ResolveTableName implements the tree.EvalDatabase interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	desc, err := ResolveExistingTableObject(ctx, p, tn, tree.ObjectLookupFlagsWithRequired(), ResolveAnyDescType)
+	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -451,29 +478,35 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
-// CommonLookupFlags, it could use or skip the TableCollection cache. See
-// TableCollection.getTableVersionByID for how it's used.
-func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
+// CommonLookupFlags, it could use or skip the Collection cache. See
+// Collection.getTableVersionByID for how it's used.
+// TODO (SQLSchema): This should call into the set of SchemaAccessors instead
+//  of having its own logic for lookups.
+func (p *planner) LookupTableByID(
+	ctx context.Context, tableID descpb.ID,
+) (catalog.TableEntry, error) {
 	if entry, err := p.getVirtualTabler().getVirtualTableEntryByID(tableID); err == nil {
-		return row.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
+		return catalog.TableEntry{Desc: sqlbase.NewImmutableTableDescriptor(*entry.desc)}, nil
 	}
 	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{AvoidCached: p.avoidCachedDescriptors}}
-	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
+	table, err := p.Descriptors().GetTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if errors.Is(err, errTableAdding) {
-			return row.TableEntry{IsAdding: true}, nil
+		if catalog.HasAddingTableError(err) {
+			return catalog.TableEntry{IsAdding: true}, nil
 		}
-		return row.TableEntry{}, err
+		return catalog.TableEntry{}, err
 	}
-	return row.TableEntry{Desc: table}, nil
+	return catalog.TableEntry{Desc: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
 // To also allow NULLs to be returned, use TypeAsStringOrNull() instead.
-func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+func (p *planner) TypeAsString(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -491,8 +524,10 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 }
 
 // TypeAsStringOrNull is like TypeAsString but allows NULLs.
-func (p *planner) TypeAsStringOrNull(e tree.Expr, op string) (func() (bool, string, error), error) {
-	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
+func (p *planner) TypeAsStringOrNull(
+	ctx context.Context, e tree.Expr, op string,
+) (func() (bool, string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +601,7 @@ func evalStringOptions(
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
+	ctx context.Context, opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]tree.TypedExpr, len(opts))
 	for _, opt := range opts {
@@ -586,7 +621,7 @@ func (p *planner) TypeAsStringOpts(
 		if validate == KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := tree.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)
+		r, err := tree.TypeCheckAndRequire(ctx, opt.Value, &p.semaCtx, types.String, k)
 		if err != nil {
 			return nil, err
 		}
@@ -617,10 +652,12 @@ func (p *planner) TypeAsStringOpts(
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
+func (p *planner) TypeAsStringArray(
+	ctx context.Context, exprs tree.Exprs, op string,
+) (func() ([]string, error), error) {
 	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {
-		typedE, err := tree.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.String, op)
+		typedE, err := tree.TypeCheckAndRequire(ctx, exprs[i], &p.semaCtx, types.String, op)
 		if err != nil {
 			return nil, err
 		}
@@ -647,6 +684,11 @@ func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]stri
 // SessionData is part of the PlanHookState interface.
 func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
+}
+
+// Ann is a shortcut for the Annotations from the eval context.
+func (p *planner) Ann() *tree.Annotations {
+	return p.ExtendedEvalContext().EvalContext.Annotations
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

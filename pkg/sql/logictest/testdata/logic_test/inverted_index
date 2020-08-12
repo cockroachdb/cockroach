@@ -36,7 +36,7 @@ CREATE TABLE c (
 query TT
 SHOW CREATE TABLE c
 ----
-c  CREATE TABLE c (
+c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo JSONB NULL,
    "bAr" JSONB NULL,
@@ -672,7 +672,7 @@ SELECT * from update_cascade_test ORDER BY update_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement error pq: foreign key violation: values \[1\] in columns \[i\] referenced in table "del_cascade_test"
+statement error pq: update on table "update_test" violates foreign key constraint "fk_delete_cascade_ref_update_test" on table "del_cascade_test"\nDETAIL: Key \(i\)=\(1\) is still referenced from table "del_cascade_test"\.
 UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
 
 statement ok
@@ -728,7 +728,7 @@ CREATE INDEX ON c USING GIN (bar)
 query TT
 SHOW CREATE TABLE c
 ----
-c  CREATE TABLE c (
+c  CREATE TABLE public.c (
    id INT8 NOT NULL,
    foo INT8[] NULL,
    bar STRING[] NULL,

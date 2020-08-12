@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -144,24 +145,22 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		maybeSocketDir, maybeSocketFile, cleanup := makeSocketFile(t)
 		defer cleanup()
 
+		// We really need to have the logs go to files, so that -show-logs
+		// does not break the "authlog" directives.
+		defer log.ScopeWithoutShowLogs(t).Close(t)
+
 		s, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		s.(*server.TestServer).PGServer().TestingEnableConnAuthLogging()
 
-		// We really need to have the logs go to files, so that -show-logs
-		// does not break the "authlog" directives. We also must call
-		// this here and not earlier, because it needs to enforce the
-		// redirect on the secondary loggers created by StartServer().
-		defer log.ScopeWithoutShowLogs(t).Close(t)
-
 		pgServer := s.(*server.TestServer).PGServer()
 
-		httpClient, err := s.GetHTTPClient()
+		httpClient, err := s.GetAdminAuthenticatedHTTPClient()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +186,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						}
 					}
 					if !allowed {
-						t.Skip("Test file not applicable at this security level.")
+						skip.IgnoreLint(t, "Test file not applicable at this security level.")
 					}
 
 				case "set_hba":
@@ -258,7 +257,8 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						// this is currently broken for secondary loggers.
 						// See: https://github.com/cockroachdb/cockroach/issues/45745
 						// So instead we need to do the filtering ourselves.
-						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe)
+						entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 10000, authLogFileRe,
+							log.WithFlattenedSensitiveData)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -274,13 +274,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 								entry := &entries[i]
 								t.Logf("found log entry: %+v", *entry)
 
-								// The message is going to contain a client address, with a random port number.
+								// The tag part is going to contain a client address, with a random port number.
 								// To make the test deterministic, erase the random part.
-								msg := addrRe.ReplaceAllString(entry.Message, ",client=XXX")
+								tags := addrRe.ReplaceAllString(entry.Tags, ",client=XXX")
+								var maybeTags string
+								if len(tags) > 0 {
+									maybeTags = "[" + tags + "] "
+								}
 								// Ditto with the duration.
-								msg = durationRe.ReplaceAllString(msg, "duration: XXX")
+								msg := durationRe.ReplaceAllString(entry.Message, "duration: XXX")
 
-								fmt.Fprintf(&buf, "%c: %s\n", entry.Severity.String()[0], msg)
+								fmt.Fprintf(&buf, "%c: %s%s\n", entry.Severity.String()[0], maybeTags, msg)
 							}
 							lastLogMsg := entries[0].Message
 							if !re.MatchString(lastLogMsg) {
@@ -407,7 +411,7 @@ func fmtErr(err error) string {
 		errStr := ""
 		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 			errStr = pqErr.Message
-			if pqErr.Code != pgcode.Uncategorized {
+			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.Uncategorized {
 				errStr += fmt.Sprintf(" (SQLSTATE %s)", pqErr.Code)
 			}
 			if pqErr.Hint != "" {

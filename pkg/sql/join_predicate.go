@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -26,7 +28,7 @@ type joinPredicate struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// numLeft/RightCols are the number of columns in the left and right
 	// operands.
@@ -36,8 +38,8 @@ type joinPredicate struct {
 	// on the left and right input row arrays, respectively.
 	// Only columns with the same left and right value types can be equality
 	// columns.
-	leftEqualityIndices  []int
-	rightEqualityIndices []int
+	leftEqualityIndices  []exec.NodeColumnOrdinal
+	rightEqualityIndices []exec.NodeColumnOrdinal
 
 	// The list of names for the columns listed in leftEqualityIndices.
 	// Used mainly for pretty-printing.
@@ -67,16 +69,14 @@ type joinPredicate struct {
 	rightEqKey bool
 }
 
-// makePredicate constructs a joinPredicate object for joins. The equality
-// columns / on condition must be initialized separately.
-func makePredicate(
-	joinType sqlbase.JoinType, left, right sqlbase.ResultColumns,
-) (*joinPredicate, error) {
+// getJoinResultColumns returns the result columns of a join.
+func getJoinResultColumns(
+	joinType descpb.JoinType, left, right sqlbase.ResultColumns,
+) sqlbase.ResultColumns {
 	// For anti and semi joins, the right columns are omitted from the output (but
 	// they must be available internally for the ON condition evaluation).
-	omitRightColumns := joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI
+	omitRightColumns := joinType == descpb.LeftSemiJoin || joinType == descpb.LeftAntiJoin
 
-	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:
 	// - all the left columns,
 	// - then all the right columns (except for anti/semi join).
@@ -85,14 +85,19 @@ func makePredicate(
 	if !omitRightColumns {
 		columns = append(columns, right...)
 	}
+	return columns
+}
 
+// makePredicate constructs a joinPredicate object for joins. The equality
+// columns / on condition must be initialized separately.
+func makePredicate(joinType descpb.JoinType, left, right sqlbase.ResultColumns) *joinPredicate {
 	pred := &joinPredicate{
 		joinType:     joinType,
 		numLeftCols:  len(left),
 		numRightCols: len(right),
 		leftCols:     left,
 		rightCols:    right,
-		cols:         columns,
+		cols:         getJoinResultColumns(joinType, left, right),
 	}
 	// We must initialize the indexed var helper in all cases, even when
 	// there is no on condition, so that getNeededColumns() does not get
@@ -100,7 +105,7 @@ func makePredicate(
 	pred.curRow = make(tree.Datums, len(left)+len(right))
 	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(pred.curRow))
 
-	return pred, nil
+	return pred
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.

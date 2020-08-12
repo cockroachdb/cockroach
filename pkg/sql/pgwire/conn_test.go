@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/pgproto3"
@@ -67,13 +66,14 @@ import (
 // complaining that the stmtBuf has an unexpected entry in it.
 func TestConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// The test server is used only incidentally by this test: this is not the
 	// server that the client will connect to; we just use it on the side to
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Start a pgwire "server".
 	addr := util.TestAddr
@@ -82,10 +82,10 @@ func TestConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.TODO(), "started listener on %s", serverAddr)
+	log.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	var clientWG sync.WaitGroup
 	clientWG.Add(1)
@@ -111,7 +111,7 @@ func TestConn(t *testing.T) {
 			nil,
 			mon.BoundAccount{}, /* reserved */
 			authOptions{testingSkipAuth: true},
-			s.Stopper())
+		)
 		return nil
 	})
 	defer stopServe()
@@ -288,7 +288,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	batch := conn.BeginBatch()
 	batch.Queue("select 7", nil, nil, nil)
 	batch.Queue("select 8", nil, nil, nil)
-	if err := batch.Send(context.TODO(), &pgx.TxOptions{}); err != nil {
+	if err := batch.Send(context.Background(), &pgx.TxOptions{}); err != nil {
 		return err
 	}
 	if err := batch.Close(); err != nil {
@@ -332,7 +332,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	// Consume the connection options.
-	if _, err := parseClientProvidedSessionParameters(context.TODO(), nil, &buf); err != nil {
+	if _, err := parseClientProvidedSessionParameters(context.Background(), nil, &buf); err != nil {
 		return nil, err
 	}
 
@@ -364,8 +364,8 @@ func sendResult(
 	for _, row := range rows {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
-		for _, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, defaultConv)
+		for i, col := range row {
+			c.msgBuilder.writeTextDatum(ctx, col, defaultConv, cols[i].Typ)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
@@ -543,7 +543,7 @@ func expectExecPortal(
 }
 
 func expectSendError(
-	ctx context.Context, t *testing.T, pgErrCode string, rd *sql.StmtBufReader, c *conn,
+	ctx context.Context, t *testing.T, pgErrCode pgcode.Code, rd *sql.StmtBufReader, c *conn,
 ) {
 	t.Helper()
 	cmd, err := rd.CurCmd()
@@ -602,7 +602,7 @@ func finishQuery(t finishType, c *conn) error {
 	case describe:
 		skipFinish = true
 		if err := c.writeRowDescription(
-			context.TODO(), nil /* columns */, nil /* formatCodes */, c.conn,
+			context.Background(), nil /* columns */, nil /* formatCodes */, c.conn,
 		); err != nil {
 			return err
 		}
@@ -641,7 +641,7 @@ func finishQuery(t finishType, c *conn) error {
 type pgxTestLogger struct{}
 
 func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.TODO(), "pgx log [%s] %s - %s", level, msg, data)
+	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -651,11 +651,12 @@ var _ pgx.Logger = pgxTestLogger{}
 // and release their locks.
 func TestConnCloseReleasesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// We're going to test closing the connection in both the Open and Aborted
 	// state.
 	testutils.RunTrueAndFalse(t, "open state", func(t *testing.T, open bool) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		ctx := context.TODO()
+		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
 
 		pgURL, cleanupFunc := sqlutils.PGUrl(
@@ -722,8 +723,9 @@ func TestConnCloseReleasesLocks(t *testing.T) {
 // network errors.
 func TestConnCloseWhileProducingRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	// Disable results buffering.
@@ -783,8 +785,9 @@ func TestConnCloseWhileProducingRows(t *testing.T) {
 // a v3Conn don't crash the server.
 func TestMaliciousInputs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	for _, tc := range [][]byte{
 		// This byte string sends a pgwirebase.ClientMsgClose message type. When
@@ -832,9 +835,6 @@ func TestMaliciousInputs(t *testing.T) {
 				close(errChan)
 			}()
 
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
@@ -852,7 +852,6 @@ func TestMaliciousInputs(t *testing.T) {
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
 				authOptions{testingSkipAuth: true},
-				stopper,
 			)
 			if err := <-errChan; err != nil {
 				t.Fatal(err)
@@ -865,12 +864,13 @@ func TestMaliciousInputs(t *testing.T) {
 // and exits with an appropriate error when exit conditions are satisfied.
 func TestReadTimeoutConnExits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Cannot use net.Pipe because deadlines are not supported.
 	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(context.TODO(), "started listener on %s", ln.Addr())
+	log.Infof(context.Background(), "started listener on %s", ln.Addr())
 	defer func() {
 		if err := ln.Close(); err != nil {
 			t.Fatal(err)
@@ -931,6 +931,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 
 func TestConnResultsBufferSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -1002,6 +1003,7 @@ func TestConnResultsBufferSize(t *testing.T) {
 // connection closing.
 func TestConnCloseCancelsAuth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	authBlocked := make(chan struct{})
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{

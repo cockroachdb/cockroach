@@ -1,0 +1,74 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.storagepb;
+option go_package = "kvserverpb";
+
+import "roachpb/data.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
+import "util/hlc/timestamp.proto";
+
+import "gogoproto/gogo.proto";
+
+enum LeaseState {
+  // ERROR indicates that the lease can't be used or acquired.
+  ERROR = 0;
+  // VALID indicates that the lease can be used.
+  VALID = 1;
+  // STASIS indicates that the lease has not expired, but can't be
+  // used because it is close to expiration (a stasis period at the
+  // end of each lease is one of the ways we handle clock
+  // uncertainty). A lease in STASIS may become VALID for the same
+  // leaseholder after a successful RequestLease (for expiration-based
+  // leases) or Heartbeat (for epoch-based leases). A lease may not
+  // change hands while it is in stasis; would-be acquirers must wait
+  // for the stasis period to expire.
+  //
+  // The point of the stasis period is to prevent reads on the old leaseholder
+  // (the one whose stasis we're talking about) from missing to see writes
+  // performed under the next lease (held by someone else) when these writes
+  // should fall in the uncertainty window. Even without the stasis, writes
+  // performed by the new leaseholder are guaranteed to have higher timestamps
+  // than any reads served by the old leaseholder. However, a read at timestamp
+  // T needs to observe all writes at timestamps [T, T+maxOffset] and so,
+  // without the stasis, only the new leaseholder might have some of these
+  // writes. In other words, without the stasis, a new leaseholder with a fast
+  // clock could start performing writes ordered in real time before the old
+  // leaseholder considers its lease to have expired.
+  STASIS = 2;
+  // EXPIRED indicates that the lease can't be used. An expired lease
+  // may become VALID for the same leaseholder on RequestLease or
+  // Heartbeat, or it may be replaced by a new leaseholder with a
+  // RequestLease (for expiration-based leases) or
+  // IncrementEpoch+RequestLease (for epoch-based leases).
+  EXPIRED = 3;
+  // PROSCRIBED indicates that the lease's proposed timestamp is
+  // earlier than allowed. This is used to detect node restarts: a
+  // node that has restarted will see its former incarnation's leases
+  // as PROSCRIBED so it will renew them before using them. Note that
+  // the PROSCRIBED state is only visible to the leaseholder; other
+  // nodes will see this as a VALID lease.
+  PROSCRIBED = 4;
+}
+
+// LeaseStatus holds the lease state, the timestamp at which the state
+// is accurate, the lease and optionally the liveness if the lease is
+// epoch-based.
+message LeaseStatus {
+  // Lease which this status describes.
+  roachpb.Lease lease = 1 [(gogoproto.nullable) = false];
+  // Timestamp that the lease was evaluated at.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  // State of the lease at timestamp.
+  LeaseState state = 3;
+  // Liveness if this is an epoch-based lease.
+  Liveness liveness = 4 [(gogoproto.nullable) = false];
+}

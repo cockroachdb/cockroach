@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestParseArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str      string
 		typ      *types.T
@@ -88,7 +90,8 @@ lo}`, types.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 				}
 			}
 			evalContext := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			actual, err := ParseDArrayFromString(evalContext, td.str, td.typ)
+			// TODO(radu): check the dependsOnContext result.
+			actual, _, err := ParseDArrayFromString(evalContext, td.str, td.typ)
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
@@ -105,6 +108,7 @@ const randomStringMaxLength = 1000
 
 func TestParseArrayRandomParseArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for i := 0; i < randomArrayIterations; i++ {
 		numElems := rand.Intn(randomArrayMaxLength)
 		ary := make([][]byte, numElems)
@@ -138,7 +142,7 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 		}
 		buf.WriteByte('}')
 
-		parsed, err := ParseDArrayFromString(
+		parsed, _, err := ParseDArrayFromString(
 			NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), types.String)
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
@@ -154,6 +158,7 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 
 func TestParseArrayError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testData := []struct {
 		str           string
 		typ           *types.T
@@ -180,7 +185,7 @@ func TestParseArrayError(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			_, err := ParseDArrayFromString(
+			_, _, err := ParseDArrayFromString(
 				NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
 			if err == nil {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)

@@ -11,13 +11,13 @@ INSERT 1
 dump d
 ----
 ----
-CREATE TABLE ";" (
+CREATE TABLE public.";" (
 	";" INT8 NULL,
 	INDEX ";_;_idx" (";" ASC),
 	FAMILY "primary" (";", rowid)
 );
 
-INSERT INTO ";" (";") VALUES
+INSERT INTO public.";" (";") VALUES
 	(1);
 ----
 ----

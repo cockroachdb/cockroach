@@ -126,6 +126,18 @@ const (
 	// FmtPGIndexDef is used to produce CREATE INDEX statements that are
 	// compatible with pg_get_indexdef.
 	FmtPGIndexDef
+
+	// If set, user defined types and datums of user defined types will be
+	// formatted in a way that is stable across changes to the underlying type.
+	// For type names, this means that they will be formatted as '@id'. For enum
+	// members, this means that they will be serialized as their bytes physical
+	// representations.
+	fmtStaticallyFormatUserDefinedTypes
+
+	// fmtFormatByteLiterals instructs bytes to be formatted as byte literals
+	// rather than string literals. For example, the bytes \x40 will be formatted
+	// as b'\x40' rather than '\x40'.
+	fmtFormatByteLiterals
 )
 
 // Composite/derived flag definitions follow.
@@ -136,9 +148,18 @@ const (
 	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
-	// can be parsed into an equivalent expression (useful for serialization of
-	// expressions).
+	// can be parsed into an equivalent expression. If there is a chance that the
+	// formatted data will be stored durably on disk or sent to other nodes,
+	// then this formatting directive is not appropriate, and FmtSerializable
+	// should be used instead.
 	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
+
+	// FmtSerializable instructs the pretty-printer to produce a representation
+	// for expressions that can be serialized to disk. It serializes user defined
+	// types using representations that are stable across changes of the type
+	// itself. This should be used when serializing expressions that will be
+	// stored on disk, like DEFAULT expressions of columns.
+	FmtSerializable FmtFlags = FmtParsable | fmtStaticallyFormatUserDefinedTypes
 
 	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
 	// that can be used to check equivalence of expressions. Specifically:
@@ -148,7 +169,13 @@ const (
 	//    annotations. This is necessary because datums of different types
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
-	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
+	//  - user defined types and datums of user defined types are formatted
+	//    using static representations to avoid name resolution and invalidation
+	//    due to changes in the underlying type.
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars |
+		fmtDisambiguateDatumTypes |
+		FmtParsableNumerics |
+		fmtStaticallyFormatUserDefinedTypes
 
 	// FmtArrayToString is a special composite flag suitable
 	// for the output of array_to_string(). This de-quotes
@@ -204,6 +231,9 @@ type FmtCtx struct {
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
+	// indexedTypeFormatter is an optional interceptor for formatting
+	// IDTypeReferences differently than normal.
+	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
 }
 
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
@@ -305,6 +335,12 @@ func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeh
 	fn()
 }
 
+// SetIndexedTypeFormat modifies FmtCtx to customize the printing of
+// IDTypeReferences using the provided function.
+func (ctx *FmtCtx) SetIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) {
+	ctx.indexedTypeFormatter = fn
+}
+
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
 	// Format performs pretty-printing towards a bytes buffer. The flags member
@@ -370,7 +406,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		}
 		if typ != nil {
 			ctx.WriteString(":::")
-			ctx.WriteString(typ.SQLString())
+			ctx.FormatTypeReference(typ)
 		}
 	}
 }
@@ -401,10 +437,16 @@ func ErrString(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtBareIdentifiers)
 }
 
-// Serialize pretty prints a node to a string using FmtParsable; it is
-// appropriate when we store expressions into strings that are later parsed back
-// into expressions.
+// Serialize pretty prints a node to a string using FmtSerializable; it is
+// appropriate when we store expressions into strings that are stored on disk
+// and may be later parsed back into expressions.
 func Serialize(n NodeFormatter) string {
+	return AsStringWithFlags(n, FmtSerializable)
+}
+
+// SerializeForDisplay pretty prints a node to a string using FmtParsable.
+// It is appropriate when printing expressions that are visible to end users.
+func SerializeForDisplay(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtParsable)
 }
 

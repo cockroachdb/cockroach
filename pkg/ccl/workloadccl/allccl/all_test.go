@@ -11,6 +11,7 @@ package allccl
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/fnv"
 	"math"
@@ -22,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
@@ -78,9 +81,10 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
-			if bigInitialData(meta) && testing.Short() {
-				t.Skipf(`%s loads a lot of data`, meta.Name)
+			if bigInitialData(meta) {
+				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
 			}
+			defer log.Scope(t).Close(t)
 
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -139,6 +143,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
+			defer log.Scope(t).Close(t)
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				UseDatabase: "d",
@@ -166,6 +171,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 
 func TestConsistentSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Test that the table schemas are consistent when the workload is created
 	// multiple times with the same seed.
 
@@ -189,7 +195,7 @@ func hashTableInitialData(
 	h hash.Hash, data workload.BatchedTuples, a *bufalloc.ByteAllocator,
 ) error {
 	var scratch [8]byte
-	b := coldata.NewMemBatchWithSize(nil, 0)
+	b := coldata.NewMemBatchWithSize(nil /* types */, 0 /* size */, coldata.StandardColumnFactory)
 	for batchIdx := 0; batchIdx < data.NumBatches; batchIdx++ {
 		*a = (*a)[:0]
 		data.FillBatch(batchIdx, b, a)
@@ -241,9 +247,7 @@ func TestDeterministicInitialData(t *testing.T) {
 
 	// There are other tests that run initial data generation under race, so we
 	// don't get anything from running this one under race as well.
-	if util.RaceEnabled {
-		t.Skip(`uninteresting under race`)
-	}
+	skip.UnderRace(t, "uninteresting under race")
 
 	// Hardcode goldens for the fingerprint of the initial data of generators with
 	// default flags. This lets us opt in generators known to be deterministic and
@@ -267,7 +271,7 @@ func TestDeterministicInitialData(t *testing.T) {
 		`startrek`:   0xa0249fbdf612734c,
 		`tpcc`:       0xab32e4f5e899eb2f,
 		`tpch`:       0xdd952207e22aa577,
-		`ycsb`:       0x85dd34d8c07fd808,
+		`ycsb`:       0x1244ea1c29ef67f6,
 	}
 
 	var a bufalloc.ByteAllocator
@@ -281,8 +285,8 @@ func TestDeterministicInitialData(t *testing.T) {
 			continue
 		}
 		t.Run(meta.Name, func(t *testing.T) {
-			if bigInitialData(meta) && testing.Short() {
-				t.Skipf(`%s involves a lot of data`, meta.Name)
+			if bigInitialData(meta) {
+				skip.UnderShort(t, fmt.Sprintf(`%s involves a lot of data`, meta.Name))
 			}
 
 			h := fnv.New64()

@@ -17,10 +17,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,8 +35,8 @@ import (
 )
 
 func descForTable(
-	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
-) *sqlbase.TableDescriptor {
+	t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
+) *sqlbase.ImmutableTableDescriptor {
 	t.Helper()
 	parsed, err := parser.Parse(create)
 	if err != nil {
@@ -50,7 +53,7 @@ func descForTable(
 		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		priv := descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 		desc, err := sql.MakeSequenceTableDesc(
 			name,
 			tree.SequenceOptions{},
@@ -59,8 +62,8 @@ func descForTable(
 			id-1,
 			ts,
 			priv,
-			false, /* temporary */
-			nil,   /* params */
+			tree.PersistencePermanent,
+			nil, /* params */
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -69,14 +72,15 @@ func descForTable(
 	} else {
 		stmt = parsed[0].AST.(*tree.CreateTable)
 	}
-	table, err := MakeSimpleTableDescriptor(context.TODO(), settings, stmt, parent, id, fks, nanos)
+	semaCtx := tree.MakeSemaContext()
+	table, err := MakeSimpleTableDescriptor(context.Background(), &semaCtx, settings, stmt, parent, keys.PublicSchemaID, id, fks, nanos)
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}
 	if err := fixDescriptorFKState(table.TableDesc()); err != nil {
 		t.Fatal(err)
 	}
-	return table.TableDesc()
+	return table.Immutable().(*sqlbase.ImmutableTableDescriptor)
 }
 
 var testEvalCtx = &tree.EvalContext{
@@ -271,6 +275,14 @@ func (es *generatorExternalStorage) ListFiles(ctx context.Context, _ string) ([]
 
 func (es *generatorExternalStorage) Delete(ctx context.Context, basename string) error {
 	return errors.New("unsupported")
+}
+
+func (es *generatorExternalStorage) ExternalIOConf() base.ExternalIODirConfig {
+	return base.ExternalIODirConfig{}
+}
+
+func (es *generatorExternalStorage) Settings() *cluster.Settings {
+	return cluster.NoSettings
 }
 
 // generatedStorage is a factory (cloud.ExternalStorageFactory)

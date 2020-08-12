@@ -20,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
@@ -33,6 +36,7 @@ import (
 
 func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const keysPerDesc = 2
 
 	testutils.RunTrueAndFalse(t, "system tenant", func(t *testing.T, systemTenant bool) {
@@ -54,18 +58,18 @@ func TestInitialKeys(t *testing.T) {
 		}
 
 		// Add an additional table.
-		sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
+		descpb.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 		desc, err := sql.CreateTestTableDescriptor(
-			context.TODO(),
+			context.Background(),
 			keys.SystemDatabaseID,
 			keys.MaxReservedDescID,
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			sqlbase.NewDefaultPrivilegeDescriptor(),
+			descpb.NewDefaultPrivilegeDescriptor(security.NodeUser),
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ms.AddDescriptor(keys.SystemDatabaseID, &desc)
+		ms.AddDescriptor(keys.SystemDatabaseID, desc)
 		kv, _ /* splits */ = ms.GetInitialValues()
 		expected = nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -100,6 +104,7 @@ func TestInitialKeys(t *testing.T) {
 
 func TestInitialKeysAndSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	datadriven.RunTest(t, "testdata/initial_keys", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "initial-keys":
@@ -151,10 +156,11 @@ func TestInitialKeysAndSplits(t *testing.T) {
 // one (though pruning the explicit zero values may make it more readable).
 func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	type testcase struct {
-		id     sqlbase.ID
+		id     descpb.ID
 		schema string
-		pkg    sqlbase.TableDescriptor
+		pkg    *sqlbase.ImmutableTableDescriptor
 	}
 
 	for _, test := range []testcase{
@@ -181,10 +187,11 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.StatementBundleChunksTableID, sqlbase.StatementBundleChunksTableSchema, sqlbase.StatementBundleChunksTable},
 		{keys.StatementDiagnosticsRequestsTableID, sqlbase.StatementDiagnosticsRequestsTableSchema, sqlbase.StatementDiagnosticsRequestsTable},
 		{keys.StatementDiagnosticsTableID, sqlbase.StatementDiagnosticsTableSchema, sqlbase.StatementDiagnosticsTable},
+		{keys.ScheduledJobsTableID, sqlbase.ScheduledJobsTableSchema, sqlbase.ScheduledJobsTable},
 	} {
 		privs := *test.pkg.Privileges
 		gen, err := sql.CreateTestTableDescriptor(
-			context.TODO(),
+			context.Background(),
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
@@ -195,8 +202,8 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 		require.NoError(t, gen.ValidateTable())
 
-		if !proto.Equal(&test.pkg, &gen) {
-			diff := strings.Join(pretty.Diff(&test.pkg, &gen), "\n")
+		if !proto.Equal(test.pkg.TableDesc(), gen.TableDesc()) {
+			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
 				"hardcoded table descriptor:\n%s", test.pkg.Name, diff)
 		}

@@ -37,7 +37,7 @@ func Flatten(err error) *Error {
 		return nil
 	}
 	resErr := &Error{
-		Code:     GetPGCode(err),
+		Code:     GetPGCode(err).String(),
 		Message:  err.Error(),
 		Severity: GetSeverity(err),
 	}
@@ -51,24 +51,9 @@ func Flatten(err error) *Error {
 	resErr.Hint = errors.FlattenHints(err)
 	resErr.Detail = errors.FlattenDetails(err)
 
-	// Populate Keys for backward-compatibility with 19.1.
-	// TODO(knz): Remove in 19.3.
-	if keys := errors.GetTelemetryKeys(err); len(keys) > 0 {
-		// We may lose keys. That's all right, backward compat here is just best effort.
-		resErr.TelemetryKey = keys[0]
-	}
-	// Populate safe strings for backward-compatibility with 19.1.
-	// TODO(knz): Remove in 19.3.
-	for _, dd := range errors.GetAllSafeDetails(err) {
-		for _, d := range dd.SafeDetails {
-			resErr.SafeDetail = append(resErr.SafeDetail,
-				&Error_SafeDetail{SafeMessage: d})
-		}
-	}
-
 	// Add a useful error prefix if not already there.
 	switch resErr.Code {
-	case pgcode.Internal:
+	case pgcode.Internal.String():
 		// The string "internal error" clarifies the nature of the error
 		// to users, and is also introduced for compatibility with
 		// previous CockroachDB versions.
@@ -82,7 +67,7 @@ func Flatten(err error) *Error {
 		// append the innermost stack trace.
 		resErr.Detail += getInnerMostStackTraceAsDetail(err)
 
-	case pgcode.SerializationFailure:
+	case pgcode.SerializationFailure.String():
 		// The string "restart transaction" is asserted by test code. This
 		// can be changed if/when test code learns to use the 40001 code
 		// (or the errors library) instead.
@@ -125,6 +110,6 @@ const InternalErrorPrefix = "internal error"
 const TxnRetryMsgPrefix = "restart transaction"
 
 // GetPGCode retrieves the error code for an error.
-func GetPGCode(err error) string {
+func GetPGCode(err error) pgcode.Code {
 	return GetPGCodeInternal(err, ComputeDefaultCode)
 }

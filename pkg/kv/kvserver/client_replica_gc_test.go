@@ -12,50 +12,33 @@ package kvserver_test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestReplicaGCQueueDropReplica verifies that a removed replica is
 // immediately cleaned up.
 func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	defer log.Scope(t).Close(t)
 	const numStores = 3
-	rangeID := roachpb.RangeID(1)
 
-	// Use actual engines (not in memory) because the in-mem ones don't write
-	// to disk. The test would still pass if we didn't do this except it
-	// would probably look at an empty sideloaded directory and fail.
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	cache := storage.NewRocksDBCache(1 << 20)
-	defer cache.Release()
-	for i := 0; i < 3; i++ {
-		eng, err := storage.NewRocksDB(storage.RocksDBConfig{
-			StorageConfig: base.StorageConfig{
-				Dir: filepath.Join(tempDir, strconv.Itoa(i)),
-			},
-		}, cache)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer eng.Close()
-		mtc.engines = append(mtc.engines, eng)
-	}
+	testKnobs := kvserver.StoreTestingKnobs{}
+	var tc *testcluster.TestCluster
 
 	// In this test, the Replica on the second Node is removed, and the test
 	// verifies that that Node adds this Replica to its RangeGCQueue. However,
@@ -64,10 +47,8 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 	// no GC will take place since the consistent RangeLookup hits the first
 	// Node. We use the TestingEvalFilter to make sure that the second Node
 	// waits for the first.
-	cfg := kvserver.TestStoreConfig(nil)
-	mtc.storeConfig = &cfg
-	mtc.storeConfig.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	testKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			et, ok := filterArgs.Req.(*roachpb.EndTxnRequest)
 			if !ok || filterArgs.Sid != 2 {
 				return nil
@@ -77,11 +58,12 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 				return nil
 			}
 			testutils.SucceedsSoon(t, func() error {
-				r, err := mtc.stores[0].GetReplica(rangeID)
+				k := tc.ScratchRange(t)
+				desc, err := tc.LookupRange(k)
 				if err != nil {
 					return err
 				}
-				if _, ok := r.Desc().GetReplicaDescriptor(2); ok {
+				if _, ok := desc.GetReplicaDescriptor(2); ok {
 					return errors.New("expected second node gone from first node's known replicas")
 				}
 				return nil
@@ -89,16 +71,34 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 			return nil
 		}
 
-	defer mtc.Stop()
-	mtc.Start(t, numStores)
+	tc = testcluster.StartTestCluster(t, numStores,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &testKnobs,
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
 
-	mtc.replicateRange(rangeID, 1, 2)
+	// Create our scratch range and up-replicate it.
+	k := tc.ScratchRange(t)
+	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
+
+	ts := tc.Servers[1]
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	{
-		repl1, err := mtc.stores[1].GetReplica(rangeID)
-		if err != nil {
-			t.Fatal(err)
-		}
+		repl1 := store.LookupReplica(roachpb.RKey(k))
+		require.NotNil(t, repl1)
+
+		eng := store.Engine()
 
 		// Put some bogus sideloaded data on the replica which we're about to
 		// remove. Then, at the end of the test, check that that sideloaded
@@ -111,10 +111,10 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if dir == "" {
 			t.Fatal("no sideloaded directory")
 		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := eng.MkdirAll(dir); err != nil {
 			t.Fatal(err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "i1000000.t100000"), []byte("foo"), 0644); err != nil {
+		if err := fs.WriteFile(eng, filepath.Join(dir, "i1000000.t100000"), []byte("foo")); err != nil {
 			t.Fatal(err)
 		}
 
@@ -125,8 +125,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					repl1.RaftLock()
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
-					_, err := os.Stat(dir)
-
+					_, err := eng.Stat(dir)
 					if os.IsNotExist(err) {
 						return nil
 					}
@@ -136,12 +135,12 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		}()
 	}
 
-	mtc.unreplicateRange(rangeID, 1)
+	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := mtc.stores[1].GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
-			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
+		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
+			return errors.Errorf("expected range removal: %v", err)
 		}
 		return nil
 	})
@@ -151,40 +150,51 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 // removes a range from a store that no longer should have a replica.
 func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
-	cfg := kvserver.TestStoreConfig(nil)
-	cfg.TestingKnobs.DisableEagerReplicaRemoval = true
-	cfg.Clock = nil // manual clock
-	mtc.storeConfig = &cfg
+	defer log.Scope(t).Close(t)
 
-	defer mtc.Stop()
-	mtc.Start(t, 3)
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableEagerReplicaRemoval: true,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	ts := tc.Servers[1]
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
 	// Disable the replica gc queue to prevent direct removal of replica.
-	mtc.stores[1].SetReplicaGCQueueActive(false)
+	store.SetReplicaGCQueueActive(false)
 
-	rangeID := roachpb.RangeID(1)
-	mtc.replicateRange(rangeID, 1, 2)
-	mtc.unreplicateRange(rangeID, 1)
+	// Create our scratch range and up-replicate it.
+	k := tc.ScratchRange(t)
+	tc.AddReplicasOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
+
+	desc := tc.RemoveReplicasOrFatal(t, k, tc.Target(1))
 
 	// Wait long enough for the direct replica GC to have had a chance and been
 	// discarded because the queue is disabled.
 	time.Sleep(10 * time.Millisecond)
-	if _, err := mtc.stores[1].GetReplica(rangeID); err != nil {
+	if _, err := store.GetReplica(desc.RangeID); err != nil {
 		t.Error("unexpected range removal")
 	}
 
 	// Enable the queue.
-	mtc.stores[1].SetReplicaGCQueueActive(true)
-
-	// Increment the clock's timestamp to make the replica GC queue process the range.
-	mtc.advanceClock(context.TODO())
-	mtc.manualClock.Increment(int64(kvserver.ReplicaGCQueueInactivityThreshold + 1))
+	store.SetReplicaGCQueueActive(true)
 
 	// Make sure the range is removed from the store.
 	testutils.SucceedsSoon(t, func() error {
-		store := mtc.stores[1]
 		store.MustForceReplicaGCScanAndProcess()
-		if _, err := store.GetReplica(rangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
+		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
 			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
 		}
 		return nil

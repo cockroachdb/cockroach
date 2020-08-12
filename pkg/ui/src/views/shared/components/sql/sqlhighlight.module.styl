@@ -1,0 +1,59 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+.box-highlight
+  font-family $font-family--monospace
+  padding 20px
+  width 100%
+  margin-bottom 10px
+  min-height 282px;
+  white-space pre-wrap
+  background-color $colors--neutral-10
+  .table-target
+    color $popover-border-color
+    &:hover
+      text-decoration underline
+
+.sql-highlight:global(.hljs)
+  color $colors--neutral-2
+  overflow-x auto
+  font-family SFMono-Semibold
+  font-size 14px
+  line-height: 1.57;
+  white-space pre-wrap
+  word-wrap break-word
+  :global(.hljs-label)
+    padding-left 8px
+  :global(.hljs-keyword)
+    color $colors--functional-purple-1
+
+  :global(.hljs-string)
+  :global(.hljs-built_in)
+    color $colors--functional-orange-3
+
+:global(.ant-tooltip):global(.hljs)
+  :global(.ant-tooltip-content)
+    width 535px
+  :global(.ant-tooltip-inner), .sql-highlight:global(.hljs)
+    background-color $colors--neutral-8
+  :global(.ant-tooltip-inner)
+    padding 8px
+  .sql-highlight:global(.hljs)
+    padding 0
+    margin 0
+
+.higlight-divider
+  width 100%
+  height 1px
+  border-bottom 1px dashed $colors--neutral-6
+  margin 15px 0

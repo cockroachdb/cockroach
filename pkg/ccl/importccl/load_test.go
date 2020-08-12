@@ -20,13 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/stretchr/testify/assert"
@@ -48,25 +52,26 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 
 func TestGetDescriptorFromDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	aliceDesc := &sqlbase.DatabaseDescriptor{Name: "alice"}
-	bobDesc := &sqlbase.DatabaseDescriptor{Name: "bob"}
+	aliceDesc := sqlbase.NewInitialDatabaseDescriptor(10000, "alice", security.AdminRole)
+	bobDesc := sqlbase.NewInitialDatabaseDescriptor(9999, "bob", security.AdminRole)
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
+		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		batch := txn.NewBatch()
-		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), 9999)
-		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), 10000)
+		batch.Put(sqlbase.NewDatabaseKey("bob").Key(keys.SystemSQLCodec), bobDesc.GetID())
+		batch.Put(sqlbase.NewDeprecatedDatabaseKey("alice").Key(keys.SystemSQLCodec), aliceDesc.GetID())
 
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 9999), sqlbase.WrapDescriptor(bobDesc))
-		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, 10000), sqlbase.WrapDescriptor(aliceDesc))
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, bobDesc.GetID()), bobDesc.DescriptorProto())
+		batch.Put(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, aliceDesc.GetID()), aliceDesc.DescriptorProto())
 		return txn.CommitInBatch(ctx, batch)
 	})
 	require.NoError(t, err)
@@ -74,11 +79,11 @@ func TestGetDescriptorFromDB(t *testing.T) {
 	for _, tc := range []struct {
 		dbName string
 
-		expected    *sqlbase.DatabaseDescriptor
+		expected    *descpb.DatabaseDescriptor
 		expectedErr error
 	}{
-		{"bob", bobDesc, nil},
-		{"alice", aliceDesc, nil},
+		{"bob", bobDesc.DatabaseDesc(), nil},
+		{"alice", aliceDesc.DatabaseDesc(), nil},
 		{"not_found", nil, gosql.ErrNoRows},
 	} {
 		t.Run(tc.dbName, func(t *testing.T) {
@@ -88,7 +93,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 				assert.Equal(t, tc.expectedErr, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, ret)
+				assert.Equal(t, tc.expected, ret.DatabaseDesc())
 			}
 		})
 	}
@@ -96,6 +101,7 @@ func TestGetDescriptorFromDB(t *testing.T) {
 
 func TestImportChunking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Generate at least 2 chunks.
 	const chunkSize = 1024 * 500
@@ -113,7 +119,8 @@ func TestImportChunking(t *testing.T) {
 	}
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := importccl.Load(ctx, tc.Conns[0], bankBuf(numAccounts), "data", "nodelocal://0"+dir, ts, chunkSize, dir, dir)
+	desc, err := importccl.Load(ctx, tc.Conns[0], bankBuf(numAccounts),
+		"data", security.RootUser, dir, "nodelocal://0"+dir, ts, chunkSize)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -124,6 +131,7 @@ func TestImportChunking(t *testing.T) {
 
 func TestImportOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
@@ -146,16 +154,15 @@ func TestImportOutOfOrder(t *testing.T) {
 	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := importccl.Load(ctx, tc.Conns[0], &buf, "data", "nodelocal://0/foo", ts, 0, dir, dir)
+	_, err := importccl.Load(ctx, tc.Conns[0], &buf, "data", security.RootUser,
+		dir, "nodelocal://0/foo", ts, 0)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
 }
 
 func BenchmarkLoad(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
+	skip.UnderShort(b, "TODO: fix benchmark")
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
@@ -173,7 +180,8 @@ func BenchmarkLoad(b *testing.B) {
 	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	b.ResetTimer()
-	if _, err := importccl.Load(ctx, tc.Conns[0], buf, "data", dir, ts, 0, dir, dir); err != nil {
+	if _, err := importccl.Load(ctx, tc.Conns[0], buf, "data", security.RootUser,
+		dir, "nodelocal://0", ts, 0); err != nil {
 		b.Fatalf("%+v", err)
 	}
 }

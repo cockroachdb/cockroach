@@ -16,10 +16,13 @@ import (
 	"math"
 	"math/rand"
 	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testBasicEncodeDecode32(
@@ -1059,6 +1063,7 @@ func TestEncodeDecodeTime(t *testing.T) {
 		}
 	}
 }
+
 func TestEncodeDecodeTimeTZ(t *testing.T) {
 	// Test cases are in ascending order for TimeTZ, which means:
 	// * UTC timestamp first preference
@@ -1114,7 +1119,7 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 		t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 			for i := range testCases {
 				t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-					current, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i], time.Microsecond)
+					current, _, err := timetz.ParseTimeTZ(timeutil.Now(), testCases[i], time.Microsecond)
 					assert.NoError(t, err)
 
 					var b []byte
@@ -1140,6 +1145,118 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestEncodeDecodeGeometry(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+	}{
+		{
+			orderedWKTs: []string{
+				"SRID=4326;POLYGON EMPTY",
+				"SRID=4326;POINT EMPTY",
+				"SRID=4326;LINESTRING(0 0, -90 -80)",
+				"SRID=4326;POINT(-80 80)",
+				"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+			},
+		},
+	}
+	for i, tc := range testCases {
+		for _, dir := range []Direction{Ascending, Descending} {
+			t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for _, wkt := range tc.orderedWKTs {
+						parsed, err := geo.ParseGeometry(wkt)
+						require.NoError(t, err)
+						spatialObject := parsed.SpatialObject()
+
+						var b []byte
+						var decoded geopb.SpatialObject
+						if dir == Ascending {
+							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, decoded, err = DecodeGeoAscending(b)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, decoded, err = DecodeGeoDescending(b)
+							require.NoError(t, err)
+						}
+						require.Equal(t, spatialObject, decoded)
+						testPeekLength(t, b)
+
+						if i > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			})
+		}
+	}
+}
+
+func TestEncodeDecodeGeography(t *testing.T) {
+	testCases := []struct {
+		orderedWKTs []string
+	}{
+		{
+			orderedWKTs: []string{
+				"SRID=4326;POLYGON EMPTY",
+				"SRID=4326;POINT EMPTY",
+				"SRID=4326;POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))",
+				"SRID=4326;POINT(-80 80)",
+				"SRID=4326;LINESTRING(0 0, -90 -80)",
+			},
+		},
+	}
+	for i, tc := range testCases {
+		for _, dir := range []Direction{Ascending, Descending} {
+			t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for _, wkt := range tc.orderedWKTs {
+						parsed, err := geo.ParseGeography(wkt)
+						require.NoError(t, err)
+						spatialObject := parsed.SpatialObject()
+
+						var b []byte
+						var decoded geopb.SpatialObject
+						if dir == Ascending {
+							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, decoded, err = DecodeGeoAscending(b)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
+							require.NoError(t, err)
+							_, decoded, err = DecodeGeoDescending(b)
+							require.NoError(t, err)
+						}
+						require.Equal(t, spatialObject, decoded)
+						testPeekLength(t, b)
+
+						if i > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			})
+		}
 	}
 }
 
@@ -1217,8 +1334,14 @@ func TestEncodeDecodeDescending(t *testing.T) {
 }
 
 func TestPeekType(t *testing.T) {
-	encodedDurationAscending, _ := EncodeDurationAscending(nil, duration.Duration{})
-	encodedDurationDescending, _ := EncodeDurationDescending(nil, duration.Duration{})
+	encodedDurationAscending, err := EncodeDurationAscending(nil, duration.Duration{})
+	require.NoError(t, err)
+	encodedDurationDescending, err := EncodeDurationDescending(nil, duration.Duration{})
+	require.NoError(t, err)
+	encodedGeoAscending, err := EncodeGeoAscending(nil, 0, &geopb.SpatialObject{})
+	require.NoError(t, err)
+	encodedGeoDescending, err := EncodeGeoDescending(nil, 0, &geopb.SpatialObject{})
+	require.NoError(t, err)
 	testCases := []struct {
 		enc []byte
 		typ Type
@@ -1242,6 +1365,8 @@ func TestPeekType(t *testing.T) {
 		{EncodeTimeDescending(nil, timeutil.Now()), Time},
 		{EncodeTimeTZAscending(nil, timetz.Now()), TimeTZ},
 		{EncodeTimeTZDescending(nil, timetz.Now()), TimeTZ},
+		{encodedGeoAscending, Geo},
+		{encodedGeoDescending, GeoDesc},
 		{encodedDurationAscending, Duration},
 		{encodedDurationDescending, Duration},
 		{EncodeBitArrayAscending(nil, bitarray.BitArray{}), BitArray},

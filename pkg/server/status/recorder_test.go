@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -88,7 +89,7 @@ func (fs fakeStore) StoreID() roachpb.StoreID {
 	return fs.storeID
 }
 
-func (fs fakeStore) Descriptor(_ bool) (*roachpb.StoreDescriptor, error) {
+func (fs fakeStore) Descriptor(_ context.Context, _ bool) (*roachpb.StoreDescriptor, error) {
 	return &fs.desc, nil
 }
 
@@ -145,7 +146,7 @@ func TestMetricsRecorder(t *testing.T) {
 	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
-	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432", "foo:26259")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual
@@ -202,6 +203,8 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testCounter", "counter", 5},
 		{"testHistogram", "histogram", 10},
 		{"testLatency", "latency", 10},
+		{"testAggGauge", "agggauge", 4},
+		{"testAggCounter", "aggcounter", 7},
 
 		// Stats needed for store summaries.
 		{"ranges", "counter", 1},
@@ -270,6 +273,18 @@ func TestMetricsRecorder(t *testing.T) {
 			case "counter":
 				c := metric.NewCounter(metric.Metadata{Name: reg.prefix + data.name})
 				reg.reg.AddMetric(c)
+				c.Inc((data.val))
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
+			case "aggcounter":
+				ac := aggmetric.NewCounter(metric.Metadata{Name: reg.prefix + data.name}, "foo")
+				reg.reg.AddMetric(ac)
+				c := ac.AddChild("bar")
+				c.Inc((data.val))
+				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
+			case "agggauge":
+				ac := aggmetric.NewGauge(metric.Metadata{Name: reg.prefix + data.name}, "foo")
+				reg.reg.AddMetric(ac)
+				c := ac.AddChild("bar")
 				c.Inc((data.val))
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":

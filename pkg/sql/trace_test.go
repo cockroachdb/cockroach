@@ -26,14 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
+	"github.com/opentracing/opentracing-go"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	s := log.Scope(t)
-	defer s.Close(t)
+	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
@@ -250,7 +251,7 @@ func TestTrace(t *testing.T) {
 	// Create a cluster. We'll run sub-tests using each node of this cluster.
 	const numNodes = 3
 	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
-	defer cluster.Stopper().Stop(context.TODO())
+	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
 	if _, err := clusterDB.Exec(`
@@ -384,6 +385,7 @@ func TestTrace(t *testing.T) {
 // the parts of a trace/log message into different columns properly.
 func TestTraceFieldDecomposition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	query := "SELECT 42"
 
@@ -405,7 +407,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 
@@ -511,11 +513,12 @@ func TestTraceFieldDecomposition(t *testing.T) {
 
 func TestKVTraceWithCountStar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Test that we don't crash if we try to do a KV trace
 	// on a COUNT(*) query (#19846).
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE DATABASE test")
@@ -526,6 +529,7 @@ func TestKVTraceWithCountStar(t *testing.T) {
 
 func TestKVTraceDistSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Test that kv tracing works in distsql.
 	const numNodes = 2
@@ -535,7 +539,7 @@ func TestKVTraceDistSQL(t *testing.T) {
 			UseDatabase: "test",
 		},
 	})
-	defer cluster.Stopper().Stop(context.TODO())
+	defer cluster.Stopper().Stop(context.Background())
 
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 	r.Exec(t, "CREATE DATABASE test")
@@ -566,4 +570,53 @@ func TestKVTraceDistSQL(t *testing.T) {
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Test that tracing works with DistSQL. Namely, test that traces for processors
+// running remotely are collected.
+func TestTraceDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	countStmt := "SELECT count(1) FROM test.a"
+	recCh := make(chan tracing.Recording, 2)
+
+	const numNodes = 2
+	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					WithStatementTrace: func(sp opentracing.Span, stmt string) {
+						if stmt == countStmt {
+							recCh <- tracing.GetRecording(sp)
+						}
+					},
+				},
+			},
+		},
+	})
+	defer cluster.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY)")
+	// Put the table on the 2nd node so that the flow is planned on the 2nd node
+	// and the spans corresponding to the processors travel through DistSQL
+	// producer metadata to the gateway.
+	r.Exec(t, "ALTER TABLE test.a EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 0)")
+	// Run the statement twice. The first time warms up the range cache, making
+	// the planning predictable for the 2nd run.
+	r.Exec(t, countStmt)
+	r.Exec(t, countStmt)
+	// Ignore the trace for the first stmt.
+	<-recCh
+
+	rec := <-recCh
+	sp, ok := rec.FindSpan("table reader")
+	require.True(t, ok, "table reader span not found")
+	require.Empty(t, rec.OrphanSpans())
+	// Check that the table reader indeed came from a remote note.
+	require.Equal(t, "2", sp.Tags["node"])
 }

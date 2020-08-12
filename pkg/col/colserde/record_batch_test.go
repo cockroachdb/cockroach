@@ -24,11 +24,14 @@ import (
 	"github.com/apache/arrow/go/arrow"
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/apache/arrow/go/arrow/memory"
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -102,7 +105,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 	case types.BytesFamily:
 		// Bytes can be represented 3 different ways. As variable-length bytes,
 		// variable-length strings, or fixed-width bytes.
-		representation := rng.Intn(3)
+		representation := rng.Intn(2)
 		switch representation {
 		case 0:
 			builder = array.NewStringBuilder(memory.DefaultAllocator)
@@ -131,17 +134,22 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			}
 			builder.(*array.BinaryBuilder).AppendValues(data, valid)
 		case 2:
-			width := rng.Intn(maxVarLen) + 1
-			builder = array.NewFixedSizeBinaryBuilder(memory.DefaultAllocator, &arrow.FixedSizeBinaryType{ByteWidth: width})
-			data := make([][]byte, n)
-			for i := range data {
-				slice := make([]byte, width)
-				if valid[i] {
-					_, _ = rng.Read(slice)
-				}
-				data[i] = slice
-			}
-			builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
+			// NOTE: We currently do not generate fixed-width bytes in this test due to
+			// the different buffer layout (no offsets). The serialization code assumes
+			// 3 buffers for all types.BytesFamily types.
+			/*
+				width := rng.Intn(maxVarLen) + 1
+				  builder = array.NewFixedSizeBinaryBuilder(memory.DefaultAllocator, &arrow.FixedSizeBinaryType{ByteWidth: width})
+				  data := make([][]byte, n)
+				  for i := range data {
+				  	slice := make([]byte, width)
+				  	if valid[i] {
+				  		_, _ = rng.Read(slice)
+				  	}
+				  	data[i] = slice
+				  }
+				  builder.(*array.FixedSizeBinaryBuilder).AppendValues(data, valid)
+			*/
 		}
 	case types.DecimalFamily:
 		var err error
@@ -180,6 +188,21 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			binary.LittleEndian.PutUint64(data[i][0:sizeOfInt64], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64:sizeOfInt64*2], rng.Uint64())
 			binary.LittleEndian.PutUint64(data[i][sizeOfInt64*2:sizeOfInt64*3], rng.Uint64())
+		}
+		builder.(*array.BinaryBuilder).AppendValues(data, valid)
+	case typeconv.DatumVecCanonicalTypeFamily:
+		builder = array.NewBinaryBuilder(memory.DefaultAllocator, arrow.BinaryTypes.Binary)
+		data := make([][]byte, n)
+		var (
+			scratch []byte
+			err     error
+		)
+		for i := range data {
+			d := sqlbase.RandDatum(rng, t, false /* nullOk */)
+			data[i], err = sqlbase.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
+			if err != nil {
+				panic(err)
+			}
 		}
 		builder.(*array.BinaryBuilder).AppendValues(data, valid)
 	default:
@@ -230,7 +253,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
+		typs[i] = sqlbase.RandType(rng)
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -131,7 +132,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			if interval != 0 {
 				// If (some store on) this node is the leaseholder for range 1, do the
 				// work.
-				stats.meta1LeaseHolder = stats.meta1LeaseHolderStore()
+				stats.meta1LeaseHolder = stats.meta1LeaseHolderStore(ctx)
 				if stats.meta1LeaseHolder != nil {
 					if err := stats.update(
 						ctx, &constraintsSaver, &replStatsSaver, &criticalLocSaver,
@@ -252,16 +253,16 @@ func (stats *Reporter) update(
 
 // meta1LeaseHolderStore returns the node store that is the leaseholder of Meta1
 // range or nil if none of the node's stores are holding the Meta1 lease.
-func (stats *Reporter) meta1LeaseHolderStore() *kvserver.Store {
+func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Store {
 	const meta1RangeID = roachpb.RangeID(1)
 	repl, store, err := stats.localStores.GetReplicaForRangeID(meta1RangeID)
 	if roachpb.IsRangeNotFoundError(err) {
 		return nil
 	}
 	if err != nil {
-		log.Fatalf(context.TODO(), "unexpected error when visiting stores: %s", err)
+		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
-	if repl.OwnsValidLease(store.Clock().Now()) {
+	if repl.OwnsValidLease(ctx, store.Clock().Now()) {
 		return store
 	}
 	return nil
@@ -280,7 +281,7 @@ type nodeChecker func(nodeID roachpb.NodeID) bool
 type zoneResolver struct {
 	init bool
 	// curObjectID is the object (i.e. usually table) of the configured range.
-	curObjectID uint32
+	curObjectID config.SystemTenantObjectID
 	// curRootZone is the lowest zone convering the previously resolved range
 	// that's not a subzone.
 	// This is used to compute the subzone for a range.
@@ -302,7 +303,9 @@ func (c *zoneResolver) resolveRange(
 // setZone remembers the passed-in info as the reference for further
 // checkSameZone() calls.
 // Clients should generally use the higher-level updateZone().
-func (c *zoneResolver) setZone(objectID uint32, key ZoneKey, rootZone *zonepb.ZoneConfig) {
+func (c *zoneResolver) setZone(
+	objectID config.SystemTenantObjectID, key ZoneKey, rootZone *zonepb.ZoneConfig,
+) {
 	c.init = true
 	c.curObjectID = objectID
 	c.curRootZone = rootZone
@@ -425,36 +428,38 @@ func visitZones(
 // corresponding to id. The zone corresponding to id itself is not visited.
 func visitAncestors(
 	ctx context.Context,
-	id uint32,
+	id config.SystemTenantObjectID,
 	cfg *config.SystemConfig,
 	visitor func(context.Context, *zonepb.ZoneConfig, ZoneKey) bool,
 ) (bool, error) {
 	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, sqlbase.ID(id)))
+	descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(keys.TODOSQLCodec, descpb.ID(id)))
 	if descVal == nil {
 		// Couldn't find a descriptor. This is not expected to happen.
 		// Let's just look at the default zone config.
 		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
-	var desc sqlbase.Descriptor
+	// TODO(ajwerner): Reconsider how this zone config picking apart happens. This
+	// isn't how we want to be retreiving table descriptors in general.
+	var desc descpb.Descriptor
 	if err := descVal.GetProto(&desc); err != nil {
 		return false, err
 	}
-	tableDesc := desc.Table(descVal.Timestamp)
+	tableDesc := sqlbase.TableFromDescriptor(&desc, descVal.Timestamp)
 	// If it's a database, the parent is the default zone.
 	if tableDesc == nil {
 		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
 
 	// If it's a table, the parent is a database.
-	zone, err := getZoneByID(uint32(tableDesc.ParentID), cfg)
+	zone, err := getZoneByID(config.SystemTenantObjectID(tableDesc.ParentID), cfg)
 	if err != nil {
 		return false, err
 	}
 	if zone != nil {
-		if visitor(ctx, zone, MakeZoneKey(uint32(tableDesc.ParentID), NoSubzone)) {
+		if visitor(ctx, zone, MakeZoneKey(config.SystemTenantObjectID(tableDesc.ParentID), NoSubzone)) {
 			return true, nil
 		}
 	}
@@ -478,7 +483,9 @@ func visitDefaultZone(
 }
 
 // getZoneByID returns a zone given its id. Inheritance does not apply.
-func getZoneByID(id uint32, cfg *config.SystemConfig) (*zonepb.ZoneConfig, error) {
+func getZoneByID(
+	id config.SystemTenantObjectID, cfg *config.SystemConfig,
+) (*zonepb.ZoneConfig, error) {
 	zoneVal := cfg.GetValue(config.MakeZoneKey(id))
 	if zoneVal == nil {
 		return nil, nil

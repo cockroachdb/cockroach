@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -61,9 +63,9 @@ type ShowCreateDisplayOptions struct {
 func ShowCreateTable(
 	ctx context.Context,
 	p PlanHookState,
-	tn *tree.Name,
+	tn *tree.TableName,
 	dbPrefix string,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
@@ -85,7 +87,11 @@ func ShowCreateTable(
 			f.WriteString(",")
 		}
 		f.WriteString("\n\t")
-		f.WriteString(col.SQLString())
+		colstr, err := schemaexpr.FormatColumnForDisplay(ctx, desc, col, &p.RunParams(ctx).p.semaCtx)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(colstr)
 		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
@@ -137,7 +143,11 @@ func ShowCreateTable(
 		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
+			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
+			if err != nil {
+				return "", err
+			}
+			f.WriteString(idxStr)
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
 
@@ -158,7 +168,9 @@ func ShowCreateTable(
 
 	// Create the FAMILY and CONSTRAINTs of the CREATE statement
 	showFamilyClause(desc, f)
-	showConstraintClause(desc, f)
+	if err := showConstraintClause(ctx, desc, &p.RunParams(ctx).p.semaCtx, f); err != nil {
+		return "", err
+	}
 
 	if err := showCreateInterleave(&desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
@@ -170,7 +182,7 @@ func ShowCreateTable(
 	}
 
 	if !displayOptions.IgnoreComments {
-		if err := showComments(desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+		if err := showComments(tn, desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
 			return "", err
 		}
 	}
@@ -201,20 +213,20 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
-	allDescs []sqlbase.Descriptor,
-	desc *sqlbase.TableDescriptor,
+	allDescs []descpb.Descriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string
 	var err error
-	tn := (*tree.Name)(&desc.Name)
+	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 	if desc.IsView() {
-		stmt, err = ShowCreateView(ctx, tn, desc)
+		stmt, err = ShowCreateView(ctx, &tn, desc)
 	} else if desc.IsSequence() {
-		stmt, err = ShowCreateSequence(ctx, tn, desc)
+		stmt, err = ShowCreateSequence(ctx, &tn, desc)
 	} else {
 		lCtx := newInternalLookupCtxFromDescriptors(allDescs, nil /* want all tables */)
-		stmt, err = ShowCreateTable(ctx, p, tn, dbPrefix, desc, lCtx, displayOptions)
+		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 
 	return stmt, err

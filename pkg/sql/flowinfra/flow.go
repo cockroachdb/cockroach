@@ -127,6 +127,7 @@ type FlowBase struct {
 	execinfra.FlowCtx
 
 	flowRegistry *FlowRegistry
+
 	// processors contains a subset of the processors in the flow - the ones that
 	// run in their own goroutines. Some processors that implement RowSource are
 	// scheduled to run in their consumer's goroutine; those are not present here.
@@ -416,6 +417,11 @@ type Releasable interface {
 func (f *FlowBase) Cleanup(ctx context.Context) {
 	if f.status == FlowFinished {
 		panic("flow cleanup called twice")
+	}
+
+	// Release any descriptors accessed by this flow
+	if f.TypeResolverFactory != nil {
+		f.TypeResolverFactory.CleanupFunc(ctx)
 	}
 
 	// This closes the monitor opened in ServerImpl.setupFlow.

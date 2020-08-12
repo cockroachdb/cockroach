@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,9 +27,9 @@ Format for the datadriven test:
 
 new-span-leaf name=<name> tight=<true|false> span=<start>[,<end>]
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
-  Creates a new leaf spanExpression with the given name
+  Creates a new leaf SpanExpression with the given name
 
 new-unknown-leaf name=<name> tight=<true|false>
 ----
@@ -42,15 +43,21 @@ new-non-inverted-leaf name=<name>
 
 and result=<name> left=<name> right=<name>
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
   Ands the left and right expressions and stores the result
 
 or result=<name> left=<name> right=<name>
 ----
-<spanExpression as string>
+<SpanExpression as string>
 
   Ors the left and right expressions and stores the result
+
+to-proto name=<name>
+----
+<SpanExpressionProto as string>
+
+  Converts the SpanExpression to SpanExpressionProto
 */
 
 func getSpan(t *testing.T, d *datadriven.TestData) InvertedSpan {
@@ -61,7 +68,7 @@ func getSpan(t *testing.T, d *datadriven.TestData) InvertedSpan {
 		d.Fatalf(t, "incorrect span format: %s", str)
 		return InvertedSpan{}
 	} else if len(parts) == 2 {
-		return InvertedSpan{start: []byte(parts[0]), end: []byte(parts[1])}
+		return InvertedSpan{Start: []byte(parts[0]), End: []byte(parts[1])}
 	} else {
 		return MakeSingleInvertedValSpan([]byte(parts[0]))
 	}
@@ -74,7 +81,7 @@ type UnknownExpression struct {
 func (u UnknownExpression) IsTight() bool { return u.tight }
 func (u UnknownExpression) SetNotTight()  { u.tight = false }
 func (u UnknownExpression) String() string {
-	return fmt.Sprintf("UnknownExpression: tight=%t", u.tight)
+	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
 }
 
 // Makes a (shallow) copy of the root node of the expression identified
@@ -109,7 +116,7 @@ func getExprCopy(
 
 func toString(expr InvertedExpression) string {
 	tp := treeprinter.New()
-	formatExpression(tp, expr)
+	formatExpression(tp, expr, true /* includeSpansToRead */)
 	return tp.String()
 }
 
@@ -164,6 +171,14 @@ func TestExpression(t *testing.T) {
 			expr := Or(left, right)
 			exprsByName[name] = expr
 			return toString(expr)
+		case "to-proto":
+			var name string
+			d.ScanArgs(t, "name", &name)
+			expr := exprsByName[name]
+			if expr == nil {
+				expr = (*SpanExpression)(nil)
+			}
+			return proto.MarshalTextString(expr.(*SpanExpression).ToProto())
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
@@ -171,7 +186,7 @@ func TestExpression(t *testing.T) {
 }
 
 func span(start, end string) InvertedSpan {
-	return InvertedSpan{start: []byte(start), end: []byte(end)}
+	return InvertedSpan{Start: []byte(start), End: []byte(end)}
 }
 
 func single(start string) InvertedSpan {
@@ -181,51 +196,51 @@ func single(start string) InvertedSpan {
 func checkEqual(t *testing.T, expected, actual []InvertedSpan) {
 	require.Equal(t, len(expected), len(actual))
 	for i := range expected {
-		require.Equal(t, expected[i].start, actual[i].start)
-		require.Equal(t, expected[i].end, actual[i].end)
+		require.Equal(t, expected[i].Start, actual[i].Start)
+		require.Equal(t, expected[i].End, actual[i].End)
 	}
 }
 
 func TestSetUnion(t *testing.T) {
 	checkEqual(t,
-		[]InvertedSpan{span("b", "b\x00")},
-		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
-		),
-	)
-	checkEqual(t,
-		[]InvertedSpan{span("b", "b\x00\x00")},
-		unionSpans(
-			[]InvertedSpan{single("b")},
-			[]InvertedSpan{single("b\x00")},
-		),
-	)
-	checkEqual(t,
 		[]InvertedSpan{span("b", "c")},
 		unionSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b\x00", "c")},
-		),
-	)
-	checkEqual(t,
-		[]InvertedSpan{span("b", "c")},
-		unionSpans(
-			[]InvertedSpan{span("b", "b\x00")},
 			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d\x00")},
+		[]InvertedSpan{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c")},
-			[]InvertedSpan{single("d\x00")},
+			[]InvertedSpan{single("b")},
+			[]InvertedSpan{single("c")},
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("b", "c"), single("d"), single("e")},
+		[]InvertedSpan{span("b", "d")},
 		unionSpans(
-			[]InvertedSpan{span("b", "c"), single("e")},
+			[]InvertedSpan{single("b")},
+			[]InvertedSpan{span("c", "d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "d")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c")},
+			[]InvertedSpan{span("c", "d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "c"), single("d")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c")},
+			[]InvertedSpan{single("d")},
+		),
+	)
+	checkEqual(t,
+		[]InvertedSpan{span("b", "c"), single("d"), single("f")},
+		unionSpans(
+			[]InvertedSpan{span("b", "c"), single("f")},
 			[]InvertedSpan{single("d")},
 		),
 	)
@@ -250,14 +265,14 @@ func TestSetIntersection(t *testing.T) {
 		[]InvertedSpan{single("b")},
 		intersectSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
+			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
 		nil,
 		intersectSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b\x00", "c")},
+			[]InvertedSpan{span("c", "d")},
 		),
 	)
 	checkEqual(t,
@@ -274,7 +289,7 @@ func TestSetSubtraction(t *testing.T) {
 		nil,
 		subtractSpans(
 			[]InvertedSpan{single("b")},
-			[]InvertedSpan{span("b", "b\x00")},
+			[]InvertedSpan{span("b", "c")},
 		),
 	)
 	checkEqual(t,
@@ -292,11 +307,11 @@ func TestSetSubtraction(t *testing.T) {
 		),
 	)
 	checkEqual(t,
-		[]InvertedSpan{span("d", "da"), span("da\x00", "dc"),
+		[]InvertedSpan{span("d", "da"), span("db", "dc"),
 			span("dd", "df"), span("fa", "g")},
 		subtractSpans(
 			[]InvertedSpan{single("b"), span("d", "e"), span("f", "g")},
-			[]InvertedSpan{span("b", "b\x00"), single("da"),
+			[]InvertedSpan{span("b", "c"), span("da", "db"),
 				span("dc", "dd"), span("df", "e"), span("f", "fa")},
 		),
 	)

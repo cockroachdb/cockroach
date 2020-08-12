@@ -58,8 +58,8 @@ func (f *fdCountingFS) assertOpenFDs(
 	require.Equal(t, expectedReadFDs, f.readFDs)
 }
 
-func (f *fdCountingFS) CreateFile(name string) (fs.File, error) {
-	file, err := f.FS.CreateFile(name)
+func (f *fdCountingFS) Create(name string) (fs.File, error) {
+	file, err := f.FS.Create(name)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,8 @@ func (f *fdCountingFS) CreateFile(name string) (fs.File, error) {
 	return &fdCountingFSFile{File: file, onCloseCb: func() { f.writeFDs-- }}, nil
 }
 
-func (f *fdCountingFS) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
-	file, err := f.FS.CreateFileWithSync(name, bytesPerSync)
+func (f *fdCountingFS) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
+	file, err := f.FS.CreateWithSync(name, bytesPerSync)
 	if err != nil {
 		return nil, err
 	}
@@ -76,8 +76,8 @@ func (f *fdCountingFS) CreateFileWithSync(name string, bytesPerSync int) (fs.Fil
 	return &fdCountingFSFile{File: file, onCloseCb: func() { f.writeFDs-- }}, nil
 }
 
-func (f *fdCountingFS) OpenFile(name string) (fs.File, error) {
-	file, err := f.FS.OpenFile(name)
+func (f *fdCountingFS) Open(name string) (fs.File, error) {
+	file, err := f.FS.Open(name)
 	if err != nil {
 		return nil, err
 	}

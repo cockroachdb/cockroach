@@ -20,32 +20,16 @@
 package colexec
 
 import (
-	"bytes"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
 
 // {{/*
 
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "bytes" package.
-var _ bytes.Buffer
-
-// Dummy import to pull in "tree" package.
-var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPE is the template variable.
 type _GOTYPE interface{}
@@ -85,8 +69,8 @@ func valuesDiffer(aColVec coldata.Vec, aValueIdx int, bColVec coldata.Vec, bValu
 			} else if aNull || bNull {
 				return true
 			}
-			arg1 := execgen.UNSAFEGET(aCol, aValueIdx)
-			arg2 := execgen.UNSAFEGET(bCol, bValueIdx)
+			arg1 := aCol.Get(aValueIdx)
+			arg2 := bCol.Get(bValueIdx)
 			var unique bool
 			_ASSIGN_NE(unique, arg1, arg2, _, aCol, bCol)
 			return unique

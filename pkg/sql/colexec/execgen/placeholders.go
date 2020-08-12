@@ -16,8 +16,6 @@ const nonTemplatePanic = "do not call from non-template code"
 
 // Remove unused warnings.
 var (
-	_ = UNSAFEGET
-	_ = RETURNUNSAFEGET
 	_ = COPYVAL
 	_ = SET
 	_ = SLICE
@@ -26,29 +24,8 @@ var (
 	_ = APPENDVAL
 	_ = LEN
 	_ = ZERO
-	_ = RANGE
 	_ = WINDOW
 )
-
-// UNSAFEGET is a template function. Use this if you are not keeping data
-// around (including passing it to SET).
-func UNSAFEGET(target, i interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
-	return nil
-}
-
-// RETURNUNSAFEGET is a template function. Use this if you are not keeping data
-// around (including passing it to SET).
-// This function is similar to UNSAFEGET with the only difference is that this
-// will be called on "return" type of an overload. For example, if we have an
-// overload like "a = b < c", "b" and "c" are arguments of the overload and can
-// be accessed via UNSAFEGET, but RETURNUNSAFEGET will operate on "a". At the
-// moment of this writing, it is used only for the purposes of bounds check
-// elimination in some templates.
-func RETURNUNSAFEGET(target, i interface{}) interface{} {
-	colexecerror.InternalError(nonTemplatePanic)
-	return nil
-}
 
 // COPYVAL is a template function that can be used to set a scalar to the value
 // of another scalar in such a way that the destination won't be modified if the
@@ -93,12 +70,6 @@ func LEN(target interface{}) interface{} {
 // ZERO is a template function.
 func ZERO(target interface{}) {
 	colexecerror.InternalError(nonTemplatePanic)
-}
-
-// RANGE is a template function.
-func RANGE(loopVariableIdent, target, start, end interface{}) bool {
-	colexecerror.InternalError(nonTemplatePanic)
-	return false
 }
 
 // WINDOW is a template function.

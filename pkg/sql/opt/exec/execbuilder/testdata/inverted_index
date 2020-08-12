@@ -164,228 +164,191 @@ InitPut /Table/55/2/15/0/0 -> /BYTES/
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   false                        ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": {"b": [1]}}'
 ----
-·           distributed  false                                    ·       ·
-·           vectorized   false                                    ·       ·
-index-join  ·            ·                                        (a, b)  ·
- │          table        d@primary                                ·       ·
- │          key columns  a                                        ·       ·
- └── scan   ·            ·                                        (a)     ·
-·           table        d@foo_inv                                ·       ·
-·           spans        /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                                    ·       ·
+·           vectorized    true                                     ·       ·
+index join  ·             ·                                        (a, b)  ·
+ │          table         d@primary                                ·       ·
+ │          key columns   a                                        ·       ·
+ └── scan   ·             ·                                        (a)     ·
+·           table         d@foo_inv                                ·       ·
+·           spans         /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": [[2]]}}';
 ----
-·           distributed  false                                            ·       ·
-·           vectorized   false                                            ·       ·
-index-join  ·            ·                                                (a, b)  ·
- │          table        d@primary                                        ·       ·
- │          key columns  a                                                ·       ·
- └── scan   ·            ·                                                (a)     ·
-·           table        d@foo_inv                                        ·       ·
-·           spans        /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
+·           distribution  local                                            ·       ·
+·           vectorized    true                                             ·       ·
+index join  ·             ·                                                (a, b)  ·
+ │          table         d@primary                                        ·       ·
+ │          key columns   a                                                ·       ·
+ └── scan   ·             ·                                                (a)     ·
+·           table         d@foo_inv                                        ·       ·
+·           spans         /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b":true}}';
 ----
-·           distributed  false                         ·       ·
-·           vectorized   false                         ·       ·
-index-join  ·            ·                             (a, b)  ·
- │          table        d@primary                     ·       ·
- │          key columns  a                             ·       ·
- └── scan   ·            ·                             (a)     ·
-·           table        d@foo_inv                     ·       ·
-·           spans        /"a"/"b"/True-/"a"/"b"/False  ·       ·
+·           distribution  local                         ·       ·
+·           vectorized    true                          ·       ·
+index join  ·             ·                             (a, b)  ·
+ │          table         d@primary                     ·       ·
+ │          key columns   a                             ·       ·
+ └── scan   ·             ·                             (a)     ·
+·           table         d@foo_inv                     ·       ·
+·           spans         /"a"/"b"/True-/"a"/"b"/False  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
 ----
-·           distributed  false                    ·       ·
-·           vectorized   false                    ·       ·
-index-join  ·            ·                        (a, b)  ·
- │          table        d@primary                ·       ·
- │          key columns  a                        ·       ·
- └── scan   ·            ·                        (a)     ·
-·           table        d@foo_inv                ·       ·
-·           spans        /Arr/1-/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                    ·       ·
+·           vectorized    true                     ·       ·
+index join  ·             ·                        (a, b)  ·
+ │          table         d@primary                ·       ·
+ │          key columns   a                        ·       ·
+ └── scan   ·             ·                        (a)     ·
+·           table         d@foo_inv                ·       ·
+·           spans         /Arr/1-/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a": {"b": [1]}}]'
 ----
-·           distributed  false                                            ·       ·
-·           vectorized   false                                            ·       ·
-index-join  ·            ·                                                (a, b)  ·
- │          table        d@primary                                        ·       ·
- │          key columns  a                                                ·       ·
- └── scan   ·            ·                                                (a)     ·
-·           table        d@foo_inv                                        ·       ·
-·           spans        /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
+·           distribution  local                                            ·       ·
+·           vectorized    true                                             ·       ·
+index join  ·             ·                                                (a, b)  ·
+ │          table         d@primary                                        ·       ·
+ │          key columns   a                                                ·       ·
+ └── scan   ·             ·                                                (a)     ·
+·           table         d@foo_inv                                        ·       ·
+·           spans         /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b @> '[]'  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b @> '[]'  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b @> '{}'  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b @> '{}'  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   false                        ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a'->'c' = '"b"'
 ----
-·           distributed  false                                ·       ·
-·           vectorized   false                                ·       ·
-index-join  ·            ·                                    (a, b)  ·
- │          table        d@primary                            ·       ·
- │          key columns  a                                    ·       ·
- └── scan   ·            ·                                    (a)     ·
-·           table        d@foo_inv                            ·       ·
-·           spans        /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
+·           distribution  local                                ·       ·
+·           vectorized    true                                 ·       ·
+index join  ·             ·                                    (a, b)  ·
+ │          table         d@primary                            ·       ·
+ │          key columns   a                                    ·       ·
+ └── scan   ·             ·                                    (a)     ·
+·           table         d@foo_inv                            ·       ·
+·           spans         /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->(NULL::STRING) = '"b"'
 ----
-·       distributed  false  ·       ·
-·       vectorized   false  ·       ·
-norows  ·            ·      (a, b)  ·
+·       distribution  local  ·       ·
+·       vectorized    true   ·       ·
+norows  ·             ·      (a, b)  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where '"b"' = b->'a'
 ----
-·           distributed  false                        ·       ·
-·           vectorized   false                        ·       ·
-index-join  ·            ·                            (a, b)  ·
- │          table        d@primary                    ·       ·
- │          key columns  a                            ·       ·
- └── scan   ·            ·                            (a)     ·
-·           table        d@foo_inv                    ·       ·
-·           spans        /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
+·           distribution  local                        ·       ·
+·           vectorized    true                         ·       ·
+index join  ·             ·                            (a, b)  ·
+ │          table         d@primary                    ·       ·
+ │          key columns   a                            ·       ·
+ └── scan   ·             ·                            (a)     ·
+·           table         d@foo_inv                    ·       ·
+·           spans         /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
 # Make sure that querying for NULL equality doesn't use the inverted index.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        d@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b IS NULL  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         d@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
-·     distributed  false
-·     vectorized   false
-scan  ·            ·
-·     table        d@primary
-·     spans        FULL SCAN
-·     filter       b @> '{"a": []}'
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        b @> '{"a": []}'
+ └── scan  ·             ·
+·          table         d@primary
+·          spans         FULL SCAN
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
-·     distributed  false
-·     vectorized   false
-scan  ·            ·
-·     table        d@primary
-·     spans        FULL SCAN
-·     filter       b @> '{"a": {}}'
+·          distribution  local
+·          vectorized    true
+filter     ·             ·
+ │         filter        b @> '{"a": {}}'
+ └── scan  ·             ·
+·          table         d@primary
+·          spans         FULL SCAN
 
 # Multi-path contains queries. Should create zigzag joins.
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distributed            false                                ·       ·
-·                 vectorized             false                                ·       ·
-lookup-join       ·                      ·                                    (a, b)  ·
- │                table                  d@primary                            ·       ·
- │                type                   inner                                ·       ·
- │                equality               (a) = (a)                            ·       ·
- │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
- │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                    (a)     ·
-      │           type                   inner                                ·       ·
-      ├── scan    ·                      ·                                    (a)     ·
-      │           table                  d@foo_inv                            ·       ·
-      │           fixedvals              1 column                             ·       ·
-      └── scan    ·                      ·                                    ()      ·
-·                 table                  d@foo_inv                            ·       ·
-·                 fixedvals              1 column                             ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-·                 distributed            false                                          ·       ·
-·                 vectorized             false                                          ·       ·
-lookup-join       ·                      ·                                              (a, b)  ·
- │                table                  d@primary                                      ·       ·
- │                type                   inner                                          ·       ·
- │                equality               (a) = (a)                                      ·       ·
- │                equality cols are key  ·                                              ·       ·
- │                parallel               ·                                              ·       ·
- │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                              (a)     ·
-      │           type                   inner                                          ·       ·
-      ├── scan    ·                      ·                                              (a)     ·
-      │           table                  d@foo_inv                                      ·       ·
-      │           fixedvals              1 column                                       ·       ·
-      └── scan    ·                      ·                                              ()      ·
-·                 table                  d@foo_inv                                      ·       ·
-·                 fixedvals              1 column                                       ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
-----
-·                 distributed            false                               ·       ·
-·                 vectorized             false                               ·       ·
-lookup-join       ·                      ·                                   (a, b)  ·
+·                 distribution           local                               ·       ·
+·                 vectorized             true                                ·       ·
+lookup join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
- │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag-join  ·                      ·                                   (a)     ·
+ │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ └── zigzag join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
       │           table                  d@foo_inv                           ·       ·
@@ -393,6 +356,48 @@ lookup-join       ·                      ·                                   (
       └── scan    ·                      ·                                   ()      ·
 ·                 table                  d@foo_inv                           ·       ·
 ·                 fixedvals              1 column                            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+·                 distribution           local                                         ·       ·
+·                 vectorized             true                                          ·       ·
+lookup join       ·                      ·                                             (a, b)  ·
+ │                table                  d@primary                                     ·       ·
+ │                type                   inner                                         ·       ·
+ │                equality               (a) = (a)                                     ·       ·
+ │                equality cols are key  ·                                             ·       ·
+ │                parallel               ·                                             ·       ·
+ │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag join  ·                      ·                                             (a)     ·
+      │           type                   inner                                         ·       ·
+      ├── scan    ·                      ·                                             (a)     ·
+      │           table                  d@foo_inv                                     ·       ·
+      │           fixedvals              1 column                                      ·       ·
+      └── scan    ·                      ·                                             ()      ·
+·                 table                  d@foo_inv                                     ·       ·
+·                 fixedvals              1 column                                      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+·                 distribution           local                              ·       ·
+·                 vectorized             true                               ·       ·
+lookup join       ·                      ·                                  (a, b)  ·
+ │                table                  d@primary                          ·       ·
+ │                type                   inner                              ·       ·
+ │                equality               (a) = (a)                          ·       ·
+ │                equality cols are key  ·                                  ·       ·
+ │                parallel               ·                                  ·       ·
+ │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag join  ·                      ·                                  (a)     ·
+      │           type                   inner                              ·       ·
+      ├── scan    ·                      ·                                  (a)     ·
+      │           table                  d@foo_inv                          ·       ·
+      │           fixedvals              1 column                           ·       ·
+      └── scan    ·                      ·                                  ()      ·
+·                 table                  d@foo_inv                          ·       ·
+·                 fixedvals              1 column                           ·       ·
 
 statement ok
 SET enable_zigzag_join = true
@@ -400,58 +405,16 @@ SET enable_zigzag_join = true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distributed            false                                ·       ·
-·                 vectorized             false                                ·       ·
-lookup-join       ·                      ·                                    (a, b)  ·
- │                table                  d@primary                            ·       ·
- │                type                   inner                                ·       ·
- │                equality               (a) = (a)                            ·       ·
- │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
- │                pred                   @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                    (a)     ·
-      │           type                   inner                                ·       ·
-      ├── scan    ·                      ·                                    (a)     ·
-      │           table                  d@foo_inv                            ·       ·
-      │           fixedvals              1 column                             ·       ·
-      └── scan    ·                      ·                                    ()      ·
-·                 table                  d@foo_inv                            ·       ·
-·                 fixedvals              1 column                             ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
-----
-·                 distributed            false                                          ·       ·
-·                 vectorized             false                                          ·       ·
-lookup-join       ·                      ·                                              (a, b)  ·
- │                table                  d@primary                                      ·       ·
- │                type                   inner                                          ·       ·
- │                equality               (a) = (a)                                      ·       ·
- │                equality cols are key  ·                                              ·       ·
- │                parallel               ·                                              ·       ·
- │                pred                   @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag-join  ·                      ·                                              (a)     ·
-      │           type                   inner                                          ·       ·
-      ├── scan    ·                      ·                                              (a)     ·
-      │           table                  d@foo_inv                                      ·       ·
-      │           fixedvals              1 column                                       ·       ·
-      └── scan    ·                      ·                                              ()      ·
-·                 table                  d@foo_inv                                      ·       ·
-·                 fixedvals              1 column                                       ·       ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
-----
-·                 distributed            false                               ·       ·
-·                 vectorized             false                               ·       ·
-lookup-join       ·                      ·                                   (a, b)  ·
+·                 distribution           local                               ·       ·
+·                 vectorized             true                                ·       ·
+lookup join       ·                      ·                                   (a, b)  ·
  │                table                  d@primary                           ·       ·
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
  │                parallel               ·                                   ·       ·
- │                pred                   @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag-join  ·                      ·                                   (a)     ·
+ │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ └── zigzag join  ·                      ·                                   (a)     ·
       │           type                   inner                               ·       ·
       ├── scan    ·                      ·                                   (a)     ·
       │           table                  d@foo_inv                           ·       ·
@@ -461,28 +424,71 @@ lookup-join       ·                      ·                                   (
 ·                 fixedvals              1 column                            ·       ·
 
 query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+·                 distribution           local                                         ·       ·
+·                 vectorized             true                                          ·       ·
+lookup join       ·                      ·                                             (a, b)  ·
+ │                table                  d@primary                                     ·       ·
+ │                type                   inner                                         ·       ·
+ │                equality               (a) = (a)                                     ·       ·
+ │                equality cols are key  ·                                             ·       ·
+ │                parallel               ·                                             ·       ·
+ │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag join  ·                      ·                                             (a)     ·
+      │           type                   inner                                         ·       ·
+      ├── scan    ·                      ·                                             (a)     ·
+      │           table                  d@foo_inv                                     ·       ·
+      │           fixedvals              1 column                                      ·       ·
+      └── scan    ·                      ·                                             ()      ·
+·                 table                  d@foo_inv                                     ·       ·
+·                 fixedvals              1 column                                      ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
+----
+·                 distribution           local                              ·       ·
+·                 vectorized             true                               ·       ·
+lookup join       ·                      ·                                  (a, b)  ·
+ │                table                  d@primary                          ·       ·
+ │                type                   inner                              ·       ·
+ │                equality               (a) = (a)                          ·       ·
+ │                equality cols are key  ·                                  ·       ·
+ │                parallel               ·                                  ·       ·
+ │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag join  ·                      ·                                  (a)     ·
+      │           type                   inner                              ·       ·
+      ├── scan    ·                      ·                                  (a)     ·
+      │           table                  d@foo_inv                          ·       ·
+      │           fixedvals              1 column                           ·       ·
+      └── scan    ·                      ·                                  ()      ·
+·                 table                  d@foo_inv                          ·       ·
+·                 fixedvals              1 column                           ·       ·
+
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
-·                distributed  false                     ·       ·
-·                vectorized   false                     ·       ·
-filter           ·            ·                         (a, b)  ·
- │               filter       b @> '{"a": {}, "b": 2}'  ·       ·
- └── index-join  ·            ·                         (a, b)  ·
-      │          table        d@primary                 ·       ·
-      │          key columns  a                         ·       ·
-      └── scan   ·            ·                         (a)     ·
-·                table        d@foo_inv                 ·       ·
-·                spans        /"b"/2-/"b"/2/PrefixEnd   ·       ·
+·                distribution  local                     ·       ·
+·                vectorized    true                      ·       ·
+filter           ·             ·                         (a, b)  ·
+ │               filter        b @> '{"a": {}, "b": 2}'  ·       ·
+ └── index join  ·             ·                         (a, b)  ·
+      │          table         d@primary                 ·       ·
+      │          key columns   a                         ·       ·
+      └── scan   ·             ·                         (a)     ·
+·                table         d@foo_inv                 ·       ·
+·                spans         /"b"/2-/"b"/2/PrefixEnd   ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
 ----
-·     distributed  false                      ·       ·
-·     vectorized   false                      ·       ·
-scan  ·            ·                          (a, b)  ·
-·     table        d@primary                  ·       ·
-·     spans        FULL SCAN                  ·       ·
-·     filter       b @> '{"a": {}, "b": {}}'  ·       ·
+·          distribution  local                      ·       ·
+·          vectorized    true                       ·       ·
+filter     ·             ·                          (a, b)  ·
+ │         filter        b @> '{"a": {}, "b": {}}'  ·       ·
+ └── scan  ·             ·                          (a, b)  ·
+·          table         d@primary                  ·       ·
+·          spans         FULL SCAN                  ·       ·
 
 subtest array
 
@@ -490,94 +496,96 @@ subtest array
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1]
 ----
-·           distributed  false      ·       ·
-·           vectorized   false      ·       ·
-index-join  ·            ·          (a, b)  ·
- │          table        e@primary  ·       ·
- │          key columns  a          ·       ·
- └── scan   ·            ·          (a)     ·
-·           table        e@e_b_idx  ·       ·
-·           spans        /1-/2      ·       ·
+·           distribution  local      ·       ·
+·           vectorized    true       ·       ·
+index join  ·             ·          (a, b)  ·
+ │          table         e@primary  ·       ·
+ │          key columns   a          ·       ·
+ └── scan   ·             ·          (a)     ·
+·           table         e@e_b_idx  ·       ·
+·           spans         /1-/2      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[]::INT[]
 ----
-·     distributed  false         ·       ·
-·     vectorized   false         ·       ·
-scan  ·            ·             (a, b)  ·
-·     table        e@primary     ·       ·
-·     spans        FULL SCAN     ·       ·
-·     filter       b @> ARRAY[]  ·       ·
+·          distribution  local         ·       ·
+·          vectorized    true          ·       ·
+filter     ·             ·             (a, b)  ·
+ │         filter        b @> ARRAY[]  ·       ·
+ └── scan  ·             ·             (a, b)  ·
+·          table         e@primary     ·       ·
+·          spans         FULL SCAN     ·       ·
 
 # Test that searching for a NULL element using the inverted index.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[NULL]::INT[]
 ----
-·            distributed  false      ·       ·
-·            vectorized   false      ·       ·
-index-join   ·            ·          (a, b)  ·
- │           table        e@primary  ·       ·
- │           key columns  a          ·       ·
- └── norows  ·            ·          (a)     ·
+·            distribution  local      ·       ·
+·            vectorized    true       ·       ·
+index join   ·             ·          (a, b)  ·
+ │           table         e@primary  ·       ·
+ │           key columns   a          ·       ·
+ └── norows  ·             ·          (a)     ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> NULL
 ----
-·       distributed  false  ·       ·
-·       vectorized   false  ·       ·
-norows  ·            ·      (a, b)  ·
+·       distribution  local  ·       ·
+·       vectorized    true   ·       ·
+norows  ·             ·      (a, b)  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 ----
-·     distributed  false      ·       ·
-·     vectorized   false      ·       ·
-scan  ·            ·          (a, b)  ·
-·     table        e@primary  ·       ·
-·     spans        FULL SCAN  ·       ·
-·     filter       b IS NULL  ·       ·
+·          distribution  local      ·       ·
+·          vectorized    true       ·       ·
+filter     ·             ·          (a, b)  ·
+ │         filter        b IS NULL  ·       ·
+ └── scan  ·             ·          (a, b)  ·
+·          table         e@primary  ·       ·
+·          spans         FULL SCAN  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                 distributed            false             ·       ·
-·                 vectorized             false             ·       ·
-lookup-join       ·                      ·                 (a, b)  ·
- │                table                  e@primary         ·       ·
- │                type                   inner             ·       ·
- │                equality               (a) = (a)         ·       ·
- │                equality cols are key  ·                 ·       ·
- │                parallel               ·                 ·       ·
- │                pred                   @2 @> ARRAY[1,2]  ·       ·
- └── zigzag-join  ·                      ·                 (a)     ·
-      │           type                   inner             ·       ·
-      ├── scan    ·                      ·                 (a)     ·
-      │           table                  e@e_b_idx         ·       ·
-      │           fixedvals              1 column          ·       ·
-      └── scan    ·                      ·                 ()      ·
-·                 table                  e@e_b_idx         ·       ·
-·                 fixedvals              1 column          ·       ·
+·                 distribution           local            ·       ·
+·                 vectorized             true             ·       ·
+lookup join       ·                      ·                (a, b)  ·
+ │                table                  e@primary        ·       ·
+ │                type                   inner            ·       ·
+ │                equality               (a) = (a)        ·       ·
+ │                equality cols are key  ·                ·       ·
+ │                parallel               ·                ·       ·
+ │                pred                   b @> ARRAY[1,2]  ·       ·
+ └── zigzag join  ·                      ·                (a)     ·
+      │           type                   inner            ·       ·
+      ├── scan    ·                      ·                (a)     ·
+      │           table                  e@e_b_idx        ·       ·
+      │           fixedvals              1 column         ·       ·
+      └── scan    ·                      ·                ()      ·
+·                 table                  e@e_b_idx        ·       ·
+·                 fixedvals              1 column         ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
-·                 distributed            false                                  ·       ·
-·                 vectorized             false                                  ·       ·
-lookup-join       ·                      ·                                      (a, b)  ·
- │                table                  e@primary                              ·       ·
- │                type                   inner                                  ·       ·
- │                equality               (a) = (a)                              ·       ·
- │                equality cols are key  ·                                      ·       ·
- │                parallel               ·                                      ·       ·
- │                pred                   (@2 @> ARRAY[1]) AND (@2 @> ARRAY[2])  ·       ·
- └── zigzag-join  ·                      ·                                      (a)     ·
-      │           type                   inner                                  ·       ·
-      ├── scan    ·                      ·                                      (a)     ·
-      │           table                  e@e_b_idx                              ·       ·
-      │           fixedvals              1 column                               ·       ·
-      └── scan    ·                      ·                                      ()      ·
-·                 table                  e@e_b_idx                              ·       ·
-·                 fixedvals              1 column                               ·       ·
+·                 distribution           local                                ·       ·
+·                 vectorized             true                                 ·       ·
+lookup join       ·                      ·                                    (a, b)  ·
+ │                table                  e@primary                            ·       ·
+ │                type                   inner                                ·       ·
+ │                equality               (a) = (a)                            ·       ·
+ │                equality cols are key  ·                                    ·       ·
+ │                parallel               ·                                    ·       ·
+ │                pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
+ └── zigzag join  ·                      ·                                    (a)     ·
+      │           type                   inner                                ·       ·
+      ├── scan    ·                      ·                                    (a)     ·
+      │           table                  e@e_b_idx                            ·       ·
+      │           fixedvals              1 column                             ·       ·
+      └── scan    ·                      ·                                    ()      ·
+·                 table                  e@e_b_idx                            ·       ·
+·                 fixedvals              1 column                             ·       ·
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
@@ -592,3 +600,77 @@ INSERT INTO t VALUES (1.00, ARRAY[1,2])
 CPut /Table/56/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
 InitPut /Table/56/2/1/1/0 -> /BYTES/0x1503348964
 InitPut /Table/56/2/2/1/0 -> /BYTES/0x1503348964
+
+statement ok
+CREATE TABLE geo_table(
+  k int primary key,
+  geom geometry,
+  INVERTED INDEX geom_index(geom)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+·                                    distribution     local                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ·          ·
+·                                    vectorized       false                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ·          ·
+render                               ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k)        ·
+ │                                   render 0         k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+ └── filter                          ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+      │                              filter           st_intersects('010100000000000000000008400000000000000840', geom)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+      └── index join                 ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+           │                         table            geo_table@primary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+           │                         key columns      k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+           └── render                ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k)        ·
+                │                    render 0         k                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+                └── inverted filter  ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+                     │               inverted column  2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      ·          ·
+                     │               num spans        31                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     ·          ·
+                     └── scan        ·                ·                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (k, geom)  ·
+·                                    table            geo_table@geom_index                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ·          ·
+·                                    spans            /1152921504606846976-/1152921504606846977 /1152921573326323712-/1152921573326323713 /1152921574400065536-/1152921574400065537 /1152921574668500992-/1152921574668500993 /1152921574735609856-/1152921574735609857 /1152921574739804160-/1152921574739804161 /1152921574740066304-/1152921574740066305 /1152921574740070400-/1152921574740070401 /1152921574740070464-/1152921574740070465 /1152921574740070468-/1152921574740070469 /1152921574740070469-/1152921574740070470 /1152921574740070480-/1152921574740070481 /1152921574740070656-/1152921574740070657 /1152921574740071424-/1152921574740071425 /1152921574740082688-/1152921574740082689 /1152921574740131840-/1152921574740131841 /1152921574740852736-/1152921574740852737 /1152921574752387072-/1152921574752387073 /1152921577621291008-/1152921577621291009 /1152921590506192896-/1152921590506192897 /1152921779484753920-/1152921779484753921 /1152922604118474752-/1152922604118474753 /1152925902653358080-/1152925902653358081 /1152939096792891392-/1152939096792891393 /1152991873351024640-/1152991873351024641 /1153202979583557632-/1153202979583557633 /1154047404513689600-/1154047404513689601 /1157425104234217472-/1157425104234217473 /1170935903116328960-/1170935903116328961 /1224979098644774912-/1224979098644774913 /1441151880758558720-/1441151880758558721  ·          ·
+
+statement ok
+CREATE TABLE geo_table2(
+  k int primary key,
+  geom geometry
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM geo_table2 JOIN geo_table@geom_index
+ON ST_Intersects(geo_table2.geom, geo_table.geom)
+----
+·                        distribution           local                      ·                   ·
+·                        vectorized             true                       ·                   ·
+lookup join              ·                      ·                          (k, geom, k, geom)  ·
+ │                       table                  geo_table@primary          ·                   ·
+ │                       type                   inner                      ·                   ·
+ │                       equality               (k) = (k)                  ·                   ·
+ │                       equality cols are key  ·                          ·                   ·
+ │                       parallel               ·                          ·                   ·
+ │                       pred                   st_intersects(geom, geom)  ·                   ·
+ └── render              ·                      ·                          (k, geom, k)        ·
+      │                  render 0               k                          ·                   ·
+      │                  render 1               geom                       ·                   ·
+      │                  render 2               k                          ·                   ·
+      └── inverted join  ·                      ·                          (k, geom, k, geom)  ·
+           │             table                  geo_table@geom_index       ·                   ·
+           │             type                   inner                      ·                   ·
+           │             ·                      st_intersects(@2, @4)      ·                   ·
+           │             parallel               ·                          ·                   ·
+           └── scan      ·                      ·                          (k, geom)           ·
+·                        table                  geo_table2@primary         ·                   ·
+·                        spans                  FULL SCAN                  ·                   ·
+
+# Do not use the index when using a _ prefixed builtin.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k FROM geo_table WHERE _ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+·               distribution  local                                                               ·          ·
+·               vectorized    true                                                                ·          ·
+render          ·             ·                                                                   (k)        ·
+ │              render 0      k                                                                   ·          ·
+ └── filter     ·             ·                                                                   (k, geom)  ·
+      │         filter        _st_intersects('010100000000000000000008400000000000000840', geom)  ·          ·
+      └── scan  ·             ·                                                                   (k, geom)  ·
+·               table         geo_table@primary                                                   ·          ·
+·               spans         FULL SCAN                                                           ·          ·

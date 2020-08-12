@@ -120,7 +120,7 @@ func (tq *testQueue) setDisabled(d bool) {
 }
 
 func (tq *testQueue) Start(stopper *stop.Stopper) {
-	stopper.RunWorker(context.TODO(), func(context.Context) {
+	stopper.RunWorker(context.Background(), func(context.Context) {
 		for {
 			select {
 			case <-time.After(1 * time.Millisecond):
@@ -192,6 +192,7 @@ func (tq *testQueue) isDone() bool {
 // removed from multiple queues.
 func TestScannerAddToQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q1, q2 := &testQueue{}, &testQueue{}
@@ -229,7 +230,7 @@ func TestScannerAddToQueues(t *testing.T) {
 	})
 
 	// Stop scanner and verify both queues are stopped.
-	stopper.Stop(context.TODO())
+	stopper.Stop(context.Background())
 	if !q1.isDone() || !q2.isDone() {
 		t.Errorf("expected all queues to stop; got %t, %t", q1.isDone(), q2.isDone())
 	}
@@ -239,6 +240,7 @@ func TestScannerAddToQueues(t *testing.T) {
 // of how many, to match scanInterval.
 func TestScannerTiming(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	const runTime = 100 * time.Millisecond
 	const maxError = 7500 * time.Microsecond
@@ -257,7 +259,7 @@ func TestScannerTiming(t *testing.T) {
 			stopper := stop.NewStopper()
 			s.Start(stopper)
 			time.Sleep(runTime)
-			stopper.Stop(context.TODO())
+			stopper.Stop(context.Background())
 
 			avg := s.avgScan()
 			log.Infof(context.Background(), "%d: average scan: %s", i, avg)
@@ -273,6 +275,7 @@ func TestScannerTiming(t *testing.T) {
 // TestScannerPaceInterval tests that paceInterval returns the correct interval.
 func TestScannerPaceInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	durations := []time.Duration{
 		30 * time.Millisecond,
@@ -311,6 +314,7 @@ func TestScannerPaceInterval(t *testing.T) {
 // specified max idle time.
 func TestScannerMinMaxIdleTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const targetInterval = 100 * time.Millisecond
 	const minIdleTime = 10 * time.Millisecond
 	const maxIdleTime = 15 * time.Millisecond
@@ -328,6 +332,7 @@ func TestScannerMinMaxIdleTime(t *testing.T) {
 // replicas from being added to queues.
 func TestScannerDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const count = 3
 	ranges := newTestRangeSet(count, t)
 	q := &testQueue{}
@@ -336,7 +341,7 @@ func TestScannerDisabled(t *testing.T) {
 	s := newReplicaScanner(makeAmbCtx(), clock, 1*time.Millisecond, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	s.Start(stopper)
 
 	// Verify queue gets all ranges.
@@ -382,6 +387,7 @@ func TestScannerDisabled(t *testing.T) {
 
 func TestScannerDisabledWithZeroInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ranges := newTestRangeSet(1, t)
 	s := newReplicaScanner(makeAmbCtx(), nil, 0*time.Millisecond, 0, 0, ranges)
 	if !s.GetDisabled() {
@@ -392,6 +398,7 @@ func TestScannerDisabledWithZeroInterval(t *testing.T) {
 // TestScannerEmptyRangeSet verifies that an empty range set doesn't busy loop.
 func TestScannerEmptyRangeSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ranges := newTestRangeSet(0, t)
 	q := &testQueue{}
 	mc := hlc.NewManualClock(123)
@@ -399,7 +406,7 @@ func TestScannerEmptyRangeSet(t *testing.T) {
 	s := newReplicaScanner(makeAmbCtx(), clock, time.Hour, 0, 0, ranges)
 	s.AddQueues(q)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	s.Start(stopper)
 	time.Sleep(time.Millisecond) // give it some time to (not) busy loop
 	if count := s.scanCount(); count > 1 {

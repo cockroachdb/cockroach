@@ -17,10 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestUnresolvedObjectName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		in, out  string
 		expanded string
@@ -74,6 +76,7 @@ func TestUnresolvedObjectName(t *testing.T) {
 // to produce a fully qualified name when required.
 func TestUnresolvedNameAnnotation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	aIdx := tree.AnnotationIdx(1)
 	u, err := tree.NewUnresolvedObjectName(1, [3]string{"t"}, aIdx)
 	if err != nil {

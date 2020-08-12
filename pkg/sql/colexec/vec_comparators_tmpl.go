@@ -20,45 +20,18 @@
 package colexec
 
 import (
-	"bytes"
 	"fmt"
-	"math"
-	"time"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
-
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
 
 // {{/*
 
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "bytes" package.
-var _ bytes.Buffer
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
-
-// Dummy import to pull in "tree" package.
-var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
@@ -113,8 +86,8 @@ func (c *_TYPEVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	} else if n2 {
 		return 1
 	}
-	left := execgen.UNSAFEGET(c.vecs[vecIdx1], valIdx1)
-	right := execgen.UNSAFEGET(c.vecs[vecIdx2], valIdx2)
+	left := c.vecs[vecIdx1].Get(valIdx1)
+	right := c.vecs[vecIdx2].Get(valIdx2)
 	var cmp int
 	_COMPARE(cmp, left, right, c.vecs[vecIdx1], c.vecs[vecIdx2])
 	return cmp
@@ -139,7 +112,7 @@ func (c *_TYPEVecComparator) set(srcVecIdx, dstVecIdx int, srcIdx, dstIdx int) {
 		// source bytes slice is. Refer to the CopySlice comment for an example.
 		execgen.COPYSLICE(c.vecs[dstVecIdx], c.vecs[srcVecIdx], dstIdx, srcIdx, srcIdx+1)
 		// {{else}}
-		v := execgen.UNSAFEGET(c.vecs[srcVecIdx], srcIdx)
+		v := c.vecs[srcVecIdx].Get(srcIdx)
 		execgen.SET(c.vecs[dstVecIdx], dstIdx, v)
 		// {{end}}
 	}

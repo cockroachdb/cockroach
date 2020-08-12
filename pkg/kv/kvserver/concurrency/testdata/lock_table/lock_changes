@@ -53,9 +53,29 @@ local: num=0
 # Lock is reacquired at same epoch with lower timestamp and different durability.
 # The lock's timestamp is allowed to regress in this case, because it must never
 # diverge from the replicated state machine.
+#
+# We first add a queued writer because the lockTable currently does not keep track
+# of uncontended replicated locks.
 # ---------------------------------------------------------------------------------
 
+new-request r=reqContend txn=none ts=10 spans=w@a
+----
+
+scan r=reqContend
+----
+start-waiting: true
+
 acquire r=req2 k=a durability=r
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 0, seqs: [2, 3]
+   queued writers:
+    active: true req: 1, txn: none
+   distinguished req: 1
+local: num=0
+
+dequeue r=reqContend
 ----
 global: num=1
  lock: "a"
@@ -119,8 +139,8 @@ global: num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000008,0, info: repl epoch: 0, seqs: [3], unrepl epoch: 2, seqs: [0]
    waiting readers:
-    req: 1, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 1
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
 local: num=0
 
 new-txn txn=txn1 ts=14 epoch=1 seq=1
@@ -135,8 +155,8 @@ global: num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 2, seqs: [0]
    waiting readers:
-    req: 1, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 1
+    req: 2, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 2
 local: num=0
 
 guard-state r=req5
@@ -178,8 +198,8 @@ global: num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000014,0, info: repl epoch: 1, seqs: [1], unrepl epoch: 1, seqs: [0, 1]
    waiting readers:
-    req: 2, txn: 00000000-0000-0000-0000-000000000002
-   distinguished req: 2
+    req: 3, txn: 00000000-0000-0000-0000-000000000002
+   distinguished req: 3
 local: num=0
 
 guard-state r=req7

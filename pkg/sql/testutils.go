@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -28,14 +29,14 @@ import (
 // other tables.
 func CreateTestTableDescriptor(
 	ctx context.Context,
-	parentID, id sqlbase.ID,
+	parentID, id descpb.ID,
 	schema string,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
+	privileges *descpb.PrivilegeDescriptor,
+) (*sqlbase.MutableTableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return nil, err
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -44,7 +45,7 @@ func CreateTestTableDescriptor(
 		desc, err := MakeTableDesc(
 			ctx,
 			nil, /* txn */
-			nil, /* vt */
+			nil, /* vs */
 			st,
 			n,
 			parentID, keys.PublicSchemaID, id,
@@ -54,9 +55,9 @@ func CreateTestTableDescriptor(
 			&semaCtx,
 			&evalCtx,
 			&sessiondata.SessionData{}, /* sessionData */
-			false,                      /* temporary */
+			tree.PersistencePermanent,
 		)
-		return desc.TableDescriptor, err
+		return &desc, err
 	case *tree.CreateSequence:
 		desc, err := MakeSequenceTableDesc(
 			n.Name.Table(),
@@ -64,12 +65,12 @@ func CreateTestTableDescriptor(
 			parentID, keys.PublicSchemaID, id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
-			false, /* temporary */
-			nil,   /* params */
+			tree.PersistencePermanent,
+			nil, /* params */
 		)
-		return desc.TableDescriptor, err
+		return &desc, err
 	default:
-		return sqlbase.TableDescriptor{}, errors.Errorf("unexpected AST %T", stmt.AST)
+		return nil, errors.Errorf("unexpected AST %T", stmt.AST)
 	}
 }
 
@@ -125,7 +126,6 @@ func (dsp *DistSQLPlanner) Exec(
 		rw,
 		stmt.AST.StatementType(),
 		execCfg.RangeDescriptorCache,
-		execCfg.LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
 			execCfg.Clock.Update(ts)
@@ -135,9 +135,7 @@ func (dsp *DistSQLPlanner) Exec(
 	defer recv.Release()
 
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p.txn)
-	planCtx.isLocal = !distribute
-	planCtx.planner = p
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()

@@ -12,18 +12,20 @@ package rowexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 )
 
 type ProcessorTestConfig struct {
@@ -68,10 +70,17 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 		case nil:
 			return tree.DNull
 		default:
-			panic(fmt.Sprintf("type %T not supported yet", concreteType))
+			panic(errors.AssertionFailedf("type %T not supported yet", concreteType))
 		}
 	}()
-	return sqlbase.DatumToEncDatum(datumType, d)
+	// Initialize both EncDatum.Datum, and EncDatum.encoded.
+	encoded, err := sqlbase.EncodeTableKey(nil, d, encoding.Ascending)
+	if err != nil {
+		panic(err)
+	}
+	encodedDatum := sqlbase.EncDatumFromEncoded(descpb.DatumEncoding_ASCENDING_KEY, encoded)
+	encodedDatum.Datum = d
+	return encodedDatum
 }
 
 func (r ProcessorTestCaseRows) toEncDatumRows() sqlbase.EncDatumRows {

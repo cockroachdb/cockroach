@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58,7 +59,7 @@ func TestHashJoiner(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -88,7 +89,7 @@ func TestHashJoiner(t *testing.T) {
 					Cfg: &execinfra.ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
-						DiskMonitor: &diskMonitor,
+						DiskMonitor: diskMonitor,
 					},
 				}
 				if flowCtxSetup != nil {
@@ -174,7 +175,7 @@ func TestHashJoinerError(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -198,7 +199,7 @@ func TestHashJoinerError(t *testing.T) {
 				Cfg: &execinfra.ServerConfig{
 					Settings:    st,
 					TempStorage: tempEngine,
-					DiskMonitor: &diskMonitor,
+					DiskMonitor: diskMonitor,
 				},
 			}
 
@@ -285,7 +286,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           sqlbase.InnerJoin,
+		Type:           descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
@@ -389,7 +390,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           sqlbase.InnerJoin,
+		Type:           descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
@@ -532,7 +533,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	spec := &execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           sqlbase.InnerJoin,
+		Type:           descpb.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	post := &execinfrapb.PostProcessSpec{}

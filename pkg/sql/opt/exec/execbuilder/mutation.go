@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -54,7 +55,7 @@ func (b *Builder) buildMutationInput(
 		}
 	}
 
-	input, err = b.ensureColumns(input, colList, nil, inputExpr.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, colList, inputExpr.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -78,9 +79,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
 	input, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
@@ -91,8 +93,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
-	// If we planned FK checks, disable the execution code for FK checks.
-	disableExecFKs := !ins.FKFallback
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
@@ -100,7 +100,6 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 		returnOrds,
 		checkOrds,
 		b.allowAutoCommit && len(ins.Checks) == 0 && len(ins.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -121,18 +120,14 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 // tryBuildFastPathInsert attempts to construct an insert using the fast path,
 // checking all required conditions. See exec.Factory.ConstructInsertFastPath.
 func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok bool, _ error) {
-	// If FKFallback is set, the optimizer-driven FK checks are disabled. We must
-	// use the legacy path.
-	if !b.allowInsertFastPath || ins.FKFallback {
-		return execPlan{}, false, nil
-	}
-
 	// Conditions from ConstructFastPathInsert:
 	//
 	//  - there are no other mutations in the statement, and the output of the
 	//    insert is not processed through side-effecting expressions (i.e. we can
 	//    auto-commit);
-	if !b.allowAutoCommit {
+	//
+	// This condition was taken into account in build().
+	if !b.allowInsertFastPath {
 		return execPlan{}, false, nil
 	}
 
@@ -223,9 +218,10 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		}
 	}
 
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
+	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
+	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
 	if !colList.Equals(values.Cols) {
 		// We have a Values input, but the columns are not in the right order. For
 		// example:
@@ -253,6 +249,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		returnOrds,
 		checkOrds,
 		fkChecks,
+		b.allowAutoCommit,
 	)
 	if err != nil {
 		return execPlan{}, false, err
@@ -277,7 +274,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) + len(upd.CheckCols)
+	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) +
+		len(upd.CheckCols) + len(upd.PartialIndexPutCols) + len(upd.PartialIndexDelCols)
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
@@ -289,6 +287,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		colList = appendColsWhenPresent(colList, upd.PassthroughCols)
 	}
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
+	colList = appendColsWhenPresent(colList, upd.PartialIndexPutCols)
+	colList = appendColsWhenPresent(colList, upd.PartialIndexDelCols)
 
 	input, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
@@ -312,7 +312,6 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		}
 	}
 
-	disableExecFKs := !upd.FKFallback
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
@@ -322,13 +321,16 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 		checkOrds,
 		passthroughCols,
 		b.allowAutoCommit && len(upd.Checks) == 0 && len(upd.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	if err := b.buildFKChecks(upd.Checks); err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKCascades(upd.WithID, upd.FKCascades); err != nil {
 		return execPlan{}, err
 	}
 
@@ -359,7 +361,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) + 1
+	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) +
+		len(ups.PartialIndexPutCols) + len(ups.PartialIndexDelCols) + 1
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
@@ -368,6 +371,8 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
+	colList = appendColsWhenPresent(colList, ups.PartialIndexPutCols)
+	colList = appendColsWhenPresent(colList, ups.PartialIndexDelCols)
 
 	input, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
@@ -386,7 +391,6 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	updateColOrds := ordinalSetFromColList(ups.UpdateCols)
 	returnColOrds := ordinalSetFromColList(ups.ReturnCols)
 	checkOrds := ordinalSetFromColList(ups.CheckCols)
-	disableExecFKs := !ups.FKFallback
 	node, err := b.factory.ConstructUpsert(
 		input.root,
 		tab,
@@ -397,13 +401,16 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		returnColOrds,
 		checkOrds,
 		b.allowAutoCommit && len(ups.Checks) == 0 && len(ups.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
 	}
 
 	if err := b.buildFKChecks(ups.Checks); err != nil {
+		return execPlan{}, err
+	}
+
+	if err := b.buildFKCascades(ups.WithID, ups.FKCascades); err != nil {
 		return execPlan{}, err
 	}
 
@@ -428,8 +435,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols))
+	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PartialIndexDelCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
+	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
 
 	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
@@ -441,14 +449,12 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
-	disableExecFKs := !del.FKFallback
 	node, err := b.factory.ConstructDelete(
 		input.root,
 		tab,
 		fetchColOrds,
 		returnColOrds,
 		b.allowAutoCommit && len(del.Checks) == 0 && len(del.FKCascades) == 0,
-		disableExecFKs,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -633,27 +639,41 @@ func (b *Builder) buildDeleteRange(
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
 	needed, _ := b.getColumns(scan.Cols, scan.Table)
-	maxKeys := 0
-	if len(interleavedTables) == 0 {
-		// Calculate the maximum number of keys that the scan could return by
-		// multiplying the number of possible result rows by the number of column
-		// families of the table. The factory uses this information to determine
-		// whether to allow autocommit.
-		// We don't do this if there are interleaved children, as we don't know how
-		// many children rows may be in range.
-		maxKeys = int(b.indexConstraintMaxResults(scan)) * tab.FamilyCount()
+
+	autoCommit := false
+	if b.allowAutoCommit {
+		// Permitting autocommit in DeleteRange is very important, because DeleteRange
+		// is used for simple deletes from primary indexes like
+		// DELETE FROM t WHERE key = 1000
+		// When possible, we need to make this a 1pc transaction for performance
+		// reasons. At the same time, we have to be careful, because DeleteRange
+		// returns all of the keys that it deleted - so we have to set a limit on the
+		// DeleteRange request. But, trying to set autocommit and a limit on the
+		// request doesn't work properly if the limit is hit. So, we permit autocommit
+		// here if we can guarantee that the number of returned keys is finite and
+		// relatively small.
+
+		// We can't calculate the maximum number of keys if there are interleaved
+		// children, as we don't know how many children rows may be in range.
+		if len(interleavedTables) == 0 {
+			if maxRows, ok := b.indexConstraintMaxResults(scan); ok {
+				if maxKeys := maxRows * uint64(tab.FamilyCount()); maxKeys <= row.TableTruncateChunkSize {
+					// Other mutations only allow auto-commit if there are no FK checks or
+					// cascades. In this case, we won't actually execute anything for the
+					// checks or cascades - if we got this far, we determined that the FKs
+					// match the interleaving hierarchy and a delete range is sufficient.
+					autoCommit = true
+				}
+			}
+		}
 	}
-	// Other mutations only allow auto-commit if there are no FK checks or
-	// cascades. In this case, we won't actually execute anything for the checks
-	// or cascades - if we got this far, we determined that the FKs match the
-	// interleaving hierarchy and a delete range is sufficient.
+
 	root, err := b.factory.ConstructDeleteRange(
 		tab,
 		needed,
 		scan.Constraint,
 		interleavedTables,
-		maxKeys,
-		b.allowAutoCommit,
+		autoCommit,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -699,9 +719,10 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 
 	var colMap opt.ColMap
 	ord := 0
-	for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		colID := private.Table.ColumnID(i)
-		if outCols.Contains(colID) {
+		// System columns should not be included in mutations.
+		if outCols.Contains(colID) && !cat.IsSystemColumn(tab, i) {
 			colMap.Set(int(colID), ord)
 			ord++
 		}

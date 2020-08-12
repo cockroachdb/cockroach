@@ -14,27 +14,25 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 func initBackfillerSpec(
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc descpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
-	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (execinfrapb.BackfillerSpec, error) {
 	ret := execinfrapb.BackfillerSpec{
-		Table:       desc,
-		Duration:    duration,
-		ChunkSize:   chunkSize,
-		OtherTables: otherTables,
-		ReadAsOf:    readAsOf,
+		Table:     desc,
+		Duration:  duration,
+		ChunkSize: chunkSize,
+		ReadAsOf:  readAsOf,
 	}
 	switch backfillType {
 	case indexBackfill:
@@ -53,14 +51,13 @@ func initBackfillerSpec(
 func (dsp *DistSQLPlanner) createBackfiller(
 	planCtx *PlanningCtx,
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc descpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,
-	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, readAsOf)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -70,7 +67,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		return PhysicalPlan{}, err
 	}
 
-	var p PhysicalPlan
+	p := MakePhysicalPlan(dsp.gatewayNodeID)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}

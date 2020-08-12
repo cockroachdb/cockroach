@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -31,8 +32,9 @@ import (
 //
 // In the future this can also be used to pool coldata.Vec allocations.
 type Allocator struct {
-	ctx context.Context
-	acc *mon.BoundAccount
+	ctx     context.Context
+	acc     *mon.BoundAccount
+	factory coldata.ColumnFactory
 }
 
 func selVectorSize(capacity int) int64 {
@@ -77,8 +79,14 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 }
 
 // NewAllocator constructs a new Allocator instance.
-func NewAllocator(ctx context.Context, acc *mon.BoundAccount) *Allocator {
-	return &Allocator{ctx: ctx, acc: acc}
+func NewAllocator(
+	ctx context.Context, acc *mon.BoundAccount, factory coldata.ColumnFactory,
+) *Allocator {
+	return &Allocator{
+		ctx:     ctx,
+		acc:     acc,
+		factory: factory,
+	}
 }
 
 // NewMemBatch allocates a new in-memory coldata.Batch.
@@ -93,7 +101,7 @@ func (a *Allocator) NewMemBatchWithSize(typs []*types.T, size int) coldata.Batch
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemBatchWithSize(typs, size)
+	return coldata.NewMemBatchWithSize(typs, size, a.factory)
 }
 
 // NewMemBatchNoCols creates a "skeleton" of new in-memory coldata.Batch. It
@@ -158,7 +166,7 @@ func (a *Allocator) NewMemColumn(t *types.T, n int) coldata.Vec {
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemColumn(t, n)
+	return coldata.NewMemColumn(t, n, a.factory)
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
@@ -178,9 +186,15 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	}
 	width := b.Width()
 	if colIdx < width {
-		presentType := b.ColVec(colIdx).Type()
+		presentVec := b.ColVec(colIdx)
+		presentType := presentVec.Type()
 		if presentType.Identical(t) {
 			// We already have the vector of the desired type in place.
+			if presentVec.CanonicalTypeFamily() == types.BytesFamily {
+				// Flat bytes vector needs to be reset before the vector can be
+				// reused.
+				presentVec.Bytes().Reset()
+			}
 			return
 		}
 		if presentType.Family() == types.UnknownFamily {
@@ -254,21 +268,15 @@ func (a *Allocator) ReleaseMemory(size int64) {
 }
 
 const (
-	// SizeOfBool is the size of a single bool value.
-	SizeOfBool = int(unsafe.Sizeof(true))
-	sizeOfInt  = int(unsafe.Sizeof(int(0)))
-	// SizeOfInt16 is the size of a single int16 value.
-	SizeOfInt16 = int(unsafe.Sizeof(int16(0)))
-	// SizeOfInt32 is the size of a single int32 value.
-	SizeOfInt32 = int(unsafe.Sizeof(int32(0)))
-	// SizeOfInt64 is the size of a single int64 value.
-	SizeOfInt64 = int(unsafe.Sizeof(int64(0)))
-	// SizeOfFloat64 is the size of a single float64 value.
-	SizeOfFloat64 = int(unsafe.Sizeof(float64(0)))
-	// SizeOfTime is the size of a single time.Time value.
-	SizeOfTime = int(unsafe.Sizeof(time.Time{}))
-	// SizeOfDuration is the size of a single duration.Duration value.
-	SizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	sizeOfBool     = int(unsafe.Sizeof(true))
+	sizeOfInt      = int(unsafe.Sizeof(int(0)))
+	sizeOfInt16    = int(unsafe.Sizeof(int16(0)))
+	sizeOfInt32    = int(unsafe.Sizeof(int32(0)))
+	sizeOfInt64    = int(unsafe.Sizeof(int64(0)))
+	sizeOfFloat64  = int(unsafe.Sizeof(float64(0)))
+	sizeOfTime     = int(unsafe.Sizeof(time.Time{}))
+	sizeOfDuration = int(unsafe.Sizeof(duration.Duration{}))
+	sizeOfDatum    = int(unsafe.Sizeof(tree.Datum(nil)))
 )
 
 // SizeOfBatchSizeSelVector is the size (in bytes) of a selection vector of
@@ -286,7 +294,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 		case types.BoolFamily:
-			acc += SizeOfBool
+			acc += sizeOfBool
 		case types.BytesFamily:
 			// For byte arrays, we initially allocate BytesInitialAllocationFactor
 			// number of bytes (plus an int32 for the offset) for each row, so we use
@@ -294,18 +302,18 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// memory footprint will be used: whenever a modification of Bytes takes
 			// place, the Allocator will measure the old footprint and the updated
 			// one and will update the memory account accordingly.
-			acc += coldata.BytesInitialAllocationFactor + SizeOfInt32
+			acc += coldata.BytesInitialAllocationFactor + sizeOfInt32
 		case types.IntFamily:
 			switch t.Width() {
 			case 16:
-				acc += SizeOfInt16
+				acc += sizeOfInt16
 			case 32:
-				acc += SizeOfInt32
+				acc += sizeOfInt32
 			default:
-				acc += SizeOfInt64
+				acc += sizeOfInt64
 			}
 		case types.FloatFamily:
-			acc += SizeOfFloat64
+			acc += sizeOfFloat64
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects.
@@ -318,13 +326,18 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int {
 			// timestamps, so if we were to include that in the estimation, we would
 			// significantly overestimate.
 			// TODO(yuzefovich): figure out whether the caching does take place.
-			acc += SizeOfTime
+			acc += sizeOfTime
 		case types.IntervalFamily:
-			acc += SizeOfDuration
-		case types.UnknownFamily:
-			// Placeholder coldata.Vecs of unknown types are allowed.
+			acc += sizeOfDuration
+		case typeconv.DatumVecCanonicalTypeFamily:
+			// In datum vec we need to account for memory underlying the struct
+			// that is the implementation of tree.Datum interface (for example,
+			// tree.DBoolFalse) as well as for the overhead of storing that
+			// implementation in the slice of tree.Datums.
+			implementationSize, _ := tree.DatumTypeSize(t)
+			acc += int(implementationSize) + sizeOfDatum
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t.String()))
+			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", t))
 		}
 	}
 	return acc * batchLength

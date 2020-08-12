@@ -15,10 +15,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -104,6 +107,14 @@ func unresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 
 func (n *setVarNode) startExec(params runParams) error {
 	var strVal string
+
+	if _, ok := DummyVars[n.name]; ok {
+		telemetry.Inc(sqltelemetry.DummySessionVarValueCounter(n.name))
+		params.p.SendClientNotice(
+			params.ctx,
+			pgnotice.NewWithSeverityf("WARNING", "setting session var %q is a no-op", n.name),
+		)
+	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.EvalContext())
@@ -270,51 +281,76 @@ func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
 	return nil
 }
 
-func stmtTimeoutVarGetStringVal(
-	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-) (string, error) {
-	if len(values) != 1 {
-		return "", newSingleArgVarError("statement_timeout")
-	}
-	d, err := values[0].Eval(&evalCtx.EvalContext)
-	if err != nil {
-		return "", err
-	}
-
-	var timeout time.Duration
-	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
-	case *tree.DString:
-		return string(*v), nil
-	case *tree.DInterval:
-		timeout, err = intervalToDuration(v)
-		if err != nil {
-			return "", wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
+func makeTimeoutVarGetter(
+	varName string,
+) func(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr) (string, error) {
+	return func(
+		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
 		}
-	case *tree.DInt:
-		timeout = time.Duration(*v) * time.Millisecond
+		d, err := values[0].Eval(&evalCtx.EvalContext)
+		if err != nil {
+			return "", err
+		}
+
+		var timeout time.Duration
+		switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInterval:
+			timeout, err = intervalToDuration(v)
+			if err != nil {
+				return "", wrapSetVarError(varName, values[0].String(), "%v", err)
+			}
+		case *tree.DInt:
+			timeout = time.Duration(*v) * time.Millisecond
+		}
+		return timeout.String(), nil
 	}
-	return timeout.String(), nil
 }
 
-func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
-	interval, err := tree.ParseDIntervalWithTypeMetadata(s, types.IntervalTypeMetadata{
+func validateTimeoutVar(timeString string, varName string) (time.Duration, error) {
+	interval, err := tree.ParseDIntervalWithTypeMetadata(timeString, types.IntervalTypeMetadata{
 		DurationField: types.IntervalDurationField{
 			DurationType: types.IntervalDurationType_MILLISECOND,
 		},
 	})
 	if err != nil {
-		return wrapSetVarError("statement_timeout", s, "%v", err)
+		return 0, wrapSetVarError(varName, timeString, "%v", err)
 	}
 	timeout, err := intervalToDuration(interval)
 	if err != nil {
-		return wrapSetVarError("statement_timeout", s, "%v", err)
+		return 0, wrapSetVarError(varName, timeString, "%v", err)
 	}
 
 	if timeout < 0 {
-		return wrapSetVarError("statement_timeout", s,
-			"statement_timeout cannot have a negative duration")
+		return 0, wrapSetVarError(varName, timeString,
+			"%v cannot have a negative duration", varName)
 	}
+
+	return timeout, nil
+}
+
+func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(s, "statement_timeout")
+	if err != nil {
+		return err
+	}
+
 	m.SetStmtTimeout(timeout)
+	return nil
+}
+
+func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(s, "idle_in_session_timeout")
+	if err != nil {
+		return err
+	}
+
+	m.SetIdleInSessionTimeout(timeout)
 	return nil
 }
 

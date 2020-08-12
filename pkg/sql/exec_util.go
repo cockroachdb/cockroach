@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -40,6 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/accessors"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -49,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -141,10 +148,20 @@ const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
 
 // ReorderJoinsLimitClusterValue controls the cluster default for the maximum
 // number of joins reordered.
-var ReorderJoinsLimitClusterValue = settings.RegisterNonNegativeIntSetting(
+var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	ReorderJoinsLimitClusterSettingName,
 	"default number of joins to reorder",
 	opt.DefaultJoinOrderLimit,
+	func(limit int64) error {
+		if limit < 0 || limit > opt.MaxReorderJoinsLimit {
+			return pgerror.Newf(pgcode.InvalidParameterValue,
+				"cannot set %s to a value less than 0 or greater than %v",
+				ReorderJoinsLimitClusterSettingName,
+				opt.MaxReorderJoinsLimit,
+			)
+		}
+		return nil
+	},
 )
 
 var requireExplicitPrimaryKeysClusterMode = settings.RegisterBoolSetting(
@@ -165,22 +182,22 @@ var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var enumsEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_enums.enabled",
+	"default value for experimental_enable_enums; allows for creation and use of ENUM types",
+	false,
+)
+
+var userDefinedSchemasClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_user_defined_schemas.enabled",
+	"default value for experimental_enable_user_defined_schemas; allows for creation of user defined schemas",
+	false,
+)
+
 var zigzagJoinClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.zigzag_join.enabled",
 	"default value for enable_zigzag_join session setting; allows use of zig-zag join by default",
 	true,
-)
-
-var optDrivenFKChecksClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.optimizer_foreign_keys.enabled",
-	"default value for optimizer_foreign_keys session setting; enables optimizer-driven foreign key checks by default",
-	true,
-)
-
-var optDrivenFKCascadesClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_optimizer_foreign_key_cascades.enabled",
-	"default value for experimental_optimizer_foreign_key_cascades session setting; enables optimizer-driven foreign key cascades by default",
-	false,
 )
 
 var optDrivenFKCascadesClusterLimit = settings.RegisterNonNegativeIntSetting(
@@ -213,6 +230,13 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
+// TODO(mgartner): Remove this setting once partial indexes are fully supported.
+var partialIndexClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_partial_indexes.enabled",
+	"default value for experimental_partial_indexes session setting; disables creation of partial indexes by default",
+	false,
+)
+
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.implicit_select_for_update.enabled",
 	"default value for enable_implicit_select_for_update session setting; enables FOR UPDATE locking during the row-fetch phase of mutation statements",
@@ -223,6 +247,43 @@ var insertFastPathClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.insert_fast_path.enabled",
 	"default value for enable_insert_fast_path session setting; enables a specialized insert path",
 	true,
+)
+
+var planInterleavedJoins = settings.RegisterBoolSetting(
+	"sql.distsql.interleaved_joins.enabled",
+	"if set we plan interleaved table joins instead of merge joins when possible",
+	true,
+)
+var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_alter_column_type.enabled",
+	"default value for experimental_alter_column_type session setting; "+
+		"enables the use of ALTER COLUMN TYPE for general conversions",
+	false,
+)
+
+var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+	"sql.defaults.idle_in_session_timeout",
+	"default value for the idle_in_session_timeout; "+
+		"enables automatically killing sessions that exceed the "+
+		"idle_in_session_timeout threshold",
+	0,
+)
+
+// ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
+// setting that controls experimentalDistSQLPlanningClusterMode below.
+const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
+
+// experimentalDistSQLPlanningClusterMode can be used to enable
+// optimizer-driven DistSQL planning that sidesteps intermediate planNode
+// transition when going from opt.Expr to DistSQL processor specs.
+var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
+	ExperimentalDistSQLPlanningClusterSettingName,
+	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning",
+	"off",
+	map[int64]string{
+		int64(sessiondata.ExperimentalDistSQLPlanningOff): "off",
+		int64(sessiondata.ExperimentalDistSQLPlanningOn):  "on",
+	},
 )
 
 // VectorizeClusterSettingName is the name for the cluster setting that controls
@@ -591,10 +652,11 @@ type ExecutorConfig struct {
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
 	DB                *kv.DB
-	Gossip            gossip.DeprecatedGossip
+	Gossip            gossip.OptionalGossip
+	SystemConfig      config.SystemConfigProvider
 	DistSender        *kvcoord.DistSender
 	RPCContext        *rpc.Context
-	LeaseManager      *LeaseManager
+	LeaseManager      *lease.Manager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
 	// StatusServer gives access to the Status service.
@@ -613,18 +675,20 @@ type ExecutorConfig struct {
 	InternalExecutor *InternalExecutor
 	QueryCache       *querycache.C
 
-	TestingKnobs              ExecutorTestingKnobs
-	PGWireTestingKnobs        *PGWireTestingKnobs
-	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
-	GCJobTestingKnobs         *GCJobTestingKnobs
-	DistSQLRunTestingKnobs    *execinfra.TestingKnobs
-	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
+	TestingKnobs                  ExecutorTestingKnobs
+	PGWireTestingKnobs            *PGWireTestingKnobs
+	SchemaChangerTestingKnobs     *SchemaChangerTestingKnobs
+	TypeSchemaChangerTestingKnobs *TypeSchemaChangerTestingKnobs
+	GCJobTestingKnobs             *GCJobTestingKnobs
+	DistSQLRunTestingKnobs        *execinfra.TestingKnobs
+	EvalContextTestingKnobs       tree.EvalContextTestingKnobs
+	TenantTestingKnobs            *TenantTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
-	// Caches updated by DistSQL.
+	// RangeDescriptorCache is updated by DistSQL when it finds out about
+	// misplanned spans.
 	RangeDescriptorCache *kvcoord.RangeDescriptorCache
-	LeaseHolderCache     *kvcoord.LeaseHolderCache
 
 	// Role membership cache.
 	RoleMemberCache *MembershipCache
@@ -634,6 +698,8 @@ type ExecutorConfig struct {
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
+
+	ExternalIODirConfig base.ExternalIODirConfig
 }
 
 // Organization returns the value of cluster.organization.
@@ -704,6 +770,9 @@ type ExecutorTestingKnobs struct {
 	// statement.
 	AfterExecute func(ctx context.Context, stmt string, err error)
 
+	// AfterExecCmd is called after successful execution of any command.
+	AfterExecCmd func(ctx context.Context, cmd Command, buf *StmtBuf)
+
 	// DisableAutoCommit, if set, disables the auto-commit functionality of some
 	// SQL statements. That functionality allows some statements to commit
 	// directly when they're executed in an implicit SQL txn, without waiting for
@@ -736,6 +805,14 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+
+	// WithStatementTrace is called after the statement is executed in
+	// execStmtInOpenState.
+	WithStatementTrace func(span opentracing.Span, stmt string)
+
+	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
+	// a given table id.
+	RunAfterSCJobsCacheLookup func(*jobs.Job)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -755,13 +832,32 @@ var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
-// databaseCacheHolder is a thread-safe container for a *databaseCache.
+// TenantTestingKnobs contains knobs for tenant behavior.
+type TenantTestingKnobs struct {
+	// ClusterSettingsUpdater is a field that if set, allows the tenant to set
+	// in-memory cluster settings. SQL tenants are otherwise prohibited from
+	// setting cluster settings.
+	ClusterSettingsUpdater settings.Updater
+}
+
+var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*TenantTestingKnobs) ModuleTestingKnobs() {}
+
+// CanSetClusterSettings is a helper method that returns whether the tenant can
+// set in-memory cluster settings.
+func (k *TenantTestingKnobs) CanSetClusterSettings() bool {
+	return k != nil && k.ClusterSettingsUpdater != nil
+}
+
+// databaseCacheHolder is a thread-safe container for a *Cache.
 // It also allows clients to block until the cache is updated to a desired
 // state.
 //
 // NOTE(andrei): The way in which we handle the database cache is funky: there's
 // this top-level holder, which gets updated on gossip updates. Then, each
-// session gets its *databaseCache, which is updated from the holder after every
+// session gets its *Cache, which is updated from the holder after every
 // transaction - the SystemConfig is updated and the lazily computer map of db
 // names to ids is wiped. So many session are sharing and contending on a
 // mutable cache, but nobody's sharing this holder. We should make up our mind
@@ -773,26 +869,26 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 type databaseCacheHolder struct {
 	mu struct {
 		syncutil.Mutex
-		c  *databaseCache
+		c  *database.Cache
 		cv *sync.Cond
 	}
 }
 
-func newDatabaseCacheHolder(c *databaseCache) *databaseCacheHolder {
+func newDatabaseCacheHolder(c *database.Cache) *databaseCacheHolder {
 	dc := &databaseCacheHolder{}
 	dc.mu.c = c
 	dc.mu.cv = sync.NewCond(&dc.mu.Mutex)
 	return dc
 }
 
-func (dc *databaseCacheHolder) getDatabaseCache() *databaseCache {
+func (dc *databaseCacheHolder) getDatabaseCache() *database.Cache {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	return dc.mu.c
 }
 
-// waitForCacheState implements the dbCacheSubscriber interface.
-func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool) {
+// WaitForCacheState implements the DatabaseCacheSubscriber interface.
+func (dc *databaseCacheHolder) WaitForCacheState(cond func(*database.Cache) bool) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	for done := cond(dc.mu.c); !done; done = cond(dc.mu.c) {
@@ -800,14 +896,14 @@ func (dc *databaseCacheHolder) waitForCacheState(cond func(*databaseCache) bool)
 	}
 }
 
-// databaseCacheHolder implements the dbCacheSubscriber interface.
-var _ dbCacheSubscriber = &databaseCacheHolder{}
+// databaseCacheHolder implements the DatabaseCacheSubscriber interface.
+var _ descs.DatabaseCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
 func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
-	dc.mu.c = newDatabaseCache(dc.mu.c.codec, cfg)
+	dc.mu.c = database.NewCache(dc.mu.c.Codec(), cfg)
 	dc.mu.cv.Broadcast()
 	dc.mu.Unlock()
 }
@@ -823,38 +919,55 @@ func shouldDistributeGivenRecAndMode(
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute
 	}
-	panic(fmt.Sprintf("unhandled distsql mode %v", mode))
+	panic(errors.AssertionFailedf("unhandled distsql mode %v", mode))
 }
 
-// willDistributePlan determines whether we will distribute the given logical
-// plan, based on the gateway's SQL ID and session settings, with physical
-// planning being handled by DistSQL physical planner.
-func willDistributePlan(
+// getPlanDistribution returns the PlanDistribution that plan will have. If
+// plan already has physical representation, then the stored PlanDistribution
+// is reused, but if plan has logical representation (i.e. it is a planNode
+// tree), then we traverse that tree in order to determine the distribution of
+// the plan.
+func getPlanDistribution(
 	ctx context.Context,
+	p *planner,
 	nodeID *base.SQLIDContainer,
 	distSQLMode sessiondata.DistSQLExecMode,
-	plan planNode,
-) bool {
+	plan planMaybePhysical,
+) physicalplan.PlanDistribution {
+	if plan.isPhysicalPlan() {
+		return plan.physPlan.Distribution
+	}
+
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if p.Descriptors().HasUncommittedTypes() {
+		return physicalplan.LocalPlan
+	}
+
 	if _, singleTenant := nodeID.OptionalNodeID(); !singleTenant {
-		return false
+		return physicalplan.LocalPlan
 	}
 	if distSQLMode == sessiondata.DistSQLOff {
-		return false
+		return physicalplan.LocalPlan
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, ok := plan.(*zeroNode); ok {
-		return false
+	if _, ok := plan.planNode.(*zeroNode); ok {
+		return physicalplan.LocalPlan
 	}
 
-	rec, err := checkSupportForNode(plan)
+	rec, err := checkSupportForPlanNode(plan.planNode)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-		return false
+		return physicalplan.LocalPlan
 	}
 
-	return shouldDistributeGivenRecAndMode(rec, distSQLMode)
+	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
+		return physicalplan.FullyDistributedPlan
+	}
+	return physicalplan.LocalPlan
 }
 
 // golangFillQueryArguments transforms Go values into datums.
@@ -920,7 +1033,7 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 				}
 			}
 			if d == nil {
-				panic(fmt.Sprintf("unexpected type %T", arg))
+				panic(errors.AssertionFailedf("unexpected type %T", arg))
 			}
 		}
 		res[i] = d
@@ -977,8 +1090,10 @@ func checkResultType(typ *types.T) error {
 
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
-func (p *planner) EvalAsOfTimestamp(asOf tree.AsOfClause) (_ hlc.Timestamp, err error) {
-	ts, err := tree.EvalAsOfTimestamp(asOf, &p.semaCtx, p.EvalContext())
+func (p *planner) EvalAsOfTimestamp(
+	ctx context.Context, asOf tree.AsOfClause,
+) (_ hlc.Timestamp, err error) {
+	ts, err := tree.EvalAsOfTimestamp(ctx, asOf, &p.semaCtx, p.EvalContext())
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -1015,7 +1130,7 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timestamp, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -1041,18 +1156,18 @@ func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
 		}
 		asOf = s.AsOf
 	case *tree.Export:
-		return p.isAsOf(s.Query)
+		return p.isAsOf(ctx, s.Query)
 	case *tree.CreateStats:
 		if s.Options.AsOf.Expr == nil {
 			return nil, nil
 		}
 		asOf = s.Options.AsOf
 	case *tree.Explain:
-		return p.isAsOf(s.Statement)
+		return p.isAsOf(ctx, s.Statement)
 	default:
 		return nil, nil
 	}
-	ts, err := p.EvalAsOfTimestamp(asOf)
+	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
 	return &ts, err
 }
 
@@ -1237,17 +1352,11 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
+func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *schemaInterface {
 	sc := &schemaInterface{
-		physical: &CachedPhysicalAccessor{
-			SchemaAccessor: UncachedPhysicalAccessor{},
-			tc:             tables,
-		},
+		physical: accessors.NewCachedAccessor(catalogkv.UncachedPhysicalAccessor{}, descsCol),
 	}
-	sc.logical = &LogicalSchemaAccessor{
-		SchemaAccessor: sc.physical,
-		vt:             vt,
-	}
+	sc.logical = accessors.NewLogicalAccessor(sc.physical, vs)
 	return sc
 }
 
@@ -1257,33 +1366,31 @@ const MaxSQLBytes = 1000
 
 type jobsCollection []int64
 
-const panicLogOutputCutoffChars = 10000
+// truncateStatementStringForTelemetry truncates the string
+// representation of a statement to a maximum length, so as to not
+// create unduly large logging and error payloads.
+func truncateStatementStringForTelemetry(stmt string) string {
+	// panicLogOutputCutoiffChars is the maximum length of the copy of the
+	// current statement embedded in telemetry reports and panic errors in
+	// logs.
+	const panicLogOutputCutoffChars = 10000
+	if len(stmt) > panicLogOutputCutoffChars {
+		stmt = stmt[:len(stmt)-6] + " [...]"
+	}
+	return stmt
+}
 
 func anonymizeStmtAndConstants(stmt tree.Statement) string {
 	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
 }
 
-// AnonymizeStatementsForReporting transforms an action, SQL statements, and a value
-// (usually a recovered panic) into an error that will be useful when passed to
-// our error reporting as it exposes a scrubbed version of the statements.
-func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) error {
-	var anonymized []string
-	{
-		stmts, err := parser.Parse(sqlStmts)
-		if err == nil {
-			for i := range stmts {
-				anonymized = append(anonymized, anonymizeStmtAndConstants(stmts[i].AST))
-			}
-		}
-	}
-	anonStmtsStr := strings.Join(anonymized, "; ")
-	if len(anonStmtsStr) > panicLogOutputCutoffChars {
-		anonStmtsStr = anonStmtsStr[:panicLogOutputCutoffChars] + " [...]"
-	}
-
-	return log.Safe(
-		fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr),
-	).WithCause(r)
+// WithAnonymizedStatement attaches the anonymized form of a statement
+// to an error object.
+func WithAnonymizedStatement(err error, stmt tree.Statement) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt)
+	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
+	return errors.WithSafeDetails(err,
+		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
@@ -1932,6 +2039,14 @@ func (m *sessionDataMutator) SetDefaultReadOnly(val bool) {
 	m.data.DefaultReadOnly = val
 }
 
+func (m *sessionDataMutator) SetEnableSeqScan(val bool) {
+	m.data.EnableSeqScan = val
+}
+
+func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
+	m.data.SynchronousCommit = val
+}
+
 func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
@@ -1942,6 +2057,24 @@ func (m *sessionDataMutator) SetForceSavepointRestart(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
+}
+
+func (m *sessionDataMutator) SetEnumsEnabled(val bool) {
+	m.data.EnumsEnabled = val
+}
+
+func (m *sessionDataMutator) SetUserDefinedSchemasEnabled(val bool) {
+	m.data.UserDefinedSchemasEnabled = val
+}
+
+func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
+	val sessiondata.ExperimentalDistSQLPlanningMode,
+) {
+	m.data.ExperimentalDistSQLPlanningMode = val
+}
+
+func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
+	m.data.PartiallyDistributedPlansDisabled = val
 }
 
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
@@ -1960,14 +2093,6 @@ func (m *sessionDataMutator) SetVectorizeRowCountThreshold(val uint64) {
 	m.data.VectorizeRowCountThreshold = val
 }
 
-func (m *sessionDataMutator) SetOptimizerFKChecks(val bool) {
-	m.data.OptimizerFKChecks = val
-}
-
-func (m *sessionDataMutator) SetOptimizerFKCascades(val bool) {
-	m.data.OptimizerFKCascades = val
-}
-
 func (m *sessionDataMutator) SetOptimizerFKCascadesLimit(val int) {
 	m.data.OptimizerFKCascadesLimit = val
 }
@@ -1980,12 +2105,21 @@ func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
 }
 
+// TODO(mgartner): remove this once partial indexes are fully supported.
+func (m *sessionDataMutator) SetPartialIndexes(val bool) {
+	m.data.PartialIndexes = val
+}
+
 func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {
 	m.data.ImplicitSelectForUpdate = val
 }
 
 func (m *sessionDataMutator) SetInsertFastPath(val bool) {
 	m.data.InsertFastPath = val
+}
+
+func (m *sessionDataMutator) SetInterleavedJoins(val bool) {
+	m.data.InterleavedJoins = val
 }
 
 func (m *sessionDataMutator) SetSerialNormalizationMode(val sessiondata.SerialNormalizationMode) {
@@ -2021,6 +2155,10 @@ func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 	m.data.StmtTimeout = timeout
 }
 
+func (m *sessionDataMutator) SetIdleInSessionTimeout(timeout time.Duration) {
+	m.data.IdleInSessionTimeout = timeout
+}
+
 func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }
@@ -2035,6 +2173,10 @@ func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
 	m.data.HashShardedIndexesEnabled = val
+}
+
+func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
+	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented
@@ -2057,6 +2199,9 @@ type sqlStatsCollector struct {
 	appStats *appStats
 	// phaseTimes tracks session-level phase times.
 	phaseTimes phaseTimes
+	// previousPhaseTimes tracks the session-level phase times for the previous
+	// query. This enables the `SHOW LAST QUERY STATISTICS` observer statement.
+	previousPhaseTimes phaseTimes
 }
 
 // newSQLStatsCollector creates an instance of sqlStatsCollector. Note that
@@ -2077,16 +2222,19 @@ func (s *sqlStatsCollector) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
+	vectorized bool,
 	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	bytesRead, rowsRead int64,
+	stats topLevelQueryStats,
 ) {
 	s.appStats.recordStatement(
-		stmt, samplePlanDescription, distSQLUsed, implicitTxn, automaticRetryCount, numRows, err,
-		parseLat, planLat, runLat, svcLat, ovhLat, bytesRead, rowsRead)
+		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn,
+		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
+		ovhLat, stats,
+	)
 }
 
 // recordTransaction records stats for one transaction.
@@ -2095,9 +2243,11 @@ func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, i
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
+	previousPhaseTimes := &s.phaseTimes
 	*s = sqlStatsCollector{
-		sqlStats:   sqlStats,
-		appStats:   appStats,
-		phaseTimes: *phaseTimes,
+		sqlStats:           sqlStats,
+		appStats:           appStats,
+		previousPhaseTimes: *previousPhaseTimes,
+		phaseTimes:         *phaseTimes,
 	}
 }

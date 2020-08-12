@@ -18,11 +18,16 @@ package geographiclib
 // #include "geographiclib.h"
 import "C"
 
-import "github.com/golang/geo/s2"
+import (
+	"math"
+
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
+)
 
 var (
 	// WGS84Spheroid represents the default WGS84 ellipsoid.
-	WGS84Spheroid = MakeSpheroid(6378137, 1/298.257223563)
+	WGS84Spheroid = NewSpheroid(6378137, 1/298.257223563)
 )
 
 // Spheroid is an object that can perform geodesic operations
@@ -34,10 +39,10 @@ type Spheroid struct {
 	SphereRadius float64
 }
 
-// MakeSpheroid creates a spheroid from a radius and flattening.
-func MakeSpheroid(radius float64, flattening float64) Spheroid {
+// NewSpheroid creates a spheroid from a radius and flattening.
+func NewSpheroid(radius float64, flattening float64) *Spheroid {
 	minorAxis := radius - radius*flattening
-	s := Spheroid{
+	s := &Spheroid{
 		Radius:       radius,
 		Flattening:   flattening,
 		SphereRadius: (radius*2 + minorAxis) / 3,
@@ -48,7 +53,7 @@ func MakeSpheroid(radius float64, flattening float64) Spheroid {
 
 // Inverse solves the geodetic inverse problem on the given spheroid
 // (https://en.wikipedia.org/wiki/Geodesy#Geodetic_problems).
-// Returns s12 (distance in meters), az1 (azimuth to point 1) and az2 (azimuth to point 2).
+// Returns s12 (distance in meters), az1 (azimuth at point 1) and az2 (azimuth at point 2).
 func (s *Spheroid) Inverse(a, b s2.LatLng) (s12, az1, az2 float64) {
 	var retS12, retAZ1, retAZ2 C.double
 	C.geod_inverse(
@@ -108,4 +113,24 @@ func (s *Spheroid) AreaAndPerimeter(points []s2.Point) (area float64, perimeter 
 		&perimeterDouble,
 	)
 	return float64(areaDouble), float64(perimeterDouble)
+}
+
+// Project returns computes the location of the projected point.
+//
+// Using the direct geodesic problem from GeographicLib (Karney 2013).
+func (s *Spheroid) Project(point s2.LatLng, distance float64, azimuth s1.Angle) s2.LatLng {
+	var lat, lng C.double
+
+	C.geod_direct(
+		&s.cRepr,
+		C.double(point.Lat.Degrees()),
+		C.double(point.Lng.Degrees()),
+		C.double(azimuth*180.0/math.Pi),
+		C.double(distance),
+		&lat,
+		&lng,
+		nil,
+	)
+
+	return s2.LatLngFromDegrees(float64(lat), float64(lng))
 }

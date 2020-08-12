@@ -12,25 +12,21 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 )
 
 const hashUtilsTmpl = "pkg/sql/colexec/hash_utils_tmpl.go"
 
-func genHashUtils(wr io.Writer) error {
-	t, err := ioutil.ReadFile(hashUtilsTmpl)
-	if err != nil {
-		return err
-	}
+func genHashUtils(inputFileContents string, wr io.Writer) error {
 
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_TYPE", "{{.VecMethod}}",
+		"TemplateType", "{{.VecMethod}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 4)
 	s = assignHash.ReplaceAllString(s, makeTemplateFunctionCall("Global.UnaryAssign", 4))

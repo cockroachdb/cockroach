@@ -1,0 +1,200 @@
+# Misc tests where locks are ignored or dropped during lock acquisitions.
+
+new-lock-table maxlocks=10000
+----
+
+# ---------------------------------------------------------------------------------
+# New replicated locks are ignored.
+# ---------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=0 seq=2
+----
+
+new-request r=req1 txn=txn1 ts=10 spans=w@a
+----
+
+acquire r=req1 k=a durability=r
+----
+global: num=0
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Upgrading from unreplicated to replicated for an uncontended lock causes that
+# lock to be dropped.
+# ---------------------------------------------------------------------------------
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+acquire r=req1 k=a durability=r
+----
+global: num=0
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Upgrading from unreplicated to replicated for a lock with only waiting readers
+# causes that lock to be dropped and the readers to be released.
+# ---------------------------------------------------------------------------------
+
+new-request r=reqContendReader txn=none ts=10 spans=r@a
+----
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+scan r=reqContendReader
+----
+start-waiting: true
+
+print
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+   waiting readers:
+    req: 1, txn: none
+   distinguished req: 1
+local: num=0
+
+acquire r=req1 k=a durability=r
+----
+global: num=0
+local: num=0
+
+guard-state r=reqContendReader
+----
+new: state=doneWaiting
+
+# ---------------------------------------------------------------------------------
+# Upgrading from unreplicated to replicated for a lock with waiting reader and
+# writers causes the lock to be retained.
+# ---------------------------------------------------------------------------------
+
+new-request r=reqContendWriter txn=none ts=10 spans=w@a
+----
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+scan r=reqContendReader
+----
+start-waiting: true
+
+scan r=reqContendWriter
+----
+start-waiting: true
+
+print
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+   waiting readers:
+    req: 1, txn: none
+   queued writers:
+    active: true req: 2, txn: none
+   distinguished req: 1
+local: num=0
+
+acquire r=req1 k=a durability=r
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: repl epoch: 0, seqs: [2], unrepl epoch: 0, seqs: [2]
+   waiting readers:
+    req: 1, txn: none
+   queued writers:
+    active: true req: 2, txn: none
+   distinguished req: 1
+local: num=0
+
+guard-state r=reqContendReader
+----
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+
+guard-state r=reqContendWriter
+----
+new: state=waitFor txn=txn1 key="a" held=true guard-access=write
+
+clear
+----
+global: num=0
+local: num=0
+
+# ---------------------------------------------------------------------------------
+# Upgrading from unreplicated to replicated for an uncontended lock. The lockState
+# should be emptied and ignored by requests that have it in their tree snapshots.
+# Regression test against bug described in #50173.
+#
+# To test this, we sequence a read such that it blocks on a lock at key "a" first.
+# We then upgrade a key "b" from unreplicated to replicated, which should cause the
+# lock to be removed from the lock table. We release the lock at key "a" and watch
+# whether the read starts waiting on key "b". If it did, it would get stranded and
+# stall indefinitely.
+# ---------------------------------------------------------------------------------
+
+acquire r=req1 k=a durability=u
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+local: num=0
+
+new-txn txn=txn2 ts=10 epoch=0 seq=0
+----
+
+new-request r=req2 txn=txn2 ts=10 spans=w@b
+----
+
+acquire r=req2 k=b durability=u
+----
+global: num=2
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+ lock: "b"
+  holder: txn: 00000000-0000-0000-0000-000000000002, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [0]
+local: num=0
+
+new-request r=req3 txn=none ts=10 spans=r@a,c
+----
+
+scan r=req3
+----
+start-waiting: true
+
+guard-state r=req3
+----
+new: state=waitForDistinguished txn=txn1 key="a" held=true guard-access=read
+
+acquire r=req2 k=b durability=r
+----
+global: num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001, ts: 0.000000010,0, info: unrepl epoch: 0, seqs: [2]
+   waiting readers:
+    req: 3, txn: none
+   distinguished req: 3
+local: num=0
+
+release txn=txn1 span=a
+----
+global: num=0
+local: num=0
+
+# Before the fix in #50173, this used to enter the following state:
+#  new: state=waitForDistinguished txn=txn2 key="b" held=true guard-access=read
+guard-state r=req3
+----
+new: state=doneWaiting

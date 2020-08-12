@@ -12,7 +12,6 @@ package rowflow
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -178,7 +177,7 @@ func findProcByOutputStreamID(
 			continue
 		}
 		if len(ospec.Streams) != 1 {
-			panic(fmt.Sprintf("pass-through router with %d streams", len(ospec.Streams)))
+			panic(errors.AssertionFailedf("pass-through router with %d streams", len(ospec.Streams)))
 		}
 		if ospec.Streams[0].StreamID == streamID {
 			return pspec
@@ -266,6 +265,16 @@ func (f *rowBasedFlow) setupInputSyncs(
 			if is.Type != execinfrapb.InputSyncSpec_UNORDERED &&
 				is.Type != execinfrapb.InputSyncSpec_ORDERED {
 				return nil, errors.Errorf("unsupported input sync type %s", is.Type)
+			}
+
+			// Before we can safely use types we received over the wire in the
+			// processors, we need to make sure they are hydrated. All processors other
+			// than processors that scan over tables get their inputs from here, so
+			// this is a convenient place to do the hydration. Processors that scan
+			// over tables will have their hydration performed in ProcessorBase.Init.
+			resolver := f.TypeResolverFactory.NewTypeResolver(f.EvalCtx.Txn)
+			if err := resolver.HydrateTypeSlice(ctx, is.ColumnTypes); err != nil {
+				return nil, err
 			}
 
 			if is.Type == execinfrapb.InputSyncSpec_UNORDERED {

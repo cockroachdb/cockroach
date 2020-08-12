@@ -14,6 +14,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -45,22 +47,16 @@ type updateRun struct {
 
 	checkOrds checkSet
 
-	// rowCount is the number of rows in the current batch.
-	rowCount int
-
 	// done informs a new call to BatchedNext() that the previous call to
 	// BatchedNext() has completed the work already.
 	done bool
-
-	// rows contains the accumulated result rows if rowsNeeded is set.
-	rows *rowcontainer.RowContainer
 
 	// traceKV caches the current KV tracing flag.
 	traceKV bool
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []sqlbase.ColumnDescriptor
+	computedCols []descpb.ColumnDescriptor
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
@@ -106,7 +102,7 @@ type updateRun struct {
 	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
 	// This provides the inverse mapping of sourceSlots.
 	//
-	updateColsIdx map[sqlbase.ColumnID]int
+	updateColsIdx map[descpb.ColumnID]int
 
 	// rowIdxToRetIdx is the mapping from the columns in ru.FetchCols to the
 	// columns in the resultRowBuffer. A value of -1 is used to indicate
@@ -132,7 +128,7 @@ func (u *updateNode) startExec(params runParams) error {
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
 	if u.run.rowsNeeded {
-		u.run.rows = rowcontainer.NewRowContainer(
+		u.run.tu.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
 	}
@@ -157,11 +153,9 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 
 	tracing.AnnotateTrace()
 
-	// Advance one batch. First, clear the current batch.
-	u.run.rowCount = 0
-	if u.run.rows != nil {
-		u.run.rows.Clear(params.ctx)
-	}
+	// Advance one batch. First, clear the last batch.
+	u.run.tu.clearLastBatch(params.ctx)
+
 	// Now consume/accumulate the rows for this batch.
 	lastBatch := false
 	for {
@@ -184,19 +178,13 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 			return false, err
 		}
 
-		u.run.rowCount++
-
 		// Are we done yet with the current batch?
-		if u.run.tu.curBatchSize() >= maxUpdateBatchSize {
+		if u.run.tu.currentBatchSize >= maxUpdateBatchSize {
 			break
 		}
 	}
 
-	if u.run.rowCount > 0 {
-		if err := u.run.tu.atBatchEnd(params.ctx, u.run.traceKV); err != nil {
-			return false, err
-		}
-
+	if u.run.tu.currentBatchSize > 0 {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
@@ -207,7 +195,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if lastBatch {
-		if _, err := u.run.tu.finalize(params.ctx, u.run.traceKV); err != nil {
+		if err := u.run.tu.finalize(params.ctx); err != nil {
 			return false, err
 		}
 		// Remember we're done for the next call to BatchedNext().
@@ -217,10 +205,10 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	// Possibly initiate a run of CREATE STATISTICS.
 	params.ExecCfg().StatsRefresher.NotifyMutation(
 		u.run.tu.tableDesc().ID,
-		u.run.rowCount,
+		u.run.tu.lastBatchSize,
 	)
 
-	return u.run.rowCount > 0, nil
+	return u.run.tu.lastBatchSize > 0, nil
 }
 
 // processSourceRow processes one row from the source for update and, if
@@ -300,23 +288,41 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// contain the results of evaluation.
 	if !u.run.checkOrds.Empty() {
 		checkVals := sourceVals[len(u.run.tu.ru.FetchCols)+len(u.run.tu.ru.UpdateCols)+u.run.numPassthrough:]
-		if err := checkMutationInput(u.run.tu.tableDesc(), u.run.checkOrds, checkVals); err != nil {
+		if err := checkMutationInput(
+			params.ctx, &params.p.semaCtx, u.run.tu.tableDesc(), u.run.checkOrds, checkVals,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Create a set of partial index IDs to not add entries or remove entries
+	// from.
+	var pm row.PartialIndexUpdateHelper
+	partialIndexOrds := u.run.tu.tableDesc().PartialIndexOrds()
+	if !partialIndexOrds.Empty() {
+		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
+		partialIndexVals := sourceVals[partialIndexValOffset:]
+		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
+		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+
+		err := pm.Init(partialIndexPutVals, partialIndexDelVals, u.run.tu.tableDesc())
+		if err != nil {
 			return err
 		}
 	}
 
 	// Queue the insert in the KV batch.
-	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, u.run.traceKV)
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, pm, u.run.traceKV)
 	if err != nil {
 		return err
 	}
 
 	// If result rows need to be accumulated, do it.
-	if u.run.rows != nil {
+	if u.run.tu.rows != nil {
 		// The new values can include all columns, the construction of the
-		// values has used publicAndNonPublicColumns so the values may
-		// contain additional columns for every newly added column not yet
-		// visible. We do not want them to be available for RETURNING.
+		// values has used execinfra.ScanVisibilityPublicAndNotPublic so the
+		// values may contain additional columns for every newly added column
+		// not yet visible. We do not want them to be available for RETURNING.
 		//
 		// MakeUpdater guarantees that the first columns of the new values
 		// are those specified u.columns.
@@ -346,7 +352,7 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 			}
 		}
 
-		if _, err := u.run.rows.AddRow(params.ctx, resultValues); err != nil {
+		if _, err := u.run.tu.rows.AddRow(params.ctx, resultValues); err != nil {
 			return err
 		}
 	}
@@ -355,17 +361,13 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedCount() int { return u.run.rowCount }
+func (u *updateNode) BatchedCount() int { return u.run.tu.lastBatchSize }
 
 // BatchedCount implements the batchedPlanNode interface.
-func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.rows.At(rowIdx) }
+func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.tu.rows.At(rowIdx) }
 
 func (u *updateNode) Close(ctx context.Context) {
 	u.source.Close(ctx)
-	if u.run.rows != nil {
-		u.run.rows.Close(ctx)
-		u.run.rows = nil
-	}
 	u.run.tu.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
@@ -392,7 +394,7 @@ type sourceSlot interface {
 }
 
 type scalarSlot struct {
-	column      sqlbase.ColumnDescriptor
+	column      descpb.ColumnDescriptor
 	sourceIndex int
 }
 
@@ -418,13 +420,13 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescriptor) error {
+func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescriptor) error {
 	for i := range cols {
 		col := &cols[i]
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlbase.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := sqlbase.LimitValueWidth(col.Type, row[i], &col.Name)
+		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
 			return err
 		}

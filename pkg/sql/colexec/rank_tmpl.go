@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -62,12 +63,12 @@ func NewRankOperator(
 	}
 	switch windowFn {
 	case execinfrapb.WindowerSpec_RANK:
-		if partitionColIdx != columnOmitted {
+		if partitionColIdx != tree.NoColumnIdx {
 			return &rankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &rankNoPartitionOp{rankInitFields: initFields}, nil
 	case execinfrapb.WindowerSpec_DENSE_RANK:
-		if partitionColIdx != columnOmitted {
+		if partitionColIdx != tree.NoColumnIdx {
 			return &denseRankWithPartitionOp{rankInitFields: initFields}, nil
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil

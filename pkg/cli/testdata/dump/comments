@@ -1,0 +1,21 @@
+# Ensure quotes in comments are properly escaped, also that the object names
+# are properly escaped in the output of the COMMENT statements.
+sql
+CREATE DATABASE d;
+CREATE TABLE d."t   t" ("x'" INT PRIMARY KEY);
+COMMENT ON TABLE d."t   t" IS 'has '' quotes';
+COMMENT ON INDEX d."t   t"@primary IS 'has '' more '' quotes';
+COMMENT ON COLUMN d."t   t"."x'" IS 'i '' just '' love '' quotes';
+----
+COMMENT ON COLUMN
+
+dump d
+----
+CREATE TABLE public."t   t" (
+	"x'" INT8 NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY ("x'" ASC),
+	FAMILY "primary" ("x'")
+);
+COMMENT ON TABLE public."t   t" IS e'has \' quotes';
+COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
+COMMENT ON INDEX public."t   t"@primary IS e'has \' more \' quotes';

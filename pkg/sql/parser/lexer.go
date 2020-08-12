@@ -80,7 +80,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	*lval = l.tokens[l.lastPos]
 
 	switch lval.id {
-	case NOT, WITH, AS:
+	case NOT, WITH, AS, GENERATED:
 		nextID := int32(0)
 		if l.lastPos+1 < len(l.tokens) {
 			nextID = l.tokens[l.lastPos+1].id
@@ -97,6 +97,11 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			switch nextID {
 			case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
 				lval.id = NOT_LA
+			}
+		case GENERATED:
+			switch nextID {
+			case ALWAYS:
+				lval.id = GENERATED_ALWAYS
 			}
 
 		case WITH:
@@ -186,7 +191,7 @@ func (l *lexer) setErr(err error) {
 
 func (l *lexer) Error(e string) {
 	e = strings.TrimPrefix(e, "syntax error: ") // we'll add it again below.
-	l.lastError = pgerror.WithCandidateCode(errors.New(e), pgcode.Syntax)
+	l.lastError = pgerror.WithCandidateCode(errors.Newf("%s", e), pgcode.Syntax)
 	l.populateErrorDetails()
 }
 

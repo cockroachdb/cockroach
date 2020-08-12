@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,7 +39,7 @@ type comment struct {
 
 // selectComment retrieves all the comments pertaining to a table (comments on the table
 // itself but also column and index comments.)
-func selectComment(ctx context.Context, p PlanHookState, tableID sqlbase.ID) (tc *tableComments) {
+func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 
 	commentRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
@@ -75,7 +77,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID sqlbase.ID) (tc
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -98,36 +100,55 @@ func ShowCreateView(
 
 // showComments prints out the COMMENT statements sufficient to populate a
 // table's comments, including its index and column comments.
-func showComments(table *sqlbase.TableDescriptor, tc *tableComments, buf *bytes.Buffer) error {
+func showComments(
+	tn *tree.TableName, table *sqlbase.ImmutableTableDescriptor, tc *tableComments, buf *bytes.Buffer,
+) error {
 	if tc == nil {
 		return nil
 	}
-
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
 	if tc.comment != nil {
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", table.Name, *tc.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnTable{
+			Table:   un,
+			Comment: tc.comment,
+		})
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnByID(sqlbase.ColumnID(columnComment.subID))
+		col, err := table.FindColumnByID(descpb.ColumnID(columnComment.subID))
 		if err != nil {
 			return err
 		}
 
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON COLUMN %s.%s IS '%s'", table.Name, col.Name, columnComment.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnColumn{
+			ColumnItem: &tree.ColumnItem{
+				TableName:  tn.ToUnresolvedObjectName(),
+				ColumnName: tree.Name(col.Name),
+			},
+			Comment: &columnComment.comment,
+		})
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexByID(sqlbase.IndexID(indexComment.subID))
+		idx, err := table.FindIndexByID(descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}
 
-		buf.WriteString(";\n")
-		buf.WriteString(fmt.Sprintf("COMMENT ON INDEX %s IS '%s'", idx.Name, indexComment.comment))
+		f.WriteString(";\n")
+		f.FormatNode(&tree.CommentOnIndex{
+			Index: tree.TableIndexName{
+				Table: *tn,
+				Index: tree.UnrestrictedName(idx.Name),
+			},
+			Comment: &indexComment.comment,
+		})
 	}
 
+	buf.WriteString(f.CloseAndGetString())
 	return nil
 }
 
@@ -136,8 +157,8 @@ func showComments(table *sqlbase.TableDescriptor, tc *tableComments, buf *bytes.
 func showForeignKeyConstraint(
 	buf *bytes.Buffer,
 	dbPrefix string,
-	originTable *sqlbase.TableDescriptor,
-	fk *sqlbase.ForeignKeyConstraint,
+	originTable *sqlbase.ImmutableTableDescriptor,
+	fk *descpb.ForeignKeyConstraint,
 	lCtx simpleSchemaResolver,
 ) error {
 	var refNames []string
@@ -148,7 +169,7 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkDb, err := lCtx.getDatabaseByID(fkTable.ParentID)
+		fkTableName, err = getTableNameFromTableDescriptor(lCtx, fkTable, dbPrefix)
 		if err != nil {
 			return err
 		}
@@ -156,8 +177,6 @@ func showForeignKeyConstraint(
 		if err != nil {
 			return err
 		}
-		fkTableName = tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
-		fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
 		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
 		if err != nil {
 			return err
@@ -178,15 +197,15 @@ func showForeignKeyConstraint(
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	// We omit MATCH SIMPLE because it is the default.
-	if fk.Match != sqlbase.ForeignKeyReference_SIMPLE {
+	if fk.Match != descpb.ForeignKeyReference_SIMPLE {
 		buf.WriteByte(' ')
 		buf.WriteString(fk.Match.String())
 	}
-	if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
+	if fk.OnDelete != descpb.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
 		buf.WriteString(fk.OnDelete.String())
 	}
-	if fk.OnUpdate != sqlbase.ForeignKeyReference_NO_ACTION {
+	if fk.OnUpdate != descpb.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
 	}
@@ -196,7 +215,7 @@ func showForeignKeyConstraint(
 // ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func ShowCreateSequence(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc *sqlbase.ImmutableTableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -218,7 +237,7 @@ func ShowCreateSequence(
 
 // showFamilyClause creates the FAMILY clauses for a CREATE statement, writing them
 // to tree.FmtCtx f
-func showFamilyClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
+func showFamilyClause(desc *sqlbase.ImmutableTableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range desc.Families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
@@ -245,7 +264,7 @@ func showFamilyClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func showCreateInterleave(
-	idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
+	idx *descpb.IndexDescriptor, buf *bytes.Buffer, dbPrefix string, lCtx simpleSchemaResolver,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
@@ -283,9 +302,9 @@ func showCreateInterleave(
 func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.TableDescriptor,
-	idxDesc *sqlbase.IndexDescriptor,
-	partDesc *sqlbase.PartitioningDescriptor,
+	tableDesc sqlbase.TableDescriptor,
+	idxDesc *descpb.IndexDescriptor,
+	partDesc *descpb.PartitioningDescriptor,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,
@@ -380,7 +399,12 @@ func ShowCreatePartitioning(
 
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
-func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
+func showConstraintClause(
+	ctx context.Context,
+	desc *sqlbase.ImmutableTableDescriptor,
+	semaCtx *tree.SemaContext,
+	f *tree.FmtCtx,
+) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		if e.Hidden {
 			continue
@@ -392,8 +416,13 @@ func showConstraintClause(desc *sqlbase.TableDescriptor, f *tree.FmtCtx) {
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		f.WriteString(e.Expr)
+		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx)
+		if err != nil {
+			return err
+		}
+		f.WriteString(expr)
 		f.WriteString(")")
 	}
 	f.WriteString("\n)")
+	return nil
 }

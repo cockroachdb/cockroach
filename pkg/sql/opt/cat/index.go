@@ -11,6 +11,7 @@
 package cat
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -53,8 +54,15 @@ type Index interface {
 
 	// ColumnCount returns the number of columns in the index. This includes
 	// columns that were part of the index definition (including the STORING
-	// clause), as well as implicitly added primary key columns.
+	// clause), as well as implicitly added primary key columns. It also contains
+	// implicit system columns, which are placed after all physical columns in
+	// the table.
 	ColumnCount() int
+
+	// Predicate returns the partial index predicate expression and true if the
+	// index is a partial index. If it is not a partial index, the empty string
+	// and false are returned.
+	Predicate() (string, bool)
 
 	// KeyColumnCount returns the number of columns in the index that are part
 	// of its unique key. No two rows in the index will have the same values for
@@ -208,6 +216,10 @@ type Index interface {
 	// InterleavedBy returns information about an index that is interleaved into
 	// this index; see InterleavedByCount.
 	InterleavedBy(i int) (table, index StableID)
+
+	// GeoConfig returns a geospatial index configuration. If non-nil, it
+	// describes the configuration for this geospatial inverted index.
+	GeoConfig() *geoindex.Config
 }
 
 // IndexColumn describes a single column that is part of an index definition.

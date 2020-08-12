@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,6 +51,7 @@ type cliTest struct {
 	*server.TestServer
 	certsDir    string
 	cleanupFunc func() error
+	prevStderr  *os.File
 
 	// t is the testing.T instance used for this test.
 	// Example_xxx tests may have this set to nil.
@@ -69,6 +71,11 @@ type cliTestParams struct {
 	locality    roachpb.Locality
 	noNodelocal bool
 }
+
+// testTempFilePrefix is a sentinel marker to be used as the prefix of a
+// test file name. It is used to extract the file name from a uniquely
+// generated (temp directory) file path.
+const testTempFilePrefix = "test-temp-prefix-"
 
 func (c *cliTest) fail(err interface{}) {
 	if c.t != nil {
@@ -93,6 +100,8 @@ func createTestCerts(certsDir string) (cleanup func() error) {
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
+
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantClientCACert),
 	}
 
 	for _, a := range assets {
@@ -142,8 +151,8 @@ func newCLITest(params cliTestParams) cliTest {
 		}
 		c.TestServer = s.(*server.TestServer)
 
-		log.Infof(context.TODO(), "server started at %s", c.ServingRPCAddr())
-		log.Infof(context.TODO(), "SQL listener at %s", c.ServingSQLAddr())
+		log.Infof(context.Background(), "server started at %s", c.ServingRPCAddr())
+		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
 	baseCfg.User = security.NodeUser
@@ -151,6 +160,7 @@ func newCLITest(params cliTestParams) cliTest {
 	// Ensure that CLI error messages and anything meant for the
 	// original stderr is redirected to stdout, where it can be
 	// captured.
+	c.prevStderr = stderr
 	stderr = os.Stdout
 
 	return c
@@ -171,7 +181,7 @@ func setCLIDefaultsForTests() {
 // stopServer stops the test server.
 func (c *cliTest) stopServer() {
 	if c.TestServer != nil {
-		log.Infof(context.TODO(), "stopping server at %s / %s",
+		log.Infof(context.Background(), "stopping server at %s / %s",
 			c.ServingRPCAddr(), c.ServingSQLAddr())
 		select {
 		case <-c.Stopper().ShouldStop():
@@ -179,7 +189,7 @@ func (c *cliTest) stopServer() {
 			// called Stop(). We just need to wait.
 			<-c.Stopper().IsStopped()
 		default:
-			c.Stopper().Stop(context.TODO())
+			c.Stopper().Stop(context.Background())
 		}
 	}
 }
@@ -188,7 +198,7 @@ func (c *cliTest) stopServer() {
 // have changed after this method returns.
 func (c *cliTest) restartServer(params cliTestParams) {
 	c.stopServer()
-	log.Info(context.TODO(), "restarting server")
+	log.Info(context.Background(), "restarting server")
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{
 		Insecure:    params.insecure,
 		SSLCertsDir: c.certsDir,
@@ -198,21 +208,23 @@ func (c *cliTest) restartServer(params cliTestParams) {
 		c.fail(err)
 	}
 	c.TestServer = s.(*server.TestServer)
-	log.Infof(context.TODO(), "restarted server at %s / %s",
+	log.Infof(context.Background(), "restarted server at %s / %s",
 		c.ServingRPCAddr(), c.ServingSQLAddr())
 }
 
 // cleanup cleans up after the test, stopping the server if necessary.
 // The log files are removed if the test has succeeded.
 func (c *cliTest) cleanup() {
-	if c.t != nil {
-		defer c.logScope.Close(c.t)
-	}
+	defer func() {
+		if c.t != nil {
+			c.logScope.Close(c.t)
+		}
+	}()
 
 	// Restore stderr.
-	stderr = log.OrigStderr
+	stderr = c.prevStderr
 
-	log.Info(context.TODO(), "stopping server and cleaning up CLI test")
+	log.Info(context.Background(), "stopping server and cleaning up CLI test")
 
 	c.stopServer()
 
@@ -292,7 +304,7 @@ func isSQLCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "sql", "dump", "workload", "nodelocal":
+	case "sql", "dump", "workload", "nodelocal", "userfile", "statement-diag":
 		return true
 	case "node":
 		if len(args) == 0 {
@@ -333,6 +345,16 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 		}
 		args = append(args, origArgs[1:]...)
 
+		// `nodelocal upload` CLI tests create test files in unique temp
+		// directories. Given that the expected output for such tests is defined as
+		// a static comment, it is not possible to match against the full file path.
+		// So, we trim the file path upto the sentinel prefix marker, and use only
+		// the file name for comparing against the expected output.
+		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
+			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
+			origArgs[2] = splitFilePath[1]
+		}
+
 		if !c.omitArgs {
 			fmt.Fprintf(os.Stderr, "%s\n", args)
 			fmt.Println(strings.Join(origArgs, " "))
@@ -367,9 +389,7 @@ func (c cliTest) RunWithCAArgs(origArgs []string) {
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag")
-	}
+	skip.UnderShort(t)
 
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
@@ -425,6 +445,10 @@ func Example_demo() {
 	// find the certs that demo sets up.
 	security.ResetAssetLoader()
 	for _, cmd := range testData {
+		// `demo` sets up a server and log file redirection, which asserts
+		// that the logging subsystem has not been initialized yet. Fake
+		// this to be true.
+		log.TestingResetActive()
 		c.RunWithArgs(cmd)
 	}
 
@@ -1250,6 +1274,7 @@ func Example_sql_table() {
 
 func TestRenderHTML(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	cols := []string{"colname"}
 	align := "d"
@@ -1344,14 +1369,14 @@ func Example_misc_table() {
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
-	//     tree    |    field    | description
-	// ------------+-------------+--------------
-	//             | distributed | true
-	//             | vectorized  | false
-	//   render    |             |
-	//    └── scan |             |
-	//             | table       | t@primary
-	//             | spans       | FULL SCAN
+	//     tree    |    field     | description
+	// ------------+--------------+--------------
+	//             | distribution | full
+	//             | vectorized   | false
+	//   render    |              |
+	//    └── scan |              |
+	//             | table        | t@primary
+	//             | spans        | FULL SCAN
 	// (6 rows)
 }
 
@@ -1378,6 +1403,7 @@ func Example_cert() {
 // help template does not break.
 func TestFlagUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	expUsage := `Usage:
   cockroach [command]
@@ -1387,14 +1413,14 @@ Available Commands:
   start-single-node start a single-node cluster
   init              initialize a cluster
   cert              create ca, node, and client certs
-  quit              drain and shut down a node
-
   sql               open a sql shell
+  statement-diag    commands for managing statement diagnostics bundles
   auth-session      log in and out of HTTP sessions
   node              list, inspect, drain or remove nodes
   dump              dump sql tables
 
   nodelocal         upload and delete nodelocal files
+  userfile          upload, list and delete user scoped files
   demo              open a demo sql shell
   gen               generate auxiliary files
   version           output version information
@@ -1507,7 +1533,7 @@ func Example_node() {
 func TestCLITimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{})
+	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
 	// Wrap the meat of the test in a retry loop. Setting a timeout like this is
@@ -1536,7 +1562,7 @@ SQLSTATE: 57014
 func TestNodeStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("currently flaky: #38151")
+	skip.WithIssue(t, 38151)
 
 	start := timeutil.Now()
 	c := newCLITest(cliTestParams{})
@@ -1781,6 +1807,7 @@ func extractFields(line string) ([]string, error) {
 
 func TestGenMan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Generate man pages in a temp directory.
 	manpath, err := ioutil.TempDir("", "TestGenMan")
@@ -1814,6 +1841,7 @@ func TestGenMan(t *testing.T) {
 
 func TestGenAutocomplete(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Get a unique path to which we can write our autocomplete files.
 	acdir, err := ioutil.TempDir("", "TestGenAutoComplete")
@@ -1882,11 +1910,11 @@ func TestJunkPositionalArguments(t *testing.T) {
 		line := test + " " + junk
 		out, err := c.RunWithCapture(line)
 		if err != nil {
-			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
+			t.Fatalf("%d: %v", i, err)
 		}
 		exp := fmt.Sprintf("%s\nERROR: unknown command %q for \"cockroach %s\"\n", line, junk, test)
 		if exp != out {
-			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
+			t.Errorf("%d: expected:\n%s\ngot:\n%s", i, exp, out)
 		}
 	}
 }
@@ -2024,6 +2052,6 @@ func Example_dump_no_visible_columns() {
 	// sql -e create table t(x int); set sql_safe_updates=false; alter table t drop x
 	// ALTER TABLE
 	// dump defaultdb
-	// CREATE TABLE t (FAMILY "primary" (rowid)
+	// CREATE TABLE public.t (FAMILY "primary" (rowid)
 	// );
 }

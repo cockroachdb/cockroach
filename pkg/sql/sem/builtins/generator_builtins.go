@@ -13,7 +13,6 @@ package builtins
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
@@ -43,11 +43,8 @@ func initGeneratorBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
-			panic(fmt.Sprintf("generator functions should all be impure, found %v", v))
-		}
 		if v.props.Class != tree.GeneratorClass {
-			panic(fmt.Sprintf("generator functions should be marked with the tree.GeneratorClass "+
+			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
 				"function class, found %v", v))
 		}
 
@@ -57,7 +54,6 @@ func initGeneratorBuiltins() {
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:   true,
 		Class:    tree.GeneratorClass,
 		Category: categoryGenerator,
 	}
@@ -65,7 +61,6 @@ func genProps() tree.FunctionProperties {
 
 func genPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Impure:       true,
 		Class:        tree.GeneratorClass,
 		Category:     categoryGenerator,
 		ReturnLabels: returnLabels,
@@ -158,6 +153,31 @@ var generators = map[string]builtinDefinition{
 			keywordsValueGeneratorType,
 			makeKeywordsGenerator,
 			"Produces a virtual table containing the keywords known to the SQL parser.",
+			tree.VolatilityImmutable,
+		),
+	),
+
+	"regexp_split_to_table": makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(false /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter.",
+			tree.VolatilityImmutable,
+		),
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"string", types.String},
+				{"pattern", types.String},
+				{"flags", types.String},
+			},
+			types.String,
+			makeRegexpSplitToTableGeneratorFactory(true /* hasFlags */),
+			"Split string using a POSIX regular expression as the delimiter with flags."+regexpFlagInfo,
 			tree.VolatilityImmutable,
 		),
 	),
@@ -265,7 +285,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Impure:   true,
 			Class:    tree.GeneratorClass,
 			Category: categorySystemInfo,
 		},
@@ -319,6 +338,50 @@ func makeGeneratorOverloadWithReturnType(
 	}
 }
 
+// regexpSplitToTableGenerator supports regexp_split_to_table.
+type regexpSplitToTableGenerator struct {
+	words []string
+	curr  int
+}
+
+func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) tree.GeneratorFactory {
+	return func(
+		ctx *tree.EvalContext, args tree.Datums,
+	) (tree.ValueGenerator, error) {
+		words, err := regexpSplit(ctx, args, hasFlags)
+		if err != nil {
+			return nil, err
+		}
+		return &regexpSplitToTableGenerator{
+			words: words,
+			curr:  -1,
+		}, nil
+	}
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.String }
+
+// Close implements the tree.ValueGenerator interface.
+func (*regexpSplitToTableGenerator) Close() {}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
+	g.curr = -1
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Next(_ context.Context) (bool, error) {
+	g.curr++
+	return g.curr < len(g.words), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *regexpSplitToTableGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{tree.NewDString(g.words[g.curr])}, nil
+}
+
 // keywordsValueGenerator supports the execution of pg_get_keywords().
 type keywordsValueGenerator struct {
 	curKeyword int
@@ -344,6 +407,8 @@ func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	k.curKeyword = -1
 	return nil
 }
+
+// Next implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Next(_ context.Context) (bool, error) {
 	k.curKeyword++
 	return k.curKeyword < len(lex.KeywordNames), nil
@@ -1049,7 +1114,6 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 }
 
 type checkConsistencyGenerator struct {
-	ctx      context.Context
 	db       *kv.DB
 	from, to roachpb.Key
 	mode     roachpb.ChecksumMode
@@ -1064,6 +1128,10 @@ var _ tree.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx *tree.EvalContext, args tree.Datums,
 ) (tree.ValueGenerator, error) {
+	if !ctx.Codec.ForSystemTenant() {
+		return nil, errorutil.UnsupportedWithMultiTenancy()
+	}
+
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 
@@ -1090,7 +1158,6 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
-		ctx:  ctx.Ctx(),
 		db:   ctx.DB,
 		from: keyFrom,
 		to:   keyTo,
@@ -1109,7 +1176,7 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
 	var b kv.Batch
 	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -1123,7 +1190,7 @@ func (c *checkConsistencyGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	})
 	// NB: DistSender has special code to avoid parallelizing the request if
 	// we're requesting CHECK_FULL.
-	if err := c.db.Run(c.ctx, &b); err != nil {
+	if err := c.db.Run(ctx, &b); err != nil {
 		return err
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)

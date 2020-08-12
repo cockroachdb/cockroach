@@ -78,6 +78,11 @@ type ClientOperationConfig struct {
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
 	PutExisting int
+	// Scan is an operation that Scans a key range that may contain values.
+	Scan int
+	// ScanForUpdate is an operation that Scans a key range that may contain
+	// values using a per-key locking scan.
+	ScanForUpdate int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -130,10 +135,12 @@ type ChangeReplicasConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:  1,
-		GetExisting: 1,
-		PutMissing:  1,
-		PutExisting: 1,
+		GetMissing:    1,
+		GetExisting:   1,
+		PutMissing:    1,
+		PutExisting:   1,
+		Scan:          1,
+		ScanForUpdate: 1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -355,6 +362,8 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
 	}
+	addOpGen(allowed, randScan, c.Scan)
+	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -381,6 +390,22 @@ func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	value := g.getNextValue()
 	key := randMapKey(rng, g.keys)
 	return put(key, value)
+}
+
+func randScan(g *generator, rng *rand.Rand) Operation {
+	key, endKey := randKey(rng), randKey(rng)
+	if endKey < key {
+		key, endKey = endKey, key
+	} else if endKey == key {
+		endKey = string(roachpb.Key(key).Next())
+	}
+	return scan(key, endKey)
+}
+
+func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.ForUpdate = true
+	return op
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -554,6 +579,14 @@ func get(key string) Operation {
 
 func put(key, value string) Operation {
 	return Operation{Put: &PutOperation{Key: []byte(key), Value: []byte(value)}}
+}
+
+func scan(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey)}}
+}
+
+func scanForUpdate(key, endKey string) Operation {
+	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), ForUpdate: true}}
 }
 
 func split(key string) Operation {

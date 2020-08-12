@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,7 @@ func checkEquality(t *testing.T, fs vfs.FS, expected map[string]*enginepb.FileEn
 
 func TestFileRegistryRelativePaths(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mem := vfs.NewMem()
 	fileEntry :=
@@ -71,6 +73,7 @@ func TestFileRegistryRelativePaths(t *testing.T) {
 
 func TestFileRegistryOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mem := vfs.NewMem()
 	fooFileEntry :=
@@ -154,6 +157,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 func TestFileRegistryCheckNoFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	mem := vfs.NewMem()
 	fileEntry :=

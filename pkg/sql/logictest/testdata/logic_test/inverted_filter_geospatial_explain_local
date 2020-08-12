@@ -1,0 +1,63 @@
+# LogicTest: local local-vec-off
+
+# TODO(sumeer): move these to opt/exec/execbuilder/testdata since logic tests
+# are not supposed to change when a plan changes.
+
+# EXPLAIN test cases for using invertedFilterer on an inverted geospatial index.
+
+statement ok
+CREATE TABLE geo_table2(
+  k int,
+  geom geometry,
+  k_plus_one int,
+  PRIMARY KEY (k, k_plus_one),
+  INVERTED INDEX geom_index(geom)
+)
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v2jAUhu_3K6xzA0hesRM-Wl8xbemWiQIDpG1qIpTFRyxasDPbmZgQ_31K0omWDlZyEel8PPb7Hp8d2J85CFgE4-DtkpQmJ7fz6R25D77Mxm_CCWm_CxfLxadxhzy0_Gga1qhXLvmWo0c-fwjmAbFulSmHxmLqbLs1m4aTZdu_YsS_Yp2WEO-D6V2wnH-lFbrpxEBBaYmTZIMWxD1wiCkURqdorTZValc3hHILglHIVFG6Kh1TSLVBEDtwmcsRBCwrIXNMJJouAwoSXZLl9bEHnaPq3lWmJG6BwqJIlBWky3nfu_F4n_UGbHDdG9wMB6__kRySREniM6LddzQW4j0FXbqDJOuSNYLge_py2aH6hcahvM1yhwZNlz_V_rcebAtDtCIjLoitdBPrEuNEBFHkD_tRxDwWRYz97wcElbyQ4hGQI-8UpqUTZMTpyD85CO-SQXzUmXp4Pu_k8xUm2yTmN1Bo5iWOV45xxtnz77r3LG6Jx_s48joHTycN-ZcYmqMttLL4xMypk9k-poByjc3SW12aFGdGp_U1TTituToh0bqmypsgVE2pEvgY5mdh7zzsnYX9Izjev_oTAAD__9U_U4U=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v2jAUhu_3K47ODSB5xU74aH3FtKVbJgoMkLapiVBGjljUYGe2MzEh_vsU0qktHbTkItL5eOz3PT5btL9ylDgLhsH7OZQmh-vp-AZug2-T4btwBM0P4Ww--zJswX3LHYO7RZGXdqEV1c0r0guX_MjJg6-fgmkA1i0y5chYWjrbbEzG4Wje9C84-Be81ZDyYzC-CebT76xC160YGSqd0ihZk0V5iwJjhoXRS7JWmyq13TeE6QYlZ5iponRVOma41IZQbtFlLieUOK-ETClJybQ5MkzJJVm-P_ZB56C6d5GplDbIcFYkykpoC9H1rjzR5Z0e7112elf93tv_JPuQqBR8Dtr9JGMx3jHUpXuQZF2yIpRix14vO1S_yThKr7PckSHTFk-1_6sHm8KAVjAQEmylG6xLjJMRRpHf70YR93gUcf7SD4FUeiYlIoQD7wzHpZMwEGzgHx2Ed84gPutM3T-fd_T5CpOtE_MHGdbzkocrxwUX_Pl32XkWN-TjfRx4rdd58s_xNCVbaGXpiZ9jJ_NdzJDSFdV7b3VpljQxerm_pg7He26fSMm6uirqIFR1qRL4GBYnYe807J2E_QM43r35GwAA__-Cklif
+
+query TTT
+EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
+----
+·                                    distribution     local
+·                                    vectorized       false
+render                               ·                ·
+ └── filter                          ·                ·
+      │                              filter           st_intersects('010100000000000000000008400000000000000840', geom)
+      └── index join                 ·                ·
+           │                         table            geo_table2@primary
+           │                         key columns      k, k_plus_one
+           └── render                ·                ·
+                └── inverted filter  ·                ·
+                     │               inverted column  2
+                     │               num spans        31
+                     └── scan        ·                ·
+·                                    table            geo_table2@geom_index
+·                                    spans            /1152921504606846976-/1152921504606846977 /1152921573326323712-/1152921573326323713 /1152921574400065536-/1152921574400065537 /1152921574668500992-/1152921574668500993 /1152921574735609856-/1152921574735609857 /1152921574739804160-/1152921574739804161 /1152921574740066304-/1152921574740066305 /1152921574740070400-/1152921574740070401 /1152921574740070464-/1152921574740070465 /1152921574740070468-/1152921574740070469 /1152921574740070469-/1152921574740070470 /1152921574740070480-/1152921574740070481 /1152921574740070656-/1152921574740070657 /1152921574740071424-/1152921574740071425 /1152921574740082688-/1152921574740082689 /1152921574740131840-/1152921574740131841 /1152921574740852736-/1152921574740852737 /1152921574752387072-/1152921574752387073 /1152921577621291008-/1152921577621291009 /1152921590506192896-/1152921590506192897 /1152921779484753920-/1152921779484753921 /1152922604118474752-/1152922604118474753 /1152925902653358080-/1152925902653358081 /1152939096792891392-/1152939096792891393 /1152991873351024640-/1152991873351024641 /1153202979583557632-/1153202979583557633 /1154047404513689600-/1154047404513689601 /1157425104234217472-/1157425104234217473 /1170935903116328960-/1170935903116328961 /1224979098644774912-/1224979098644774913 /1441151880758558720-/1441151880758558721
+
+query TTT
+EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_DFullyWithin('POINT(3.0 3.0)'::geometry, geom, 1)
+----
+·                                    distribution     local
+·                                    vectorized       false
+render                               ·                ·
+ └── filter                          ·                ·
+      │                              filter           st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
+      └── index join                 ·                ·
+           │                         table            geo_table2@primary
+           │                         key columns      k, k_plus_one
+           └── render                ·                ·
+                └── inverted filter  ·                ·
+                     │               inverted column  2
+                     │               num spans        20
+                     └── scan        ·                ·
+·                                    table            geo_table2@geom_index
+·                                    spans            /1152921504606846976-/1152921504606846977 /1152921521786716160-/1152921521786716161 /1152921526081683456-/1152921526081683457 /1152921527155425280-/1152921527155425281 /1152921527155425281-/1152921527692296191/PrefixEnd /1152921538966585345-/1152921573326323711/PrefixEnd /1152921573326323712-/1152921573326323713 /1152921573326323713-/1152921607686062079/PrefixEnd /1152921607686062081-/1152921642045800447/PrefixEnd /1152921779484753920-/1152921779484753921 /1152922604118474752-/1152922604118474753 /1152925902653358080-/1152925902653358081 /1152939096792891392-/1152939096792891393 /1152991873351024640-/1152991873351024641 /1153202979583557632-/1153202979583557633 /1154047404513689600-/1154047404513689601 /1157425104234217472-/1157425104234217473 /1170935903116328960-/1170935903116328961 /1224979098644774912-/1224979098644774913 /1441151880758558720-/1441151880758558721

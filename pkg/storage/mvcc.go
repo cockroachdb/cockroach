@@ -17,6 +17,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -163,14 +164,28 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
-// isSysLocal returns whether the whether the key is system-local.
+// isSysLocal returns whether the key is system-local.
 func isSysLocal(key roachpb.Key) bool {
 	return key.Compare(keys.LocalMax) < 0
 }
 
-// updateStatsForInline updates stat counters for an inline value.
-// These are simpler as they don't involve intents or multiple
-// versions.
+// isAbortSpanKey returns whether the key is an abort span key.
+func isAbortSpanKey(key roachpb.Key) bool {
+	if !bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
+		return false
+	}
+
+	_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(key)
+	if err != nil {
+		return false
+	}
+	hasAbortSpanSuffix := infix.Equal(keys.LocalRangeIDReplicatedInfix) && suffix.Equal(keys.LocalAbortSpanSuffix)
+	return hasAbortSpanSuffix
+}
+
+// updateStatsForInline updates stat counters for an inline value
+// (abort span entries for example). These are simpler as they don't
+// involve intents or multiple versions.
 func updateStatsForInline(
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
@@ -182,6 +197,12 @@ func updateStatsForInline(
 		if sys {
 			ms.SysBytes -= (origMetaKeySize + origMetaValSize)
 			ms.SysCount--
+			// We only do this check in updateStatsForInline since
+			// abort span keys are always inlined - we don't associate
+			// timestamps with them.
+			if isAbortSpanKey(key) {
+				ms.AbortSpanBytes -= (origMetaKeySize + origMetaValSize)
+			}
 		} else {
 			ms.LiveBytes -= (origMetaKeySize + origMetaValSize)
 			ms.LiveCount--
@@ -196,6 +217,9 @@ func updateStatsForInline(
 		if sys {
 			ms.SysBytes += metaKeySize + metaValSize
 			ms.SysCount++
+			if isAbortSpanKey(key) {
+				ms.AbortSpanBytes += metaKeySize + metaValSize
+			}
 		} else {
 			ms.LiveBytes += metaKeySize + metaValSize
 			ms.LiveCount++
@@ -1321,6 +1345,7 @@ func replayTransactionalWrite(
 ) error {
 	var found bool
 	var writtenValue []byte
+	var writtenValueSafety valueSafety
 	var err error
 	metaKey := MakeMVCCMetadataKey(key)
 	if txn.Sequence == meta.Txn.Sequence {
@@ -1331,7 +1356,7 @@ func replayTransactionalWrite(
 		defer getBuf.release()
 		getBuf.meta = buf.meta
 		var exVal *roachpb.Value
-		if exVal, _, _, err = mvccGetInternal(
+		if exVal, _, writtenValueSafety, err = mvccGetInternal(
 			ctx, iter, metaKey, timestamp, true /* consistent */, unsafeValue, txn, getBuf); err != nil {
 			return err
 		}
@@ -1340,6 +1365,7 @@ func replayTransactionalWrite(
 	} else {
 		// Get the value from the intent history.
 		writtenValue, found = meta.GetIntentValue(txn.Sequence)
+		writtenValueSafety = safeValue
 	}
 	if !found {
 		return errors.Errorf("transaction %s with sequence %d missing an intent with lower sequence %d",
@@ -1359,8 +1385,14 @@ func replayTransactionalWrite(
 			prevVal := prevIntent.Value
 
 			exVal = &roachpb.Value{RawBytes: prevVal}
-		}
-		if exVal == nil {
+		} else {
+			// We're going to be using the iterator again, so make sure the
+			// existing writtenValue bytes are safe and won't be corrupted.
+			if writtenValueSafety == unsafeValue {
+				writtenValue = append([]byte(nil), writtenValue...)
+				writtenValueSafety = safeValue
+			}
+
 			// If the previous value at the key wasn't written by this
 			// transaction, or it was hidden by a rolled back seqnum, we
 			// look at last committed value on the key.
@@ -1869,9 +1901,10 @@ const (
 	CPutFailIfMissing CPutMissingBehavior = false
 )
 
-// MVCCConditionalPut sets the value for a specified key only if the
-// expected value matches. If not, the return a ConditionFailedError
-// containing the actual value.
+// MVCCConditionalPut sets the value for a specified key only if the expected
+// value matches. If not, the return a ConditionFailedError containing the
+// actual value. An empty expVal signifies that the key is expected to not
+// exist.
 //
 // The condition check reads a value from the key using the same operational
 // timestamp as we use to write a value.
@@ -1879,6 +1912,10 @@ const (
 // Note that, when writing transactionally, the txn's timestamps
 // dictate the timestamp of the operation, and the timestamp paramater is
 // confusing and redundant. See the comment on mvccPutInternal for details.
+//
+// An empty expVal means that the key is expected to not exist. If not empty,
+// expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
+// value without the checksum (as the checksum includes the key too).
 func MVCCConditionalPut(
 	ctx context.Context,
 	rw ReadWriter,
@@ -1886,7 +1923,7 @@ func MVCCConditionalPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
@@ -1912,7 +1949,7 @@ func MVCCBlindConditionalPut(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expVal []byte,
 	allowIfDoesNotExist CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
@@ -1927,16 +1964,15 @@ func mvccConditionalPutUsingIter(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value roachpb.Value,
-	expVal *roachpb.Value,
+	expBytes []byte,
 	allowNoExisting CPutMissingBehavior,
 	txn *roachpb.Transaction,
 ) error {
 	return mvccPutUsingIter(
 		ctx, writer, iter, ms, key, timestamp, noValue, txn,
 		func(existVal *roachpb.Value) ([]byte, error) {
-			if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
-				// Every type flows through here, so we can't use the typed getters.
-				if !expVal.EqualData(*existVal) {
+			if expValPresent, existValPresent := len(expBytes) != 0, existVal.IsPresent(); expValPresent && existValPresent {
+				if !bytes.Equal(expBytes, existVal.TagAndDataBytes()) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
 					}
@@ -2013,7 +2049,7 @@ func mvccInitPutUsingIter(
 				// We found a tombstone and failOnTombstones is true: fail.
 				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
 			}
-			if existVal.IsPresent() && !existVal.EqualData(value) {
+			if existVal.IsPresent() && !existVal.EqualTagAndData(value) {
 				// The existing value does not match the supplied value.
 				return nil, &roachpb.ConditionFailedError{
 					ActualValue: existVal.ShallowClone(),
@@ -2526,9 +2562,11 @@ type MVCCScanResult struct {
 //
 // When scanning in "fail on more recent" mode, a WriteTooOldError will be
 // returned if the scan observes a version with a timestamp above the read
-// timestamp. Similarly, a WriteIntentError will be returned if the scan
-// observes another transaction's intent, even if it has a timestamp above
-// the read timestamp.
+// timestamp. If the scan observes multiple versions with timestamp above
+// the read timestamp, the maximum will be returned in the WriteTooOldError.
+// Similarly, a WriteIntentError will be returned if the scan observes
+// another transaction's intent, even if it has a timestamp above the read
+// timestamp.
 func MVCCScan(
 	ctx context.Context,
 	reader Reader,
@@ -3145,6 +3183,8 @@ func MVCCResolveWriteIntentRangeUsingIter(
 // keys slice. The iterator is seeked in turn to each listed
 // key, clearing all values with timestamps <= to expiration. The
 // timestamp parameter is used to compute the intent age on GC.
+//
+// Note that this method will be sorting the keys.
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3152,16 +3192,34 @@ func MVCCGarbageCollect(
 	keys []roachpb.GCRequest_GCKey,
 	timestamp hlc.Timestamp,
 ) error {
-	// We're allowed to use a prefix iterator because we always Seek() the
-	// iterator when handling a new user key.
-	iter := rw.NewIterator(IterOptions{Prefix: true})
-	defer iter.Close()
 
 	var count int64
 	defer func(begin time.Time) {
 		log.Eventf(ctx, "done with GC evaluation for %d keys at %.2f keys/sec. Deleted %d entries",
 			len(keys), float64(len(keys))*1e9/float64(timeutil.Since(begin)), count)
 	}(timeutil.Now())
+
+	// If there are no keys then there is no work.
+	if len(keys) == 0 {
+		return nil
+	}
+
+	// Sort the slice to both determine the bounds and ensure that we're seeking
+	// in increasing order.
+	sort.Slice(keys, func(i, j int) bool {
+		iKey := MVCCKey{Key: keys[i].Key, Timestamp: keys[i].Timestamp}
+		jKey := MVCCKey{Key: keys[j].Key, Timestamp: keys[j].Timestamp}
+		return iKey.Less(jKey)
+	})
+
+	// Bound the iterator appropriately for the set of keys we'll be garbage
+	// collecting.
+	iter := rw.NewIterator(IterOptions{
+		LowerBound: keys[0].Key,
+		UpperBound: keys[len(keys)-1].Key.Next(),
+	})
+	defer iter.Close()
+	supportsPrev := iter.SupportsPrev()
 
 	// Iterate through specified GC keys.
 	meta := &enginepb.MVCCMetadata{}
@@ -3216,19 +3274,84 @@ func MVCCGarbageCollect(
 			iter.Next()
 		}
 
-		// TODO(tschottdorf): Can't we just Seek() to a key with timestamp
-		// gcKey.Timestamp to avoid potentially cycling through a large prefix
-		// of versions we can't GC? The batching mechanism in the GC queue sends
-		// requests susceptible to that happening when there are lots of versions.
-		// A minor complication there will be that we need to know the first non-
-		// deletable value's timestamp (for prevNanos).
-
-		// Now, iterate through all values, GC'ing ones which have expired.
 		// For GCBytesAge, this requires keeping track of the previous key's
 		// timestamp (prevNanos). See ComputeStatsGo for a more easily digested
-		// and better commented version of this logic.
-
+		// and better commented version of this logic. The below block will set
+		// prevNanos to the appropriate value and position the iterator at the
+		// first garbage version.
 		prevNanos := timestamp.WallTime
+		{
+
+			var foundPrevNanos bool
+			{
+				// If reverse iteration is supported (supportsPrev), we'll step the
+				// iterator a few time before attempting to seek.
+				var foundNextKey bool
+
+				// If there are a large number of versions which are not garbage,
+				// iterating through all of them is very inefficient. However, if there
+				// are few, SeekLT is inefficient. MVCCGarbageCollect will try to step
+				// the iterator a few times to find the predecessor of gcKey before
+				// resorting to seeking.
+				//
+				// In a synthetic benchmark where there is one version of garbage and
+				// one not, this optimization showed a 50% improvement. More
+				// importantly, this optimization mitigated the overhead of the Seek
+				// approach when almost all of the versions are garbage.
+				const nextsBeforeSeekLT = 4
+				for i := 0; !supportsPrev || i < nextsBeforeSeekLT; i++ {
+					if i > 0 {
+						iter.Next()
+					}
+					if ok, err := iter.Valid(); err != nil {
+						return err
+					} else if !ok {
+						foundNextKey = true
+						break
+					}
+					unsafeIterKey := iter.UnsafeKey()
+					if !unsafeIterKey.Key.Equal(encKey.Key) {
+						foundNextKey = true
+						break
+					}
+					if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
+						foundPrevNanos = true
+						break
+					}
+					prevNanos = unsafeIterKey.Timestamp.WallTime
+				}
+
+				// We have nothing to GC for this key if we found the next key.
+				if foundNextKey {
+					continue
+				}
+			}
+
+			// Stepping with the iterator did not get us to our target garbage key or
+			// its predecessor. Seek to the predecessor to find the right value for
+			// prevNanos and position the iterator on the gcKey.
+			if !foundPrevNanos {
+				if !supportsPrev {
+					log.Fatalf(ctx, "failed to find first garbage key without"+
+						"support for reverse iteration")
+				}
+				gcKeyMVCC := MVCCKey{Key: gcKey.Key, Timestamp: gcKey.Timestamp}
+				iter.SeekLT(gcKeyMVCC)
+				if ok, err := iter.Valid(); err != nil {
+					return err
+				} else if ok {
+					// Use the previous version's timestamp if it's for this key.
+					if iter.UnsafeKey().Key.Equal(gcKey.Key) {
+						prevNanos = iter.UnsafeKey().Timestamp.WallTime
+					}
+					// Seek to the first version for deletion.
+					iter.Next()
+				}
+			}
+		}
+
+		// Iterate through the garbage versions, accumulating their stats and
+		// issuing clear operations.
 		for ; ; iter.Next() {
 			if ok, err := iter.Valid(); err != nil {
 				return err
@@ -3242,26 +3365,24 @@ func MVCCGarbageCollect(
 			if !unsafeIterKey.IsValue() {
 				break
 			}
-			if unsafeIterKey.Timestamp.LessEq(gcKey.Timestamp) {
-				if ms != nil {
-					// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
-					// when it's a deletion.
-					valSize := int64(len(iter.UnsafeValue()))
+			if ms != nil {
+				// FIXME: use prevNanos instead of unsafeIterKey.Timestamp, except
+				// when it's a deletion.
+				valSize := int64(len(iter.UnsafeValue()))
 
-					// A non-deletion becomes non-live when its newer neighbor shows up.
-					// A deletion tombstone becomes non-live right when it is created.
-					fromNS := prevNanos
-					if valSize == 0 {
-						fromNS = unsafeIterKey.Timestamp.WallTime
-					}
+				// A non-deletion becomes non-live when its newer neighbor shows up.
+				// A deletion tombstone becomes non-live right when it is created.
+				fromNS := prevNanos
+				if valSize == 0 {
+					fromNS = unsafeIterKey.Timestamp.WallTime
+				}
 
-					ms.Add(updateStatsOnGC(gcKey.Key, MVCCVersionTimestampSize,
-						valSize, nil, fromNS))
-				}
-				count++
-				if err := rw.Clear(unsafeIterKey); err != nil {
-					return err
-				}
+				ms.Add(updateStatsOnGC(gcKey.Key, MVCCVersionTimestampSize,
+					valSize, nil, fromNS))
+			}
+			count++
+			if err := rw.Clear(unsafeIterKey); err != nil {
+				return err
 			}
 			prevNanos = unsafeIterKey.Timestamp.WallTime
 		}
@@ -3334,17 +3455,20 @@ func MVCCFindSplitKey(
 		return nil, nil
 	}
 	var minSplitKey roachpb.Key
-	if _, _, err := keys.TODOSQLCodec.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
-		// The first key in this range represents a row in a SQL table. Advance the
-		// minSplitKey past this row to avoid the problems described above.
-		firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
-		if err != nil {
-			return nil, err
+	if _, tenID, err := keys.DecodeTenantPrefix(it.UnsafeKey().Key); err == nil {
+		if _, _, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
+			// The first key in this range represents a row in a SQL table. Advance the
+			// minSplitKey past this row to avoid the problems described above.
+			firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
+			if err != nil {
+				return nil, err
+			}
+			// Allow a split key before other rows in the same table or before any
+			// rows in interleaved tables.
+			minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
 		}
-		// Allow a split key before other rows in the same table or before any
-		// rows in interleaved tables.
-		minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
-	} else {
+	}
+	if minSplitKey == nil {
 		// The first key in the range does not represent a row in a SQL table.
 		// Allow a split at any key that sorts after it.
 		minSplitKey = it.Key().Key.Next()
@@ -3484,6 +3608,9 @@ func ComputeStatsGo(
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
+				if isAbortSpanKey(unsafeKey.Key) {
+					ms.AbortSpanBytes += totalBytes
+				}
 			} else {
 				if !meta.Deleted {
 					ms.LiveBytes += totalBytes

@@ -13,7 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -28,18 +29,18 @@ import (
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	codec    keys.SQLCodec
-	leaseMgr *sql.LeaseManager
+	leaseMgr *lease.Manager
 	fetchers map[idVersion]*row.Fetcher
 
 	a sqlbase.DatumAlloc
 }
 
 type idVersion struct {
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	id      descpb.ID
+	version descpb.DescriptorVersion
 }
 
-func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *sql.LeaseManager) *rowFetcherCache {
+func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetcherCache {
 	return &rowFetcherCache{
 		codec:    codec,
 		leaseMgr: leaseMgr,
@@ -62,12 +63,13 @@ func (c *rowFetcherCache) TableDescForKey(
 		}
 		// No caching of these are attempted, since the lease manager does its
 		// own caching.
-		tableDesc, _, err = c.leaseMgr.Acquire(ctx, ts, tableID)
+		desc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
-			// LeaseManager can return all kinds of errors during chaos, but based on
+			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
+		tableDesc = desc.(*sqlbase.ImmutableTableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
 		if err := c.leaseMgr.Release(tableDesc); err != nil {
@@ -101,7 +103,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.
-	colIdxMap := make(map[sqlbase.ColumnID]int)
+	colIdxMap := make(map[descpb.ColumnID]int)
 	var valNeededForCol util.FastIntSet
 	for colIdx := range tableDesc.Columns {
 		colIdxMap[tableDesc.Columns[colIdx].ID] = colIdx
@@ -112,8 +114,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	if err := rf.Init(
 		c.codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&c.a,
 		row.FetcherTableArgs{

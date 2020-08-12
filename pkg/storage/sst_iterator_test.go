@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue) {
@@ -71,6 +72,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 
 func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	sstFile := &MemFile{}
 	sst := MakeIngestionSSTWriter(sstFile)
@@ -122,6 +124,7 @@ func TestSSTIterator(t *testing.T) {
 
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	keyAMetadata := MVCCKey{
 		Key: []byte("a"),

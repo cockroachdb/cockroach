@@ -29,6 +29,7 @@ import (
 
 func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
@@ -51,6 +52,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4
@@ -66,10 +68,6 @@ func TestKVNemesisMultiNode(t *testing.T) {
 
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = numNodes, 3
-	// kvnemesis found a rare bug with closed timestamps when merges happen
-	// on a multinode cluster. Disable the combo for now to keep the test
-	// from flaking. See #44878.
-	config.Ops.Merge = MergeConfig{}
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: sqlDBs}
 	failures, err := RunNemesis(ctx, rng, ct, config, dbs...)

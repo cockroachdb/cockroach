@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -30,15 +32,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 	codec := keys.SystemSQLCodec
 	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
 
@@ -59,13 +63,13 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(expectedCounter))
-	dbDesc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Database{
-			Database: &sqlbase.DatabaseDescriptor{
+	dbDescKey := sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
+	dbDesc := &descpb.Descriptor{
+		Union: &descpb.Descriptor_Database{
+			Database: &descpb.DatabaseDescriptor{
 				Name:       "sentinel",
-				ID:         sqlbase.ID(expectedCounter),
-				Privileges: &sqlbase.PrivilegeDescriptor{},
+				ID:         descpb.ID(expectedCounter),
+				Privileges: &descpb.PrivilegeDescriptor{},
 			},
 		},
 	}
@@ -114,7 +118,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbDescKey = sqlbase.MakeDescMetadataKey(codec, sqlbase.ID(expectedCounter))
+	dbDescKey = sqlbase.MakeDescMetadataKey(codec, descpb.ID(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -221,17 +225,17 @@ func verifyTables(
 	tc *testcluster.TestCluster,
 	completed chan int,
 	expectedNumOfTables int,
-	descIDStart sqlbase.ID,
+	descIDStart descpb.ID,
 ) {
-	usedTableIDs := make(map[sqlbase.ID]string)
+	usedTableIDs := make(map[descpb.ID]string)
 	var count int
-	tableIDs := make(map[sqlbase.ID]struct{})
+	tableIDs := make(map[descpb.ID]struct{})
 	maxID := descIDStart
 	for id := range completed {
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
 		kvDB := tc.Servers[count%tc.NumServers()].DB()
-		tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		if tableDesc.ID < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",
@@ -264,11 +268,11 @@ func verifyTables(
 			continue
 		}
 		descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-		desc := &sqlbase.Descriptor{}
-		if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil {
+		desc := &descpb.Descriptor{}
+		if err := kvDB.GetProto(context.Background(), descKey, desc); err != nil {
 			t.Fatal(err)
 		}
-		if (*desc != sqlbase.Descriptor{}) {
+		if !desc.Equal(descpb.Descriptor{}) {
 			t.Fatalf("extra descriptor with id %d", id)
 		}
 	}
@@ -278,6 +282,7 @@ func verifyTables(
 // correctly filled.
 func TestParallelCreateTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// This number has to be around 10 or else testrace will take too long to
 	// finish.
@@ -285,18 +290,18 @@ func TestParallelCreateTables(t *testing.T) {
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
 	}
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
-	var descIDStart sqlbase.ID
+	var descIDStart descpb.ID
 	if descID, err := kvDB.Get(context.Background(), keys.SystemSQLCodec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else {
-		descIDStart = sqlbase.ID(descID.ValueInt())
+		descIDStart = descpb.ID(descID.ValueInt())
 	}
 
 	var wgStart sync.WaitGroup
@@ -333,12 +338,13 @@ func TestParallelCreateTables(t *testing.T) {
 // and is designed to specifically test the IF NOT EXIST clause.
 func TestParallelCreateConflictingTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const numberOfTables = 30
 	const numberOfNodes = 3
 
 	tc := testcluster.StartTestCluster(t, numberOfNodes, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	if _, err := tc.ServerConn(0).Exec(`CREATE DATABASE "test"`); err != nil {
 		t.Fatal(err)
@@ -346,11 +352,11 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
-	var descIDStart sqlbase.ID
+	var descIDStart descpb.ID
 	if descID, err := kvDB.Get(context.Background(), keys.SystemSQLCodec.DescIDSequenceKey()); err != nil {
 		t.Fatal(err)
 	} else {
-		descIDStart = sqlbase.ID(descID.ValueInt())
+		descIDStart = descpb.ID(descID.ValueInt())
 	}
 
 	var wgStart sync.WaitGroup
@@ -384,9 +390,10 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 // Test that the modification time on a table descriptor is initialized.
 func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -443,8 +450,9 @@ SELECT * FROM t.kv%d
 
 func TestCreateStatementType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -486,9 +494,10 @@ func TestCreateStatementType(t *testing.T) {
 // Test that the user's password cannot be set in insecure mode.
 func TestSetUserPasswordInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	errFail := "setting or updating a password is not supported in insecure mode"
 
@@ -497,7 +506,7 @@ func TestSetUserPasswordInsecure(t *testing.T) {
 		errString string
 	}{
 		{"CREATE USER user1", ""},
-		{"CREATE USER user2 WITH PASSWORD ''", "empty passwords are not permitted"},
+		{"CREATE USER user2 WITH PASSWORD ''", errFail},
 		{"CREATE USER user2 WITH PASSWORD 'cockroach'", errFail},
 		{"CREATE USER user3 WITH PASSWORD NULL", ""},
 		{"ALTER USER user1 WITH PASSWORD 'somepass'", errFail},

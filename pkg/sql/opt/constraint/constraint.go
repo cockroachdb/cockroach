@@ -228,6 +228,70 @@ func (c Constraint) String() string {
 	return b.String()
 }
 
+// Contains returns true if the constraint contains every span in the given
+// constraint. The columns of the constraint must be a prefix of the columns of
+// other.
+func (c *Constraint) Contains(evalCtx *tree.EvalContext, other *Constraint) bool {
+	if !c.Columns.IsPrefixOf(&other.Columns) {
+		panic(errors.AssertionFailedf("columns must be a prefix of other columns"))
+	}
+
+	// An unconstrained constraint contains all constraints.
+	if c.IsUnconstrained() {
+		return true
+	}
+
+	// A contradiction is contained by all constraints.
+	if other.IsContradiction() {
+		return true
+	}
+
+	// Use variation on merge sort, because both sets of spans are ordered and
+	// non-overlapping.
+	left := &c.Spans
+	leftIndex := 0
+	right := &other.Spans
+	rightIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+
+	for leftIndex < left.Count() && rightIndex < right.Count() {
+		// If the current left span starts after the current right span, then
+		// the left span cannot contain the right span. Furthermore, no left
+		// spans can contain the current right spans.
+		cmpStart := left.Get(leftIndex).CompareStarts(&keyCtx, right.Get(rightIndex))
+		if cmpStart > 0 {
+			return false
+		}
+
+		cmpEnd := left.Get(leftIndex).CompareEnds(&keyCtx, right.Get(rightIndex))
+
+		// If the current left span end has the same end as the current right
+		// span, then the left span contains the right span. Move on to the next
+		// left and right spans.
+		if cmpEnd == 0 {
+			leftIndex++
+			rightIndex++
+		}
+
+		// If the current left span ends after the the current right span, then
+		// the left span contains the right span. The current left span could
+		// also contain other right spans, so only increment rightIndex.
+		if cmpEnd > 0 {
+			rightIndex++
+		}
+
+		// If the current left span ends before the current right span, then the
+		// left span cannot contain the right span, but other left spans could.
+		// Move on to the next left span.
+		if cmpEnd < 0 {
+			leftIndex++
+		}
+	}
+
+	// Return true if containment was proven for each span in right.
+	return rightIndex == right.Count()
+}
+
 // ContainsSpan returns true if the constraint contains the given span (or a
 // span that contains it).
 func (c *Constraint) ContainsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
@@ -564,10 +628,10 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	return res
 }
 
-// CalculateMaxResults returns a non-zero integer indicating the maximum number
-// of results that can be read from indexCols by using c.Spans. The indexCols
+// CalculateMaxResults returns an integer indicating the maximum number of
+// results that can be read from indexCols by using c.Spans. The indexCols
 // are assumed to form at least a weak key.
-// If 0 is returned, the maximum number of results could not be deduced.
+// If ok is false, the maximum number of results could not be deduced.
 // We can calculate the maximum number of results when both of the following
 // are satisfied:
 //  1. The index columns form a weak key (assumption), and the spans do not
@@ -579,12 +643,12 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 // mutations. Once the optimizer plans mutations, this method can go away.
 func (c *Constraint) CalculateMaxResults(
 	evalCtx *tree.EvalContext, indexCols opt.ColSet, notNullCols opt.ColSet,
-) uint64 {
+) (_ uint64, ok bool) {
 	// Ensure that if we have nullable columns, we are only reading non-null
 	// values, given that a unique index allows an arbitrary number of duplicate
 	// entries if they have NULLs.
 	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(evalCtx))) {
-		return 0
+		return 0, false
 	}
 
 	numCols := c.Columns.Count()
@@ -594,8 +658,9 @@ func (c *Constraint) CalculateMaxResults(
 	prefix := c.Prefix(evalCtx)
 	var distinctVals uint64
 	if prefix < numCols-1 {
-		return 0
-	} else if prefix == numCols-1 {
+		return 0, false
+	}
+	if prefix == numCols-1 {
 		// If the prefix does not include the last column, calculate the number of
 		// distinct values possible in the span. This is only supported for int
 		// and date types.
@@ -606,7 +671,7 @@ func (c *Constraint) CalculateMaxResults(
 
 			// Ensure that the keys specify the last column.
 			if start.Length() != numCols || end.Length() != numCols {
-				return 0
+				return 0, false
 			}
 
 			// TODO(asubiotto): This logic is very similar to
@@ -627,12 +692,12 @@ func (c *Constraint) CalculateMaxResults(
 				if !startDate.IsFinite() || !endDate.IsFinite() {
 					// One of the boundaries is not finite, so we can't determine the
 					// distinct count for this column.
-					return 0
+					return 0, false
 				}
 				startIntVal = int64(startDate.PGEpochDays())
 				endIntVal = int64(endDate.PGEpochDays())
 			} else {
-				return 0
+				return 0, false
 			}
 
 			if c.Columns.Get(colIdx).Ascending() {
@@ -648,5 +713,5 @@ func (c *Constraint) CalculateMaxResults(
 	} else {
 		distinctVals = uint64(c.Spans.Count())
 	}
-	return distinctVals
+	return distinctVals, true
 }

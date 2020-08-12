@@ -18,7 +18,11 @@ import "google/protobuf/duration.proto";
 // VectorizedStats represents the stats collected from an operator.
 message VectorizedStats {
   int32 id = 1 [(gogoproto.customname) = "ID"];
+  // num_batches is the number of batches that this stats collector observed its
+  // operator to output.
   int64 num_batches = 2;
+  // num_tuples is the number of tuples that this stats collector received
+  // from its input.
   int64 num_tuples = 3;
   google.protobuf.Duration time = 4 [(gogoproto.nullable) = false,
                                   (gogoproto.stdduration) = true];

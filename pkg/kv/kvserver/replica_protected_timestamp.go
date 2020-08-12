@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -176,8 +176,8 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// range's bounds, return an error for the client to try again on the
 	// correct range.
 	desc := r.descRLocked()
-	if !storagebase.ContainsKeyRange(desc, args.Key, args.EndKey) {
-		return false, false, roachpb.NewRangeKeyMismatchError(args.Key, args.EndKey, desc)
+	if !kvserverbase.ContainsKeyRange(desc, args.Key, args.EndKey) {
+		return false, false, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.EndKey, desc, r.mu.state.Lease)
 	}
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
 		return false, false, nil

@@ -120,8 +120,8 @@ func (b *circularGroupsBuffer) addGroupsToNextCol(
 }
 
 // addLeftUnmatchedGroup adds a left and right group to the buffer that
-// correspond to an unmatched row from the left side in the case of LEFT OUTER
-// JOIN or LEFT ANTI JOIN.
+// correspond to an unmatched row from the left side in the case of LEFT OUTER,
+// LEFT ANTI, or EXCEPT ALL joins.
 func (b *circularGroupsBuffer) addLeftUnmatchedGroup(curLIdx int, curRIdx int) {
 	b.leftGroups[b.endIdx] = group{
 		rowStartIdx: curLIdx,
@@ -178,7 +178,8 @@ func (b *circularGroupsBuffer) addRightOuterGroup(curLIdx int, curRIdx int) {
 // of tuples from the left side that all have a match on the right side. This
 // should only be called after processing the last equality column, and this
 // group will be used by the builder next. Note that we're not adding a right
-// group here since tuples from the right are not outputted in LEFT SEMI JOIN.
+// group here since tuples from the right are not outputted in LEFT SEMI nor
+// INTERSECT ALL joins.
 func (b *circularGroupsBuffer) addLeftSemiGroup(curLIdx int, lRunLength int) {
 	b.leftGroups[b.endIdx] = group{
 		rowStartIdx: curLIdx,

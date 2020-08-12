@@ -394,7 +394,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		// Track the total maximum memory used for a query with no budget.
 		{
 			// Swap model's memory monitor in order to adjust allocation size.
-			adjustedMon := mon.MakeMonitor(
+			adjustedMon := mon.NewMonitor(
 				"timeseries-test-worker-adjusted",
 				mon.MemoryResource,
 				nil,
@@ -403,11 +403,11 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 				math.MaxInt64,
 				cluster.MakeTestingClusterSettings(),
 			)
-			adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
-			defer adjustedMon.Stop(context.TODO())
+			adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+			defer adjustedMon.Stop(context.Background())
 
 			query := tm.makeQuery("test.metric", resolution1ns, 11, 109)
-			query.workerMemMonitor = &adjustedMon
+			query.workerMemMonitor = adjustedMon
 			query.InterpolationLimitNanos = 10
 			query.assertSuccess(99, 3)
 			memoryUsed := adjustedMon.MaximumBytes()
@@ -418,8 +418,8 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 				memoryUsed / 3,
 			} {
 				// Limit memory in use by model. Reset memory monitor to get new maximum.
-				adjustedMon.Stop(context.TODO())
-				adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+				adjustedMon.Stop(context.Background())
+				adjustedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
 				if adjustedMon.MaximumBytes() != 0 {
 					t.Fatalf("maximum bytes was %d, wanted zero", adjustedMon.MaximumBytes())
 				}
@@ -471,7 +471,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 
 		// Create a limited bytes monitor.
 		memoryBudget := int64(100 * 1024)
-		limitedMon := mon.MakeMonitorWithLimit(
+		limitedMon := mon.NewMonitorWithLimit(
 			"timeseries-test-limited",
 			mon.MemoryResource,
 			memoryBudget,
@@ -481,29 +481,29 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 			100,
 			cluster.MakeTestingClusterSettings(),
 		)
-		limitedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
-		defer limitedMon.Stop(context.TODO())
+		limitedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
+		defer limitedMon.Stop(context.Background())
 
 		// Assert correctness with no memory pressure.
 		query := tm.makeQuery("test.metric", resolution1ns, 0, 60)
-		query.workerMemMonitor = &limitedMon
+		query.workerMemMonitor = limitedMon
 		query.assertSuccess(7, 1)
 
 		// Assert failure with memory pressure.
 		acc := limitedMon.MakeBoundAccount()
-		if err := acc.Grow(context.TODO(), memoryBudget-1); err != nil {
+		if err := acc.Grow(context.Background(), memoryBudget-1); err != nil {
 			t.Fatal(err)
 		}
 
 		query.assertError("memory budget exceeded")
 
 		// Assert success again with memory pressure released.
-		acc.Close(context.TODO())
+		acc.Close(context.Background())
 		query.assertSuccess(7, 1)
 
 		// Start/Stop limited monitor to reset maximum allocation.
-		limitedMon.Stop(context.TODO())
-		limitedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+		limitedMon.Stop(context.Background())
+		limitedMon.Start(context.Background(), tm.workerMemMonitor, mon.BoundAccount{})
 
 		var (
 			memStatsBefore runtime.MemStats

@@ -25,8 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -37,11 +38,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -68,6 +71,7 @@ func (spec *testSpec) getConverterSpec() *execinfrapb.ReadImportDataSpec {
 
 func TestConverterFlushesBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Reset batch size setting upon test completion.
 	defer row.TestingSetDatumRowConverterBatchSize(0)()
 
@@ -119,7 +123,8 @@ func TestConverterFlushesBatches(t *testing.T) {
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
-					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format, externalStorageFactory)
+					return conv.readFiles(ctx, testCase.inputs, nil, converterSpec.Format,
+						externalStorageFactory, security.RootUser)
 				})
 
 				lastBatch := 0
@@ -194,7 +199,7 @@ type doNothingKeyAdder struct {
 	onFlush  func()
 }
 
-var _ storagebase.BulkAdder = &doNothingKeyAdder{}
+var _ kvserverbase.BulkAdder = &doNothingKeyAdder{}
 
 func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) error {
 	if a.onKeyAdd != nil {
@@ -219,6 +224,7 @@ var eofOffset int64 = math.MaxInt64
 
 func TestImportIgnoresProcessedFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	evalCtx := tree.MakeTestingEvalContext(nil)
 	flowCtx := &execinfra.FlowCtx{
@@ -228,7 +234,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
-				_ storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				_ kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
 				return &doNothingKeyAdder{}, nil
 			},
 		},
@@ -312,6 +318,7 @@ type observedKeys struct {
 
 func TestImportHonorsResumePosition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	batchSize := 13
 	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
@@ -326,7 +333,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 			ExternalStorage: externalStorageFactory,
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
-				opts storagebase.BulkAdderOptions) (storagebase.BulkAdder, error) {
+				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
 				if opts.Name == "pkAdder" {
 					return pkBulkAdder, nil
 				}
@@ -429,6 +436,67 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	}
 }
 
+type duplicateKeyErrorAdder struct {
+	doNothingKeyAdder
+}
+
+var _ kvserverbase.BulkAdder = &duplicateKeyErrorAdder{}
+
+func (a *duplicateKeyErrorAdder) Add(_ context.Context, k roachpb.Key, v []byte) error {
+	return &kvserverbase.DuplicateKeyError{Key: k, Value: v}
+}
+
+func TestImportHandlesDuplicateKVs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	batchSize := 13
+	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
+	evalCtx := tree.MakeTestingEvalContext(nil)
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Cfg: &execinfra.ServerConfig{
+			Settings:        &cluster.Settings{},
+			ExternalStorage: externalStorageFactory,
+			BulkAdder: func(
+				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
+				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
+				return &duplicateKeyErrorAdder{}, nil
+			},
+			TestingKnobs: execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+		},
+	}
+
+	// In this test, we'll attempt to import different input formats.
+	// All imports produce a DuplicateKeyError, which we expect to be propagated.
+	testSpecs := []testSpec{
+		newTestSpec(t, csvFormat(), "testdata/csv/data-0"),
+		newTestSpec(t, mysqlDumpFormat(), "testdata/mysqldump/simple.sql"),
+		newTestSpec(t, mysqlOutFormat(), "testdata/mysqlout/csv-ish/simple.txt"),
+		newTestSpec(t, pgCopyFormat(), "testdata/pgcopy/default/test.txt"),
+		newTestSpec(t, pgDumpFormat(), "testdata/pgdump/simple.sql"),
+		newTestSpec(t, avroFormat(t, roachpb.AvroOptions_JSON_RECORDS), "testdata/avro/simple-sorted.json"),
+	}
+
+	for _, testCase := range testSpecs {
+		spec := testCase.getConverterSpec()
+
+		t.Run(fmt.Sprintf("duplicate-key-%v", spec.Format.Format), func(t *testing.T) {
+			progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+			defer close(progCh)
+			go func() {
+				for range progCh {
+				}
+			}()
+
+			_, err := runImport(context.Background(), flowCtx, spec, progCh)
+			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
+		})
+	}
+}
+
 // syncBarrier allows 2 threads (a controller and a worker) to
 // synchronize between themselves. A controller portion of the
 // barrier waits until worker starts running, and then notifies
@@ -526,7 +594,7 @@ func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
 	}
 	var progressBytes, payloadBytes []byte
 	js.err = db.QueryRowContext(
-		context.TODO(), "SELECT status, payload, progress FROM system.jobs WHERE id = $1", jobID).Scan(
+		context.Background(), "SELECT status, payload, progress FROM system.jobs WHERE id = $1", jobID).Scan(
 		&js.status, &payloadBytes, &progressBytes)
 	if js.err != nil {
 		return
@@ -568,6 +636,7 @@ func queryJobUntil(
 
 func TestCSVImportCanBeResumed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
@@ -584,7 +653,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 			},
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -659,8 +728,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	resumePos := js.prog.ResumePos[0]
 	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
-	// Resume the job and wait for it to complete.
-	if err := registry.Resume(ctx, nil, jobID); err != nil {
+	// Unpause the job and wait for it to complete.
+	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
@@ -675,6 +744,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
@@ -690,7 +760,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 			},
 		})
 	registry := s.JobRegistry().(*jobs.Registry)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -763,8 +833,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	// Send cancellation and unblock import.
 	proceedImport()
 
-	// Resume the job and wait for it to complete.
-	if err := registry.Resume(ctx, nil, jobID); err != nil {
+	// Unpause the job and wait for it to complete.
+	if err := registry.Unpause(ctx, nil, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
@@ -797,8 +867,8 @@ func externalStorageFactory(
 	if err != nil {
 		return nil, err
 	}
-	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIOConfig{},
-		nil, blobs.TestBlobServiceClient(workdir))
+	return cloudimpl.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+		nil, blobs.TestBlobServiceClient(workdir), nil, nil)
 }
 
 // Helper to create and initialize testSpec.
@@ -810,7 +880,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 
 	// Initialize table descriptor for import. We need valid descriptor to run
 	// converters, even though we don't actually import anything in this test.
-	var descr *sqlbase.TableDescriptor
+	var descr *sqlbase.ImmutableTableDescriptor
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
 		descr = descForTable(t,
@@ -838,11 +908,11 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 	assert.True(t, numCols > 0)
 
 	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr, TargetCols: targetCols[0:numCols]},
+		"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
 	}
 
 	for id, path := range inputs {
-		spec.inputs[int32(id)] = cloud.MakeLocalStorageURI(path)
+		spec.inputs[int32(id)] = cloudimpl.MakeLocalStorageURI(path)
 	}
 
 	return spec

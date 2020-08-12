@@ -82,26 +82,6 @@ type SyncedCluster struct {
 	DebugDir string
 }
 
-// CmdKind is the kind of command passed to SyncedCluster.Run().
-type CmdKind int
-
-// The kinds of commands passed to SyncedCluster.Run().
-const (
-	// A cockroach command is passed.
-	CockroachCmd CmdKind = iota
-
-	// A non-classified command is passed.
-	OtherCmd
-)
-
-func (ck CmdKind) classifyError(err error) rperrors.Error {
-	if ck == CockroachCmd {
-		return rperrors.ClassifyCockroachError(err)
-	}
-
-	return rperrors.ClassifyCmdError(err)
-}
-
 func (c *SyncedCluster) host(index int) string {
 	return c.VMs[index-1]
 }
@@ -122,7 +102,13 @@ func (c *SyncedCluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
-// ServerNodes TODO(peter): document
+// ServerNodes is the fully expanded, ordered list of nodes that any given
+// roachprod command is intending to target.
+//
+//  $ roachprod create local -n 4
+//  $ roachprod start local          # [1, 2, 3, 4]
+//  $ roachprod start local:2-4      # [2, 3, 4]
+//  $ roachprod start local:2,1,4    # [1, 2, 4]
 func (c *SyncedCluster) ServerNodes() []int {
 	return append([]int{}, c.Nodes...)
 }
@@ -466,12 +452,9 @@ done
 // stdout: Where stdout messages are written
 // stderr: Where stderr messages are written
 // nodes: The cluster nodes where the command will be run.
-// cmdKind: Which type of command is being run? This allows refined error reporting.
 // title: A description of the command being run that is output to the logs.
 // cmd: The command to run.
-func (c *SyncedCluster) Run(
-	stdout, stderr io.Writer, nodes []int, cmdKind CmdKind, title, cmd string,
-) error {
+func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd string) error {
 	// Stream output if we're running the command on only 1 node.
 	stream := len(nodes) == 1
 	var display string
@@ -520,7 +503,7 @@ func (c *SyncedCluster) Run(
 			if errors[i] != nil {
 				detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
 				err = crdberrors.WithDetail(errors[i], detailMsg)
-				err = cmdKind.classifyError(err)
+				err = rperrors.ClassifyCmdError(err)
 				errors[i] = err
 			}
 			return nil, nil
@@ -531,7 +514,7 @@ func (c *SyncedCluster) Run(
 		if err != nil {
 			detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
 			err = crdberrors.WithDetail(err, detailMsg)
-			err = cmdKind.classifyError(err)
+			err = rperrors.ClassifyCmdError(err)
 			errors[i] = err
 			msg += fmt.Sprintf("\n%v", err)
 		}

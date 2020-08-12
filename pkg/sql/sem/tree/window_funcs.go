@@ -580,11 +580,9 @@ func (wfr *WindowFrameRun) FullPartitionIsInWindow() bool {
 	return precedingConfirmed && followingConfirmed
 }
 
-const noFilterIdx = -1
-
 // noFilter returns whether a filter is present.
 func (wfr *WindowFrameRun) noFilter() bool {
-	return wfr.FilterColIdx == noFilterIdx
+	return wfr.FilterColIdx == NoColumnIdx
 }
 
 // isRowExcluded returns whether the row at index idx should be excluded from

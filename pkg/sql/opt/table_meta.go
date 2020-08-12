@@ -32,9 +32,7 @@ const (
 )
 
 // ColumnID returns the metadata id of the column at the given ordinal position
-// in the table. This is equivalent to calling:
-//
-//   md.TableMeta(t).ColumnMeta(ord).MetaID
+// in the table.
 //
 // NOTE: This method cannot do bounds checking, so it's up to the caller to
 //       ensure that a column really does exist at this ordinal position.
@@ -43,9 +41,7 @@ func (t TableID) ColumnID(ord int) ColumnID {
 }
 
 // ColumnOrdinal returns the ordinal position of the given column in its base
-// table. This is equivalent to calling:
-//
-//   md.ColumnMeta(id).Ordinal()
+// table.
 //
 // NOTE: This method cannot do complete bounds checking, so it's up to the
 //       caller to ensure that this column is really in the given base table.
@@ -112,6 +108,9 @@ var tableAnnIDCount TableAnnID
 const maxTableAnnIDCount = 2
 
 // TableMeta stores information about one of the tables stored in the metadata.
+//
+// NOTE: Metadata.DuplicateTable must be kept in sync with changes to this
+// struct.
 type TableMeta struct {
 	// MetaID is the identifier for this table that is unique within the query
 	// metadata.
@@ -143,11 +142,19 @@ type TableMeta struct {
 	// See comment above GenerateConstrainedScans for more detail.
 	Constraints ScalarExpr
 
-	// ComputedCols stores ScalarExprs for each computed column on the table,
-	// indexed by ColumnID. These will be used when building mutation statements
-	// and constraining indexes. See comment above GenerateConstrainedScans for
-	// more detail.
+	// ComputedCols stores ScalarExprs for computed columns on the table, indexed
+	// by ColumnID. These will be used as "known truths" about data when
+	// constraining indexes. See comment above GenerateConstrainedScans for more
+	// detail.
+	//
+	// Computed columns with non-immutable operators are omitted.
 	ComputedCols map[ColumnID]ScalarExpr
+
+	// PartialIndexPredicates is a map from index ordinals on the table to
+	// *FiltersExprs representing the predicate on the corresponding partial
+	// index. If an index is not a partial index, it will not have an entry in
+	// the map.
+	PartialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
@@ -200,6 +207,15 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 		tm.ComputedCols = make(map[ColumnID]ScalarExpr)
 	}
 	tm.ComputedCols[colID] = computedCol
+}
+
+// AddPartialIndexPredicate adds a partial index predicate to the table's
+// metadata.
+func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
+	if tm.PartialIndexPredicates == nil {
+		tm.PartialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
+	}
+	tm.PartialIndexPredicates[ord] = pred
 }
 
 // TableAnnotation returns the given annotation that is associated with the

@@ -105,8 +105,8 @@ func signalFlusher() {
 // lockAndFlushAndSync is like flushAndSync but locks l.mu first.
 func (l *loggerT) lockAndFlushAndSync(doSync bool) {
 	l.mu.Lock()
-	l.flushAndSync(doSync)
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	l.flushAndSyncLocked(doSync)
 }
 
 // SetSync configures whether logging synchronizes all writes.
@@ -146,7 +146,7 @@ func (l *loggerT) lockAndSetSync(sync bool) {
 // attempts to sync its data to disk.
 //
 // l.mu is held.
-func (l *loggerT) flushAndSync(doSync bool) {
+func (l *loggerT) flushAndSyncLocked(doSync bool) {
 	if l.mu.file == nil {
 		return
 	}

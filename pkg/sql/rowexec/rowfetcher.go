@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -42,13 +43,12 @@ type rowFetcher interface {
 	) error
 
 	NextRow(ctx context.Context) (
-		sqlbase.EncDatumRow, *sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error)
+		sqlbase.EncDatumRow, sqlbase.TableDescriptor, *descpb.IndexDescriptor, error)
 
 	// PartialKey is not stat-related but needs to be supported.
 	PartialKey(int) (roachpb.Key, error)
 	Reset()
 	GetBytesRead() int64
-	GetRangesInfo() []roachpb.RangeInfo
 	NextRowWithErrors(context.Context) (sqlbase.EncDatumRow, error)
 }
 
@@ -56,28 +56,31 @@ type rowFetcher interface {
 func initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor,
 	indexIdx int,
-	colIdxMap map[sqlbase.ColumnID]int,
+	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
-	lockStr sqlbase.ScanLockingStrength,
-) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
-	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
-	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
+	lockStr descpb.ScanLockingStrength,
+	systemColumns []descpb.ColumnDescriptor,
+) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	cols := immutDesc.Columns
-	if scanVisibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
-		cols = immutDesc.ReadableColumns
+	cols := desc.Columns
+	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
+		cols = desc.ReadableColumns
 	}
+	// Add on any requested system columns. We slice cols to avoid modifying
+	// the underlying table descriptor.
+	cols = append(cols[:len(cols):len(cols)], systemColumns...)
 	tableArgs := row.FetcherTableArgs{
-		Desc:             immutDesc,
+		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
@@ -88,7 +91,6 @@ func initRowFetcher(
 		flowCtx.Codec(),
 		reverseScan,
 		lockStr,
-		true, /* returnRangeInfo */
 		isCheck,
 		alloc,
 		tableArgs,

@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -40,14 +42,14 @@ type testContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	mockDB      *kv.DB
-	mon         mon.BytesMonitor
+	mon         *mon.BytesMonitor
 	tracer      opentracing.Tracer
 	// ctx is mimicking the spirit of a client connection's context
 	ctx      context.Context
 	settings *cluster.Settings
 }
 
-func makeTestContext() testContext {
+func makeTestContext(stopper *stop.Stopper) testContext {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	factory := kv.MakeMockTxnSenderFactory(
@@ -61,8 +63,8 @@ func makeTestContext() testContext {
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      kv.NewDB(ambient, factory, clock),
-		mon: mon.MakeMonitor(
+		mockDB:      kv.NewDB(ambient, factory, clock, stopper),
+		mon: mon.NewMonitor(
 			"test root mon",
 			mon.MemoryResource,
 			nil,  /* curCount */
@@ -72,7 +74,7 @@ func makeTestContext() testContext {
 			settings,
 		),
 		tracer:   ambient.Tracer,
-		ctx:      context.TODO(),
+		ctx:      context.Background(),
 		settings: settings,
 	}
 }
@@ -83,7 +85,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	ctx := opentracing.ContextWithSpan(tc.ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
 
-	txnStateMon := mon.MakeMonitor("test mon",
+	txnStateMon := mon.NewMonitor("test mon",
 		mon.MemoryResource,
 		nil,  /* curCount */
 		nil,  /* maxHist */
@@ -91,7 +93,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
+	txnStateMon.Start(tc.ctx, tc.mon, mon.BoundAccount{})
 
 	ts := txnState{
 		Ctx:           ctx,
@@ -100,7 +102,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
 		priority:      roachpb.NormalUserPriority,
-		mon:           &txnStateMon,
+		mon:           txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
@@ -128,7 +130,7 @@ func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 }
 
 func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
-	txnStateMon := mon.MakeMonitor("test mon",
+	txnStateMon := mon.NewMonitor("test mon",
 		mon.MemoryResource,
 		nil,  /* curCount */
 		nil,  /* maxHist */
@@ -136,7 +138,7 @@ func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	ts := txnState{mon: &txnStateMon, connCtx: tc.ctx}
+	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts
 }
 
@@ -169,9 +171,9 @@ type expKVTxn struct {
 	userPriority *roachpb.UserPriority
 	// For the timestamps we just check the physical part. The logical part is
 	// incremented every time the clock is read and so it's unpredictable.
-	tsNanos     *int64
-	origTSNanos *int64
-	maxTSNanos  *int64
+	writeTSNanos *int64
+	readTSNanos  *int64
+	maxTSNanos   *int64
 }
 
 func checkTxn(txn *kv.Txn, exp expKVTxn) error {
@@ -187,14 +189,14 @@ func checkTxn(txn *kv.Txn, exp expKVTxn) error {
 			*exp.userPriority, txn.UserPriority())
 	}
 	proto := txn.TestingCloneTxn()
-	if exp.tsNanos != nil && *exp.tsNanos != proto.WriteTimestamp.WallTime {
+	if exp.writeTSNanos != nil && *exp.writeTSNanos != proto.WriteTimestamp.WallTime {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
-			*exp.tsNanos, proto.WriteTimestamp)
+			*exp.writeTSNanos, proto.WriteTimestamp)
 	}
-	if origTimestamp := txn.ReadTimestamp(); exp.origTSNanos != nil &&
-		*exp.origTSNanos != origTimestamp.WallTime {
-		return errors.Errorf("expected DeprecatedOrigTimestamp: %d, but got: %s",
-			*exp.origTSNanos, origTimestamp)
+	if readTimestamp := txn.ReadTimestamp(); exp.readTSNanos != nil &&
+		*exp.readTSNanos != readTimestamp.WallTime {
+		return errors.Errorf("expected ReadTimestamp: %d, but got: %s",
+			*exp.readTSNanos, readTimestamp)
 	}
 	if exp.maxTSNanos != nil && *exp.maxTSNanos != proto.MaxTimestamp.WallTime {
 		return errors.Errorf("expected MaxTimestamp: %d, but got: %s",
@@ -205,16 +207,19 @@ func checkTxn(txn *kv.Txn, exp expKVTxn) error {
 
 func TestTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
-	testCon := makeTestContext()
+	testCon := makeTestContext(stopper)
 	tranCtx := transitionCtx{
 		db:             testCon.mockDB,
 		nodeIDOrZero:   roachpb.NodeID(5),
 		clock:          testCon.clock,
 		tracer:         tracing.NewTracer(),
-		connMon:        &testCon.mon,
+		connMon:        testCon.mon,
 		sessionTracing: &SessionTracing{},
 		settings:       testCon.settings,
 	}
@@ -278,8 +283,8 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -301,8 +306,8 @@ func TestTransitions(t *testing.T) {
 			expTxn: &expKVTxn{
 				debugName:    &txnName,
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -586,8 +591,8 @@ func TestTransitions(t *testing.T) {
 			},
 			expTxn: &expKVTxn{
 				userPriority: &pri,
-				tsNanos:      &now.WallTime,
-				origTSNanos:  &now.WallTime,
+				writeTSNanos: &now.WallTime,
+				readTSNanos:  &now.WallTime,
 				maxTSNanos:   &maxTS.WallTime,
 			},
 		},
@@ -607,7 +612,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnRestart,
 			},
 			expTxn: &expKVTxn{
-				tsNanos: proto.Int64(now.WallTime),
+				writeTSNanos: proto.Int64(now.WallTime),
 			},
 		},
 		//

@@ -21,14 +21,9 @@ package coldata
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/cockroachdb/apd"
-	// {{/*
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
-	// */}}
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // {{/*
@@ -41,15 +36,6 @@ const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
 
 // _TYPE_WIDTH is the template variable.
 const _TYPE_WIDTH = 0
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
 
 // */}}
 
@@ -89,7 +75,7 @@ func (m *memColumn) Append(args SliceArgs) {
 				toCol = execgen.SLICE(toCol, 0, args.DestIdx)
 				// {{end}}
 				for _, selIdx := range sel {
-					val := execgen.UNSAFEGET(fromCol, selIdx)
+					val := fromCol.Get(selIdx)
 					execgen.APPENDVAL(toCol, val)
 				}
 			}
@@ -121,7 +107,7 @@ func _COPY_WITH_SEL(
 				// {{end}}
 			} else {
 				// {{with .Global}}
-				v := execgen.UNSAFEGET(fromCol, selIdx)
+				v := fromCol.Get(selIdx)
 				// {{end}}
 				// {{if .SelOnDest}}
 				m.nulls.UnsetNull(selIdx)
@@ -141,7 +127,7 @@ func _COPY_WITH_SEL(
 	for i := range sel[args.SrcStartIdx:args.SrcEndIdx] {
 		selIdx := sel[args.SrcStartIdx+i]
 		// {{with .Global}}
-		v := execgen.UNSAFEGET(fromCol, selIdx)
+		v := fromCol.Get(selIdx)
 		// {{end}}
 		// {{if .SelOnDest}}
 		// {{with .Global}}
@@ -249,7 +235,7 @@ func GetValueAt(v Vec, rowIdx int) interface{} {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			target := v.TemplateType()
-			return execgen.UNSAFEGET(target, rowIdx)
+			return target.Get(rowIdx)
 			// {{end}}
 		}
 		// {{end}}

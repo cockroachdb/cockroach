@@ -95,7 +95,7 @@ func (s unresolvedAddrSlice) Swap(i, j int) {
 func TestGossipStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	defaultZoneConfig := zonepb.DefaultZoneConfigRef()
 	network := simulation.NewNetwork(stopper, 3, true, defaultZoneConfig)
@@ -213,7 +213,7 @@ func TestGossipStorage(t *testing.T) {
 func TestGossipStorageCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	const numNodes = 3
 	network := simulation.NewNetwork(stopper, numNodes, false, zonepb.DefaultZoneConfigRef())

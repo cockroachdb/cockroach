@@ -273,7 +273,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		//
 		// For the refresh, we have two options: either refresh everything read
 		// *before* this batch, and then retry this batch, or refresh the current
-		// batch's reads too and then, if successful, there'd be nothing to refresh.
+		// batch's reads too and then, if successful, there'd be nothing to retry.
 		// We take the former option by setting br = nil below to minimized the
 		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
@@ -285,8 +285,12 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 			bumpedTxn)
 		br = nil
 	}
-	if pErr != nil && maxRefreshAttempts > 0 {
-		br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+	if pErr != nil {
+		if maxRefreshAttempts > 0 {
+			br, pErr = sr.maybeRetrySend(ctx, ba, pErr, maxRefreshAttempts)
+		} else {
+			log.VEventf(ctx, 2, "not checking error for refresh; refresh attempts exhausted")
+		}
 	}
 	sr.forwardRefreshTimestampOnResponse(br, pErr)
 	return br, pErr
@@ -323,6 +327,7 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 		return nil, pErr
 	}
 	sr.refreshSuccess.Inc(1)
+	log.Eventf(ctx, "refresh succeeded; retrying original request")
 
 	// We've refreshed all of the read spans successfully and bumped
 	// ba.Txn's timestamps. Attempt the request again.

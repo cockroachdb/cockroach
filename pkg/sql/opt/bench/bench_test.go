@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -275,8 +277,8 @@ var profileQuery = flag.String("profile-query", "kv-read", "name of query to run
 // TestCPUProfile writes the output profile to a cpu.out file in the current
 // directory. See the profile flags for ways to configure what is profiled.
 func TestCPUProfile(t *testing.T) {
-	t.Skip(
-		"Remove this when profiling. Use profile flags above to configure. Sample command line: \n" +
+	skip.IgnoreLint(t,
+		"Remove this when profiling. Use profile flags above to configure. Sample command line: \n"+
 			"GOMAXPROCS=1 go test -run TestCPUProfile --logtostderr NONE && go tool pprof bench.test cpu.out",
 	)
 
@@ -350,7 +352,7 @@ func newHarness() *harness {
 
 func (h *harness) close() {
 	if h.s != nil {
-		h.s.Stopper().Stop(context.TODO())
+		h.s.Stopper().Stop(context.Background())
 	}
 }
 
@@ -507,11 +509,12 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		id := tree.PlaceholderIdx(i)
 		typ, _ := h.semaCtx.Placeholders.ValueType(id)
 		texpr, err := sqlbase.SanitizeVarFreeExpr(
+			context.Background(),
 			parg,
 			typ,
 			"", /* context */
 			&h.semaCtx,
-			true, /* allowImpure */
+			tree.VolatilityVolatile,
 		)
 		if err != nil {
 			tb.Fatalf("%v", err)
@@ -570,8 +573,9 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 	}
 
 	root := execMemo.RootExpr()
-	execFactory := stubFactory{}
-	eb := execbuilder.New(&execFactory, execMemo, nil /* catalog */, root, &h.evalCtx)
+	eb := execbuilder.New(
+		exec.StubFactory{}, execMemo, nil /* catalog */, root, &h.evalCtx, true, /* allowAutoCommit */
+	)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}

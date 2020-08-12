@@ -13,16 +13,15 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -58,26 +57,6 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 // Ann is a shortcut for the Annotations from the eval context.
 func (r *runParams) Ann() *tree.Annotations {
 	return r.extendedEvalCtx.EvalContext.Annotations
-}
-
-// createTimeForNewTableDescriptor consults the cluster version to determine
-// whether the CommitTimestamp() needs to be observed when creating a new
-// TableDescriptor. See TableDescriptor.ModificationTime.
-//
-// TODO(ajwerner): remove in 20.1.
-func (r *runParams) creationTimeForNewTableDescriptor() hlc.Timestamp {
-	// Before 19.2 we needed to observe the transaction CommitTimestamp to ensure
-	// that CreateAsOfTime and ModificationTime reflected the timestamp at which the
-	// creating transaction committed. Starting in 19.2 we use a zero-valued
-	// CreateAsOfTime and ModificationTime when creating a table descriptor and then
-	// upon reading use the MVCC timestamp to populate the values.
-	var ts hlc.Timestamp
-	if !r.ExecCfg().Settings.Version.IsActive(
-		r.ctx, clusterversion.VersionTableDescModificationTimeFromMVCC,
-	) {
-		ts = r.p.txn.CommitTimestamp()
-	}
-	return ts
 }
 
 // planNode defines the interface for executing a query or portion of a query.
@@ -157,8 +136,10 @@ type planNodeReadingOwnWrites interface {
 }
 
 var _ planNode = &alterIndexNode{}
+var _ planNode = &alterSchemaNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterTableSetSchemaNode{}
 var _ planNode = &alterTypeNode{}
 var _ planNode = &bufferNode{}
 var _ planNode = &cancelQueriesNode{}
@@ -178,6 +159,7 @@ var _ planNode = &deleteRangeNode{}
 var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
+var _ planNode = &dropSchemaNode{}
 var _ planNode = &dropSequenceNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropTypeNode{}
@@ -234,8 +216,10 @@ var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 var _ planNodeFastPath = &controlJobsNode{}
+var _ planNodeFastPath = &controlSchedulesNode{}
 
 var _ planNodeReadingOwnWrites = &alterIndexNode{}
+var _ planNodeReadingOwnWrites = &alterSchemaNode{}
 var _ planNodeReadingOwnWrites = &alterSequenceNode{}
 var _ planNodeReadingOwnWrites = &alterTableNode{}
 var _ planNodeReadingOwnWrites = &alterTypeNode{}
@@ -245,6 +229,7 @@ var _ planNodeReadingOwnWrites = &createTableNode{}
 var _ planNodeReadingOwnWrites = &createTypeNode{}
 var _ planNodeReadingOwnWrites = &createViewNode{}
 var _ planNodeReadingOwnWrites = &changePrivilegesNode{}
+var _ planNodeReadingOwnWrites = &dropSchemaNode{}
 var _ planNodeReadingOwnWrites = &dropTypeNode{}
 var _ planNodeReadingOwnWrites = &setZoneConfigNode{}
 
@@ -290,13 +275,6 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog *optCatalog
 
-	// deps, if non-nil, collects the table/view dependencies for this query.
-	// Any planNode constructors that resolves a table name or reference in the query
-	// to a descriptor must register this descriptor into planDeps.
-	// This is (currently) used by CREATE VIEW.
-	// TODO(knz): Remove this in favor of a better encapsulated mechanism.
-	deps planDependencies
-
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -317,6 +295,68 @@ type planTop struct {
 	distSQLDiagrams []execinfrapb.FlowDiagram
 }
 
+// physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
+// storing planNodes that "power" the processors in the physical plan.
+type physicalPlanTop struct {
+	// PhysicalPlan contains the physical plan that has not yet been finalized.
+	*PhysicalPlan
+	// planNodesToClose contains the planNodes that are a part of the physical
+	// plan (via planNodeToRowSource wrapping). These planNodes need to be
+	// closed explicitly since we don't have a planNode tree that performs the
+	// closure.
+	planNodesToClose []planNode
+}
+
+func (p *physicalPlanTop) Close(ctx context.Context) {
+	for _, plan := range p.planNodesToClose {
+		plan.Close(ctx)
+	}
+	p.planNodesToClose = nil
+}
+
+// planMaybePhysical is a utility struct representing a plan. It can currently
+// use either planNode or DistSQL spec representation, but eventually will be
+// replaced by the latter representation directly.
+type planMaybePhysical struct {
+	planNode planNode
+	// physPlan (when non-nil) contains the physical plan that has not yet
+	// been finalized.
+	physPlan *physicalPlanTop
+}
+
+func makePlanMaybePhysical(physPlan *PhysicalPlan, planNodesToClose []planNode) planMaybePhysical {
+	return planMaybePhysical{
+		physPlan: &physicalPlanTop{
+			PhysicalPlan:     physPlan,
+			planNodesToClose: planNodesToClose,
+		},
+	}
+}
+
+func (p *planMaybePhysical) isPhysicalPlan() bool {
+	return p.physPlan != nil
+}
+
+func (p *planMaybePhysical) planColumns() sqlbase.ResultColumns {
+	if p.isPhysicalPlan() {
+		return p.physPlan.ResultColumns
+	}
+	return planColumns(p.planNode)
+}
+
+// Close closes the pieces of the plan that haven't been yet closed. Note that
+// it also resets the corresponding fields.
+func (p *planMaybePhysical) Close(ctx context.Context) {
+	if p.planNode != nil {
+		p.planNode.Close(ctx)
+		p.planNode = nil
+	}
+	if p.physPlan != nil {
+		p.physPlan.Close(ctx)
+		p.physPlan = nil
+	}
+}
+
 // planComponents groups together the various components of the entire query
 // plan.
 type planComponents struct {
@@ -324,7 +364,7 @@ type planComponents struct {
 	subqueryPlans []subquery
 
 	// plan for the main query.
-	main planNode
+	main planMaybePhysical
 
 	// cascades contains metadata for all cascades.
 	cascades []cascadeMetadata
@@ -338,43 +378,26 @@ type cascadeMetadata struct {
 	exec.Cascade
 	// plan for the cascade. This plan is not populated upfront; it is created
 	// only when it needs to run, after the main query (and previous cascades).
-	plan planNode
+	plan planMaybePhysical
 }
 
 // checkPlan is a query tree that is executed after the main one. It can only
 // return an error (for example, foreign key violation).
 type checkPlan struct {
-	plan planNode
+	plan planMaybePhysical
 }
 
 // close calls Close on all plan trees.
 func (p *planComponents) close(ctx context.Context) {
-	if p.main != nil {
-		p.main.Close(ctx)
-		p.main = nil
-	}
-
+	p.main.Close(ctx)
 	for i := range p.subqueryPlans {
-		// Once a subquery plan has been evaluated, it already closes its
-		// plan.
-		if p.subqueryPlans[i].plan != nil {
-			p.subqueryPlans[i].plan.Close(ctx)
-			p.subqueryPlans[i].plan = nil
-		}
+		p.subqueryPlans[i].plan.Close(ctx)
 	}
-
 	for i := range p.cascades {
-		if p.cascades[i].plan != nil {
-			p.cascades[i].plan.Close(ctx)
-			p.cascades[i].plan = nil
-		}
+		p.cascades[i].plan.Close(ctx)
 	}
-
 	for i := range p.checkPlans {
-		if p.checkPlans[i].plan != nil {
-			p.checkPlans[i].plan.Close(ctx)
-			p.checkPlans[i].plan = nil
-		}
+		p.checkPlans[i].plan.Close(ctx)
 	}
 }
 
@@ -387,7 +410,9 @@ func (p *planTop) init(stmt *Statement, appStats *appStats) {
 
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
-	if p.main != nil {
+	if p.main.planNode != nil {
+		// TODO(yuzefovich): update this once we support creating table reader
+		// specs directly in the optimizer (see #47474).
 		p.instrumentation.savePlanInfo(ctx, p)
 	}
 	p.planComponents.close(ctx)
@@ -464,12 +489,13 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 
 // Mark transaction as operating on the system DB if the descriptor id
 // is within the SystemConfig range.
-func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
-	if !sqlbase.IsSystemConfigID(id) {
+func (p *planner) maybeSetSystemConfig(id descpb.ID) error {
+	if !descpb.IsSystemConfigID(id) {
 		return nil
 	}
 	// Mark transaction as operating on the system DB.
-	return p.txn.SetSystemConfigTrigger()
+	// Only the system tenant marks the SystemConfigTrigger.
+	return p.txn.SetSystemConfigTrigger(p.execCfg.Codec.ForSystemTenant())
 }
 
 // planFlags is used throughout the planning code to keep track of various
@@ -502,6 +528,13 @@ const (
 
 	// planFlagIsDDL marks that the plan contains DDL.
 	planFlagIsDDL
+
+	// planFlagVectorized is set if the plan is executed via the vectorized
+	// engine.
+	planFlagVectorized
+
+	// planFlagTenant is set if the plan is executed on behalf of a tenant.
+	planFlagTenant
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
@@ -536,6 +569,7 @@ func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTo
 	if pi.appStats != nil && pi.appStats.shouldSaveLogicalPlanDescription(
 		curPlan.stmt,
 		curPlan.flags.IsSet(planFlagDistributed),
+		curPlan.flags.IsSet(planFlagVectorized),
 		curPlan.flags.IsSet(planFlagImplicitTxn),
 		curPlan.execErr,
 	) {

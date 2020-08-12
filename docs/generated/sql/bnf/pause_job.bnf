@@ -1,3 +1,4 @@
-pause_stmt ::=
+pause_jobs_stmt ::=
 	'PAUSE' 'JOB' job_id
 	| 'PAUSE' 'JOBS' select_stmt
+	| 'PAUSE' 'JOBS' for_schedules_clause

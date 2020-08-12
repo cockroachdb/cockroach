@@ -35,7 +35,7 @@ func newCSVInputReader(
 	opts roachpb.CSVOptions,
 	walltime int64,
 	parallelism int,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {
@@ -61,8 +61,9 @@ func (c *csvInputReader) readFiles(
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
 	makeExternalStorage cloud.ExternalStorageFactory,
+	user string,
 ) error {
-	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, makeExternalStorage)
+	return readInputFiles(ctx, dataFiles, resumePos, format, c.readFile, makeExternalStorage, user)
 }
 
 func (c *csvInputReader) readFile(

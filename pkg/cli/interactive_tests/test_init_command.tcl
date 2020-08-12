@@ -72,8 +72,7 @@ eexpect ":/# "
 
 start_test "Check that init on an already started server immediately complains the server is already initialized"
 send "$argv init --insecure --host=localhost\r"
-eexpect "error"
-eexpect "cluster has already been initialized"
+eexpect "ERROR: cluster has already been initialized"
 eexpect ":/# "
 end_test
 
@@ -82,8 +81,7 @@ start_server $argv
 
 start_test "Check that init after server restart still properly complains the server has been initialized"
 send "$argv init --insecure --host=localhost\r"
-eexpect "error"
-eexpect "cluster has already been initialized"
+eexpect "ERROR: cluster has already been initialized"
 eexpect ":/# "
 end_test
 

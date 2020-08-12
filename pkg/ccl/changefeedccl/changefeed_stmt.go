@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"net/url"
 	"sort"
@@ -29,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -54,7 +57,7 @@ func init() {
 
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
-	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
@@ -82,7 +85,7 @@ func changefeedPlanHook(
 		avoidBuffering = true
 	} else {
 		var err error
-		sinkURIFn, err = p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -91,7 +94,7 @@ func changefeedPlanHook(
 		}
 	}
 
-	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
+	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedbase.ChangefeedOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -131,7 +134,7 @@ func changefeedPlanHook(
 		if cursor, ok := opts[changefeedbase.OptCursor]; ok {
 			asOf := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
 			var err error
-			if initialHighWater, err = p.EvalAsOfTimestamp(asOf); err != nil {
+			if initialHighWater, err = p.EvalAsOfTimestamp(ctx, asOf); err != nil {
 				return err
 			}
 			statementTime = initialHighWater
@@ -156,17 +159,17 @@ func changefeedPlanHook(
 
 		// This grabs table descriptors once to get their ids.
 		targetDescs, _, err := backupccl.ResolveTargetsToDescriptors(
-			ctx, p, statementTime, changefeedStmt.Targets, tree.RequestedDescriptors)
+			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
 			return err
 		}
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
-			if tableDesc := desc.Table(hlc.Timestamp{}); tableDesc != nil {
-				targets[tableDesc.ID] = jobspb.ChangefeedTarget{
-					StatementTimeName: tableDesc.Name,
+			if table, isTable := desc.(sqlbase.TableDescriptor); isTable {
+				targets[table.GetID()] = jobspb.ChangefeedTarget{
+					StatementTimeName: table.GetName(),
 				}
-				if err := validateChangefeedTable(targets, tableDesc); err != nil {
+				if err := validateChangefeedTable(targets, table); err != nil {
 					return err
 				}
 			}
@@ -259,7 +262,7 @@ func changefeedPlanHook(
 			var nilOracle timestampLowerBoundOracle
 			canarySink, err := getSink(
 				ctx, details.SinkURI, nodeID, details.Opts, details.Targets,
-				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
 			)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
@@ -295,7 +298,7 @@ func changefeedPlanHook(
 			jr := jobs.Record{
 				Description: jobDescription,
 				Username:    p.User(),
-				DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 					for _, desc := range targetDescs {
 						sqlDescIDs = append(sqlDescIDs, desc.GetID())
 					}
@@ -363,7 +366,7 @@ func changefeedPlanHook(
 func changefeedJobDescription(
 	p sql.PlanHookState, changefeed *tree.CreateChangefeed, sinkURI string, opts map[string]string,
 ) (string, error) {
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{changefeedbase.SinkParamSASLPassword})
+	cleanedSinkURI, err := cloudimpl.SanitizeExternalStorageURI(sinkURI, []string{changefeedbase.SinkParamSASLPassword})
 	if err != nil {
 		return "", err
 	}
@@ -466,11 +469,11 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 }
 
 func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor,
+	targets jobspb.ChangefeedTargets, tableDesc sqlbase.TableDescriptor,
 ) error {
-	t, ok := targets[tableDesc.ID]
+	t, ok := targets[tableDesc.GetID()]
 	if !ok {
-		return errors.Errorf(`unwatched table: %s`, tableDesc.Name)
+		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 
 	// Technically, the only non-user table known not to work is system.jobs
@@ -478,29 +481,29 @@ func validateChangefeedTable(
 	// saved in it), but there are subtle differences in the way many of them
 	// work and this will be under-tested, so disallow them all until demand
 	// dictates.
-	if tableDesc.ID < keys.MinUserDescID {
+	if tableDesc.GetID() < keys.MinUserDescID {
 		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
 	}
 	if tableDesc.IsView() {
-		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsVirtualTable() {
-		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target virtual tables: %s`, tableDesc.GetName())
 	}
 	if tableDesc.IsSequence() {
-		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
+		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
-	if len(tableDesc.Families) != 1 {
+	if families := tableDesc.GetFamilies(); len(families) != 1 {
 		return errors.Errorf(
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.Name, len(tableDesc.Families))
+			tableDesc.GetName(), len(families))
 	}
 
-	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+	if tableDesc.GetState() == descpb.TableDescriptor_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
-	if tableDesc.Name != t.StatementTimeName {
-		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
+	if tableDesc.GetName() != t.StatementTimeName {
+		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.GetName())
 	}
 
 	// TODO(mrtracy): re-enable this when allow-backfill option is added.
@@ -571,6 +574,16 @@ func (b *changefeedResumer) Resume(
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+
+			if flowinfra.IsFlowRetryableError(err) {
+				// We don't want to retry flowinfra retryable error in the retry loop above.
+				// This error currently indicates that this node is being drained.  As such,
+				// retries will not help.
+				// Instead, we want to make sure that the changefeed job is not marked failed
+				// due to a transient, retryable error.
+				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+			}
+
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
 			return err
 		}

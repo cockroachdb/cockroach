@@ -11,6 +11,8 @@
 package schemachange
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -93,20 +95,8 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 		},
 	},
 	types.StringFamily: {
-		// If we want to convert string -> bytes, we need to know that the
-		// bytes type has an unlimited width or that we have at least
-		// 4x the number of bytes as known-maximum characters.
 		types.BytesFamily: func(s *types.T, b *types.T) ColumnConversionKind {
-			switch {
-			case b.Width() == 0:
-				return ColumnConversionTrivial
-			case s.Width() == 0:
-				return ColumnConversionValidate
-			case b.Width() >= s.Width()*4:
-				return ColumnConversionTrivial
-			default:
-				return ColumnConversionValidate
-			}
+			return ColumnConversionValidate
 		},
 		types.StringFamily: classifierWidth,
 	},
@@ -200,7 +190,9 @@ func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 // ClassifyConversion takes two ColumnTypes and determines "how hard"
 // the conversion is.  Note that this function will return
 // ColumnConversionTrivial if the two types are equal.
-func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKind, error) {
+func ClassifyConversion(
+	ctx context.Context, oldType *types.T, newType *types.T,
+) (ColumnConversionKind, error) {
 	if oldType.Identical(newType) {
 		return ColumnConversionTrivial, nil
 	}
@@ -216,20 +208,20 @@ func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKin
 	}
 
 	// See if there's existing cast logic.  If so, return general.
-	ctx := tree.MakeSemaContext()
-	if err := ctx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
+	semaCtx := tree.MakeSemaContext()
+	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 		return ColumnConversionImpossible, err
 	}
 
 	// Use a placeholder just to sub in the original type.
-	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(&ctx, oldType)
+	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(ctx, &semaCtx, oldType)
 	if err != nil {
 		return ColumnConversionImpossible, err
 	}
 
 	// Cook up a cast expression using the placeholder.
 	cast := tree.NewTypedCastExpr(fromPlaceholder, newType)
-	if _, err := cast.TypeCheck(&ctx, nil); err == nil {
+	if _, err := cast.TypeCheck(ctx, &semaCtx, nil); err == nil {
 		return ColumnConversionGeneral, nil
 	}
 

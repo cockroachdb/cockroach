@@ -134,3 +134,7 @@ var SchemaChangeInExplicitTxnCounter = telemetry.GetCounterOnce("sql.schema.chan
 // SecondaryIndexColumnFamiliesCounter is a counter that is incremented every time
 // a secondary index that is separated into different column families is created.
 var SecondaryIndexColumnFamiliesCounter = telemetry.GetCounterOnce("sql.schema.secondary_index_column_families")
+
+// CreateUnloggedTableCounter is a counter that is incremented everytime an unlogged
+// table is created.
+var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unlogged_table")

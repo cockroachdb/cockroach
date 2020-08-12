@@ -88,13 +88,13 @@ func (node *AlterTypeRenameValue) Format(ctx *FmtCtx) {
 
 // AlterTypeRename represents an ALTER TYPE RENAME command.
 type AlterTypeRename struct {
-	NewName *UnresolvedObjectName
+	NewName string
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTypeRename) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
-	ctx.FormatNode(node.NewName)
+	ctx.WriteString(node.NewName)
 }
 
 // AlterTypeSetSchema represents an ALTER TYPE SET SCHEMA command.

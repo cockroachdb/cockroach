@@ -21,14 +21,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +87,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 }
 
 func lookupTableStats(
-	ctx context.Context, sc *TableStatisticsCache, tableID sqlbase.ID,
+	ctx context.Context, sc *TableStatisticsCache, tableID descpb.ID,
 ) ([]*TableStatistic, bool) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -94,10 +98,7 @@ func lookupTableStats(
 }
 
 func checkStatsForTable(
-	ctx context.Context,
-	sc *TableStatisticsCache,
-	expected []*TableStatisticProto,
-	tableID sqlbase.ID,
+	ctx context.Context, sc *TableStatisticsCache, expected []*TableStatisticProto, tableID descpb.ID,
 ) error {
 	// Initially the stats won't be in the cache.
 	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
@@ -108,7 +109,7 @@ func checkStatsForTable(
 	// returned stats match the expected values.
 	statsList, err := sc.GetTableStats(ctx, tableID)
 	if err != nil {
-		return errors.Errorf(err.Error())
+		return errors.Wrap(err, "retrieving stats")
 	}
 	if !checkStats(statsList, expected) {
 		return errors.Errorf("for lookup of key %d, expected stats %s, got %s", tableID, expected, statsList)
@@ -135,15 +136,15 @@ func checkStats(actual []*TableStatistic, expected []*TableStatisticProto) bool 
 
 func initTestData(
 	ctx context.Context, db *kv.DB, ex sqlutil.InternalExecutor,
-) (map[sqlbase.ID][]*TableStatisticProto, error) {
+) (map[descpb.ID][]*TableStatisticProto, error) {
 	// The expected stats must be ordered by TableID+, CreatedAt- so they can
 	// later be compared with the returned stats using reflect.DeepEqual.
 	expStatsList := []TableStatisticProto{
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descpb.ID(100),
 			StatisticID:   0,
 			Name:          "table0",
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []descpb.ColumnID{1},
 			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 24, 0, time.UTC),
 			RowCount:      32,
 			DistinctCount: 30,
@@ -153,28 +154,28 @@ func initTestData(
 			},
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descpb.ID(100),
 			StatisticID:   1,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []descpb.ColumnID{2, 3},
 			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
 			RowCount:      32,
 			DistinctCount: 5,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(101),
+			TableID:       descpb.ID(101),
 			StatisticID:   0,
-			ColumnIDs:     []sqlbase.ColumnID{0},
+			ColumnIDs:     []descpb.ColumnID{0},
 			CreatedAt:     time.Date(2017, 11, 20, 11, 35, 23, 0, time.UTC),
 			RowCount:      320000,
 			DistinctCount: 300000,
 			NullCount:     100,
 		},
 		{
-			TableID:       sqlbase.ID(102),
+			TableID:       descpb.ID(102),
 			StatisticID:   34,
 			Name:          "table2",
-			ColumnIDs:     []sqlbase.ColumnID{1, 2, 3},
+			ColumnIDs:     []descpb.ColumnID{1, 2, 3},
 			CreatedAt:     time.Date(2001, 1, 10, 5, 25, 14, 0, time.UTC),
 			RowCount:      0,
 			DistinctCount: 0,
@@ -184,7 +185,7 @@ func initTestData(
 
 	// Insert the stats into system.table_statistics
 	// and store them in maps for fast retrieval.
-	expectedStats := make(map[sqlbase.ID][]*TableStatisticProto)
+	expectedStats := make(map[descpb.ID][]*TableStatisticProto)
 	for i := range expStatsList {
 		stat := &expStatsList[i]
 
@@ -196,13 +197,14 @@ func initTestData(
 	}
 
 	// Add another TableID for which we don't have stats.
-	expectedStats[sqlbase.ID(103)] = nil
+	expectedStats[descpb.ID(103)] = nil
 
 	return expectedStats, nil
 }
 
 func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -216,7 +218,7 @@ func TestCacheBasic(t *testing.T) {
 
 	// Collect the tableIDs and sort them so we can iterate over them in a
 	// consistent order (Go randomizes the order of iteration over maps).
-	var tableIDs sqlbase.IDs
+	var tableIDs descpb.IDs
 	for tableID := range expectedStats {
 		tableIDs = append(tableIDs, tableID)
 	}
@@ -227,9 +229,10 @@ func TestCacheBasic(t *testing.T) {
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
 		2, /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
+		keys.SystemSQLCodec,
 	)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
@@ -238,7 +241,7 @@ func TestCacheBasic(t *testing.T) {
 	}
 
 	// Table IDs 0 and 1 should have been evicted since the cache size is 2.
-	tableIDs = []sqlbase.ID{sqlbase.ID(100), sqlbase.ID(101)}
+	tableIDs = []descpb.ID{descpb.ID(100), descpb.ID(101)}
 	for _, tableID := range tableIDs {
 		if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 			t.Fatalf("lookup of evicted key %d returned: %s", tableID, statsList)
@@ -246,18 +249,89 @@ func TestCacheBasic(t *testing.T) {
 	}
 
 	// Table IDs 2 and 3 should still be in the cache.
-	tableIDs = []sqlbase.ID{sqlbase.ID(102), sqlbase.ID(103)}
+	tableIDs = []descpb.ID{descpb.ID(102), descpb.ID(103)}
 	for _, tableID := range tableIDs {
 		if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
 			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expectedStats[tableID])
 		}
 	}
 
+	// Insert a new stat for Table ID 2.
+	tableID := descpb.ID(102)
+	stat := TableStatisticProto{
+		TableID:       tableID,
+		StatisticID:   35,
+		Name:          "table2",
+		ColumnIDs:     []descpb.ColumnID{1, 2, 3},
+		CreatedAt:     time.Date(2001, 1, 10, 5, 26, 34, 0, time.UTC),
+		RowCount:      10,
+		DistinctCount: 10,
+		NullCount:     0,
+	}
+	if err := insertTableStat(ctx, db, ex, &stat); err != nil {
+		t.Fatal(err)
+	}
+
+	// After refreshing, Table ID 2 should be available immediately in the cache
+	// for querying, and eventually should contain the updated stat.
+	sc.RefreshTableStats(ctx, tableID)
+	if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
+		t.Fatalf("expected lookup of refreshed key %d to succeed", tableID)
+	}
+	expected := append([]*TableStatisticProto{&stat}, expectedStats[tableID]...)
+	testutils.SucceedsSoon(t, func() error {
+		statsList, ok := lookupTableStats(ctx, sc, tableID)
+		if !ok {
+			return errors.Errorf("expected lookup of refreshed key %d to succeed", tableID)
+		}
+		if !checkStats(statsList, expected) {
+			return errors.Errorf(
+				"for lookup of key %d, expected stats %s but found %s", tableID, expected, statsList,
+			)
+		}
+		return nil
+	})
+
 	// After invalidation Table ID 2 should be gone.
-	tableID := sqlbase.ID(102)
 	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
+	}
+}
+
+func TestCacheUserDefinedTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := sqlDB.Exec(`
+SET experimental_enable_enums=true;
+CREATE DATABASE t;
+USE t;
+CREATE TYPE t AS ENUM ('hello');
+CREATE TABLE tt (x t PRIMARY KEY);
+INSERT INTO tt VALUES ('hello');
+CREATE STATISTICS s FROM tt;
+`); err != nil {
+		t.Fatal(err)
+	}
+	_ = kvDB
+	// Make a stats cache.
+	sc := NewTableStatisticsCache(
+		1,
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
+		kvDB,
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		keys.SystemSQLCodec,
+	)
+	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	// Get stats for our table. We are ensuring here that the access to the stats
+	// for tt properly hydrates the user defined type t before access.
+	_, err := sc.GetTableStats(ctx, tbl.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -265,6 +339,7 @@ func TestCacheBasic(t *testing.T) {
 // the stats one time, even if there are multiple callers asking for them.
 func TestCacheWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -278,16 +353,17 @@ func TestCacheWait(t *testing.T) {
 
 	// Collect the tableIDs and sort them so we can iterate over them in a
 	// consistent order (Go randomizes the order of iteration over maps).
-	var tableIDs sqlbase.IDs
+	var tableIDs descpb.IDs
 	for tableID := range expectedStats {
 		tableIDs = append(tableIDs, tableID)
 	}
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
 		len(tableIDs), /* cacheSize */
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
+		keys.SystemSQLCodec,
 	)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {

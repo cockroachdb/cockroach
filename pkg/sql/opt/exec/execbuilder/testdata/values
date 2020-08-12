@@ -4,7 +4,7 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (a)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -13,7 +13,7 @@ values  ·              ·                (a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
-·       distributed    false            ·    ·
+·       distribution   local            ·    ·
 ·       vectorized     false            ·    ·
 values  ·              ·                (a)  ·
 ·       size           1 column, 1 row  ·    ·
@@ -22,7 +22,7 @@ values  ·              ·                (a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distributed    false              ·                            ·
+·       distribution   local              ·                            ·
 ·       vectorized     false              ·                            ·
 values  ·              ·                  (column1, column2, column3)  ·
 ·       size           3 columns, 2 rows  ·                            ·
@@ -36,7 +36,7 @@ values  ·              ·                  (column1, column2, column3)  ·
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
-·       distributed    false             ·          ·
+·       distribution   local             ·          ·
 ·       vectorized     false             ·          ·
 values  ·              ·                 (column1)  ·
 ·       size           1 column, 4 rows  ·          ·
@@ -48,7 +48,7 @@ values  ·              ·                 (column1)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-·            distributed    false              ·                   ·
+·            distribution   local              ·                   ·
 ·            vectorized     false              ·                   ·
 render       ·              ·                  (r)                 ·
  │           render 0       column1 + column2  ·                   ·

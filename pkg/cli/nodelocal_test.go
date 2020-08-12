@@ -43,7 +43,7 @@ func Example_nodelocal() {
 	// nodelocal upload test.csv /test/file1.csv
 	// ERROR: destination file already exists for /test/file1.csv
 	// nodelocal upload test.csv /test/../../file1.csv
-	// ERROR: local file access to paths outside of external-io-dir is not allowed: /test/../../file1.csv
+	// ERROR: local file access to paths outside of external-io-dir is not allowed: ../file1.csv
 	// nodelocal upload notexist.csv /test/file1.csv
 	// ERROR: open notexist.csv: no such file or directory
 }
@@ -126,11 +126,15 @@ func TestNodeLocalFileUpload(t *testing.T) {
 }
 
 func createTestFile(name, content string) (string, func()) {
-	err := ioutil.WriteFile(name, []byte(content), 0666)
+	tmpDir, err := ioutil.TempDir("", "")
+	tmpFile := filepath.Join(tmpDir, testTempFilePrefix+name)
+	if err == nil {
+		err = ioutil.WriteFile(tmpFile, []byte(content), 0666)
+	}
 	if err != nil {
 		return "", func() {}
 	}
-	return name, func() {
-		_ = os.Remove(name)
+	return tmpFile, func() {
+		_ = os.RemoveAll(tmpDir)
 	}
 }

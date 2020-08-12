@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>CockroachDB GeoVIZ</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta charset="utf-8">
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 100%;
+      }
+      #geoviz-input {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        z-index: 5;
+        background-color: #fff;
+        padding: 5px;
+        border: 1px solid #999;
+        text-align: center;
+        font-family: 'Roboto','sans-serif';
+        line-height: 30px;
+        padding-left: 10px;
+      }
+      #legend {
+        position: absolute;
+        top: 80px;
+        right: 10px;
+        max-height: 60%;
+        z-index: 5;
+        background-color: #fff;
+        padding: 5px;
+        border: 1px solid #999;
+        font-family: 'Roboto','sans-serif';
+        overflow: auto;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="legend">
+      <h3>Legend</h3>
+      <div id="legend-items">
+      </div>
+      <div>
+        <hr/>
+        <label>
+          <input type="checkbox" id="show-labels" name="show-labels" checked>
+          Show Labels
+        </label>
+        <div>
+          <button onclick="copyURL()">Share GeoVIZ</button>
+        </div>
+      </div>
+    </div>
+    <div id="geoviz-input">
+      <form id="form-geoviz-input" method="POST" action="/load">
+        <div>
+          <p>
+            Each line should contain four fields in CSV Format: <code>op,name,color,ewkt/cellid</code>. Name/Color can be blank to be randomized.<br/>
+            Valid ops are: "drawgeography", "innercovering", "drawcellid", "drawcelltoken", "covering", "interiorcovering".
+          </p>
+          <textarea name="data" rows="10" cols="160">
+drawcelltoken,An International Cell Token,,869
+drawgeography,California,,"POLYGON((-124.4009 41.9983,-123.6237 42.0024,-123.1526 42.0126,-122.0073 42.0075,-121.2369 41.9962,-119.9982 41.9983,-120.0037 39.0021,-117.9575 37.5555,-116.3699 36.3594,-114.6368 35.0075,-114.6382 34.9659,-114.6286 34.9107,-114.6382 34.8758,-114.5970 34.8454,-114.5682 34.7890,-114.4968 34.7269,-114.4501 34.6648,-114.4597 34.6581,-114.4322 34.5869,-114.3787 34.5235,-114.3869 34.4601,-114.3361 34.4500,-114.3031 34.4375,-114.2674 34.4024,-114.1864 34.3559,-114.1383 34.3049,-114.1315 34.2561,-114.1651 34.2595,-114.2249 34.2044,-114.2221 34.1914,-114.2908 34.1720,-114.3237 34.1368,-114.3622 34.1186,-114.4089 34.1118,-114.4363 34.0856,-114.4336 34.0276,-114.4652 34.0117,-114.5119 33.9582,-114.5366 33.9308,-114.5091 33.9058,-114.5256 33.8613,-114.5215 33.8248,-114.5050 33.7597,-114.4940 33.7083,-114.5284 33.6832,-114.5242 33.6363,-114.5393 33.5895,-114.5242 33.5528,-114.5586 33.5311,-114.5778 33.5070,-114.6245 33.4418,-114.6506 33.4142,-114.7055 33.4039,-114.6973 33.3546,-114.7302 33.3041,-114.7206 33.2858,-114.6808 33.2754,-114.6698 33.2582,-114.6904 33.2467,-114.6794 33.1720,-114.7083 33.0904,-114.6918 33.0858,-114.6629 33.0328,-114.6451 33.0501,-114.6286 33.0305,-114.5888 33.0282,-114.5750 33.0351,-114.5174 33.0328,-114.4913 32.9718,-114.4775 32.9764,-114.4844 32.9372,-114.4679 32.8427,-114.5091 32.8161,-114.5311 32.7850,-114.5284 32.7573,-114.5641 32.7503,-114.6162 32.7353,-114.6986 32.7480,-114.7220 32.7191,-115.1944 32.6868,-117.3395 32.5121,-117.4823 32.7838,-117.5977 33.0501,-117.6814 33.2341,-118.0591 33.4578,-118.6290 33.5403,-118.7073 33.7928,-119.3706 33.9582,-120.0050 34.1925,-120.7164 34.2561,-120.9128 34.5360,-120.8427 34.9749,-121.1325 35.2131,-121.3220 35.5255,-121.8013 35.9691,-122.1446 36.2808,-122.1721 36.7268,-122.6871 37.2227,-122.8903 37.7783,-123.2378 37.8965,-123.3202 38.3449,-123.8338 38.7423,-123.9793 38.9946,-124.0329 39.3088,-124.0823 39.7642,-124.5314 40.1663,-124.6509 40.4658,-124.3144 41.0110,-124.3419 41.2386,-124.4545 41.7170,-124.4009 41.9983,-124.4009 41.9983))"
+drawgeography,San Francisco,,"POINT(-122.4194 37.7749)"
+drawgeography,"San Francisco to LA via Bakersfield",orange,"LINESTRING(-122.4194 37.7749, -119.0187 35.3733,-118.2437 34.0522)"
+covering,New Mexico Covering,purple,"POLYGON((-109.0448 36.9971,-109.0489 31.3337,-108.2140 31.3349,-108.2071 31.7795,-106.5317 31.7830,-106.6223 32.0034,-103.0696 31.9999,-103.0023 36.9982,-109.0475 36.9982,-109.0448 36.9971))"
+</textarea>
+        </div>
+        <div>
+          <input type="submit" value="GeoVIZ!">
+        </div>
+      </form>
+    </div>
+    <div id="map">
+    </div>
+    <script>
+      var map;
+      var labels = [];
+      var allObjItems = [];
+
+      // initMap will initialize a Google Map, and submit the form defaults to the server
+      // for re-display.
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: -34.397, lng: 150.644},
+          zoom: 2
+        });
+
+        // Populate GeoVIZ from URL if available.
+        const loc = $(location).attr('hash');
+        if (loc) {
+          $('textarea[name="data"]').val(atob(loc.substring(1)));
+        }
+
+        $("#form-geoviz-input").submit();
+      }
+
+      // When the show labels button is clicked (or unclicked), show (or hide) all labels on the map.
+      $("#show-labels").click(function() {
+        const checked = $(this).is(':checked');
+        var idx = 0;
+        for (const objItems of allObjItems) {
+          var itemChecked = $('input[name="show-object[]"][value="' + idx + '"]').is(':checked');
+          for (const label of objItems.labels) {
+            label.setMap((itemChecked && checked) ? map : null);
+          }
+          idx++;
+        }
+      });
+
+      // setMapOnObjs will set visibility on each object depending on whether the show labels
+      // and legend is clicked.
+      function setMapOnObjs(objItems, visible) {
+        for (const obj of objItems.objs) {
+          obj.setMap(visible ? map : null);
+        }
+        for (const infoWindow of objItems.infowindows) {
+          if (!visible) {
+            infoWindow.close();
+          }
+        }
+        const labelChecked = $('#show-labels').is(':checked');
+        for (const label of objItems.labels) {
+          label.setMap((labelChecked && visible) ? map : null);
+        }
+      }
+
+      function copyURL() {
+        const el = document.createElement('textarea');
+        el.value = window.location;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '-9999px';
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        alert("URL copied to clipboard!");
+      }
+
+      $("#form-geoviz-input").submit(function(event) {
+        event.preventDefault();
+
+        const form = $(this);
+        const url = form.attr('action');
+
+        // Remove everything from the map.
+        for (const objItems of allObjItems) {
+          setMapOnObjs(objItems, false);
+        }
+
+        // Reset everything again.
+        allObjItems = [];
+
+        // addMarker adds a marker on the map, modifying objItems with
+        // new marker metadata.
+        // Returns an object with the marker and infowindow.
+        function addMarker(marker, objItems, visible) {
+          const infowindow = new google.maps.InfoWindow({
+            content: marker.content,
+          });
+          const p = new google.maps.Marker({
+            ...marker,
+            map: map,
+            visible: visible,
+          });
+          objItems.objs.push(p);
+          objItems.infowindows.push(infowindow);
+          p.addListener('click', function() {
+            infowindow.open(map, p);
+          });
+          return {marker: p, infowindow};
+        }
+
+        $.ajax({
+          type: "POST",
+          url: url,
+          data: form.serialize(),
+          success: function(data) {
+            const bounds = new google.maps.LatLngBounds();
+            var list = $("<div/>");
+            for (const obj of data.objects) {
+              list.append(
+                '<label style="color:' + obj.color + '">' +
+                '<input type="checkbox" name="show-object[]" value="' + allObjItems.length + '" checked> ' +
+                obj.title + '</label><br/>'
+              );
+
+              const objItems = {
+                objs: [],
+                infowindows: [],
+                labels: [],
+              };
+              if (obj.polylines) {
+                for (const polyline of obj.polylines) {
+                  const p = new google.maps.Polyline({
+                    ...polyline,
+                    map: map,
+                  });
+                  objItems.objs.push(p);
+                  var initial = true;
+                  for (const loc of polyline.path) {
+                    bounds.extend(loc);
+                    const params = {
+                      ...polyline.marker,
+                      position: loc,
+                      icon: {
+                        url: "http://maps.google.com/mapfiles/kml/pal4/icon57.png",
+                        origin: new google.maps.Point(0, 0),
+                        scaledSize: new google.maps.Size(24, 24),
+                        anchor: new google.maps.Point(12, 12),
+                      },
+                    };
+                    const marker = addMarker(params, objItems, true);
+                    if (initial) {
+                      p.addListener('click', function() {
+                        marker.infowindow.open(map, marker.marker);
+                      });
+                      initial = false;
+                    }
+                  }
+                }
+              }
+              if (obj.polygons) {
+                for (const polygon of obj.polygons) {
+                  const p = new google.maps.Polygon({
+                    ...polygon,
+                    map: map,
+                  });
+                  objItems.objs.push(p);
+                  var polygonBound = new google.maps.LatLngBounds();
+                  for (const loc of polygon.paths[0]) {
+                    polygonBound.extend(loc);
+                    bounds.extend(loc);
+                  }
+                  polygon.marker.position = polygonBound.getCenter();
+                  const marker = addMarker(polygon.marker, objItems, false);
+                  p.addListener('click', function() {
+                    marker.infowindow.open(map, marker.marker);
+                  });
+                  const label = new MapLabel({
+                    text: polygon.label,
+                    position: polygonBound.getCenter(),
+                    fontSize: 16,
+                    align: 'center'
+                  });
+                  if ($('#show-labels').is(':checked')) {
+                    label.setMap(map);
+                  }
+                  objItems.labels.push(label);
+                }
+              }
+              if (obj.markers) {
+                for (const marker of obj.markers) {
+                  addMarker(marker, objItems, true);
+                  bounds.extend(marker.position);
+                }
+              }
+              allObjItems.push(objItems);
+            }
+            map.fitBounds(bounds);
+            $("#legend-items").html(list);
+
+            $('input[name="show-object[]"]').click(function() {
+              const checked = $(this).is(':checked');
+              const idx = $(this).attr('value');
+              setMapOnObjs(allObjItems[idx], checked);
+            });
+
+            window.location.hash = '#' + btoa($('textarea[name="data"]').val());
+          },
+          error: function(xhr) {
+            alert(xhr.responseText);
+          }
+        });
+      });
+    </script>
+    {{if .APIKey}}
+      <script src="https://maps.googleapis.com/maps/api/js?key={{.APIKey}}&callback=initMap"></script>
+    {{else}}
+      <script src="https://maps.googleapis.com/maps/api/js?callback=initMap"></script>
+    {{end}}
+    <script>
+  /**
+   * @license
+   *
+   * Copyright 2011 Google Inc.
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *     http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+  /**
+   * @fileoverview Map Label.
+   *
+   * @author Luke Mahe (lukem@google.com),
+   *         Chris Broadfoot (cbro@google.com)
+   */
+
+  /**
+   * Creates a new Map Label
+   * @constructor
+   * @extends google.maps.OverlayView
+   * @param {Object.<string, *>=} opt_options Optional properties to set.
+   */
+  function MapLabel(opt_options) {
+    this.set('fontFamily', 'sans-serif');
+    this.set('fontSize', 12);
+    this.set('fontColor', '#000000');
+    this.set('strokeWeight', 4);
+    this.set('strokeColor', '#ffffff');
+    this.set('align', 'center');
+
+    this.set('zIndex', 1e3);
+
+    this.setValues(opt_options);
+  }
+
+  MapLabel.prototype = new google.maps.OverlayView;
+
+  window['MapLabel'] = MapLabel;
+
+  /** @inheritDoc */
+  MapLabel.prototype.changed = function(prop) {
+    switch (prop) {
+      case 'fontFamily':
+      case 'fontSize':
+      case 'fontColor':
+      case 'strokeWeight':
+      case 'strokeColor':
+      case 'align':
+      case 'text':
+        return this.drawCanvas_();
+      case 'maxZoom':
+      case 'minZoom':
+      case 'position':
+        return this.draw();
+    }
+  };
+
+  /**
+   * Draws the label to the canvas 2d context.
+   * @private
+   */
+  MapLabel.prototype.drawCanvas_ = function() {
+    var canvas = this.canvas_;
+    if (!canvas) return;
+
+    var style = canvas.style;
+    style.zIndex = /** @type number */(this.get('zIndex'));
+
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = this.get('strokeColor');
+    ctx.fillStyle = this.get('fontColor');
+    ctx.font = this.get('fontSize') + 'px ' + this.get('fontFamily');
+
+    var strokeWeight = Number(this.get('strokeWeight'));
+
+    var text = this.get('text');
+    if (text) {
+      if (strokeWeight) {
+        ctx.lineWidth = strokeWeight;
+        ctx.strokeText(text, strokeWeight, strokeWeight);
+      }
+
+      ctx.fillText(text, strokeWeight, strokeWeight);
+
+      var textMeasure = ctx.measureText(text);
+      var textWidth = textMeasure.width + strokeWeight;
+      style.marginLeft = this.getMarginLeft_(textWidth) + 'px';
+      // Bring actual text top in line with desired latitude.
+      // Cheaper than calculating height of text.
+      style.marginTop = '-0.4em';
+    }
+  };
+
+  /**
+   * @inheritDoc
+   */
+  MapLabel.prototype.onAdd = function() {
+    var canvas = this.canvas_ = document.createElement('canvas');
+    var style = canvas.style;
+    style.position = 'absolute';
+
+    var ctx = canvas.getContext('2d');
+    ctx.lineJoin = 'round';
+    ctx.textBaseline = 'top';
+
+    this.drawCanvas_();
+
+    var panes = this.getPanes();
+    if (panes) {
+      panes.mapPane.appendChild(canvas);
+    }
+  };
+  MapLabel.prototype['onAdd'] = MapLabel.prototype.onAdd;
+
+  /**
+   * Gets the appropriate margin-left for the canvas.
+   * @private
+   * @param {number} textWidth  the width of the text, in pixels.
+   * @return {number} the margin-left, in pixels.
+   */
+  MapLabel.prototype.getMarginLeft_ = function(textWidth) {
+    switch (this.get('align')) {
+      case 'left':
+        return 0;
+      case 'right':
+        return -textWidth;
+    }
+    return textWidth / -2;
+  };
+
+  /**
+   * @inheritDoc
+   */
+  MapLabel.prototype.draw = function() {
+    var projection = this.getProjection();
+
+    if (!projection) {
+      // The map projection is not ready yet so do nothing
+      return;
+    }
+
+    if (!this.canvas_) {
+      // onAdd has not been called yet.
+      return;
+    }
+
+    var latLng = /** @type {google.maps.LatLng} */ (this.get('position'));
+    if (!latLng) {
+      return;
+    }
+    var pos = projection.fromLatLngToDivPixel(latLng);
+
+    var style = this.canvas_.style;
+
+    style['top'] = pos.y + 'px';
+    style['left'] = pos.x + 'px';
+
+    style['visibility'] = this.getVisible_();
+  };
+  MapLabel.prototype['draw'] = MapLabel.prototype.draw;
+
+  /**
+   * Get the visibility of the label.
+   * @private
+   * @return {string} blank string if visible, 'hidden' if invisible.
+   */
+  MapLabel.prototype.getVisible_ = function() {
+    var minZoom = /** @type number */(this.get('minZoom'));
+    var maxZoom = /** @type number */(this.get('maxZoom'));
+
+    if (minZoom === undefined && maxZoom === undefined) {
+      return '';
+    }
+
+    var map = this.getMap();
+    if (!map) {
+      return '';
+    }
+
+    var mapZoom = map.getZoom();
+    if (mapZoom < minZoom || mapZoom > maxZoom) {
+      return 'hidden';
+    }
+    return '';
+  };
+
+  /**
+   * @inheritDoc
+   */
+  MapLabel.prototype.onRemove = function() {
+    var canvas = this.canvas_;
+    if (canvas && canvas.parentNode) {
+      canvas.parentNode.removeChild(canvas);
+    }
+  };
+  MapLabel.prototype['onRemove'] = MapLabel.prototype.onRemove;
+    </script>
+  </body>
+</html>

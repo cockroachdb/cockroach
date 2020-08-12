@@ -11,11 +11,9 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
-	"math"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -149,288 +147,6 @@ const (
 	MinimumMaxOpenFiles = 1700
 )
 
-// SSTableInfo contains metadata about a single sstable. Note this mirrors
-// the C.DBSSTable struct contents.
-type SSTableInfo struct {
-	Level int
-	Size  int64
-	Start MVCCKey
-	End   MVCCKey
-}
-
-// SSTableInfos is a slice of SSTableInfo structures.
-type SSTableInfos []SSTableInfo
-
-func (s SSTableInfos) Len() int {
-	return len(s)
-}
-
-func (s SSTableInfos) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (s SSTableInfos) Less(i, j int) bool {
-	switch {
-	case s[i].Level < s[j].Level:
-		return true
-	case s[i].Level > s[j].Level:
-		return false
-	case s[i].Size > s[j].Size:
-		return true
-	case s[i].Size < s[j].Size:
-		return false
-	default:
-		return s[i].Start.Less(s[j].Start)
-	}
-}
-
-func (s SSTableInfos) String() string {
-	const (
-		KB = 1 << 10
-		MB = 1 << 20
-		GB = 1 << 30
-		TB = 1 << 40
-	)
-
-	roundTo := func(val, to int64) int64 {
-		return (val + to/2) / to
-	}
-
-	// We're intentionally not using humanizeutil here as we want a slightly more
-	// compact representation.
-	humanize := func(size int64) string {
-		switch {
-		case size < MB:
-			return fmt.Sprintf("%dK", roundTo(size, KB))
-		case size < GB:
-			return fmt.Sprintf("%dM", roundTo(size, MB))
-		case size < TB:
-			return fmt.Sprintf("%dG", roundTo(size, GB))
-		default:
-			return fmt.Sprintf("%dT", roundTo(size, TB))
-		}
-	}
-
-	type levelInfo struct {
-		size  int64
-		count int
-	}
-
-	var levels []*levelInfo
-	for _, t := range s {
-		for i := len(levels); i <= t.Level; i++ {
-			levels = append(levels, &levelInfo{})
-		}
-		info := levels[t.Level]
-		info.size += t.Size
-		info.count++
-	}
-
-	var maxSize int
-	var maxLevelCount int
-	for _, info := range levels {
-		size := len(humanize(info.size))
-		if maxSize < size {
-			maxSize = size
-		}
-		count := 1 + int(math.Log10(float64(info.count)))
-		if maxLevelCount < count {
-			maxLevelCount = count
-		}
-	}
-	levelFormat := fmt.Sprintf("%%d [ %%%ds %%%dd ]:", maxSize, maxLevelCount)
-
-	level := -1
-	var buf bytes.Buffer
-	var lastSize string
-	var lastSizeCount int
-
-	flushLastSize := func() {
-		if lastSizeCount > 0 {
-			fmt.Fprintf(&buf, " %s", lastSize)
-			if lastSizeCount > 1 {
-				fmt.Fprintf(&buf, "[%d]", lastSizeCount)
-			}
-			lastSizeCount = 0
-		}
-	}
-
-	maybeFlush := func(newLevel, i int) {
-		if level == newLevel {
-			return
-		}
-		flushLastSize()
-		if buf.Len() > 0 {
-			buf.WriteString("\n")
-		}
-		level = newLevel
-		if level >= 0 {
-			info := levels[level]
-			fmt.Fprintf(&buf, levelFormat, level, humanize(info.size), info.count)
-		}
-	}
-
-	for i, t := range s {
-		maybeFlush(t.Level, i)
-		size := humanize(t.Size)
-		if size == lastSize {
-			lastSizeCount++
-		} else {
-			flushLastSize()
-			lastSize = size
-			lastSizeCount = 1
-		}
-	}
-
-	maybeFlush(-1, 0)
-	return buf.String()
-}
-
-// ReadAmplification returns RocksDB's worst case read amplification, which is
-// the number of level-0 sstables plus the number of levels, other than level 0,
-// with at least one sstable.
-//
-// This definition comes from here:
-// https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#level-style-compaction
-func (s SSTableInfos) ReadAmplification() int {
-	var readAmp int
-	seenLevel := make(map[int]bool)
-	for _, t := range s {
-		if t.Level == 0 {
-			readAmp++
-		} else if !seenLevel[t.Level] {
-			readAmp++
-			seenLevel[t.Level] = true
-		}
-	}
-	return readAmp
-}
-
-// SSTableInfosByLevel maintains slices of SSTableInfo objects, one
-// per level. The slice for each level contains the SSTableInfo
-// objects for SSTables at that level, sorted by start key.
-type SSTableInfosByLevel struct {
-	// Each level is a slice of SSTableInfos.
-	levels [][]SSTableInfo
-}
-
-// NewSSTableInfosByLevel returns a new SSTableInfosByLevel object
-// based on the supplied SSTableInfos slice.
-func NewSSTableInfosByLevel(s SSTableInfos) SSTableInfosByLevel {
-	var result SSTableInfosByLevel
-	for _, t := range s {
-		for i := len(result.levels); i <= t.Level; i++ {
-			result.levels = append(result.levels, []SSTableInfo{})
-		}
-		result.levels[t.Level] = append(result.levels[t.Level], t)
-	}
-	// Sort each level by start key.
-	for _, l := range result.levels {
-		sort.Slice(l, func(i, j int) bool { return l[i].Start.Less(l[j].Start) })
-	}
-	return result
-}
-
-// MaxLevel returns the maximum level for which there are SSTables.
-func (s *SSTableInfosByLevel) MaxLevel() int {
-	return len(s.levels) - 1
-}
-
-// MaxLevelSpanOverlapsContiguousSSTables returns the maximum level at
-// which the specified key span overlaps either none, one, or at most
-// two contiguous SSTables. Level 0 is returned if no level qualifies.
-//
-// This is useful when considering when to merge two compactions. In
-// this case, the method is called with the "gap" between the two
-// spans to be compacted. When the result is that the gap span touches
-// at most two SSTables at a high level, it suggests that merging the
-// two compactions is a good idea (as the up to two SSTables touched
-// by the gap span, due to containing endpoints of the existing
-// compactions, would be rewritten anyway).
-//
-// As an example, consider the following sstables in a small database:
-//
-// Level 0.
-//  {Level: 0, Size: 20, Start: key("a"), End: key("z")},
-//  {Level: 0, Size: 15, Start: key("a"), End: key("k")},
-// Level 2.
-//  {Level: 2, Size: 200, Start: key("a"), End: key("j")},
-//  {Level: 2, Size: 100, Start: key("k"), End: key("o")},
-//  {Level: 2, Size: 100, Start: key("r"), End: key("t")},
-// Level 6.
-//  {Level: 6, Size: 201, Start: key("a"), End: key("c")},
-//  {Level: 6, Size: 200, Start: key("d"), End: key("f")},
-//  {Level: 6, Size: 300, Start: key("h"), End: key("r")},
-//  {Level: 6, Size: 405, Start: key("s"), End: key("z")},
-//
-// - The span "a"-"c" overlaps only a single SSTable at the max level
-//   (L6). That's great, so we definitely want to compact that.
-// - The span "s"-"t" overlaps zero SSTables at the max level (L6).
-//   Again, great! That means we're going to compact the 3rd L2
-//   SSTable and maybe push that directly to L6.
-func (s *SSTableInfosByLevel) MaxLevelSpanOverlapsContiguousSSTables(span roachpb.Span) int {
-	// Note overlapsMoreTHanTwo should not be called on level 0, where
-	// the SSTables are not guaranteed disjoint.
-	overlapsMoreThanTwo := func(tables []SSTableInfo) bool {
-		// Search to find the first sstable which might overlap the span.
-		i := sort.Search(len(tables), func(i int) bool { return span.Key.Compare(tables[i].End.Key) < 0 })
-		// If no SSTable is overlapped, return false.
-		if i == -1 || i == len(tables) || span.EndKey.Compare(tables[i].Start.Key) < 0 {
-			return false
-		}
-		// Return true if the span is not subsumed by the combination of
-		// this sstable and the next. This logic is complicated and is
-		// covered in the unittest. There are three successive conditions
-		// which together ensure the span doesn't overlap > 2 SSTables.
-		//
-		// - If the first overlapped SSTable is the last.
-		// - If the span does not exceed the end of the next SSTable.
-		// - If the span does not overlap the start of the next next SSTable.
-		if i >= len(tables)-1 {
-			// First overlapped SSTable is the last (right-most) SSTable.
-			//    Span:   [c-----f)
-			//    SSTs: [a---d)
-			// or
-			//    SSTs: [a-----------q)
-			return false
-		}
-		if span.EndKey.Compare(tables[i+1].End.Key) <= 0 {
-			// Span does not reach outside of this SSTable's right neighbor.
-			//    Span:    [c------f)
-			//    SSTs: [a---d) [e-f) ...
-			return false
-		}
-		if i >= len(tables)-2 {
-			// Span reaches outside of this SSTable's right neighbor, but
-			// there are no more SSTables to the right.
-			//    Span:    [c-------------x)
-			//    SSTs: [a---d) [e---q)
-			return false
-		}
-		if span.EndKey.Compare(tables[i+2].Start.Key) <= 0 {
-			// There's another SSTable two to the right, but the span doesn't
-			// reach into it.
-			//    Span:    [c------------x)
-			//    SSTs: [a---d) [e---q) [x--z) ...
-			return false
-		}
-
-		// Touching at least three SSTables.
-		//    Span:    [c-------------y)
-		//    SSTs: [a---d) [e---q) [x--z) ...
-		return true
-	}
-	// Note that we never consider level 0, where SSTables can overlap.
-	// Level 0 is instead returned as a catch-all which means that there
-	// is no level where the span overlaps only two or fewer SSTables.
-	for i := len(s.levels) - 1; i > 0; i-- {
-		if !overlapsMoreThanTwo(s.levels[i]) {
-			return i
-		}
-	}
-	return 0
-}
-
 // RocksDBCache is a wrapper around C.DBCache
 type RocksDBCache struct {
 	cache *C.DBCache
@@ -527,14 +243,10 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	}
 
 	r := &RocksDB{
-		cfg:   cfg,
-		cache: cache.ref(),
+		cfg:    cfg,
+		cache:  cache.ref(),
+		auxDir: filepath.Join(cfg.Dir, base.AuxiliaryDir),
 	}
-
-	if err := r.setAuxiliaryDir(filepath.Join(cfg.Dir, base.AuxiliaryDir)); err != nil {
-		return nil, err
-	}
-
 	if err := r.open(); err != nil {
 		return nil, err
 	}
@@ -565,25 +277,12 @@ func newMemRocksDB(attrs roachpb.Attributes, cache RocksDBCache, maxSize int64) 
 			},
 		},
 		// dir: empty dir == "mem" RocksDB instance.
-		cache: cache.ref(),
+		cache:  cache.ref(),
+		auxDir: "cockroach-auxiliary",
 	}
-
-	// TODO(peter): This is bizarre. We're creating on on-disk temporary
-	// directory for an in-memory filesystem. The reason this is done is because
-	// various users of the auxiliary directory use the os.* routines (which is
-	// invalid!). This needs to be cleaned up.
-	auxDir, err := ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
-	if err != nil {
-		return nil, err
-	}
-	if err := r.setAuxiliaryDir(auxDir); err != nil {
-		return nil, err
-	}
-
 	if err := r.open(); err != nil {
 		return nil, err
 	}
-
 	return r, nil
 }
 
@@ -643,7 +342,11 @@ func (r *RocksDB) open() error {
 	if r.cfg.MaxOpenFiles != 0 {
 		maxOpenFiles = r.cfg.MaxOpenFiles
 	}
-
+	if r.cfg.Dir != "" {
+		if err := os.MkdirAll(r.cfg.Dir, os.ModePerm); err != nil {
+			return err
+		}
+	}
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
@@ -666,6 +369,13 @@ func (r *RocksDB) open() error {
 		}
 	}
 
+	// Create the auxiliary directory if necessary.
+	if !r.cfg.ReadOnly {
+		if err := r.MkdirAll(r.auxDir); err != nil {
+			return err
+		}
+	}
+
 	r.commit.cond.L = &r.commit.Mutex
 	r.syncer.cond.L = &r.syncer.Mutex
 	r.iters.m = make(map[*rocksDBIterator][]byte)
@@ -673,6 +383,7 @@ func (r *RocksDB) open() error {
 	// NB: The sync goroutine acts as a check that the RocksDB instance was
 	// properly closed as the goroutine will leak otherwise.
 	go r.syncLoop()
+
 	return nil
 }
 
@@ -737,10 +448,6 @@ func (r *RocksDB) Close() {
 	if len(r.cfg.Dir) == 0 {
 		if log.V(1) {
 			log.Infof(context.TODO(), "closing in-memory rocksdb instance")
-		}
-		// Remove the temporary directory when the engine is in-memory.
-		if err := os.RemoveAll(r.auxDir); err != nil {
-			log.Warningf(context.TODO(), "%v", err)
 		}
 	} else {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)
@@ -1199,7 +906,7 @@ func (r *RocksDB) GetUserProperties() (enginepb.SSTUserPropertiesCollection, err
 		return enginepb.SSTUserPropertiesCollection{}, err
 	}
 	if ssts.Error != "" {
-		return enginepb.SSTUserPropertiesCollection{}, errors.New(ssts.Error)
+		return enginepb.SSTUserPropertiesCollection{}, errors.Newf("%s", ssts.Error)
 	}
 	return ssts, nil
 }
@@ -1228,6 +935,7 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 		L0FileCount:                    int64(s.l0_file_count),
+		L0SublevelCount:                -1, // Not a RocksDB feature.
 	}, nil
 }
 
@@ -1522,6 +1230,10 @@ func (r *distinctBatch) close() {
 type batchIterator struct {
 	iter  rocksDBIterator
 	batch *rocksDBBatch
+}
+
+func (r *batchIterator) SupportsPrev() bool {
+	return false
 }
 
 func (r *batchIterator) Stats() IteratorStats {
@@ -2251,6 +1963,10 @@ func (r *rocksDBIterator) destroy() {
 
 // The following methods implement the Iterator interface.
 
+func (r *rocksDBIterator) SupportsPrev() bool {
+	return true
+}
+
 func (r *rocksDBIterator) Stats() IteratorStats {
 	stats := C.DBIterStats(r.iter)
 	return IteratorStats{
@@ -2627,6 +2343,7 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 	ms.GCBytesAge = int64(stats.gc_bytes_age)
 	ms.SysBytes = int64(stats.sys_bytes)
 	ms.SysCount = int64(stats.sys_count)
+	ms.AbortSpanBytes = int64(stats.abort_span_bytes)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
 }
@@ -3206,16 +2923,6 @@ func (r *RocksDB) GetAuxiliaryDir() string {
 	return r.auxDir
 }
 
-func (r *RocksDB) setAuxiliaryDir(d string) error {
-	if !r.cfg.ReadOnly {
-		if err := os.MkdirAll(d, 0755); err != nil {
-			return err
-		}
-	}
-	r.auxDir = d
-	return nil
-}
-
 // PreIngestDelay implements the Engine interface.
 func (r *RocksDB) PreIngestDelay(ctx context.Context) {
 	preIngestDelay(ctx, r, r.cfg.Settings)
@@ -3265,28 +2972,50 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
 }
 
-// DeleteFile deletes the file with the given filename from this RocksDB's env.
+// Remove deletes the file with the given filename from this RocksDB's env.
 // If the file with given filename doesn't exist, return os.ErrNotExist.
-func (r *RocksDB) DeleteFile(filename string) error {
+func (r *RocksDB) Remove(filename string) error {
 	if err := statusToError(C.DBEnvDeleteFile(r.rdb, goToCSlice([]byte(filename)))); err != nil {
 		return notFoundErrOrDefault(err)
 	}
 	return nil
 }
 
-// DeleteDirAndFiles deletes the directory and any files it contains but
-// not subdirectories from this RocksDB's env. If dir does not exist,
-// return os.ErrNotExist.
-func (r *RocksDB) DeleteDirAndFiles(dir string) error {
-	if err := statusToError(C.DBEnvDeleteDirAndFiles(r.rdb, goToCSlice([]byte(dir)))); err != nil {
-		return notFoundErrOrDefault(err)
+// RemoveAll removes path and any children it contains from this RocksDB's
+// env. If the path does not exist, RemoveAll returns nil (no error).
+func (r *RocksDB) RemoveAll(path string) error {
+	// We don't have a reliable way of telling whether a path is a directory
+	// or a file from the RocksDB Env interface. Assume it's a directory,
+	// ignoring any resulting error, and delete any of its children.
+	dirents, listErr := r.List(path)
+	if listErr == nil {
+		for _, dirent := range dirents {
+			err := r.RemoveAll(filepath.Join(path, dirent))
+			if err != nil {
+				return err
+			}
+		}
+
+		// Path should exist, point to a directory and have no children.
+		return r.RemoveDir(path)
 	}
-	return nil
+
+	// Path might be a file, non-existent, or a directory for which List
+	// errored for some other reason.
+	err := r.Remove(path)
+	if err == nil {
+		return nil
+	}
+	if os.IsNotExist(err) && os.IsNotExist(listErr) {
+		return nil
+	}
+	return listErr
 }
 
-// LinkFile creates 'newname' as a hard link to 'oldname'. This use the Env responsible for the file
-// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
-func (r *RocksDB) LinkFile(oldname, newname string) error {
+// Link creates 'newname' as a hard link to 'oldname'. This use the Env
+// responsible for the file which may handle extra logic (eg: copy encryption
+// settings for EncryptedEnv).
+func (r *RocksDB) Link(oldname, newname string) error {
 	if err := statusToError(C.DBEnvLinkFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname)))); err != nil {
 		return &os.LinkError{
 			Op:  "link",
@@ -3352,9 +3081,14 @@ func MVCCScanDecodeKeyValues(repr [][]byte, fn func(key MVCCKey, rawBytes []byte
 }
 
 func notFoundErrOrDefault(err error) error {
+	if err == nil {
+		return nil
+	}
 	errStr := err.Error()
 	if strings.Contains(errStr, "No such") ||
 		strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "does not exist") ||
+		strings.Contains(errStr, "NotFound:") ||
 		strings.Contains(errStr, "cannot find") {
 		return os.ErrNotExist
 	}
@@ -3432,6 +3166,11 @@ func (f *rocksdbReadableFile) Read(p []byte) (n int, err error) {
 func (f *rocksdbReadableFile) ReadAt(p []byte, off int64) (int, error) {
 	var n C.int
 	err := statusToError(C.DBEnvReadAtFile(f.rdb, f.file, goToCSlice(p), C.int64_t(off), &n))
+	// The io.ReaderAt interface requires implementations to return a non-nil
+	// error if fewer than len(p) bytes are read.
+	if int(n) < len(p) {
+		err = io.EOF
+	}
 	return int(n), err
 }
 
@@ -3469,13 +3208,13 @@ func (f *rocksdbDirectory) ReadAt(p []byte, off int64) (n int, err error) {
 
 var _ fs.FS = &RocksDB{}
 
-// CreateFile implements the FS interface.
-func (r *RocksDB) CreateFile(name string) (fs.File, error) {
-	return r.CreateFileWithSync(name, 0)
+// Create implements the FS interface.
+func (r *RocksDB) Create(name string) (fs.File, error) {
+	return r.CreateWithSync(name, 0)
 }
 
-// CreateFileWithSync implements the FS interface.
-func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
+// CreateWithSync implements the FS interface.
+func (r *RocksDB) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
 	var file C.DBWritableFile
 	if err := statusToError(C.DBEnvOpenFile(
 		r.rdb, goToCSlice([]byte(name)), C.uint64_t(bytesPerSync), &file)); err != nil {
@@ -3484,8 +3223,8 @@ func (r *RocksDB) CreateFileWithSync(name string, bytesPerSync int) (fs.File, er
 	return &rocksdbWritableFile{file: file, rdb: r.rdb}, nil
 }
 
-// OpenFile implements the FS interface.
-func (r *RocksDB) OpenFile(name string) (fs.File, error) {
+// Open implements the FS interface.
+func (r *RocksDB) Open(name string) (fs.File, error) {
 	var file C.DBReadableFile
 	if err := statusToError(C.DBEnvOpenReadableFile(r.rdb, goToCSlice([]byte(name)), &file)); err != nil {
 		return nil, notFoundErrOrDefault(err)
@@ -3502,23 +3241,42 @@ func (r *RocksDB) OpenDir(name string) (fs.File, error) {
 	return &rocksdbDirectory{file: file, rdb: r.rdb}, nil
 }
 
-// RenameFile implements the FS interface.
-func (r *RocksDB) RenameFile(oldname, newname string) error {
+// Rename implements the FS interface.
+func (r *RocksDB) Rename(oldname, newname string) error {
 	return statusToError(C.DBEnvRenameFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname))))
 }
 
-// CreateDir implements the FS interface.
-func (r *RocksDB) CreateDir(name string) error {
-	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(name))))
+// MkdirAll implements the FS interface.
+func (r *RocksDB) MkdirAll(path string) error {
+	path = filepath.Clean(path)
+
+	// Skip trailing path separators.
+	for len(path) > 0 && path[len(path)-1] == filepath.Separator {
+		path = path[:len(path)-1]
+	}
+	// The path may be empty after cleaning and trimming tailing path
+	// separators.
+	if path == "" {
+		return nil
+	}
+
+	// Ensure the parent exists first.
+	parent, _ := filepath.Split(path)
+	if parent != "" {
+		if err := r.MkdirAll(parent); err != nil {
+			return err
+		}
+	}
+	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(path))))
 }
 
-// DeleteDir implements the FS interface.
-func (r *RocksDB) DeleteDir(name string) error {
-	return statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(name))))
+// RemoveDir implements the FS interface.
+func (r *RocksDB) RemoveDir(name string) error {
+	return notFoundErrOrDefault(statusToError(C.DBEnvDeleteDir(r.rdb, goToCSlice([]byte(name)))))
 }
 
-// ListDir implements the FS interface.
-func (r *RocksDB) ListDir(name string) ([]string, error) {
+// List implements the FS interface.
+func (r *RocksDB) List(name string) ([]string, error) {
 	list := C.DBEnvListDir(r.rdb, goToCSlice([]byte(name)))
 	n := list.n
 	names := list.names
@@ -3530,13 +3288,59 @@ func (r *RocksDB) ListDir(name string) ([]string, error) {
 		return *(*C.DBString)(unsafe.Pointer(uintptr(unsafe.Pointer(names)) + uintptr(i)*nameSize))
 	}
 	err := statusToError(list.status)
+	if err != nil {
+		err = notFoundErrOrDefault(err)
+	}
+
 	result := make([]string, n)
+	j := 0
 	for i := range result {
-		result[i] = cStringToGoString(nameVal(i))
+		str := cStringToGoString(nameVal(i))
+		if str == "." || str == ".." {
+			continue
+		}
+		result[j] = str
+		j++
 	}
 	C.free(unsafe.Pointer(names))
+
+	result = result[:j]
+	sort.Strings(result)
 	return result, err
 }
+
+// Stat implements the FS interface.
+func (r *RocksDB) Stat(name string) (os.FileInfo, error) {
+	// The RocksDB Env doesn't expose a Stat equivalent. If we're using an
+	// on-disk filesystem, circumvent the Env and return the os.Stat results.
+	if r.cfg.Dir != "" {
+		return os.Stat(name)
+	}
+
+	// Otherwise, we don't know whether the path names a directory or a file,
+	// so try both to check for existence.  The code paths that actually hit
+	// this today are only checking for existence, so we return an
+	// unimplemented FileInfo implementation.
+	if _, listErr := r.List(name); listErr == nil {
+		return inMemRocksDBFileInfo{}, nil
+	}
+	f, err := r.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return inMemRocksDBFileInfo{}, f.Close()
+}
+
+type inMemRocksDBFileInfo struct{}
+
+var _ os.FileInfo = inMemRocksDBFileInfo{}
+
+func (fi inMemRocksDBFileInfo) Name() string       { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Size() int64        { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Mode() os.FileMode  { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) ModTime() time.Time { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) IsDir() bool        { panic("unimplemented") }
+func (fi inMemRocksDBFileInfo) Sys() interface{}   { panic("unimplemented") }
 
 // ThreadStacks returns the stacks for all threads. The stacks are raw
 // addresses, and do not contain symbols. Use addr2line (or atos on Darwin) to

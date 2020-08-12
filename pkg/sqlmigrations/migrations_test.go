@@ -23,7 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -143,7 +146,7 @@ func TestEnsureMigrations(t *testing.T) {
 		db:           db,
 		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	fnGotCalled := false
 	fnGotCalledDescriptor := migrationDescriptor{
@@ -318,7 +321,7 @@ func TestDBErrors(t *testing.T) {
 		db:           db,
 		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
@@ -384,7 +387,7 @@ func TestLeaseErrors(t *testing.T) {
 		db:    db,
 		codec: codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	migration := noopMigration1
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
@@ -413,7 +416,7 @@ func TestLeaseExpiration(t *testing.T) {
 		db:           db,
 		codec:        codec,
 	}
-	defer mgr.stopper.Stop(context.TODO())
+	defer mgr.stopper.Stop(context.Background())
 
 	oldLeaseRefreshInterval := leaseRefreshInterval
 	leaseRefreshInterval = time.Microsecond
@@ -538,24 +541,24 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := sqlbase.NamespaceTable
+	table := sqlbase.NewMutableExistingTableDescriptor(sqlbase.NamespaceTable.TableDescriptor)
 	table.ID = keys.MaxReservedDescID
 
-	prevPrivileges, ok := sqlbase.SystemAllowedPrivileges[table.ID]
+	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
 	defer func() {
 		if ok {
 			// Restore value of privileges.
-			sqlbase.SystemAllowedPrivileges[table.ID] = prevPrivileges
+			descpb.SystemAllowedPrivileges[table.ID] = prevPrivileges
 		} else {
-			delete(sqlbase.SystemAllowedPrivileges, table.ID)
+			delete(descpb.SystemAllowedPrivileges, table.ID)
 		}
 	}()
-	sqlbase.SystemAllowedPrivileges[table.ID] = sqlbase.SystemAllowedPrivileges[keys.NamespaceTableID]
+	descpb.SystemAllowedPrivileges[table.ID] = descpb.SystemAllowedPrivileges[keys.NamespaceTableID]
 
 	table.Name = "dummy"
 	nameKey := sqlbase.NewPublicTableKey(table.ParentID, table.Name).Key(keys.SystemSQLCodec)
 	descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
-	descVal := sqlbase.WrapDescriptor(&table)
+	descVal := table.DescriptorProto()
 
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
@@ -590,7 +593,7 @@ func TestCreateSystemTable(t *testing.T) {
 	} else if !kv.Exists() {
 		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
 	}
-	var descriptor sqlbase.Descriptor
+	var descriptor descpb.Descriptor
 	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
 		t.Error(err)
 	} else if !proto.Equal(descVal, &descriptor) {
@@ -616,7 +619,7 @@ func TestAdminUserExists(t *testing.T) {
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		sqlbase.AdminRole)
+		security.AdminRole)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -637,7 +640,7 @@ func TestPublicRoleExists(t *testing.T) {
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		sqlbase.PublicRole)
+		security.PublicRole)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -646,9 +649,9 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Now try with a role instead of a user.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		sqlbase.PublicRole)
+		security.PublicRole)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -657,7 +660,7 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Drop it and try again.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, security.PublicRole)
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
 	}
@@ -710,7 +713,7 @@ func TestExpectedInitialRangeCount(t *testing.T) {
 			if err := rows.Scan(&rangeID, &startKey, &endKey); err != nil {
 				return err
 			}
-			if sysCfg.NeedsSplit(startKey, endKey) {
+			if sysCfg.NeedsSplit(ctx, startKey, endKey) {
 				return fmt.Errorf("range %d needs split", rangeID)
 			}
 			nranges++
@@ -776,7 +779,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 	require.NoError(t, mt.kvDB.Del(ctx, key))
 
 	deprecatedKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, keys.DeprecatedNamespaceTableID)
-	desc := &sqlbase.Descriptor{}
+	desc := &descpb.Descriptor{}
 	require.NoError(t, mt.kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 		return err
@@ -791,19 +794,92 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
-			table := desc.Table(ts)
+			table := sqlbase.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = sqlbase.NamespaceTable.CreateAsOfTime
 			table.ModificationTime = sqlbase.NamespaceTable.ModificationTime
-			require.True(t, table.Equal(sqlbase.NamespaceTable))
+			require.True(t, table.Equal(sqlbase.NamespaceTable.TableDesc()))
 		}
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
-			table := desc.Table(ts)
+			table := sqlbase.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = sqlbase.DeprecatedNamespaceTable.CreateAsOfTime
 			table.ModificationTime = sqlbase.DeprecatedNamespaceTable.ModificationTime
-			require.True(t, table.Equal(sqlbase.DeprecatedNamespaceTable))
+			require.True(t, table.Equal(sqlbase.DeprecatedNamespaceTable.TableDesc()))
 		}
 		return nil
 	}))
+}
+
+func TestAlterSystemJobsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// We need to use "old" jobs table descriptor without newly added columns
+	// in order to test migration.
+	// oldJobsTableSchema is system.jobs definition prior to 20.2
+	oldJobsTableSchema := `
+CREATE TABLE system.jobs (
+	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
+	status            STRING    NOT NULL,
+	created           TIMESTAMP NOT NULL DEFAULT now(),
+	payload           BYTES     NOT NULL,
+	progress          BYTES,
+	INDEX (status, created),
+
+	FAMILY (id, status, created, payload),
+	FAMILY progress (progress)
+)
+`
+	oldJobsTable, err := sql.CreateTestTableDescriptor(
+		context.Background(),
+		keys.SystemDatabaseID,
+		keys.JobsTableID,
+		oldJobsTableSchema,
+		sqlbase.JobsTable.Privileges,
+	)
+	require.NoError(t, err)
+
+	const primaryFamilyName = "fam_0_id_status_created_payload"
+	oldPrimaryFamilyColumns := []string{"id", "status", "created", "payload"}
+	newPrimaryFamilyColumns := append(
+		oldPrimaryFamilyColumns, "created_by_type", "created_by_id")
+
+	// Sanity check oldJobsTable does not have new columns.
+	require.Equal(t, 5, len(oldJobsTable.Columns))
+	require.Equal(t, 2, len(oldJobsTable.Families))
+	require.Equal(t, primaryFamilyName, oldJobsTable.Families[0].Name)
+	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
+
+	jobsTable := sqlbase.JobsTable
+	sqlbase.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
+	defer func() {
+		sqlbase.JobsTable = jobsTable
+	}()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add created_by columns to system.jobs")
+	mt.start(t, base.TestServerArgs{})
+
+	// Run migration and verify we have added columns and renamed column family.
+	require.NoError(t, mt.runMigration(ctx, migration))
+
+	newJobsTable := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.Equal(t, 7, len(newJobsTable.Columns))
+	require.Equal(t, "created_by_type", newJobsTable.Columns[5].Name)
+	require.Equal(t, "created_by_id", newJobsTable.Columns[6].Name)
+	require.Equal(t, 2, len(newJobsTable.Families))
+	// Ensure we keep old family name.
+	require.Equal(t, primaryFamilyName, newJobsTable.Families[0].Name)
+	// Make sure our primary family has new columns added to it.
+	require.Equal(t, newPrimaryFamilyColumns, newJobsTable.Families[0].ColumnNames)
+
+	// Run the migration again -- it should be a no-op.
+	require.NoError(t, mt.runMigration(ctx, migration))
+	newJobsTableAgain := catalogkv.TestingGetTableDescriptor(
+		mt.kvDB, keys.SystemSQLCodec, "system", "jobs")
+	require.True(t, proto.Equal(newJobsTable.TableDesc(), newJobsTableAgain.TableDesc()))
 }

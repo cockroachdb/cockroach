@@ -1,3 +1,4 @@
+# LogicTest: !3node-tenant(52567)
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
 # USING THE `lastval` FUNCTION
@@ -116,14 +117,14 @@ CREATE SEQUENCE show_create_test
 query ITTITTTTTTTB colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state   create_nofks                                                                                  alter_statements  validate_statements  has_partitions
-52           test           public       66             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                  false
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                                     state   create_nofks                                                                                         alter_statements  validate_statements  has_partitions
+52           test           public       66             sequence         show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}                   false
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
 ----
 table_name        create_statement
-show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+show_create_test  CREATE SEQUENCE public.show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 # DML ERRORS
 
@@ -853,7 +854,7 @@ CREATE SEQUENCE sv VIRTUAL
 query T
 SELECT create_statement FROM [SHOW CREATE SEQUENCE sv]
 ----
-CREATE SEQUENCE sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+CREATE SEQUENCE public.sv MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
 
 statement ok
 CREATE TABLE svals(x INT)
@@ -1071,3 +1072,161 @@ DROP TABLE b;
 
 statement ok
 DROP TABLE a;
+
+# A dependency on a sequence should be added if the sequence is used in a
+# currval call. (Regression #50033)
+
+statement ok
+CREATE SEQUENCE currval_dep_test;
+CREATE TABLE c(a INT DEFAULT(currval('currval_dep_test')))
+
+statement error pq: cannot drop sequence currval_dep_test because other objects depend on it
+DROP SEQUENCE currval_dep_test
+
+subtest regression_50649
+
+statement ok
+CREATE TABLE t_50649(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50649 OWNED BY t_50649.a
+
+statement ok
+DROP SEQUENCE seq_50649
+
+statement ok
+DROP TABLE t_50649
+
+subtest regression_50712
+
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the table is lexicographically less than the
+# sequence, which results in drop database dropping the table before the
+# sequence.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY db_50712.a_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+# Same test like above, except the db is switched as the current db
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+SET DATABASE = db_50712
+
+statement ok
+CREATE TABLE a_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY a_50712.a
+
+statement ok
+DROP DATABASE db_50712
+
+statement ok
+SET DATABASE = test
+
+# Tests db drop.
+# Sequence: outside db.
+# Owner: inside db.
+# The sequence should be automatically dropped.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE db_50712.t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE seq_50712 OWNED BY db_50712.t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+query I
+SELECT count(*) FROM system.namespace WHERE name LIKE 'seq_50712'
+----
+0
+
+# Tests db drop.
+# Sequence: inside db
+# Owner: outside db
+# It should be possible to drop the table later.
+statement ok
+CREATE DATABASE db_50712
+
+statement ok
+CREATE TABLE t_50712(a INT PRIMARY KEY)
+
+statement ok
+CREATE SEQUENCE db_50712.seq_50712 OWNED BY t_50712.a
+
+statement ok
+DROP DATABASE db_50712 CASCADE
+
+statement ok
+DROP TABLE t_50712
+
+# previously, changing ownership of a sequence between columns of the same table
+# was causing the sequenceID to appear in multiple column's ownedSequences list.
+# This makes it impossible to drop the affected columns/table once the sequence
+# has been dropped. This tests for these scenarios and ensures the table/columns
+# remain drop-able.
+subtest regression_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+DROP TABLE t_50711
+
+statement ok
+CREATE TABLE t_50711(a int, b int)
+
+statement ok
+CREATE SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.b
+
+statement ok
+ALTER SEQUENCE seq_50711 owned by t_50711.a
+
+statement ok
+DROP SEQUENCE seq_50711
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN a
+
+statement ok
+ALTER TABLE t_50711 DROP COLUMN b

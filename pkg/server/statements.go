@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -25,17 +25,17 @@ import (
 func (s *statusServer) Statements(
 	ctx context.Context, req *serverpb.StatementsRequest,
 ) (*serverpb.StatementsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	if _, err := s.admin.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
 	response := &serverpb.StatementsResponse{
 		Statements:            []serverpb.StatementsResponse_CollectedStatementStatistics{},
 		LastReset:             timeutil.Now(),
-		InternalAppNamePrefix: sqlbase.InternalAppNamePrefix,
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
 	}
 
 	localReq := &serverpb.StatementsRequest{
@@ -93,7 +93,7 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 	resp := &serverpb.StatementsResponse{
 		Statements:            make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
 		LastReset:             lastReset,
-		InternalAppNamePrefix: sqlbase.InternalAppNamePrefix,
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
 	}
 
 	for i, stmt := range stmtStats {

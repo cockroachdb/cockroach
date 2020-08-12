@@ -15,10 +15,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestPostgreStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const sql = `
 select 1;
@@ -56,6 +58,7 @@ SELECT '123456789012345678901234567890123456789012345678901234567890123456789012
 
 func TestPostgreStreamCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const sql = `
 CREATE TABLE public.second (

@@ -56,6 +56,9 @@ type TestServerInterface interface {
 	// ServingSQLAddr returns the server's advertised SQL address.
 	ServingSQLAddr() string
 
+	// ServingTenantAddr returns the server's advertised Tenant address.
+	ServingTenantAddr() string
+
 	// HTTPAddr returns the server's http address.
 	HTTPAddr() string
 
@@ -66,6 +69,10 @@ type TestServerInterface interface {
 	// SQLAddr returns the server's SQL address.
 	// Note: use ServingSQLAddr() instead unless specific reason not to.
 	SQLAddr() string
+
+	// TenantAddr returns the server's Tenant address.
+	// Note: use ServingTenantAddr() instead unless specific reason not to.
+	TenantAddr() string
 
 	// DB returns a *client.DB instance for talking to this KV server.
 	DB() *kv.DB
@@ -149,7 +156,7 @@ type TestServerInterface interface {
 	GetFirstStoreID() roachpb.StoreID
 
 	// GetStores returns the collection of stores from this TestServer's node.
-	// The return value is of type *storage.Stores.
+	// The return value is of type *kvserver.Stores.
 	GetStores() interface{}
 
 	// ClusterSettings returns the ClusterSettings shared by all components of
@@ -196,7 +203,7 @@ type TestServerInterface interface {
 	ReportDiagnostics(ctx context.Context)
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant() (pgAddr string, _ error)
+	StartTenant(params base.TestTenantArgs) (pgAddr string, _ error)
 }
 
 // TestServerFactory encompasses the actual implementation of the shim
@@ -261,8 +268,8 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // StartTenant starts a tenant SQL server connecting to the supplied test
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
-func StartTenant(t testing.TB, ts TestServerInterface) *gosql.DB {
-	pgAddr, err := ts.StartTenant()
+func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArgs) *gosql.DB {
+	pgAddr, err := ts.StartTenant(params)
 	if err != nil {
 		t.Fatal(err)
 	}

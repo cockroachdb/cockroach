@@ -66,7 +66,6 @@ export namespace MetricConstants {
   export const intentCount: string = "intentcount";
   export const intentAge: string = "intentage";
   export const gcBytesAge: string = "gcbytesage";
-  export const lastUpdateNano: string = "lastupdatenanos";
   export const capacity: string = "capacity";
   export const availableCapacity: string = "capacity.available";
   export const usedCapacity: string = "capacity.used";

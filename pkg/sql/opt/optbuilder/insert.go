@@ -194,7 +194,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		}
 
 		ins.Columns = make(tree.NameList, len(refColumns))
-		for i, ord := range cat.ConvertColumnIDsToOrdinals(tab, refColumns) {
+		for i, ord := range resolveNumericColumnRefs(tab, refColumns) {
 			ins.Columns[i] = tab.Column(ord).ColName()
 		}
 	}
@@ -288,7 +288,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Wrap the input in one LEFT OUTER JOIN per UNIQUE index, and filter out
 		// rows that have conflicts. See the buildInputForDoNothing comment for
 		// more details.
-		conflictOrds := mb.mapColumnNamesToOrdinals(ins.OnConflict.Columns)
+		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
 		mb.buildInputForDoNothing(inScope, conflictOrds)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
@@ -321,7 +321,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	default:
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
-		conflictOrds := mb.mapColumnNamesToOrdinals(ins.OnConflict.Columns)
+		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
 		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
@@ -366,17 +366,21 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// TODO(andyk): This is not true in the case of composite key encodings. See
 	// issue #34518.
 	keyOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
-	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 		if keyOrds.Contains(i) {
 			// #1: Don't consider key columns.
 			continue
 		}
-		insertColID := mb.insertColID(i)
+		if cat.IsSystemColumn(mb.tab, i) {
+			// #2: Don't consider system columns.
+			continue
+		}
+		insertColID := mb.insertColIDs[i]
 		if insertColID == 0 {
 			// #2: Non-key column does not have insert value specified.
 			return true
 		}
-		if insertColID != mb.scopeOrdToColID(mb.updateOrds[i]) {
+		if insertColID != mb.updateColIDs[i] {
 			// #3: Update value is not same as corresponding insert value.
 			return true
 		}
@@ -513,8 +517,8 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	// the SQL user.
 	numCols := 0
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
-		// Skip hidden columns.
-		if mb.tab.Column(i).IsHidden() {
+		// Skip mutation, hidden or system columns.
+		if mb.tab.ColumnKind(i) != cat.Ordinary || mb.tab.Column(i).IsHidden() {
 			continue
 		}
 
@@ -559,12 +563,13 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
 		}
 	} else {
-		// Do not target mutation columns.
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			tabCol := mb.tab.Column(i)
-			if !tabCol.IsHidden() {
-				desiredTypes = append(desiredTypes, tabCol.DatumType())
+			if !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
+				tabCol := mb.tab.Column(i)
+				if !tabCol.IsHidden() {
+					desiredTypes = append(desiredTypes, tabCol.DatumType())
+				}
 			}
 		}
 	}
@@ -584,7 +589,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	// Loop over input columns and:
 	//   1. Type check each column
 	//   2. Assign name to each column
-	//   3. Add scope column ordinal to the insertOrds list.
+	//   3. Add column ID to the insertColIDs list.
 	for i := range mb.outScope.cols {
 		inCol := &mb.outScope.cols[i]
 		ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
@@ -595,9 +600,9 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		// Assign name of input column.
 		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
-		// Record the ordinal position of the scope column that contains the
-		// value to be inserted into the corresponding target table column.
-		mb.insertOrds[ord] = scopeOrdinal(i)
+		// Record the ID of the column that contains the value to be inserted
+		// into the corresponding target table column.
+		mb.insertColIDs[ord] = inCol.id
 	}
 }
 
@@ -611,29 +616,41 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	// specified in the query. Do this before adding computed columns, since those
 	// may depend on non-computed columns.
 	mb.addSynthesizedCols(
-		mb.insertOrds,
+		mb.insertColIDs,
 		func(colOrd int) bool { return !mb.tab.Column(colOrd).IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related columns containing insertion values (whether
 	// synthesized or not).
-	mb.roundDecimalValues(mb.insertOrds, false /* roundComputedCols */)
+	mb.roundDecimalValues(mb.insertColIDs, false /* roundComputedCols */)
 
 	// Now add all computed columns.
 	mb.addSynthesizedCols(
-		mb.insertOrds,
+		mb.insertColIDs,
 		func(colOrd int) bool { return mb.tab.Column(colOrd).IsComputed() },
 	)
 
 	// Possibly round DECIMAL-related computed columns.
-	mb.roundDecimalValues(mb.insertOrds, true /* roundComputedCols */)
+	mb.roundDecimalValues(mb.insertColIDs, true /* roundComputedCols */)
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
+	// Disambiguate names so that references in any expressions, such as a
+	// check constraint, refer to the correct columns.
+	mb.disambiguateColumns()
+
+	// Keep a reference to the scope before the check constraint columns are
+	// projected. We use this scope when projecting the partial index put
+	// columns because the check columns are not in-scope for those expressions.
+	preCheckScope := mb.outScope
+
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
+
+	// Add any partial index put boolean columns to the input.
+	mb.projectPartialIndexPutCols(preCheckScope)
 
 	mb.buildFKChecksForInsert()
 
@@ -708,7 +725,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			scanColID := scanScope.cols[indexCol.Ordinal].id
 
 			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColID(indexCol.Ordinal)),
+				mb.b.factory.ConstructVariable(mb.insertColIDs[indexCol.Ordinal]),
 				mb.b.factory.ConstructVariable(scanColID),
 			)
 			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
@@ -742,7 +759,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 		var conflictCols opt.ColSet
 		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
 			indexCol := index.Column(i)
-			conflictCols.Add(mb.outScope.cols[mb.insertOrds[indexCol.Ordinal]].id)
+			conflictCols.Add(mb.insertColIDs[indexCol.Ordinal])
 		}
 
 		// Treat NULL values as distinct from one another. And if duplicates are
@@ -751,7 +768,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			conflictCols, mb.outScope, true /* nullsAreDistinct */, "" /* errorOnDup */)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
 }
 
@@ -780,7 +797,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	// misleading error in buildDistinctOn if present).
 	var conflictCols opt.ColSet
 	for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
-		conflictCols.Add(mb.outScope.cols[mb.insertOrds[ord]].id)
+		conflictCols.Add(mb.insertColIDs[ord])
 	}
 	mb.outScope.ordering = nil
 	mb.outScope = mb.b.buildDistinctOn(
@@ -813,10 +830,12 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	canaryScopeCol := &fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
 	mb.canaryColID = canaryScopeCol.id
 
-	// Set fetchOrds to point to the scope columns created for the fetch values.
+	// Set fetchColIDs to reference the columns created for the fetch values.
 	for i := range fetchScope.cols {
-		// Fetch columns come after insert columns.
-		mb.fetchOrds[i] = scopeOrdinal(len(mb.outScope.cols) + i)
+		// Ensure that we don't add system columns to the fetch columns.
+		if !fetchScope.cols[i].system {
+			mb.fetchColIDs[i] = fetchScope.cols[i].id
+		}
 	}
 
 	// Add the fetch columns to the current scope. It's OK to modify the current
@@ -834,7 +853,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		// Include fetch columns with ordinal positions in conflictOrds.
 		if conflictOrds.Contains(i) {
 			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColID(i)),
+				mb.b.factory.ConstructVariable(mb.insertColIDs[i]),
 				mb.b.factory.ConstructVariable(fetchScope.cols[i].id),
 			)
 			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
@@ -865,8 +884,11 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		mb.b.buildWhere(where, mb.outScope)
 	}
 
-	mb.targetColList = make(opt.ColList, 0, mb.tab.DeletableColumnCount())
+	mb.targetColList = make(opt.ColList, 0, mb.tab.ColumnCount())
 	mb.targetColSet = opt.ColSet{}
+
+	// Add any partial index del boolean columns to the input for UPSERTs.
+	mb.projectPartialIndexDelCols(fetchScope)
 }
 
 // setUpsertCols sets the list of columns to be updated in case of conflict.
@@ -896,22 +918,24 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 		for _, name := range insertCols {
 			// Table column must exist, since existence of insertCols has already
 			// been checked previously.
-			ord := cat.FindTableColumnByName(mb.tab, name)
-			mb.updateOrds[ord] = mb.insertOrds[ord]
+			ord := findPublicTableColumnByName(mb.tab, name)
+			mb.updateColIDs[ord] = mb.insertColIDs[ord]
 		}
 	} else {
-		copy(mb.updateOrds, mb.insertOrds)
+		copy(mb.updateColIDs, mb.insertColIDs)
 	}
 
-	// Never update mutation columns.
-	for i, n := mb.tab.ColumnCount(), mb.tab.DeletableColumnCount(); i < n; i++ {
-		mb.updateOrds[i] = -1
+	// Never update mutation or system columns.
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		if cat.IsMutationColumn(mb.tab, i) || cat.IsSystemColumn(mb.tab, i) {
+			mb.updateColIDs[i] = 0
+		}
 	}
 
 	// Never update primary key columns.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
-		mb.updateOrds[conflictIndex.Column(i).Ordinal] = -1
+		mb.updateColIDs[conflictIndex.Column(i).Ordinal] = 0
 	}
 }
 
@@ -921,8 +945,37 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
 
+	// Disambiguate names so that references in any expressions, such as a
+	// check constraint, refer to the correct columns.
+	mb.disambiguateColumns()
+
+	// Keep a reference to the scope before the check constraint columns are
+	// projected. We use this scope when projecting the partial index put
+	// columns because the check columns are not in-scope for those expressions.
+	preCheckScope := mb.outScope
+
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
+
+	// Add any partial index put boolean columns. The variables in these partial
+	// index predicates must resolve to the new column values of the row which
+	// are either the existing values of the columns or new values provided in
+	// the upsert. Therefore, the variables must resolve to the upsert CASE
+	// expression columns, so the project must be added after the upsert columns
+	// are.
+	//
+	// For example, consider the table and upsert:
+	//
+	//   CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b) WHERE a > 1)
+	//   INSERT INTO t (a, b) VALUES (1, 2) ON CONFLICT (a) DO UPDATE a = t.a + 1
+	//
+	// An entry in the partial index should only be added when a > 1. The
+	// resulting value of a is dependent on whether or not there is a conflict.
+	// In the case of no conflict, the (1, 2) is inserted into the table, and no
+	// partial index entry should be added. But if there is a conflict, The
+	// existing row where a = 1 has a incremented to 2, and an entry should be
+	// added to the partial index.
+	mb.projectPartialIndexPutCols(preCheckScope)
 
 	mb.buildFKChecksForUpsert()
 
@@ -957,20 +1010,25 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	// Add a new column for each target table column that needs to be upserted.
 	// This can include mutation columns.
-	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
-		insertScopeOrd := mb.insertOrds[i]
-		updateScopeOrd := mb.updateOrds[i]
-		if updateScopeOrd == -1 {
-			updateScopeOrd = mb.fetchOrds[i]
+	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+		insertColID := mb.insertColIDs[i]
+		updateColID := mb.updateColIDs[i]
+		if updateColID == 0 {
+			updateColID = mb.fetchColIDs[i]
 		}
 
 		// Skip columns that will only be inserted or only updated.
-		if insertScopeOrd == -1 || updateScopeOrd == -1 {
+		if insertColID == 0 || updateColID == 0 {
 			continue
 		}
 
 		// Skip columns where the insert value and update value are the same.
-		if mb.scopeOrdToColID(insertScopeOrd) == mb.scopeOrdToColID(updateScopeOrd) {
+		if insertColID == updateColID {
+			continue
+		}
+
+		// Skip system columns.
+		if cat.IsSystemColumn(mb.tab, i) {
 			continue
 		}
 
@@ -983,16 +1041,15 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 						mb.b.factory.ConstructVariable(mb.canaryColID),
 						memo.NullSingleton,
 					),
-					mb.b.factory.ConstructVariable(mb.outScope.cols[insertScopeOrd].id),
+					mb.b.factory.ConstructVariable(insertColID),
 				),
 			},
-			mb.b.factory.ConstructVariable(mb.outScope.cols[updateScopeOrd].id),
+			mb.b.factory.ConstructVariable(updateColID),
 		)
 
 		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
-		typ := mb.outScope.cols[insertScopeOrd].typ
+		typ := mb.md.ColumnMeta(insertColID).Type
 		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
-		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 
 		// Assign name to synthesized column.
 		scopeCol.name = mb.tab.Column(i).ColName()
@@ -1001,10 +1058,10 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		// the Upsert. The new columns will be used by the Upsert operator in place
 		// of the original columns. Also set the scope ordinals for the upsert
 		// columns, as those columns can be used by RETURNING columns.
-		if mb.updateOrds[i] != -1 {
-			mb.updateOrds[i] = scopeColOrd
+		if mb.updateColIDs[i] != 0 {
+			mb.updateColIDs[i] = scopeCol.id
 		}
-		mb.upsertOrds[i] = scopeColOrd
+		mb.upsertColIDs[i] = scopeCol.id
 	}
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
@@ -1037,15 +1094,16 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(conflictOrds util.FastIntSet
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 
-// mapColumnNamesToOrdinals returns the set of ordinal positions within the
-// target table that correspond to the given names.
-func (mb *mutationBuilder) mapColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
+// mapPublicColumnNamesToOrdinals returns the set of ordinal positions within
+// the target table that correspond to the given names. Mutation and system
+// columns are ignored.
+func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) util.FastIntSet {
 	var ords util.FastIntSet
 	for _, name := range names {
 		found := false
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
-			if tabCol.ColName() == name {
+			if tabCol.ColName() == name && !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
 				ords.Add(i)
 				found = true
 				break

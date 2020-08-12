@@ -20,21 +20,20 @@ INSERT 1
 dump d t
 ----
 ----
-CREATE TABLE t (
+CREATE TABLE public.t (
 	id INT8 NOT NULL,
 	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
 );
 
-INSERT INTO t (id, next_id) VALUES
+INSERT INTO public.t (id, next_id) VALUES
 	(1, NULL);
 
-ALTER TABLE t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t(id);
+ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE t VALIDATE CONSTRAINT fk_next_id_ref_t;
+ALTER TABLE public.t VALIDATE CONSTRAINT fk_next_id_ref_t;
 ----
 ----
 
@@ -48,21 +47,20 @@ UPDATE 1
 dump d t
 ----
 ----
-CREATE TABLE t (
+CREATE TABLE public.t (
 	id INT8 NOT NULL,
 	next_id INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
 	FAMILY "primary" (id, next_id)
 );
 
-INSERT INTO t (id, next_id) VALUES
+INSERT INTO public.t (id, next_id) VALUES
 	(1, 1);
 
-ALTER TABLE t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t(id);
+ALTER TABLE public.t ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES public.t(id);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE t VALIDATE CONSTRAINT fk_next_id_ref_t;
+ALTER TABLE public.t VALIDATE CONSTRAINT fk_next_id_ref_t;
 ----
 ----
 
@@ -70,28 +68,27 @@ ALTER TABLE t VALIDATE CONSTRAINT fk_next_id_ref_t;
 
 sql
 ALTER TABLE d.t RENAME COLUMN next_id TO "'";
-ALTER TABLE d.t RENAME TO d."table";
+ALTER TABLE d.t RENAME TO "table";
 ----
 RENAME TABLE
 
 dump d table
 ----
 ----
-CREATE TABLE "table" (
+CREATE TABLE public."table" (
 	id INT8 NOT NULL,
 	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")
 );
 
-INSERT INTO "table" (id, "'") VALUES
+INSERT INTO public."table" (id, "'") VALUES
 	(1, 1);
 
-ALTER TABLE "table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES "table"(id);
+ALTER TABLE public."table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES public."table"(id);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE "table" VALIDATE CONSTRAINT fk_next_id_ref_t;
+ALTER TABLE public."table" VALIDATE CONSTRAINT fk_next_id_ref_t;
 ----
 ----
 
@@ -100,20 +97,20 @@ ALTER TABLE "table" VALIDATE CONSTRAINT fk_next_id_ref_t;
 dump d --dump-mode=schema
 ----
 ----
-CREATE TABLE "table" (
+CREATE TABLE public."table" (
 	id INT8 NOT NULL,
 	"'" INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	INDEX t_auto_index_fk_next_id_ref_t ("'" ASC),
 	FAMILY "primary" (id, "'")
 );
 
-ALTER TABLE "table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES "table"(id);
+ALTER TABLE public."table" ADD CONSTRAINT fk_next_id_ref_t FOREIGN KEY ("'") REFERENCES public."table"(id);
 
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.
-ALTER TABLE "table" VALIDATE CONSTRAINT fk_next_id_ref_t;
+ALTER TABLE public."table" VALIDATE CONSTRAINT fk_next_id_ref_t;
 ----
 ----
+
 # Dumping only the data shouldn't have the ALTER stuff either.
 
 dump d --dump-mode=data
@@ -121,7 +118,7 @@ noroundtrip
 ----
 ----
 
-INSERT INTO "table" (id, "'") VALUES
+INSERT INTO public."table" (id, "'") VALUES
 	(1, 1);
 ----
 ----

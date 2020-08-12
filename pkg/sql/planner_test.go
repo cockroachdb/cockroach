@@ -11,16 +11,20 @@
 package sql
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestTypeAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	testData := []struct {
 		expr        tree.Expr
@@ -38,7 +42,7 @@ func TestTypeAsString(t *testing.T) {
 
 	t.Run("TypeAsString", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsString(td.expr, "test")
+			fn, err := p.TypeAsString(ctx, td.expr, "test")
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)
@@ -59,7 +63,7 @@ func TestTypeAsString(t *testing.T) {
 
 	t.Run("TypeAsStringArray", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsStringArray([]tree.Expr{td.expr, td.expr}, "test")
+			fn, err := p.TypeAsStringArray(ctx, []tree.Expr{td.expr, td.expr}, "test")
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)

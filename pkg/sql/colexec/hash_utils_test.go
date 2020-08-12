@@ -16,8 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestHashFunctionFamily verifies the assumption that our vectorized hashing
@@ -26,6 +28,7 @@ import (
 // sufficient to get a "different" hash function.
 func TestHashFunctionFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	bucketsA, bucketsB := make([]uint64, coldata.BatchSize()), make([]uint64, coldata.BatchSize())
@@ -37,15 +40,16 @@ func TestHashFunctionFamily(t *testing.T) {
 	}
 	numBuckets := uint64(16)
 	var (
-		cancelChecker  CancelChecker
-		decimalScratch decimalOverloadScratch
+		cancelChecker     CancelChecker
+		overloadHelperVar overloadHelper
+		datumAlloc        sqlbase.DatumAlloc
 	)
 
 	for initHashValue, buckets := range [][]uint64{bucketsA, bucketsB} {
 		// We need +1 here because 0 is not a valid initial hash value.
 		initHash(buckets, nKeys, uint64(initHashValue+1))
 		for _, keysCol := range keys {
-			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, decimalScratch)
+			rehash(ctx, buckets, keysCol, nKeys, nil /* sel */, cancelChecker, overloadHelperVar, &datumAlloc)
 		}
 		finalizeHash(buckets, nKeys, numBuckets)
 	}

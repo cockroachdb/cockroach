@@ -11,10 +11,12 @@
 package tree
 
 import (
+	"context"
 	"go/constant"
 	"go/token"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,11 +44,15 @@ type Constant interface {
 	// past the decimal point. It is possible to resolve this constant as a
 	// decimal, but it is not desirable.
 	DesirableTypes() []*types.T
-	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
-	// error if the Constant could not be resolved as that type. The method should only
-	// be passed a type returned from AvailableTypes and should never be called more than
-	// once for a given Constant.
-	ResolveAsType(*SemaContext, *types.T) (Datum, error)
+	// ResolveAsType resolves the Constant as the specified type, or returns an
+	// error if the Constant could not be resolved as that type. The method should
+	// only be passed a type returned from AvailableTypes and should never be
+	// called more than once for a given Constant.
+	//
+	// The returned expression is either a Datum or a CastExpr wrapping a Datum;
+	// the latter is necessary for cases where the result would depend on the
+	// context (like the timezone or the current time).
+	ResolveAsType(context.Context, *SemaContext, *types.T) (TypedExpr, error)
 }
 
 var _ Constant = &NumVal{}
@@ -57,12 +63,14 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret TypedExpr, err error) {
+func typeCheckConstant(
+	ctx context.Context, semaCtx *SemaContext, c Constant, desired *types.T,
+) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired.Family() != types.AnyFamily {
+	if !desired.IsAmbiguous() {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
-				return c.ResolveAsType(ctx, desired)
+				return c.ResolveAsType(ctx, semaCtx, desired)
 			}
 		}
 	}
@@ -84,7 +92,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret Type
 	}
 
 	natural := avail[0]
-	return c.ResolveAsType(ctx, natural)
+	return c.ResolveAsType(ctx, semaCtx, natural)
 }
 
 func naturalConstantType(c Constant) *types.T {
@@ -92,7 +100,7 @@ func naturalConstantType(c Constant) *types.T {
 }
 
 // canConstantBecome returns whether the provided Constant can become resolved
-// as the provided type.
+// as a type that is Equivalent to the given type.
 func canConstantBecome(c Constant, typ *types.T) bool {
 	avail := c.AvailableTypes()
 	for _, availTyp := range avail {
@@ -284,7 +292,9 @@ func (expr *NumVal) DesirableTypes() []*types.T {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
+func (expr *NumVal) ResolveAsType(
+	ctx context.Context, semaCtx *SemaContext, typ *types.T,
+) (TypedExpr, error) {
 	switch typ.Family() {
 	case types.IntFamily:
 		// We may have already set expr.resInt in AsInt64.
@@ -346,7 +356,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		}
 		return dd, nil
 	case types.OidFamily:
-		d, err := expr.ResolveAsType(ctx, types.Int)
+		d, err := expr.ResolveAsType(ctx, semaCtx, types.Int)
 		if err != nil {
 			return nil, err
 		}
@@ -469,7 +479,7 @@ var (
 		types.AnyEnum,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
-	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String}
+	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String, types.AnyEnum}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -514,16 +524,25 @@ func (expr *StrVal) DesirableTypes() []*types.T {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
+func (expr *StrVal) ResolveAsType(
+	ctx context.Context, semaCtx *SemaContext, typ *types.T,
+) (TypedExpr, error) {
 	if expr.scannedAsBytes {
 		// We're looking at typing a byte literal constant into some value type.
 		switch typ.Family() {
 		case types.BytesFamily:
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
+		case types.EnumFamily:
+			return MakeDEnumFromPhysicalRepresentation(typ, []byte(expr.s))
 		case types.UuidFamily:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.StringFamily:
+			// bpchar types truncate trailing whitespace.
+			if typ.Oid() == oid.T_bpchar {
+				expr.resString = DString(strings.TrimRight(expr.s, " "))
+				return &expr.resString, nil
+			}
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
@@ -537,151 +556,47 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			expr.resString = DString(expr.s)
 			return NewDNameFromDString(&expr.resString), nil
 		}
+		// bpchar types truncate trailing whitespace.
+		if typ.Oid() == oid.T_bpchar {
+			expr.resString = DString(strings.TrimRight(expr.s, " "))
+			return &expr.resString, nil
+		}
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
+
 	case types.BytesFamily:
 		return ParseDByte(expr.s)
+
+	default:
+		val, dependsOnContext, err := ParseAndRequireString(typ, expr.s, dummyParseTimeContext{})
+		if err != nil {
+			return nil, err
+		}
+		if !dependsOnContext {
+			return val, nil
+		}
+		// Interpreting a string as one of these types may depend on the timezone or
+		// the current time; the value won't be safe to reuse later. So in this case
+		// we return a CastExpr and let the conversion happen at evaluation time. We
+		// still want to error out if the conversion is not possible though (this is
+		// used when resolving overloads).
+		expr.resString = DString(expr.s)
+		c := NewTypedCastExpr(&expr.resString, typ)
+		return c.TypeCheck(ctx, semaCtx, typ)
 	}
-
-	datum, err := ParseAndRequireString(typ, expr.s, ctx)
-	return datum, err
 }
 
-type constantFolderVisitor struct{}
+// dummyParseTimeContext is a ParseTimeContext when used for parsing timestamps
+// during type-checking. Note that results that depend on the context are not
+// retained in the AST.
+type dummyParseTimeContext struct{}
 
-var _ Visitor = constantFolderVisitor{}
+var _ ParseTimeContext = dummyParseTimeContext{}
 
-func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	return true, expr
-}
+// We can return any time, but not the zero value - it causes an error when
+// parsing "yesterday".
+var dummyTime = time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC)
 
-var unaryOpToToken = map[UnaryOperator]token.Token{
-	UnaryMinus: token.SUB,
-}
-var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
-	UnaryComplement: token.XOR,
-}
-var binaryOpToToken = map[BinaryOperator]token.Token{
-	Plus:  token.ADD,
-	Minus: token.SUB,
-	Mult:  token.MUL,
-	Div:   token.QUO,
-}
-var binaryOpToTokenIntOnly = map[BinaryOperator]token.Token{
-	FloorDiv: token.QUO_ASSIGN,
-	Mod:      token.REM,
-	Bitand:   token.AND,
-	Bitor:    token.OR,
-	Bitxor:   token.XOR,
-}
-var comparisonOpToToken = map[ComparisonOperator]token.Token{
-	EQ: token.EQL,
-	NE: token.NEQ,
-	LT: token.LSS,
-	LE: token.LEQ,
-	GT: token.GTR,
-	GE: token.GEQ,
-}
-
-func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
-	defer func() {
-		// go/constant operations can panic for a number of reasons (like division
-		// by zero), but it's difficult to preemptively detect when they will. It's
-		// safest to just recover here without folding the expression and let
-		// normalization or evaluation deal with error handling.
-		if r := recover(); r != nil {
-			retExpr = expr
-		}
-	}()
-	switch t := expr.(type) {
-	case *ParenExpr:
-		switch cv := t.Expr.(type) {
-		case *NumVal, *StrVal:
-			return cv
-		}
-	case *UnaryExpr:
-		switch cv := t.Expr.(type) {
-		case *NumVal:
-			if tok, ok := unaryOpToToken[t.Operator]; ok {
-				return &NumVal{value: constant.UnaryOp(tok, cv.AsConstantValue(), 0)}
-			}
-			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
-				if intVal, ok := cv.AsConstantInt(); ok {
-					return &NumVal{value: constant.UnaryOp(token, intVal, 0)}
-				}
-			}
-		}
-	case *BinaryExpr:
-		switch l := t.Left.(type) {
-		case *NumVal:
-			if r, ok := t.Right.(*NumVal); ok {
-				if token, ok := binaryOpToToken[t.Operator]; ok {
-					return &NumVal{value: constant.BinaryOp(l.AsConstantValue(), token, r.AsConstantValue())}
-				}
-				if token, ok := binaryOpToTokenIntOnly[t.Operator]; ok {
-					if lInt, ok := l.AsConstantInt(); ok {
-						if rInt, ok := r.AsConstantInt(); ok {
-							return &NumVal{value: constant.BinaryOp(lInt, token, rInt)}
-						}
-					}
-				}
-				// Explicitly ignore shift operators so the expression is evaluated as a
-				// non-const. This is because 1 << 63 as a 64-bit int (which is a negative
-				// number due to 2s complement) is different than 1 << 63 as constant,
-				// which is positive.
-			}
-		case *StrVal:
-			if r, ok := t.Right.(*StrVal); ok {
-				switch t.Operator {
-				case Concat:
-					// When folding string-like constants, if either was a byte
-					// array literal, the result is also a byte literal.
-					return &StrVal{s: l.s + r.s, scannedAsBytes: l.scannedAsBytes || r.scannedAsBytes}
-				}
-			}
-		}
-	case *ComparisonExpr:
-		switch l := t.Left.(type) {
-		case *NumVal:
-			if r, ok := t.Right.(*NumVal); ok {
-				if token, ok := comparisonOpToToken[t.Operator]; ok {
-					return MakeDBool(DBool(constant.Compare(l.AsConstantValue(), token, r.AsConstantValue())))
-				}
-			}
-		case *StrVal:
-			// ComparisonExpr folding for String-like constants is not significantly different
-			// from constant evalutation during normalization (because both should be exact,
-			// unlike numeric comparisons). Still, folding these comparisons when possible here
-			// can reduce the amount of work performed during type checking, can reduce necessary
-			// allocations, and maintains symmetry with numeric constants.
-			if r, ok := t.Right.(*StrVal); ok {
-				switch t.Operator {
-				case EQ:
-					return MakeDBool(DBool(l.s == r.s))
-				case NE:
-					return MakeDBool(DBool(l.s != r.s))
-				case LT:
-					return MakeDBool(DBool(l.s < r.s))
-				case LE:
-					return MakeDBool(DBool(l.s <= r.s))
-				case GT:
-					return MakeDBool(DBool(l.s > r.s))
-				case GE:
-					return MakeDBool(DBool(l.s >= r.s))
-				}
-			}
-		}
-	}
-	return expr
-}
-
-// FoldConstantLiterals folds all constant literals using exact arithmetic.
-//
-// TODO(nvanbenschoten): Can this visitor be preallocated (like normalizeVisitor)?
-// TODO(nvanbenschoten): Investigate normalizing associative operations to group
-//     constants together and permit further numeric constant folding.
-func FoldConstantLiterals(expr Expr) (Expr, error) {
-	v := constantFolderVisitor{}
-	expr, _ = WalkExpr(v, expr)
-	return expr, nil
+func (dummyParseTimeContext) GetRelativeParseTime() time.Time {
+	return dummyTime
 }

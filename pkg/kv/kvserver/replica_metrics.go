@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft"
@@ -27,7 +27,7 @@ type ReplicaMetrics struct {
 	LeaseValid  bool
 	Leaseholder bool
 	LeaseType   roachpb.LeaseType
-	LeaseStatus storagepb.LeaseStatus
+	LeaseStatus kvserverpb.LeaseStatus
 
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
@@ -37,15 +37,15 @@ type ReplicaMetrics struct {
 
 	// Is this the replica which collects per-range metrics? This is done either
 	// on the leader or, if there is no leader, on the largest live replica ID.
-	RangeCounter             bool
-	Unavailable              bool
-	Underreplicated          bool
-	UnderreplicatedForConfig bool
-	Overreplicated           bool
-	BehindCount              int64
-	LatchInfoLocal           storagepb.LatchManagerInfo
-	LatchInfoGlobal          storagepb.LatchManagerInfo
-	RaftLogTooLarge          bool
+
+	RangeCounter    bool
+	Unavailable     bool
+	Underreplicated bool
+	Overreplicated  bool
+	BehindCount     int64
+	LatchInfoLocal  kvserverpb.LatchManagerInfo
+	LatchInfoGlobal kvserverpb.LatchManagerInfo
+	RaftLogTooLarge bool
 }
 
 // Metrics returns the current metrics for the replica.
@@ -54,7 +54,7 @@ func (r *Replica) Metrics(
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
-	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
+	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
 	zone := r.mu.zone
@@ -97,12 +97,12 @@ func calcReplicaMetrics(
 	clusterNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
-	leaseStatus storagepb.LeaseStatus,
+	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	quiescent bool,
 	ticking bool,
-	latchInfoLocal storagepb.LatchManagerInfo,
-	latchInfoGlobal storagepb.LatchManagerInfo,
+	latchInfoLocal kvserverpb.LatchManagerInfo,
+	latchInfoGlobal kvserverpb.LatchManagerInfo,
 	raftLogSize int64,
 	raftLogSizeTrusted bool,
 ) ReplicaMetrics {
@@ -110,7 +110,7 @@ func calcReplicaMetrics(
 
 	var leaseOwner bool
 	m.LeaseStatus = leaseStatus
-	if leaseStatus.State == storagepb.LeaseState_VALID {
+	if leaseStatus.State == kvserverpb.LeaseState_VALID {
 		m.LeaseValid = true
 		leaseOwner = leaseStatus.Lease.OwnedBy(storeID)
 		m.LeaseType = leaseStatus.Lease.Type()
@@ -255,6 +255,19 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
 	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
+}
+
+func (r *Replica) needsRaftLogTruncationLocked() bool {
+	// We don't want to check the Raft log for truncation on every write
+	// operation or even every operation which occurs after the Raft log exceeds
+	// RaftLogQueueStaleSize. The logic below queues the replica for possible
+	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
+	// have been written to the Raft log.
+	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	if checkRaftLog {
+		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
+	}
+	return checkRaftLog
 }
 
 // exceedsMultipleOfSplitSizeRLocked returns whether the current size of the

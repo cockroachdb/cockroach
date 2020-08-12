@@ -11,6 +11,7 @@
 package geogfn
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -38,6 +39,13 @@ var distanceTestCases = []struct {
 		"POINT(2.5559 49.0083)",
 		9.103087983009e+06,
 		9124665.27317673,
+	},
+	{
+		"POINT to POINT (CDG to LAX) SRID=4004",
+		"SRID=4004;POINT(-118.4079 33.9434)",
+		"SRID=4004;POINT(2.5559 49.0083)",
+		9102062.53966977,
+		9123572.72696577,
 	},
 	{
 		"LINESTRING to POINT where POINT is on vertex",
@@ -110,6 +118,20 @@ var distanceTestCases = []struct {
 		627129.50261075,
 	},
 	{
+		"LINESTRING to intersecting LINESTRING, duplicate points",
+		"LINESTRING(0.0 0.0, 0.0 0.0, 1.0 1.0)",
+		"LINESTRING(0.0 1.0, 1.0 0.0, 1.0 0.0)",
+		0,
+		0,
+	},
+	{
+		"LINESTRING to faraway LINESTRING, duplicate points",
+		"LINESTRING(0.0 0.0, 1.0 1.0)",
+		"LINESTRING(5.0 5.0, 6.0 6.0, 6.0 6.0, 6.0 6.0)",
+		628519.03378753,
+		627129.50261075,
+	},
+	{
 		"LINESTRING to intersecting POLYGON where LINESTRING is inside the polygon",
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		"LINESTRING(0.1 0.1, 0.15 0.15)",
@@ -173,6 +195,20 @@ var distanceTestCases = []struct {
 		0,
 	},
 	{
+		"POLYGON to POLYGON completely inside its hole, duplicate points",
+		"POLYGON((0.0 0.0, 0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))",
+		"POLYGON((0.25 0.25, 0.25 0.25, 0.35 0.35, 0.25 0.35, 0.25 0.35, 0.25 0.25))",
+		5559.65025416,
+		5565.87138621,
+	},
+	{
+		"POLYGON to POLYGON intersecting through its hole, duplicate points",
+		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))",
+		"POLYGON((0.15 0.25, 0.15 0.25, 0.35 0.25, 0.35 0.35, 0.25 0.35, 0.25 0.35, 0.15 0.25))",
+		0,
+		0,
+	},
+	{
 		"POLYGON to faraway POLYGON",
 		"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))",
 		"POLYGON((-8.0 -8.0, -4.0 -8.0, -4.0 -4.0, -8.0 -4.0, -8.0 -8.0))",
@@ -220,6 +256,48 @@ var distanceTestCases = []struct {
 		"MULTIPOLYGON (((30 20, 45 40, 15 45, 30 20)))",
 		0,
 		0,
+	},
+	{
+		"LINESTRING to POINT intersecting across the longitudinal boundary",
+		"LINESTRING(179 0, -179 0)",
+		"POINT(179.1 0)",
+		0,
+		0,
+	},
+	{
+		"reversed LINESTRING to POINT intersecting across the longitudinal boundary",
+		"LINESTRING(-179 0, 179 0)",
+		"POINT(179.1 0)",
+		0,
+		0,
+	},
+	{
+		"reversed LINESTRING to POINT not intersecting the linestring crossing the longitudinal boundary but POINT on the other side",
+		"LINESTRING(-179 0, 179 0)",
+		"POINT(170 0)",
+		1000755.71761168,
+		1001875.41713946,
+	},
+	{
+		"LINESTRING to POINT not intersecting the linestring crossing the longitudinal boundary but POINT on the other side",
+		"LINESTRING(179 0, -179 0)",
+		"POINT(170 0)",
+		1000755.71761168,
+		1001875.41713946,
+	},
+	{
+		"POLYGON to POINT lying inside latitudinal boundary",
+		"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+		"POINT (150 88)",
+		0,
+		0,
+	},
+	{
+		"POLYGON to POINT lying outside latitudinal boundary",
+		"POLYGON((150 85, 160 85, -20 85, -30 85, 150 85))",
+		"POINT (170 88)",
+		38610.04033289,
+		38783.11312354,
 	},
 }
 
@@ -269,5 +347,31 @@ func TestDistance(t *testing.T) {
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := Distance(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, UseSpheroid)
 		requireMismatchingSRIDError(t, err)
+	})
+
+	t.Run("empty geographies always error", func(t *testing.T) {
+		for _, tc := range []struct {
+			a string
+			b string
+		}{
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"},
+			{"POINT(1.0 1.0)", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"},
+		} {
+			for _, useSphereOrSpheroid := range []UseSphereOrSpheroid{
+				UseSphere,
+				UseSpheroid,
+			} {
+				t.Run(fmt.Sprintf("Distance(%s,%s),spheroid=%t", tc.a, tc.b, useSphereOrSpheroid), func(t *testing.T) {
+					a, err := geo.ParseGeography(tc.a)
+					require.NoError(t, err)
+					b, err := geo.ParseGeography(tc.b)
+					require.NoError(t, err)
+					_, err = Distance(a, b, useSphereOrSpheroid)
+					require.Error(t, err)
+					require.True(t, geo.IsEmptyGeometryError(err))
+				})
+			}
+		}
 	})
 }

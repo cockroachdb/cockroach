@@ -71,7 +71,7 @@ func makeAsOf(s *Smither) tree.AsOfClause {
 	case 1:
 		expr = tree.NewStrVal("-2s")
 	case 2:
-		expr = tree.NewStrVal(timeutil.Now().Add(-2 * time.Second).Format(tree.TimestampOutputFormat))
+		expr = tree.NewStrVal(timeutil.Now().Add(-2 * time.Second).Format(tree.TimestampTZOutputFormat))
 	case 3:
 		expr = sqlbase.RandDatum(s.rnd, types.Interval, false /* nullOk */)
 	case 4:
@@ -106,20 +106,11 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	s.bulkBackups[name] = targets
 	s.lock.Unlock()
 
-	var opts tree.KVOptions
-	if s.coin() {
-		opts = tree.KVOptions{
-			tree.KVOption{
-				Key: "revision_history",
-			},
-		}
-	}
-
 	return &tree.Backup{
-		Targets: targets,
-		To:      tree.PartitionedBackup{tree.NewStrVal(name)},
+		Targets: &targets,
+		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),
-		Options: opts,
+		Options: tree.BackupOptions{CaptureRevisionHistory: s.coin()},
 	}, true
 }
 
@@ -150,13 +141,10 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 
 	return &tree.Restore{
 		Targets: targets,
-		From:    []tree.PartitionedBackup{{tree.NewStrVal(name)}},
+		From:    []tree.StringOrPlaceholderOptList{{tree.NewStrVal(name)}},
 		AsOf:    makeAsOf(s),
-		Options: tree.KVOptions{
-			tree.KVOption{
-				Key:   "into_db",
-				Value: tree.NewStrVal(string(db)),
-			},
+		Options: tree.RestoreOptions{
+			IntoDB: tree.NewDString("into_db"),
 		},
 	}, true
 }

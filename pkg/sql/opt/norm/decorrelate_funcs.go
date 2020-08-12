@@ -88,13 +88,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
 			case *memo.WhenExpr:
 				if child == t.Value {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 
 			case *memo.IfErrExpr:
@@ -103,7 +103,7 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 				// it's at position 1.
 				if i == 1 {
 					memo.BuildSharedProps(child, &sharedProps)
-					hasHoistableSubquery = !sharedProps.CanHaveSideEffects
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakProof()
 				}
 			}
 
@@ -398,22 +398,6 @@ func (c *CustomFuncs) NonKeyCols(in memo.RelExpr) opt.ColSet {
 	return c.OutputCols(in).Difference(keyCols)
 }
 
-// MakeAggCols constructs a new Aggregations operator containing an aggregate
-// function of the given operator type for each of column in the given set. For
-// example, for ConstAggOp and columns (1,2), this expression is returned:
-//
-//   (Aggregations
-//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
-//     [1,2]
-//   )
-//
-func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.AggregationsExpr {
-	colsLen := cols.Len()
-	aggs := make(memo.AggregationsExpr, colsLen)
-	c.makeAggCols(aggOp, cols, aggs)
-	return aggs
-}
-
 // MakeAggCols2 is similar to MakeAggCols, except that it allows two different
 // sets of aggregate functions to be added to the resulting Aggregations
 // operator, with one set appended to the other, like this:
@@ -431,6 +415,29 @@ func (c *CustomFuncs) MakeAggCols2(
 	c.makeAggCols(aggOp, cols, aggs)
 	c.makeAggCols(aggOp2, cols2, aggs[colsLen:])
 	return aggs
+}
+
+// AppendAggCols2 constructs a new Aggregations operator containing the
+// aggregate functions from an existing Aggregations operator plus an
+// additional set of aggregate functions, one for each column in the given set.
+// The new functions are of the given aggregate operator type.
+func (c *CustomFuncs) AppendAggCols2(
+	aggs memo.AggregationsExpr,
+	aggOp opt.Operator,
+	cols opt.ColSet,
+	aggOp2 opt.Operator,
+	cols2 opt.ColSet,
+) memo.AggregationsExpr {
+	colsLen := cols.Len()
+	outAggs := make(memo.AggregationsExpr, len(aggs)+colsLen+cols2.Len())
+	copy(outAggs, aggs)
+
+	offset := len(aggs)
+	c.makeAggCols(aggOp, cols, outAggs[offset:])
+	offset += colsLen
+	c.makeAggCols(aggOp2, cols2, outAggs[offset:])
+
+	return outAggs
 }
 
 // EnsureCanaryCol checks whether an aggregation which cannot ignore nulls exists.
@@ -516,15 +523,16 @@ func (c *CustomFuncs) AggsCanBeDecorrelated(aggs memo.AggregationsExpr) bool {
 func (c *CustomFuncs) constructCanaryChecker(
 	aggCanaryVar opt.ScalarExpr, inputCol opt.ColumnID,
 ) opt.ScalarExpr {
+	variable := c.f.ConstructVariable(inputCol)
 	return c.f.ConstructCase(
 		memo.TrueSingleton,
 		memo.ScalarListExpr{
 			c.f.ConstructWhen(
 				c.f.ConstructIsNot(aggCanaryVar, memo.NullSingleton),
-				c.f.ConstructVariable(inputCol),
+				variable,
 			),
 		},
-		memo.NullSingleton,
+		c.f.ConstructNull(variable.DataType()),
 	)
 }
 
@@ -1000,7 +1008,7 @@ func (r *subqueryHoister) constructGroupByAny(
 						r.f.ConstructFalse(),
 					),
 				},
-				memo.NullSingleton,
+				r.f.ConstructNull(types.Bool),
 			),
 			caseColID,
 		)},

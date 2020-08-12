@@ -2,8 +2,25 @@
 # RowDescription message of the wire protocol. The IDs should remain consistent
 # even when joining tables or when using views.
 
+# Prepare the environment.
 send
-Query {"String": "CREATE TABLE tab1 (a int primary key, b int)"}
+Query {"String": "DROP VIEW IF EXISTS v; DROP TABLE IF EXISTS tab4; DROP TABLE IF EXISTS tab3; DROP TABLE IF EXISTS tab2; DROP TABLE IF EXISTS tab1"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP VIEW"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Start of test.
+
+send
+Query {"String": "CREATE TABLE tab1 (a INT8 PRIMARY KEY, b INT8)"}
 ----
 
 until
@@ -13,7 +30,7 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE tab2 (c int primary key, tab1_a int REFERENCES tab1(a))"}
+Query {"String": "CREATE TABLE tab2 (c INT8 PRIMARY KEY, tab1_a INT8 REFERENCES tab1(a))"}
 ----
 
 until
@@ -56,10 +73,20 @@ send
 Query {"String": "SELECT a FROM tab1"}
 ----
 
+# With postgres we don't control the table OID.
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -68,10 +95,20 @@ send
 Query {"String": "SELECT tab1.a, tab2.c FROM tab1 JOIN tab2 ON tab1.a = tab2.tab1_a"}
 ----
 
+# With postgres we don't control the table OID.
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":53,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":53,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"4"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
@@ -80,16 +117,26 @@ send
 Query {"String": "SELECT * FROM v WHERE v1 = 1"}
 ----
 
-until
-ReadyForQuery
+# With postgres we don't control the table OID.
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
 ----
 {"Type":"RowDescription","Fields":[{"Name":"v1","TableOID":52,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"v2","TableOID":53,"TableAttributeNumber":2,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+until ignore_table_oids
+ReadyForQuery
+----
 {"Type":"DataRow","Values":[{"text":"1"},{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
-Query {"String": "CREATE TABLE tab3 (a int primary key, b char(8))"}
+Query {"String": "CREATE TABLE tab3 (a INT8 PRIMARY KEY, b CHAR(8))"}
 ----
 
 until
@@ -112,17 +159,30 @@ send
 Query {"String": "SELECT b FROM tab3"}
 ----
 
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello   "}]}
+
 until
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
-{"Type":"DataRow","Values":[{"text":"hello"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # 80 = ASCII 'P' for Portal
 send
-Parse {"Name": "s", "Query": "SELECT b FROM tab3"}
+Parse {"Name": "s", "Query": "SELECT b, 1 FROM tab3"}
 Bind {"DestinationPortal": "p", "PreparedStatement": "s"}
 Describe {"ObjectType": 80, "Name": "p"}
 Execute {"Portal": "p"}
@@ -130,11 +190,172 @@ Sync
 ----
 
 until
-ReadyForQuery
+BindComplete
 ----
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
-{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0}]}
+
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":1042,"DataTypeSize":-1,"TypeModifier":12,"Format":0},{"Name":"?column?","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"hello   "},{"text":"1"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# tab4 is a regression test for #51360 -- verify that VARCHAR(n) columns
+# have the correct DataTypeOID in RowDescription.
+send
+Query {"String": "CREATE TABLE tab4 (a INT8 PRIMARY KEY, b VARCHAR(256)[] NOT NULL)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO tab4 VALUES(4, ARRAY['hello', 'goodbye'])"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s2", "Query": "SELECT b FROM tab4"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
+Describe {"ObjectType": 80, "Name": "p2"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+BindComplete
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"{hello,goodbye}"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT b FROM tab4"}
+----
+
+until ignore_table_oids noncrdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":56,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until
+DataRow
+----
+{"Type":"DataRow","Values":[{"text":"{hello,goodbye}"}]}
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SET enable_experimental_alter_column_type_general = true"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE STRING"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Ensure that after alter column type, the TableAttributeNumber stays consistent.
+# TableAttributeNumber of column b should stay as 2.
+
+# 80 = ASCII 'P' for Portal
+send
+Parse {"Name": "s3", "Query": "SELECT b FROM tab3"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3"}
+Describe {"ObjectType": 80, "Name": "p3"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until
+BindComplete
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+
+until noncrdb_only ignore_table_oids
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":1015,"DataTypeSize":-1,"TypeModifier":260,"Format":0}]}
+
+until crdb_only
+RowDescription
+----
+{"Type":"RowDescription","Fields":[{"Name":"b","TableOID":55,"TableAttributeNumber":2,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+
+
+until
+DataRow
+----
 {"Type":"DataRow","Values":[{"text":"hello"}]}
+
+until
+ReadyForQuery
+----
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

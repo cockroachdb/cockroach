@@ -23,8 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,6 +43,7 @@ func FakePHS(opName, user string) (interface{}, func()) {
 
 func TestRegistryCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx, stopper := context.Background(), stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -56,8 +60,18 @@ func TestRegistryCancelation(t *testing.T) {
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
-		log.AmbientContext{}, stopper, clock, nodeLiveness, db, nil /* ex */, base.TestingIDContainer, cluster.NoSettings,
-		histogramWindowInterval, FakePHS, "")
+		log.AmbientContext{},
+		stopper,
+		clock,
+		sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
+		db,
+		nil, /* ex */
+		base.TestingIDContainer,
+		cluster.NoSettings,
+		histogramWindowInterval,
+		FakePHS,
+		"",
+	)
 
 	const cancelInterval = time.Nanosecond
 	const adoptInterval = time.Duration(math.MaxInt64)
@@ -184,9 +198,9 @@ func TestRegistryCancelation(t *testing.T) {
 
 func TestRegistryGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("")
-	// TODO (lucy): This test probably shouldn't continue to exist in its current
-	// form if GCMutations will cease to be used. Refactor or get rid of it.
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 51796, "TODO (lucy): This test probably shouldn't continue to exist in its current"+
+		"form if GCMutations will cease to be used. Refactor or get rid of it.")
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -207,34 +221,37 @@ func TestRegistryGC(t *testing.T) {
 	earlier := ts.Add(-1 * time.Hour)
 	muchEarlier := ts.Add(-2 * time.Hour)
 
-	setMutations := func(mutations []sqlbase.DescriptorMutation) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
+	setMutations := func(mutations []descpb.DescriptorMutation) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.Mutations = mutations
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
-			sqlbase.WrapDescriptor(desc),
+			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
 		}
 		return desc.GetID()
 	}
 
-	setGCMutations := func(gcMutations []sqlbase.TableDescriptor_GCDescriptorMutation) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
+	setGCMutations := func(gcMutations []descpb.TableDescriptor_GCDescriptorMutation) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		desc.GCMutations = gcMutations
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
-			sqlbase.WrapDescriptor(desc),
+			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
 		}
 		return desc.GetID()
 	}
 
-	setDropJob := func(shouldDrop bool) sqlbase.ID {
-		desc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
+	setDropJob := func(shouldDrop bool) descpb.ID {
+		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
+			kvDB, keys.SystemSQLCodec, "t", "to_be_mutated")
 		if shouldDrop {
 			desc.DropJobID = 123
 		} else {
@@ -242,9 +259,9 @@ func TestRegistryGC(t *testing.T) {
 			desc.DropJobID = 0
 		}
 		if err := kvDB.Put(
-			context.TODO(),
+			context.Background(),
 			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
-			sqlbase.WrapDescriptor(desc),
+			desc.DescriptorProto(),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -258,10 +275,10 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 		}
 		descriptorID := setDropJob(mutOptions.hasDropJob)
 		if mutOptions.hasMutation {
-			descriptorID = setMutations([]sqlbase.DescriptorMutation{{}})
+			descriptorID = setMutations([]descpb.DescriptorMutation{{}})
 		}
 		if mutOptions.hasGCMutation {
-			descriptorID = setGCMutations([]sqlbase.TableDescriptor_GCDescriptorMutation{{}})
+			descriptorID = setGCMutations([]descpb.TableDescriptor_GCDescriptorMutation{{}})
 		}
 
 		payload, err := protoutil.Marshal(&jobspb.Payload{
@@ -269,9 +286,9 @@ CREATE DATABASE IF NOT EXISTS t; CREATE TABLE IF NOT EXISTS t.to_be_mutated AS S
 			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
 			// register a mutation on the table so that jobs that reference
 			// the table are not considered orphaned
-			DescriptorIDs: []sqlbase.ID{
+			DescriptorIDs: []descpb.ID{
 				descriptorID,
-				sqlbase.InvalidID, // invalid id to test handling of missing descriptors.
+				descpb.InvalidID, // invalid id to test handling of missing descriptors.
 			},
 			Details:        jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{}),
 			StartedMicros:  timeutil.ToUnixMicros(created),

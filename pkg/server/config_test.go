@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -31,15 +32,16 @@ import (
 
 func TestParseInitNodeAttributes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
+	defer log.Scope(t).Close(t)
+	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.Attrs = "attr1=val1::attr2=val2"
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}}}}
-	engines, err := cfg.CreateEngines(context.TODO())
+	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	defer engines.Close()
-	if err := cfg.InitNode(context.TODO()); err != nil {
+	if err := cfg.InitNode(context.Background()); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 
@@ -52,15 +54,16 @@ func TestParseInitNodeAttributes(t *testing.T) {
 // correctly.
 func TestParseJoinUsingAddrs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
+	defer log.Scope(t).Close(t)
+	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.JoinList = []string{"localhost:12345", "localhost:23456", "localhost:34567", "localhost"}
 	cfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{{InMemory: true, Size: base.SizeSpec{InBytes: base.MinimumStoreSize * 100}}}}
-	engines, err := cfg.CreateEngines(context.TODO())
+	engines, err := cfg.CreateEngines(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to initialize stores: %s", err)
 	}
 	defer engines.Close()
-	if err := cfg.InitNode(context.TODO()); err != nil {
+	if err := cfg.InitNode(context.Background()); err != nil {
 		t.Fatalf("Failed to initialize node: %s", err)
 	}
 	r1, err := resolver.NewResolver("localhost:12345")
@@ -89,6 +92,7 @@ func TestParseJoinUsingAddrs(t *testing.T) {
 // correctly parsed.
 func TestReadEnvironmentVariables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	resetEnvVar := func() {
 		// Reset all environment variables in case any were already set.
@@ -113,8 +117,8 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// Makes sure no values are set when no environment variables are set.
-	cfg := MakeConfig(context.TODO(), st)
-	cfgExpected := MakeConfig(context.TODO(), st)
+	cfg := MakeConfig(context.Background(), st)
+	cfgExpected := MakeConfig(context.Background(), st)
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
@@ -170,6 +174,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 func TestFilterGossipBootstrapResolvers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	resolverSpecs := []string{
 		"127.0.0.1:9000",
@@ -184,7 +189,7 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 			resolvers = append(resolvers, resolver)
 		}
 	}
-	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
+	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	cfg.GossipBootstrapResolvers = resolvers
 
 	listenAddr := util.MakeUnresolvedAddr("tcp", resolverSpecs[0])
@@ -199,8 +204,9 @@ func TestFilterGossipBootstrapResolvers(t *testing.T) {
 
 func TestParseBootstrapResolvers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	cfg := MakeConfig(context.TODO(), cluster.MakeTestingClusterSettings())
+	cfg := MakeConfig(context.Background(), cluster.MakeTestingClusterSettings())
 	const expectedName = "hello"
 
 	t.Run("nosrv", func(t *testing.T) {
@@ -209,7 +215,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 		cfg.JoinPreferSRVRecords = false
 		cfg.JoinList = append(base.JoinListType(nil), expectedName)
 
-		resolvers, err := cfg.parseGossipBootstrapResolvers(context.TODO())
+		resolvers, err := cfg.parseGossipBootstrapResolvers(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +242,7 @@ func TestParseBootstrapResolvers(t *testing.T) {
 			return "cluster", []*net.SRV{{Target: expectedName, Port: 111}}, nil
 		})()
 
-		resolvers, err := cfg.parseGossipBootstrapResolvers(context.TODO())
+		resolvers, err := cfg.parseGossipBootstrapResolvers(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}

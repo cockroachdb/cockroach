@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +39,7 @@ func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(context.TODO())
+	defer server.Stopper().Stop(context.Background())
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -51,7 +52,7 @@ func TestSampleAggregator(t *testing.T) {
 				Settings: st,
 				DB:       kvDB,
 				Executor: server.InternalExecutor().(sqlutil.InternalExecutor),
-				Gossip:   gossip.MakeExposedGossip(server.GossipI().(*gossip.Gossip)),
+				Gossip:   gossip.MakeOptionalGossip(server.GossipI().(*gossip.Gossip)),
 			},
 		}
 		// Override the default memory limit. If memLimitBytes is small but
@@ -84,6 +85,8 @@ func TestSampleAggregator(t *testing.T) {
 			types.Int,   // num rows
 			types.Int,   // null vals
 			types.Bytes, // sketch data
+			types.Int,   // inverted index column
+			types.Bytes, // inverted index data
 		}
 
 		sketchSpecs := []execinfrapb.SketchSpec{
@@ -144,7 +147,7 @@ func TestSampleAggregator(t *testing.T) {
 		spec := &execinfrapb.SampleAggregatorSpec{
 			SampleSize:       100,
 			Sketches:         sketchSpecs,
-			SampledColumnIDs: []sqlbase.ColumnID{100, 101},
+			SampledColumnIDs: []descpb.ColumnID{100, 101},
 			TableID:          13,
 		}
 
@@ -237,7 +240,7 @@ func TestSampleAggregator(t *testing.T) {
 
 				for _, b := range h.Buckets {
 					ed, _, err := sqlbase.EncDatumFromBuffer(
-						types.Int, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+						types.Int, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 					)
 					if err != nil {
 						t.Fatal(err)

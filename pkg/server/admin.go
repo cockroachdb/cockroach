@@ -22,14 +22,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,6 +79,7 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.TimeseriesRangesID,
 		keys.LivenessRangesID,
 		keys.PublicSchemaID,
+		keys.TenantsRangesID,
 	}))
 }
 
@@ -89,7 +91,7 @@ var errAdminAPIError = status.Errorf(codes.Internal, "An internal server error "
 // the cockroach cluster.
 type adminServer struct {
 	server     *Server
-	memMonitor mon.BytesMonitor
+	memMonitor *mon.BytesMonitor
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -103,7 +105,7 @@ func newAdminServer(s *Server) *adminServer {
 	server := &adminServer{server: s}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
-	server.memMonitor = mon.MakeUnlimitedMonitor(
+	server.memMonitor = mon.NewUnlimitedMonitor(
 		context.Background(),
 		"admin",
 		mon.MemoryResource,
@@ -326,7 +328,7 @@ func (s *adminServer) DatabaseDetails(
 	// Marshal table names.
 	{
 		scanner := makeResultScanner(cols)
-		if a, e := len(cols), 3; a != e {
+		if a, e := len(cols), 4; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
 		for _, row := range rows {
@@ -568,7 +570,7 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	var tableID sqlbase.ID
+	var tableID descpb.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
 		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database, req.Table})
@@ -602,13 +604,7 @@ func (s *adminServer) TableDetails(
 	// data. Then, we count the number of ranges that make up that key span.
 	{
 		tableSpan := generateTableSpan(tableID)
-		tableRSpan := roachpb.RSpan{}
-		var err error
-		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+		tableRSpan, err := keys.SpanAddr(tableSpan)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -626,7 +622,7 @@ func (s *adminServer) TableDetails(
 //
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
-func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
+func generateTableSpan(tableID descpb.ID) roachpb.Span {
 	tableStartKey := keys.TODOSQLCodec.TablePrefix(uint32(tableID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
@@ -637,6 +633,7 @@ func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	// TODO(someone): perform authorization based on the requesting user's
 	// SELECT privilege over the requested table.
 	userName, err := s.requireAdminUser(ctx)
@@ -662,6 +659,7 @@ func (s *adminServer) TableStats(
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -699,9 +697,8 @@ func (s *adminServer) NonTableStats(
 		}
 	}
 
-	// There are four empty ranges for table descriptors 17, 18, 19, and 22 that
-	// aren't actually tables (a.k.a. MetaRangesID, SystemRangesID,
-	// TimeseriesRangesID, and LivenessRangesID in pkg/keys).
+	// There are six empty ranges for table descriptors 17, 18, 19, 22, 29, and
+	// 37 that aren't actually tables (a.k.a. the PseudoTableIDs in pkg/keys).
 	// No data is ever really written to them since they don't have actual
 	// tables. Some backend work could probably be done to eliminate these empty
 	// ranges, but it may be more trouble than it's worth. In the meantime,
@@ -1018,28 +1015,28 @@ func (s *adminServer) RangeLog(
 	}
 	scanner := makeResultScanner(cols)
 	for _, row := range rows {
-		var event storagepb.RangeLogEvent
+		var event kvserverpb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
+			return nil, errors.Wrapf(err, "timestamp didn't parse correctly: %s", row[0].String())
 		}
 		event.Timestamp = ts
 		var rangeID int64
 		if err := scanner.ScanIndex(row, 1, &rangeID); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("RangeID didn't parse correctly: %s", row[1].String()))
+			return nil, errors.Wrapf(err, "RangeID didn't parse correctly: %s", row[1].String())
 		}
 		event.RangeID = roachpb.RangeID(rangeID)
 		var storeID int64
 		if err := scanner.ScanIndex(row, 2, &storeID); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("StoreID didn't parse correctly: %s", row[2].String()))
+			return nil, errors.Wrapf(err, "StoreID didn't parse correctly: %s", row[2].String())
 		}
 		event.StoreID = roachpb.StoreID(int32(storeID))
 		var eventTypeString string
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
+			return nil, errors.Wrapf(err, "EventType didn't parse correctly: %s", row[3].String())
 		}
-		if eventType, ok := storagepb.RangeLogEventType_value[eventTypeString]; ok {
-			event.EventType = storagepb.RangeLogEventType(eventType)
+		if eventType, ok := kvserverpb.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = kvserverpb.RangeLogEventType(eventType)
 		} else {
 			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
 		}
@@ -1047,7 +1044,7 @@ func (s *adminServer) RangeLog(
 		var otherRangeID int64
 		if row[4].String() != "NULL" {
 			if err := scanner.ScanIndex(row, 4, &otherRangeID); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("OtherRangeID didn't parse correctly: %s", row[4].String()))
+				return nil, errors.Wrapf(err, "OtherRangeID didn't parse correctly: %s", row[4].String())
 			}
 			event.OtherRangeID = roachpb.RangeID(otherRangeID)
 		}
@@ -1056,10 +1053,10 @@ func (s *adminServer) RangeLog(
 		if row[5].String() != "NULL" {
 			var info string
 			if err := scanner.ScanIndex(row, 5, &info); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", row[5].String()))
+				return nil, errors.Wrapf(err, "info didn't parse correctly: %s", row[5].String())
 			}
 			if err := json.Unmarshal([]byte(info), &event.Info); err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
+				return nil, errors.Wrapf(err, "info didn't parse correctly: %s", info)
 			}
 			if event.Info.NewDesc != nil {
 				if !includeRawKeys {
@@ -1240,12 +1237,7 @@ func (s *adminServer) Settings(
 		keys = settings.Keys()
 	}
 
-	sessionUser, err := userFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	isAdmin, err := s.hasAdminRole(ctx, sessionUser)
+	_, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1376,11 +1368,11 @@ func (s *adminServer) checkReadinessForHealthCheck() error {
 // getLivenessStatusMap() includes removed nodes (dead + decommissioned).
 func getLivenessStatusMap(
 	nl *kvserver.NodeLiveness, now time.Time, st *cluster.Settings,
-) map[roachpb.NodeID]storagepb.NodeLivenessStatus {
+) map[roachpb.NodeID]kvserverpb.NodeLivenessStatus {
 	livenesses := nl.GetLivenesses()
 	threshold := kvserver.TimeUntilStoreDead.Get(&st.SV)
 
-	statusMap := make(map[roachpb.NodeID]storagepb.NodeLivenessStatus, len(livenesses))
+	statusMap := make(map[roachpb.NodeID]kvserverpb.NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
 		status := kvserver.LivenessStatus(liveness, now, threshold)
 		statusMap[liveness.NodeID] = status
@@ -1689,10 +1681,10 @@ func (s *adminServer) DecommissionStatus(
 			return nil, errors.Wrapf(err, "unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:          l.NodeID,
-			ReplicaCount:    replicaCounts[l.NodeID],
-			Decommissioning: l.Decommissioning,
-			Draining:        l.Draining,
+			NodeID:       l.NodeID,
+			ReplicaCount: replicaCounts[l.NodeID],
+			Membership:   l.Membership,
+			Draining:     l.Draining,
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
@@ -1713,16 +1705,14 @@ func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
 	nodeIDs := req.NodeIDs
-	if nodeIDs == nil {
-		// If no NodeIDs are specified, decommission the current node. This is
-		// used by `quit --decommission`.
-		// TODO(knz): This behavior is deprecated in 20.1. Remove in 20.2.
-		nodeIDs = []roachpb.NodeID{s.server.NodeID()}
+
+	if len(nodeIDs) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "no node ID specified")
 	}
 
-	// Mark the target nodes as decommissioning. They'll find out as they
-	// heartbeat their liveness.
-	if err := s.server.Decommission(ctx, req.Decommissioning, nodeIDs); err != nil {
+	// Mark the target nodes with their new membership status. They'll find out
+	// as they heartbeat their liveness.
+	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs); err != nil {
 		return nil, err
 	}
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
@@ -1904,6 +1894,9 @@ func (s *adminServer) DataDistribution(
 func (s *adminServer) EnqueueRange(
 	ctx context.Context, req *serverpb.EnqueueRangeRequest,
 ) (*serverpb.EnqueueRangeResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.server.AnnotateCtx(ctx)
+
 	if _, err := s.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
@@ -1911,9 +1904,6 @@ func (s *adminServer) EnqueueRange(
 	if !debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings()) {
 		return nil, remoteDebuggingErr
 	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.server.AnnotateCtx(ctx)
 
 	if req.NodeID < 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "node_id must be non-negative; got %d", req.NodeID)
@@ -2023,7 +2013,9 @@ func (s *adminServer) enqueueRangeLocal(
 		return response, nil
 	}
 	response.Details[0].Events = recordedSpansToTraceEvents(traceSpans)
-	response.Details[0].Error = processErr
+	if processErr != nil {
+		response.Details[0].Error = processErr.Error()
+	}
 	return response, nil
 }
 
@@ -2184,7 +2176,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = int64(s)
 
-	case *[]sqlbase.ID:
+	case *[]descpb.ID:
 		s, ok := tree.AsDArray(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
@@ -2194,7 +2186,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, sqlbase.ID(id))
+			*d = append(*d, descpb.ID(id))
 		}
 
 	case *time.Time:
@@ -2282,7 +2274,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, userName string, id sqlbase.ID,
+	ctx context.Context, userName string, id descpb.ID,
 ) (zonepb.ZoneConfig, bool, error) {
 	const query = `SELECT crdb_internal.get_zone_config($1)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
@@ -2325,8 +2317,8 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, userName string, path []sqlbase.ID,
-) (sqlbase.ID, zonepb.ZoneConfig, bool, error) {
+	ctx context.Context, userName string, path []descpb.ID,
+) (descpb.ID, zonepb.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
 		if err != nil || zoneExists {
@@ -2339,8 +2331,8 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, userName string, parentID sqlbase.ID, name string,
-) (sqlbase.ID, error) {
+	ctx context.Context, userName string, parentID descpb.ID, name string,
+) (descpb.ID, error) {
 	const query = `SELECT crdb_internal.get_namespace_id($1, $2)`
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-query-namespace-ID", nil, /* txn */
@@ -2368,7 +2360,7 @@ func (s *adminServer) queryNamespaceID(
 		return 0, err
 	}
 
-	return sqlbase.ID(id), nil
+	return descpb.ID(id), nil
 }
 
 // queryDescriptorIDPath converts a path of namespaces into a path of namespace
@@ -2377,8 +2369,8 @@ func (s *adminServer) queryNamespaceID(
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
 	ctx context.Context, userName string, names []string,
-) ([]sqlbase.ID, error) {
-	path := []sqlbase.ID{keys.RootNamespaceID}
+) ([]descpb.ID, error) {
+	path := []descpb.ID{keys.RootNamespaceID}
 	for _, name := range names {
 		id, err := s.queryNamespaceID(ctx, userName, path[len(path)-1], name)
 		if err != nil {

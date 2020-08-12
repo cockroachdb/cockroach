@@ -28,3 +28,30 @@ false false
 false true
 true true
 false false
+
+statement ok
+CREATE TABLE bytes_string(_group INT, _bytes BYTES, _string STRING)
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string
+----
+NULL NULL
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group
+----
+
+statement ok
+INSERT INTO bytes_string VALUES
+(0, NULL, NULL),
+(1, b'1', '1'),
+(2, b'2', '2'), (2, b'2', '2'),
+(3, b'3', '3'), (3, NULL, NULL), (3, b'3', '3')
+
+query TT
+SELECT concat_agg(_bytes), concat_agg(_string) FROM bytes_string GROUP BY _group ORDER BY _group
+----
+NULL NULL
+1    1
+22   22
+33   33

@@ -16,11 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -113,7 +113,7 @@ func distChangefeedFlow(
 	}
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, noTxn)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn, true /* distribute */)
 
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {
@@ -127,30 +127,24 @@ func distChangefeedFlow(
 		}
 	}
 
-	changeAggregatorProcs := make([]physicalplan.Processor, 0, len(spanPartitions))
-	for _, sp := range spanPartitions {
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(spanPartitions))
+	for i, sp := range spanPartitions {
 		// TODO(dan): Merge these watches with the span-level resolved
 		// timestamps from the job progress.
 		watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
-		for i, nodeSpan := range sp.Spans {
-			watches[i] = execinfrapb.ChangeAggregatorSpec_Watch{
+		for watchIdx, nodeSpan := range sp.Spans {
+			watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
 				Span:            nodeSpan,
 				InitialResolved: initialHighWater,
 			}
 		}
 
-		changeAggregatorProcs = append(changeAggregatorProcs, physicalplan.Processor{
-			Node: sp.Node,
-			Spec: execinfrapb.ProcessorSpec{
-				Core: execinfrapb.ProcessorCoreUnion{
-					ChangeAggregator: &execinfrapb.ChangeAggregatorSpec{
-						Watches: watches,
-						Feed:    details,
-					},
-				},
-				Output: []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
-			},
-		})
+		corePlacement[i].NodeID = sp.Node
+		corePlacement[i].Core.ChangeAggregator = &execinfrapb.ChangeAggregatorSpec{
+			Watches: watches,
+			Feed:    details,
+			User:    phs.User(),
+		}
 	}
 	// NB: This SpanFrontier processor depends on the set of tracked spans being
 	// static. Currently there is no way for them to change after the changefeed
@@ -160,18 +154,11 @@ func distChangefeedFlow(
 		TrackedSpans: trackedSpans,
 		Feed:         details,
 		JobID:        jobID,
+		User:         phs.User(),
 	}
 
-	var p sql.PhysicalPlan
-
-	stageID := p.NewStageID()
-	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(changeAggregatorProcs))
-	for i, proc := range changeAggregatorProcs {
-		proc.Spec.StageID = stageID
-		pIdx := p.AddProcessor(proc)
-		p.ResultRouters[i] = pIdx
-	}
-
+	p := sql.MakePhysicalPlan(gatewayNodeID)
+	p.AddNoInputStage(corePlacement, execinfrapb.PostProcessSpec{}, changefeedResultTypes, execinfrapb.Ordering{})
 	p.AddSingleGroupStage(
 		gatewayNodeID,
 		execinfrapb.ProcessorCoreUnion{ChangeFrontier: &changeFrontierSpec},
@@ -179,7 +166,6 @@ func distChangefeedFlow(
 		changefeedResultTypes,
 	)
 
-	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
 	dsp.FinalizePlan(planCtx, &p)
 
@@ -189,7 +175,6 @@ func distChangefeedFlow(
 		resultRows,
 		tree.Rows,
 		execCfg.RangeDescriptorCache,
-		execCfg.LeaseHolderCache,
 		noTxn,
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
@@ -227,7 +212,7 @@ func fetchSpansForTargets(
 		txn.SetFixedTimestamp(ctx, ts)
 		// Note that all targets are currently guaranteed to be tables.
 		for tableID := range targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, codec, tableID)
+			tableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, tableID)
 			if err != nil {
 				return err
 			}

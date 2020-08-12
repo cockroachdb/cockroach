@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,21 +63,21 @@ type InternalExecutor struct {
 	// the executor will run on copies of this data.
 	sessionData *sessiondata.SessionData
 
-	// The internal executor uses its own TableCollection. A TableCollection
+	// The internal executor uses its own Collection. A Collection
 	// is a schema cache for each transaction and contains data like the schema
 	// modified by a transaction. Occasionally an internal executor is called
 	// within the context of a transaction that has modified the schema, the
 	// internal executor should see the modified schema. This interface allows
-	// the internal executor to modify its TableCollection to match the
-	// TableCollection of the parent executor.
-	tcModifier tableCollectionModifier
+	// the internal executor to modify its Collection to match the
+	// Collection of the parent executor.
+	tcModifier descs.ModifiedCollectionCopier
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
 	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
-	monitor := mon.MakeUnlimitedMonitor(
+	monitor := mon.NewUnlimitedMonitor(
 		ctx,
 		"internal SQL executor",
 		mon.MemoryResource,
@@ -86,7 +88,7 @@ func MakeInternalExecutor(
 	)
 	return InternalExecutor{
 		s:          s,
-		mon:        &monitor,
+		mon:        monitor,
 		memMetrics: memMetrics,
 	}
 }
@@ -129,8 +131,8 @@ func (ie *InternalExecutor) initConnEx(
 	// their respective "pressure" on internal queries. Hence the choice here to
 	// add the delegate prefix to the current app name.
 	var appStatsBucketName string
-	if !strings.HasPrefix(sd.ApplicationName, sqlbase.InternalAppNamePrefix) {
-		appStatsBucketName = sqlbase.DelegatedAppNamePrefix + sd.ApplicationName
+	if !strings.HasPrefix(sd.ApplicationName, catconstants.InternalAppNamePrefix) {
+		appStatsBucketName = catconstants.DelegatedAppNamePrefix + sd.ApplicationName
 	} else {
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
@@ -343,7 +345,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 	if ie.sessionData == nil {
 		return sqlbase.InternalExecutorSessionDataOverride{
 			User:            security.RootUser,
-			ApplicationName: sqlbase.InternalAppNamePrefix + "-" + opName,
+			ApplicationName: catconstants.InternalAppNamePrefix + "-" + opName,
 		}
 	}
 	o := sqlbase.InternalExecutorSessionDataOverride{}
@@ -351,7 +353,7 @@ func (ie *InternalExecutor) maybeRootSessionDataOverride(
 		o.User = security.RootUser
 	}
 	if ie.sessionData.ApplicationName == "" {
-		o.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+		o.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	return o
 }
@@ -384,18 +386,21 @@ func (ie *InternalExecutor) execInternal(
 		return result{}, errors.AssertionFailedf("no user specified for internal query")
 	}
 	if sd.ApplicationName == "" {
-		sd.ApplicationName = sqlbase.InternalAppNamePrefix + "-" + opName
+		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 
 	defer func() {
 		// We wrap errors with the opName, but not if they're retriable - in that
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
+		//
+		// TODO(knz): track the callers and check whether opName could be turned
+		// into a type safe for reporting.
 		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = errors.Wrapf(retErr, opName)
+			retErr = errors.Wrapf(retErr, "%s", opName)
 		}
 		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrapf(retRes.err, opName)
+			retRes.err = errors.Wrapf(retRes.err, "%s", opName)
 		}
 	}()
 
@@ -573,9 +578,7 @@ func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
 
 // LockCommunication is part of the ClientComm interface.
 func (icc *internalClientComm) LockCommunication() ClientLock {
-	return &noopClientLock{
-		clientComm: icc,
-	}
+	return (*noopClientLock)(icc)
 }
 
 // Flush is part of the ClientComm interface.
@@ -620,26 +623,24 @@ func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
 
 // noopClientLock is an implementation of ClientLock that says that no results
 // have been communicated to the client.
-type noopClientLock struct {
-	clientComm *internalClientComm
-}
+type noopClientLock internalClientComm
 
 // Close is part of the ClientLock interface.
 func (ncl *noopClientLock) Close() {}
 
 // ClientPos is part of the ClientLock interface.
 func (ncl *noopClientLock) ClientPos() CmdPos {
-	return ncl.clientComm.lastDelivered
+	return ncl.lastDelivered
 }
 
 // RTrim is part of the ClientLock interface.
 func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 	var i int
 	var r resWithPos
-	for i, r = range ncl.clientComm.results {
+	for i, r = range ncl.results {
 		if r.pos >= pos {
 			break
 		}
 	}
-	ncl.clientComm.results = ncl.clientComm.results[:i]
+	ncl.results = ncl.results[:i]
 }

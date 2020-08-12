@@ -20,6 +20,9 @@ func Covers(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
+		return false, nil
+	}
 	return geos.Covers(a.EWKB(), b.EWKB())
 }
 
@@ -27,6 +30,9 @@ func Covers(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func CoveredBy(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
+		return false, nil
 	}
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
 }
@@ -36,17 +42,21 @@ func Contains(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
+		return false, nil
+	}
 	return geos.Contains(a.EWKB(), b.EWKB())
 }
 
 // ContainsProperly returns whether geometry A properly contains geometry B.
 func ContainsProperly(a *geo.Geometry, b *geo.Geometry) (bool, error) {
-	// No GEOS CAPI to call ContainsProperly; fallback to Relate.
-	relate, err := Relate(a, b)
-	if err != nil {
-		return false, err
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
-	return MatchesDE9IM(relate, "T**FF*FF*")
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
+		return false, nil
+	}
+	return geos.RelatePattern(a.EWKB(), b.EWKB(), "T**FF*FF*")
 }
 
 // Crosses returns whether geometry A crosses geometry B.
@@ -54,13 +64,33 @@ func Crosses(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+		return false, nil
+	}
 	return geos.Crosses(a.EWKB(), b.EWKB())
+}
+
+// Disjoint returns whether geometry A is disjoint from geometry B.
+func Disjoint(a *geo.Geometry, b *geo.Geometry) (bool, error) {
+	if a.SRID() != b.SRID() {
+		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	return geos.Disjoint(a.EWKB(), b.EWKB())
 }
 
 // Equals returns whether geometry A equals geometry B.
 func Equals(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	// Empty items are equal to each other.
+	// Do this check before the BoundingBoxIntersects check, as we would otherwise
+	// return false.
+	if a.Empty() && b.Empty() {
+		return true, nil
+	}
+	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
+		return false, nil
 	}
 	return geos.Equals(a.EWKB(), b.EWKB())
 }
@@ -70,6 +100,9 @@ func Intersects(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+		return false, nil
+	}
 	return geos.Intersects(a.EWKB(), b.EWKB())
 }
 
@@ -77,6 +110,9 @@ func Intersects(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Overlaps(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+		return false, nil
 	}
 	return geos.Overlaps(a.EWKB(), b.EWKB())
 }
@@ -86,6 +122,9 @@ func Touches(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
+	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
+		return false, nil
+	}
 	return geos.Touches(a.EWKB(), b.EWKB())
 }
 
@@ -93,6 +132,9 @@ func Touches(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 func Within(a *geo.Geometry, b *geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
+	}
+	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
+		return false, nil
 	}
 	return geos.Within(a.EWKB(), b.EWKB())
 }

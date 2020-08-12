@@ -26,8 +26,9 @@ import (
 var rewriteCSVTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_CSV_TESTDATA", false)
 
 type csvTestFiles struct {
-	files, gzipFiles, bzipFiles, filesWithOpts, filesWithDups, fileWithShadowKeys, fileWithDupKeySameValue []string
-	filesUsingWildcard, gzipFilesUsingWildcard, bzipFilesUsingWildcard                                     []string
+	files, gzipFiles, bzipFiles, filesWithOpts, filesWithDups, fileWithShadowKeys,
+	fileWithDupKeySameValue []string
+	filesUsingWildcard, gzipFilesUsingWildcard, bzipFilesUsingWildcard []string
 }
 
 // Returns a single CSV file with a previously imported key sandiwched between

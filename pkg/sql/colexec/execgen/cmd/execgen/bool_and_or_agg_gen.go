@@ -13,7 +13,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -60,16 +59,12 @@ var (
 
 const boolAggTmpl = "pkg/sql/colexec/bool_and_or_agg_tmpl.go"
 
-func genBooleanAgg(wr io.Writer) error {
-	t, err := ioutil.ReadFile(boolAggTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(t)
-
-	s = strings.ReplaceAll(s, "_OP_TYPE", "{{.OpType}}")
-	s = strings.ReplaceAll(s, "_DEFAULT_VAL", "{{.DefaultVal}}")
+func genBooleanAgg(inputFileContents string, wr io.Writer) error {
+	r := strings.NewReplacer(
+		"_OP_TYPE", "{{.OpType}}",
+		"_DEFAULT_VAL", "{{.DefaultVal}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	accumulateBoolean := makeFunctionRegex("_ACCUMULATE_BOOLEAN", 3)
 	s = accumulateBoolean.ReplaceAllString(s, `{{template "accumulateBoolean" buildDict "Global" .}}`)
@@ -86,5 +81,5 @@ func genBooleanAgg(wr io.Writer) error {
 }
 
 func init() {
-	registerGenerator(genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl)
+	registerAggGenerator(genBooleanAgg, "bool_and_or_agg.eg.go", boolAggTmpl)
 }

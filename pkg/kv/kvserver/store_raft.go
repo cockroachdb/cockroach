@@ -48,7 +48,7 @@ func (s *Store) HandleSnapshot(
 	ctx := s.AnnotateCtx(stream.Context())
 	const name = "storage.Store: handle snapshot"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
-		s.metrics.raftRcvdMessages[raftpb.MsgSnap].Inc(1)
+		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 		if s.IsDraining() {
 			return stream.Send(&SnapshotResponse{
@@ -60,9 +60,6 @@ func (s *Store) HandleSnapshot(
 		return s.receiveSnapshot(ctx, header, stream)
 	})
 }
-
-// learnerType exists to avoid allocating on every coalesced beat to a learner.
-var learnerType = roachpb.LEARNER
 
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
@@ -100,9 +97,6 @@ func (s *Store) uncoalesceBeats(
 			},
 			Message: msg,
 			Quiesce: beat.Quiesce,
-		}
-		if beat.ToIsLearner {
-			beatReqs[i].ToReplica.Type = &learnerType
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -146,7 +140,7 @@ func (s *Store) HandleRaftUncoalescedRequest(
 	// HandleRaftRequest is called on locally uncoalesced heartbeats (which are
 	// not sent over the network if the environment variable is set) so do not
 	// count them.
-	s.metrics.raftRcvdMessages[req.Message.Type].Inc(1)
+	s.metrics.RaftRcvdMessages[req.Message.Type].Inc(1)
 
 	value, ok := s.replicaQueues.Load(int64(req.RangeID))
 	if !ok {
@@ -190,7 +184,6 @@ func (s *Store) withReplicaForRequest(
 		req.RangeID,
 		req.ToReplica.ReplicaID,
 		&req.FromReplica,
-		req.ToReplica.GetType() == roachpb.LEARNER,
 	)
 	if err != nil {
 		return roachpb.NewError(err)
@@ -700,7 +693,6 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	}
 
 	if !s.cfg.Transport.SendAsync(chReq, rpc.SystemClass) {
-		chReq.release()
 		for _, beat := range beats {
 			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
 				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)
@@ -735,8 +727,8 @@ func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
 	s.metrics.RaftCoalescedHeartbeatsPending.Update(int64(beatsSent))
 }
 
-func (s *Store) updateCapacityGauges() error {
-	desc, err := s.Descriptor(false /* useCached */)
+func (s *Store) updateCapacityGauges(ctx context.Context) error {
+	desc, err := s.Descriptor(ctx, false /* useCached */)
 	if err != nil {
 		return err
 	}

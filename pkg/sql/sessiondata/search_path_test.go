@@ -79,6 +79,20 @@ func TestImpliedSearchPath(t *testing.T) {
 			expectedSearchPathWhenTemporarySchemaExists:                    []string{testTempSchemaName, `pg_catalog`, `foobar`},
 			expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists: []string{`foobar`},
 		},
+		{
+			explicitSearchPath:                                             []string{`public`},
+			expectedSearchPath:                                             []string{`pg_catalog`, `pg_extension`, `public`},
+			expectedSearchPathWithoutImplicitPgSchemas:                     []string{`public`},
+			expectedSearchPathWhenTemporarySchemaExists:                    []string{testTempSchemaName, `pg_catalog`, `pg_extension`, `public`},
+			expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists: []string{`public`},
+		},
+		{
+			explicitSearchPath:                                             []string{`public`, `pg_extension`},
+			expectedSearchPath:                                             []string{`pg_catalog`, `public`, `pg_extension`},
+			expectedSearchPathWithoutImplicitPgSchemas:                     []string{`public`, `pg_extension`},
+			expectedSearchPathWhenTemporarySchemaExists:                    []string{testTempSchemaName, `pg_catalog`, `public`, `pg_extension`},
+			expectedSearchPathWithoutImplicitPgSchemasWhenTempSchemaExists: []string{`public`, `pg_extension`},
+		},
 	}
 
 	for tcNum, tc := range testCases {

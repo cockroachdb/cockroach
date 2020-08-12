@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,6 +38,7 @@ type stmtKey struct {
 	stmt        string
 	failed      bool
 	distSQLUsed bool
+	vectorized  bool
 	implicitTxn bool
 }
 
@@ -125,12 +126,13 @@ func (a *appStats) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
+	vectorized bool,
 	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
-	bytesRead, rowsRead int64,
+	stats topLevelQueryStats,
 ) {
 	if !stmtStatsEnable.Get(&a.st.SV) {
 		return
@@ -141,7 +143,10 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmt, distSQLUsed, implicitTxn, err, true /* createIfNonexistent */)
+	s := a.getStatsForStmt(
+		stmt, distSQLUsed, vectorized, implicitTxn,
+		err, true, /* createIfNonexistent */
+	)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -165,18 +170,28 @@ func (a *appStats) recordStatement(
 	s.data.RunLat.Record(s.data.Count, runLat)
 	s.data.ServiceLat.Record(s.data.Count, svcLat)
 	s.data.OverheadLat.Record(s.data.Count, ovhLat)
-	s.data.BytesRead = bytesRead
-	s.data.RowsRead = rowsRead
+	s.data.BytesRead.Record(s.data.Count, float64(stats.bytesRead))
+	s.data.RowsRead.Record(s.data.Count, float64(stats.rowsRead))
 	s.Unlock()
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement, distSQLUsed bool, implicitTxn bool, err error, createIfNonexistent bool,
+	stmt *Statement,
+	distSQLUsed bool,
+	vectorized bool,
+	implicitTxn bool,
+	err error,
+	createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, implicitTxn: implicitTxn}
+	key := stmtKey{
+		failed:      err != nil,
+		distSQLUsed: distSQLUsed,
+		vectorized:  vectorized,
+		implicitTxn: implicitTxn,
+	}
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
@@ -285,12 +300,15 @@ func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit b
 // `logicalPlanCollectionPeriod` to assess how frequently to sample logical
 // plans.
 func (a *appStats) shouldSaveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, implicitTxn bool, err error,
+	stmt *Statement, useDistSQL bool, vectorized bool, implicitTxn bool, err error,
 ) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
-	stats := a.getStatsForStmt(stmt, useDistSQL, implicitTxn, err, false /* createIfNonexistent */)
+	stats := a.getStatsForStmt(
+		stmt, useDistSQL, vectorized, implicitTxn,
+		err, false, /* createIfNonexistent */
+	)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -328,35 +346,31 @@ func (s *sqlStats) getStatsForApplication(appName string) *appStats {
 	return a
 }
 
-func (s *sqlStats) Add(other *sqlStats) {
-	other.Lock()
-	appStatsCopy := make(map[string]*appStats)
-	for k, v := range other.apps {
-		appStatsCopy[k] = v
-	}
-	other.Unlock()
-	for k, v := range appStatsCopy {
-		stats := s.getStatsForApplication(k)
-		// Add manages locks for itself, so we don't need to guard it with locks.
-		stats.Add(v)
-	}
-}
-
-// resetStats clears all the stored per-app and per-statement
-// statistics.
-func (s *sqlStats) resetStats(ctx context.Context) {
+// resetAndMaybeDumpStats clears all the stored per-app and per-statement
+// statistics. If target s not nil, then the stats in s will be flushed
+// into target.
+func (s *sqlStats) resetAndMaybeDumpStats(ctx context.Context, target *sqlStats) {
 	// Note: we do not clear the entire s.apps map here. We would need
 	// to do so to prevent problems with a runaway client running `SET
 	// APPLICATION_NAME=...` with a different name every time.  However,
 	// any ongoing open client session at the time of the reset has
 	// cached a pointer to its appStats struct and would thus continue
-	// to report its stats in an object now invisible to the other tools
+	// to report its stats in an object now invisible to the target tools
 	// (virtual table, marshaling, etc.). It's a judgement call, but
 	// for now we prefer to see more data and thus not clear the map, at
 	// the risk of seeing the map grow unboundedly with the number of
 	// different application_names seen so far.
 
+	// appStatsCopy will hold a snapshot of the stats being cleared
+	// to dump into target.
+	var appStatsCopy map[string]*appStats
+
 	s.Lock()
+
+	if target != nil {
+		appStatsCopy = make(map[string]*appStats, len(s.apps))
+	}
+
 	// Clear the per-apps maps manually,
 	// because any SQL session currently open has cached the
 	// pointer to its appStats object and will continue to
@@ -373,6 +387,12 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 			dumpStmtStats(ctx, appName, a.stmts)
 		}
 
+		// Only save a copy of a if we need to dump a copy of the stats.
+		if target != nil {
+			aCopy := &appStats{st: a.st, stmts: a.stmts}
+			appStatsCopy[appName] = aCopy
+		}
+
 		// Clear the map, to release the memory; make the new map somewhat already
 		// large for the likely future workload.
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
@@ -380,6 +400,15 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	}
 	s.lastReset = timeutil.Now()
 	s.Unlock()
+
+	// Dump the copied stats into target.
+	if target != nil {
+		for k, v := range appStatsCopy {
+			stats := target.getStatsForApplication(k)
+			// Add manages locks for itself, so we don't need to guard it with locks.
+			stats.Add(v)
+		}
+	}
 }
 
 func (s *sqlStats) getLastReset() time.Time {
@@ -470,7 +499,7 @@ func (s *sqlStats) getStmtStats(
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
-				if !strings.HasPrefix(appName, sqlbase.ReportableAppNamePrefix) {
+				if !strings.HasPrefix(appName, catconstants.ReportableAppNamePrefix) {
 					maybeHashedAppName = HashForReporting(salt, appName)
 				}
 			}
@@ -479,6 +508,7 @@ func (s *sqlStats) getStmtStats(
 					Query:       maybeScrubbed,
 					DistSQL:     q.distSQLUsed,
 					Opt:         true,
+					Vec:         q.vectorized,
 					ImplicitTxn: q.implicitTxn,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,

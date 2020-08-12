@@ -69,6 +69,10 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
 		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
 
+		{`ALTER SCHEMA ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x RENAME ??`, `ALTER SCHEMA`},
+		{`ALTER SCHEMA x OWNER ??`, `ALTER SCHEMA`},
+
 		{`ALTER USER IF ??`, `ALTER ROLE`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER ROLE`},
 
@@ -79,6 +83,11 @@ func TestContextualHelp(t *testing.T) {
 
 		{`ALTER PARTITION ??`, `ALTER PARTITION`},
 		{`ALTER PARTITION p OF INDEX tbl@idx ??`, `ALTER PARTITION`},
+
+		{`ANALYZE ??`, `ANALYZE`},
+		{`ANALYZE blah ??`, `ANALYZE`},
+		{`ANALYSE ??`, `ANALYZE`},
+		{`ANALYSE blah ??`, `ANALYZE`},
 
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
@@ -174,6 +183,11 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP VIEW IF ??`, `DROP VIEW`},
 		{`DROP VIEW IF EXISTS blih, bloh ??`, `DROP VIEW`},
 
+		{`DROP SCHEDULE ???`, `DROP SCHEDULES`},
+		{`DROP SCHEDULES ???`, `DROP SCHEDULES`},
+
+		{`DROP SCHEMA ??`, `DROP SCHEMA`},
+
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},
 		{`EXPLAIN INSERT INTO xx (SELECT 1) ??`, `INSERT`},
@@ -222,9 +236,17 @@ func TestContextualHelp(t *testing.T) {
 		{`GRANT ALL ON foo TO ??`, `GRANT`},
 		{`GRANT ALL ON foo TO bar ??`, `GRANT`},
 
-		{`PAUSE ??`, `PAUSE JOBS`},
+		{`PAUSE ??`, `PAUSE`},
+		{`PAUSE JOB ??`, `PAUSE JOBS`},
+		{`PAUSE JOBS ??`, `PAUSE JOBS`},
+		{`PAUSE SCHEDULE ??`, `PAUSE SCHEDULES`},
+		{`PAUSE SCHEDULES ??`, `PAUSE SCHEDULES`},
 
-		{`RESUME ??`, `RESUME JOBS`},
+		{`RESUME ??`, `RESUME`},
+		{`RESUME JOB ??`, `RESUME JOBS`},
+		{`RESUME JOBS ??`, `RESUME JOBS`},
+		{`RESUME SCHEDULE ??`, `RESUME SCHEDULES`},
+		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
@@ -264,6 +286,9 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW JOBS ??`, `SHOW JOBS`},
 		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
 
+		{`SHOW SCHEDULE ??`, `SHOW SCHEDULES`},
+		{`SHOW SCHEDULES ??`, `SHOW SCHEDULES`},
+
 		{`SHOW BACKUP 'foo' ??`, `SHOW BACKUP`},
 
 		{`SHOW CLUSTER SETTING all ??`, `SHOW CLUSTER SETTING`},
@@ -281,6 +306,8 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW CREATE SEQUENCE blah ??`, `SHOW CREATE`},
 
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
+
+		{`SHOW ENUMS ??`, `SHOW ENUMS`},
 
 		{`SHOW GRANTS ON ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
@@ -315,6 +342,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW SYNTAX ??`, `SHOW SYNTAX`},
 		{`SHOW SYNTAX 'foo' ??`, `SHOW SYNTAX`},
 		{`SHOW SAVEPOINT STATUS ??`, `SHOW SAVEPOINT`},
+		{`SHOW LAST QUERY STATISTICS ??`, `SHOW LAST QUERY STATISTICS`},
 
 		{`SHOW RANGE ??`, `SHOW RANGE`},
 
@@ -397,6 +425,7 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPORT ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' FROM SELECT a ??`, `SELECT`},
+		{`CREATE SCHEDULE FOR BACKUP ??`, `CREATE SCHEDULE FOR BACKUP`},
 	}
 
 	// The following checks that the test definition above exercises all

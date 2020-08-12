@@ -49,14 +49,20 @@ func buildOpaque(
 	switch n := stmt.(type) {
 	case *tree.AlterIndex:
 		plan, err = p.AlterIndex(ctx, n)
+	case *tree.AlterSchema:
+		plan, err = p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
 		plan, err = p.AlterTable(ctx, n)
+	case *tree.AlterTableSetSchema:
+		plan, err = p.AlterTableSetSchema(ctx, n)
 	case *tree.AlterType:
 		plan, err = p.AlterType(ctx, n)
 	case *tree.AlterRole:
 		plan, err = p.AlterRole(ctx, n)
 	case *tree.AlterSequence:
 		plan, err = p.AlterSequence(ctx, n)
+	case *tree.Analyze:
+		plan, err = p.Analyze(ctx, n)
 	case *tree.CommentOnColumn:
 		plan, err = p.CommentOnColumn(ctx, n)
 	case *tree.CommentOnDatabase:
@@ -89,6 +95,8 @@ func buildOpaque(
 		plan, err = p.DropIndex(ctx, n)
 	case *tree.DropRole:
 		plan, err = p.DropRole(ctx, n)
+	case *tree.DropSchema:
+		plan, err = p.DropSchema(ctx, n)
 	case *tree.DropTable:
 		plan, err = p.DropTable(ctx, n)
 	case *tree.DropType:
@@ -124,7 +132,7 @@ func buildOpaque(
 	case *tree.SetVar:
 		plan, err = p.SetVar(ctx, n)
 	case *tree.SetTransaction:
-		plan, err = p.SetTransaction(n)
+		plan, err = p.SetTransaction(ctx, n)
 	case *tree.SetSessionAuthorizationDefault:
 		plan, err = p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:
@@ -165,10 +173,13 @@ func buildOpaque(
 func init() {
 	for _, stmt := range []tree.Statement{
 		&tree.AlterIndex{},
+		&tree.AlterSchema{},
 		&tree.AlterTable{},
+		&tree.AlterTableSetSchema{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},
 		&tree.AlterRole{},
+		&tree.Analyze{},
 		&tree.CommentOnColumn{},
 		&tree.CommentOnDatabase{},
 		&tree.CommentOnIndex{},
@@ -184,6 +195,7 @@ func init() {
 		&tree.Discard{},
 		&tree.DropDatabase{},
 		&tree.DropIndex{},
+		&tree.DropSchema{},
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
@@ -219,6 +231,7 @@ func init() {
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
 		&tree.Import{},
+		&tree.ScheduledBackup{},
 	} {
 		typ := optbuilder.OpaqueReadOnly
 		if tree.CanModifySchema(stmt) {

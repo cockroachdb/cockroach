@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,6 +40,7 @@ import (
 // state of caches.
 func TestSpanResolverUsesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -46,7 +48,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 				UseDatabase: "t",
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	rowRanges, _ := setupRanges(
 		tc.Conns[0], tc.Servers[0], tc.Servers[0].DB(), t)
@@ -86,7 +88,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	lr := physicalplan.NewSpanResolver(
 		s3.Cfg.Settings,
 		s3.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeExposedGossip(s3.Gossip()),
+		s3.Gossip(),
 		s3.GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -103,9 +105,9 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 			})
 	}
 
-	// Resolve the spans. Since the LeaseHolderCache is empty, all the ranges
-	// should be grouped and "assigned" to replica 0.
-	replicas, err := resolveSpans(context.TODO(), lr.NewSpanResolverIterator(nil), spans...)
+	// Resolve the spans. Since the range descriptor cache doesn't have any
+	// leases, all the ranges should be grouped and "assigned" to replica 0.
+	replicas, err := resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +134,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 	if err := populateCache(tc.Conns[3], 3 /* expectedNumRows */); err != nil {
 		t.Fatal(err)
 	}
-	replicas, err = resolveSpans(context.TODO(), lr.NewSpanResolverIterator(nil), spans...)
+	replicas, err = resolveSpans(context.Background(), lr.NewSpanResolverIterator(nil), spans...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +166,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc *sqlbase.TableDescriptor, pk int,
+	ts *server.TestServer, tableDesc *sqlbase.ImmutableTableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
@@ -185,16 +187,17 @@ func splitRangeAtVal(
 
 func TestSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor, nil,
 		replicaoracle.BinPackingChoice)
 
@@ -280,16 +283,17 @@ func TestSpanResolver(t *testing.T) {
 
 func TestMixedDirections(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, cdb := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "t",
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	rowRanges, tableDesc := setupRanges(db, s.(*server.TestServer), cdb, t)
 	lr := physicalplan.NewSpanResolver(
 		s.(*server.TestServer).Cfg.Settings,
 		s.DistSenderI().(*kvcoord.DistSender),
-		gossip.MakeExposedGossip(s.GossipI().(*gossip.Gossip)),
+		s.GossipI().(*gossip.Gossip),
 		s.(*server.TestServer).GetNode().Descriptor,
 		nil,
 		replicaoracle.BinPackingChoice)
@@ -316,7 +320,7 @@ func TestMixedDirections(t *testing.T) {
 
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
-) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
+) ([]roachpb.RangeDescriptor, *sqlbase.ImmutableTableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +336,7 @@ func setupRanges(
 		}
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))
 	for i, val := range values {
@@ -347,11 +351,6 @@ func setupRanges(
 		}
 	}
 
-	// TODO(andrei): The sleep below serves to remove the noise that the
-	// RangeCache might encounter, clobbering descriptors with old versions.
-	// Remove once all the causes of such clobbering, listed in #10751, have been
-	// fixed.
-	time.Sleep(300 * time.Millisecond)
 	// Run a select across the whole table to populate the caches with all the
 	// ranges.
 	if _, err := db.Exec(`SELECT count(1) from test`); err != nil {
@@ -399,7 +398,7 @@ func resolveSpans(
 				return nil, err
 			}
 			repls = append(repls, rngInfo{
-				ReplicaDescriptor: repl.ReplicaDescriptor,
+				ReplicaDescriptor: repl,
 				rngDesc:           it.Desc(),
 			})
 			if !it.NeedAnother() {
@@ -413,7 +412,7 @@ func resolveSpans(
 
 func onlyReplica(rng roachpb.RangeDescriptor) rngInfo {
 	if len(rng.InternalReplicas) != 1 {
-		panic(fmt.Sprintf("expected one replica in %+v", rng))
+		panic(errors.AssertionFailedf("expected one replica in %+v", rng))
 	}
 	return rngInfo{ReplicaDescriptor: rng.InternalReplicas[0], rngDesc: rng}
 }
@@ -424,7 +423,7 @@ func selectReplica(nodeID roachpb.NodeID, rng roachpb.RangeDescriptor) rngInfo {
 			return rngInfo{ReplicaDescriptor: rep, rngDesc: rng}
 		}
 	}
-	panic(fmt.Sprintf("no replica on node %d in: %s", nodeID, &rng))
+	panic(errors.AssertionFailedf("no replica on node %d in: %s", nodeID, &rng))
 }
 
 func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
@@ -451,7 +450,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	return nil
 }
 
-func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
+func makeSpan(tableDesc *sqlbase.ImmutableTableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
 		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {

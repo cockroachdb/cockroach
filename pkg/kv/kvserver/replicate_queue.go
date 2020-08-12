@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -167,7 +167,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeQueueSnapshotTimeoutFunc(rebalanceSnapshotRate),
+			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
@@ -233,7 +233,7 @@ func (rq *replicateQueue) shouldQueue(
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
 		_, _, _, ok := rq.allocator.RebalanceTarget(
-			ctx, zone, repl.RaftStatus(), desc.RangeID, voterReplicas, rangeUsageInfo, storeFilterThrottled)
+			ctx, zone, repl.RaftStatus(), voterReplicas, rangeUsageInfo, storeFilterThrottled)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
@@ -242,10 +242,10 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) {
+	if lease, _ := repl.GetLease(); repl.IsLeaseValid(ctx, lease, now) {
 		if rq.canTransferLease() &&
 			rq.allocator.ShouldTransferLease(
-				ctx, zone, voterReplicas, lease.Replica.StoreID, desc.RangeID, repl.leaseholderStats) {
+				ctx, zone, voterReplicas, lease.Replica.StoreID, repl.leaseholderStats) {
 			log.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 			return true, 0
 		}
@@ -256,7 +256,7 @@ func (rq *replicateQueue) shouldQueue(
 
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
@@ -282,24 +282,24 @@ func (rq *replicateQueue) process(
 			}
 
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if testingAggressiveConsistencyChecks {
-				if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				if _, err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
 					log.Warningf(ctx, "%v", err)
 				}
 			}
 
 			if !requeue {
-				return nil
+				return true, nil
 			}
 
 			log.VEventf(ctx, 1, "re-processing")
 		}
 	}
 
-	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
+	return false, errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
 }
 
 func (rq *replicateQueue) processOneChange(
@@ -320,8 +320,7 @@ func (rq *replicateQueue) processOneChange(
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
 	voterReplicas := desc.Replicas().Voters()
-	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(
-		desc.RangeID, voterReplicas)
+	liveVoterReplicas, deadVoterReplicas := rq.allocator.storePool.liveAndDeadReplicas(voterReplicas)
 	{
 		unavailable := !desc.Replicas().CanMakeProgress(func(rDesc roachpb.ReplicaDescriptor) bool {
 			for _, inner := range liveVoterReplicas {
@@ -379,8 +378,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 		return rq.addOrReplace(ctx, repl, voterReplicas, liveVoterReplicas, removeIdx, dryRun)
 	case AllocatorReplaceDecommissioning:
-		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(
-			desc.RangeID, voterReplicas)
+		decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(voterReplicas)
 		if len(decommissioningReplicas) == 0 {
 			// Nothing to do.
 			return false, nil
@@ -481,7 +479,6 @@ func (rq *replicateQueue) addOrReplace(
 	newStore, details, err := rq.allocator.AllocateTarget(
 		ctx,
 		zone,
-		desc.RangeID,
 		remainingLiveReplicas,
 	)
 	if err != nil {
@@ -522,7 +519,6 @@ func (rq *replicateQueue) addOrReplace(
 		_, _, err := rq.allocator.AllocateTarget(
 			ctx,
 			zone,
-			desc.RangeID,
 			oldPlusNewReplicas,
 		)
 		if err != nil {
@@ -555,7 +551,7 @@ func (rq *replicateQueue) addOrReplace(
 		ops,
 		desc,
 		SnapshotRequest_RECOVERY,
-		storagepb.ReasonRangeUnderReplicated,
+		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
 	); err != nil {
@@ -706,7 +702,7 @@ func (rq *replicateQueue) remove(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonRangeOverReplicated,
+		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
 	); err != nil {
@@ -719,8 +715,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	ctx context.Context, repl *Replica, dryRun bool,
 ) (requeue bool, _ error) {
 	desc, _ := repl.DescAndZone()
-	decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(
-		desc.RangeID, desc.Replicas().All())
+	decommissioningReplicas := rq.allocator.storePool.decommissioningReplicas(desc.Replicas().All())
 	if len(decommissioningReplicas) == 0 {
 		log.VEventf(ctx, 1, "range of replica %s was identified as having decommissioning replicas, "+
 			"but no decommissioning replicas were found", repl)
@@ -748,7 +743,7 @@ func (rq *replicateQueue) removeDecommissioning(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonStoreDecommissioning, "", dryRun,
+		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
 	); err != nil {
 		return false, err
 	}
@@ -780,7 +775,7 @@ func (rq *replicateQueue) removeDead(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN, // unused
-		storagepb.ReasonStoreDead,
+		kvserverpb.ReasonStoreDead,
 		"",
 		dryRun,
 	); err != nil {
@@ -815,7 +810,7 @@ func (rq *replicateQueue) removeLearner(
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_REPLICA, target),
 		desc,
 		SnapshotRequest_UNKNOWN,
-		storagepb.ReasonAbandonedLearner,
+		kvserverpb.ReasonAbandonedLearner,
 		"",
 		dryRun,
 	); err != nil {
@@ -837,7 +832,7 @@ func (rq *replicateQueue) considerRebalance(
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
 		addTarget, removeTarget, details, ok := rq.allocator.RebalanceTarget(
-			ctx, zone, repl.RaftStatus(), desc.RangeID, existingReplicas, rangeUsageInfo,
+			ctx, zone, repl.RaftStatus(), existingReplicas, rangeUsageInfo,
 			storeFilterThrottled)
 		if !ok {
 			log.VEventf(ctx, 1, "no suitable rebalance target")
@@ -894,7 +889,7 @@ func (rq *replicateQueue) considerRebalance(
 				chgs,
 				desc,
 				SnapshotRequest_REBALANCE,
-				storagepb.ReasonRebalance,
+				kvserverpb.ReasonRebalance,
 				details,
 				dryRun,
 			); err != nil {
@@ -952,7 +947,6 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 		zone,
 		desc.Replicas().Voters(),
 		repl.store.StoreID(),
-		desc.RangeID,
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,
 		opts.checkCandidateFullness,
@@ -995,7 +989,7 @@ func (rq *replicateQueue) changeReplicas(
 	chgs roachpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {

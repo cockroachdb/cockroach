@@ -14,12 +14,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 type dropSequenceNode struct {
@@ -31,7 +35,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
 		tn := &n.Names[i]
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, ResolveRequireSequenceDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, tree.ResolveRequireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -106,6 +110,9 @@ func (p *planner) dropSequenceImpl(
 	jobDesc string,
 	behavior tree.DropBehavior,
 ) error {
+	if err := removeSequenceOwnerIfExists(ctx, p, seqDesc.ID, seqDesc.GetSequenceOpts()); err != nil {
+		return err
+	}
 	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
 }
 
@@ -140,7 +147,7 @@ func (p *planner) canRemoveAllTableOwnedSequences(
 func (p *planner) canRemoveAllColumnOwnedSequences(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveOwnedSequencesImpl(ctx, desc, col, behavior, true /* isColumnDrop */)
@@ -149,13 +156,20 @@ func (p *planner) canRemoveAllColumnOwnedSequences(
 func (p *planner) canRemoveOwnedSequencesImpl(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 	isColumnDrop bool,
 ) error {
 	for _, sequenceID := range col.OwnsSequenceIds {
 		seqLookup, err := p.LookupTableByID(ctx, sequenceID)
 		if err != nil {
+			// Special case error swallowing for #50711 and #50781, which can cause a
+			// column to own sequences that have been dropped/do not exist.
+			if errors.Is(err, catalog.ErrDescriptorDropped) ||
+				pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				log.Eventf(ctx, "swallowing error ensuring owned sequences can be removed: %s", err.Error())
+				continue
+			}
 			return err
 		}
 		seqDesc := seqLookup.Desc

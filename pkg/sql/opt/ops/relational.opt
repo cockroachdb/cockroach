@@ -53,6 +53,10 @@ define ScanPrivate {
     # that need to be scanned.
     Constraint Constraint
 
+    # If set, the scan is a constrained scan of an inverted index; the
+    # InvertedConstraint contains the spans that need to be scanned.
+    InvertedConstraint InvertedSpans
+
     # HardLimit specifies the maximum number of rows that the scan can return
     # (after applying any constraint), as well as the required scan direction.
     # This is a "hard" limit, meaning that the scan operator must never return
@@ -155,6 +159,32 @@ define Project {
     internalFuncDeps FuncDepSet
 }
 
+# InvertedFilter filters rows from its input result set, based on the
+# InvertedExpression predicate (which is defined in InvertedFilterPrivate).
+# Rows which do not match the filter are discarded. The input should be a
+# constrained scan of an inverted index, possibly wrapped in other operators
+# such as Select.
+[Relational]
+define InvertedFilter {
+    Input RelExpr
+    _ InvertedFilterPrivate
+}
+
+[Private]
+define InvertedFilterPrivate {
+    # InvertedExpression represents the set operations (UNION or INTERSECTION)
+    # that should be executed on the inverted spans retrieved from the input.
+    # The input should already be filtered based on SpansToRead from the
+    # SpanExpression, but this InvertedExpression serves to filter the rows
+    # further by applying set operations on the primary key columns.
+    InvertedExpression SpanExpression
+
+    # The InvertedColumn is the id of the inverted column in the input. It is
+    # used during execution to map rows from the input to their corresponding
+    # spans in the SpanExpression.
+    InvertedColumn ColumnID
+}
+
 # InnerJoin creates a result set that combines columns from its left and right
 # inputs, based upon its "on" join predicate. Rows which do not match the
 # predicate are filtered. While expressions in the predicate can refer to
@@ -166,6 +196,7 @@ define InnerJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -174,6 +205,7 @@ define LeftJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -190,6 +222,7 @@ define FullJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -198,6 +231,7 @@ define SemiJoin {
     Right RelExpr
     On FiltersExpr
     _ JoinPrivate
+    multiplicity JoinMultiplicity
 }
 
 [Relational, Join, JoinNonApply]
@@ -214,6 +248,10 @@ define AntiJoin {
 define JoinPrivate {
     # Flags modify what type of join we choose.
     Flags JoinFlags
+
+    # WasReordered indicates whether reorderings of the join tree rooted at this
+    # join have already been considered.
+    WasReordered bool
 }
 
 # IndexJoin represents an inner join between an input expression and a primary
@@ -272,10 +310,16 @@ define LookupJoinPrivate {
     # index columns (or a prefix of them).
     KeyCols ColList
 
-    # Cols is the set of columns produced by the lookup join. This set can
-    # contain columns from the input and columns from the index. Any columns not
-    # in the input are retrieved from the index. Cols may not contain some or
-    # all of the KeyCols, if they are not output columns for the join.
+    # Cols is the union between the set of input columns that are returned by
+    # the lookup join and the set of lookup columns retrieved through lookup.
+    #
+    # For inner/left join, this is the set of columns produced by the LookupJoin
+    # operator.
+    # For semi/anti-join, this contains the semi-join output columns (from the
+    # input) plus the columns that we need to look up for the ON condition.
+    #
+    # Cols may not contain some or all of the KeyCols, if they are not output
+    # columns for the join.
     #
     # TODO(radu): this effectively allows an arbitrary projection; it should be
     # just a LookupCols set indicating which columns we should add from the
@@ -295,38 +339,16 @@ define LookupJoinPrivate {
     _ JoinPrivate
 }
 
-# GeoLookupJoin represents a join between an input expression and an index,
-# where the index is an inverted index on a Geometry or Geography column.
-#
-# A GeoLookupJoin can be generated for queries containing a join where one of
-# the join conditions is a geospatial binary function such as ST_Covers or
-# ST_CoveredBy, and at least one of the two inputs to the function is an
-# indexed geospatial column. The type of geospatial function implies the
-# GeoRelationshipType (Covers, CoveredBy or Intersects) for the join, which is
-# stored in the GeoLookupJoinPrivate and affects how the join is executed. For
-# a full list of the geospatial functions that can be index-accelerated and
-# their corresponding GeoRelationshipTypes, see geoRelationshipMap in
-# xform/custom_funcs.go.
-#
-# The GeoLookupJoin has no false negatives, but it may return false positives
-# that would not have been returned by the original geospatial function
-# join predicate. Therefore, the original function must still be applied on
-# the output of the join. Since the inverted index does not actually include
-# the geospatial column (or any other columns besides the primary key columns),
-# the GeoLookupJoin will be wrapped in an index join. The geospatial function
-# and any other filters on non-key columns will be appied as filters on the
-# outer index join.
+# InvertedJoin represents a join between an input expression and an inverted
+# index. The type of join is in the InvertedJoinPrivate field.
 [Relational]
-define GeoLookupJoin {
+define InvertedJoin {
     Input RelExpr
 
     # On only contains filters on the input columns and primary key columns of
-    # the inverted index's base table. (Since the indexed geospatial column is
-    # not actually included in the index, the GeoLookupJoin must be wrapped in
-    # an index join, which will contain the original geospatial function as one
-    # of its On conditions.)
+    # the inverted index's base table.
     On FiltersExpr
-    _ GeoLookupJoinPrivate
+    _ InvertedJoinPrivate
 
     # lookupProps caches relational properties for the "table" side of the lookup
     # join, treating it as if it were another relational input. This makes the
@@ -335,28 +357,28 @@ define GeoLookupJoin {
 }
 
 [Private]
-define GeoLookupJoinPrivate {
+define InvertedJoinPrivate {
     # JoinType is InnerJoin, LeftJoin, SemiJoin, or AntiJoin.
     JoinType Operator
 
-    # GeoRelationshipType is Covers, CoveredBy, or Intersects.
-    GeoRelationshipType GeoRelationshipType
+    # InvertedExpr is the inverted join condition. It is used to get the keys
+    # to lookup in the inverted index based on the values of the input columns.
+    InvertedExpr ScalarExpr
 
     # Table identifies the table do to lookups in.
     Table TableID
 
-    # Index identifies the geospatial inverted index to do lookups in. It can
-    # be passed to the cat.Table.Index() method in order to fetch the cat.Index
-    # metadata.
+    # Index identifies the inverted index to do lookups in. It can be passed to
+    # the cat.Table.Index() method in order to fetch the cat.Index metadata.
     Index IndexOrdinal
 
-    # GeoCol is the geospatial column (produced by the input) used to
-    # determine the keys (i.e., s2 CellIDs) to scan in the inverted index.
-    GeoCol ColumnID
+    # InvertedCol is the inverted column in the index that is referenced by
+    # InvertedExpr.
+    InvertedCol ColumnID
 
-    # Cols is the set of columns produced by the geospatial lookup join. This
-    # set can contain columns from the input and columns from the index. Any
-    # columns not in the input are retrieved from the index.
+    # Cols is the set of columns produced by the inverted join. This set can
+    # contain columns from the input and columns from the index. Any columns
+    # not in the input are retrieved from the index.
     Cols ColSet
     _ JoinPrivate
 }
@@ -929,7 +951,7 @@ define WindowPrivate {
 # With executes Binding, making its results available to Main. Within Main, the
 # results of Binding may be referenced by a WithScan expression containing the
 # ID of this With.
-[Relational]
+[Relational, WithBinding]
 define With {
     Binding RelExpr
     Main RelExpr
@@ -954,6 +976,8 @@ define WithPrivate {
 
 # WithScan returns the results present in the With expression referenced
 # by ID.
+# Note that in order to contruct a WithScan, the WithID must have a bound
+# expression in the metadata.
 [Relational]
 define WithScan {
     _ WithScanPrivate
@@ -963,9 +987,6 @@ define WithScan {
 define WithScanPrivate {
     # With identifies the CTE to scan.
     With WithID
-
-    # BindingProps stores the relational properties of the referenced expression.
-    BindingProps RelPropsPtr
 
     # Name is used to identify the with being referenced for debugging purposes.
     Name string
@@ -1029,9 +1050,10 @@ define RecursiveCTEPrivate {
     OutCols ColList
 }
 
-# FakeRel is a mock relational operator used for testing; its logical properties
-# are pre-determined and stored in the private. It can be used as the child of
-# an operator for which we are calculating properties or statistics.
+# FakeRel is a mock relational operator used for testing and as a dummy binding
+# relation for building cascades; its logical properties are pre-determined and
+# stored in the private. It can be used as the child of an operator for which we
+# are calculating properties or statistics.
 [Relational]
 define FakeRel {
     _ FakeRelPrivate

@@ -21,7 +21,7 @@ import (
 )
 
 func TestRunWithTimeout(t *testing.T) {
-	ctx := context.TODO()
+	ctx := context.Background()
 	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		time.Sleep(10 * time.Millisecond)
 		return nil
@@ -74,8 +74,8 @@ func TestRunWithTimeout(t *testing.T) {
 // returned error is still a TimeoutError. In this case however the underlying
 // cause should be the returned error and not context.DeadlineExceeded.
 func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
-	ctx := context.TODO()
-	notContextDeadlineExceeded := errors.New(context.DeadlineExceeded.Error())
+	ctx := context.Background()
+	notContextDeadlineExceeded := errors.Handled(context.DeadlineExceeded)
 	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
 		<-ctx.Done()
 		return notContextDeadlineExceeded

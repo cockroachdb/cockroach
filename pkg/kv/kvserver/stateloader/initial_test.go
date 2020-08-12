@@ -26,7 +26,7 @@ import (
 func TestSynthesizeHardState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	eng := storage.NewDefaultInMem()
 	stopper.AddCloser(eng)
 

@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	opTxnCoordSender = "txn coordinator send"
+	// OpTxnCoordSender represents a txn coordinator send operation.
+	OpTxnCoordSender = "txn coordinator send"
 )
 
 // txnState represents states relating to whether an EndTxn request needs
@@ -328,11 +329,6 @@ func newLeafTxnCoordSender(
 	txn.WriteTooOld = false
 	txn.AssertInitialized(context.TODO())
 
-	// Deal with requests from 19.2 nodes which did not set ReadTimestamp.
-	if txn.ReadTimestamp.Less(txn.DeprecatedOrigTimestamp) {
-		txn.ReadTimestamp = txn.DeprecatedOrigTimestamp
-	}
-
 	if txn.Status != roachpb.PENDING {
 		log.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
 	}
@@ -468,7 +464,7 @@ func (tc *TxnCoordSender) Send(
 
 	startNs := tc.clock.PhysicalNow()
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, opTxnCoordSender)
+	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
 
 	// Associate the txnID with the trace.
@@ -924,6 +920,7 @@ func (tc *TxnCoordSender) CommitTimestampFixed() bool {
 // SetFixedTimestamp is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 	tc.mu.Lock()
+	defer tc.mu.Unlock()
 	tc.mu.txn.ReadTimestamp = ts
 	tc.mu.txn.WriteTimestamp = ts
 	tc.mu.txn.MaxTimestamp = ts
@@ -932,11 +929,6 @@ func (tc *TxnCoordSender) SetFixedTimestamp(ctx context.Context, ts hlc.Timestam
 	// Set the MinTimestamp to the minimum of the existing MinTimestamp and the fixed
 	// timestamp. This ensures that the MinTimestamp is always <= the other timestamps.
 	tc.mu.txn.MinTimestamp.Backward(ts)
-
-	// For backwards compatibility with 19.2, set the DeprecatedOrigTimestamp too.
-	tc.mu.txn.DeprecatedOrigTimestamp = ts
-
-	tc.mu.Unlock()
 }
 
 // ManualRestart is part of the client.TxnSender interface.

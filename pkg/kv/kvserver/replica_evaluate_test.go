@@ -19,17 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEvaluateBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ts := hlc.Timestamp{WallTime: 1}
 	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0)
@@ -566,7 +568,7 @@ func TestEvaluateBatch(t *testing.T) {
 			defer eng.Close()
 
 			d := &data{
-				idKey: storagebase.CmdIDKey("testing"),
+				idKey: kvserverbase.CmdIDKey("testing"),
 				eng:   eng,
 			}
 			d.AbortSpan = abortspan.New(1)
@@ -594,7 +596,7 @@ func TestEvaluateBatch(t *testing.T) {
 type data struct {
 	batcheval.MockEvalCtx
 	ba       roachpb.BatchRequest
-	idKey    storagebase.CmdIDKey
+	idKey    kvserverbase.CmdIDKey
 	eng      storage.Engine
 	ms       enginepb.MVCCStats
 	readOnly bool

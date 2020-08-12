@@ -1,0 +1,30 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Data structures for distributed SQL APIs. See docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+package cockroach.sql.sqlbase;
+option go_package = "descpb";
+
+import "gogoproto/gogo.proto";
+
+// DatumEncoding identifies the encoding used for an EncDatum.
+enum DatumEncoding {
+    // Indicates that the datum is encoded using the order-preserving encoding
+    // used for keys (ascending order).
+    ASCENDING_KEY = 0;
+    // Indicates that the datum is encoded using the order-preserving encoding
+    // used for keys (descending order).
+    DESCENDING_KEY = 1;
+    // Indicates that the datum is encoded using the encoding used for values.
+    VALUE = 2;
+}

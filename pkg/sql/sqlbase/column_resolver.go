@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,7 +29,7 @@ import (
 // mutations are added.
 func ProcessTargetColumns(
 	tableDesc *ImmutableTableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
-) ([]ColumnDescriptor, error) {
+) ([]descpb.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
 			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -40,10 +41,10 @@ func ProcessTargetColumns(
 		return nil, nil
 	}
 
-	cols := make([]ColumnDescriptor, len(nameList))
-	colIDSet := make(map[ColumnID]struct{}, len(nameList))
+	cols := make([]descpb.ColumnDescriptor, len(nameList))
+	colIDSet := make(map[descpb.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		var col *ColumnDescriptor
+		var col *descpb.ColumnDescriptor
 		var err error
 		if allowMutations {
 			col, _, err = tableDesc.FindColumnByName(colName)
@@ -117,13 +118,11 @@ func (r *ColumnResolver) FindSourceMatchingName(
 	return tree.ExactlyOne, prefix, nil, nil
 }
 
-const invalidColIdx = -1
-
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	colIdx := invalidColIdx
+	colIdx := tree.NoColumnIdx
 	colName := string(col)
 
 	for idx := range r.Source.SourceColumns {
@@ -131,12 +130,12 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		if err != nil {
 			return nil, nil, -1, err
 		}
-		if colIdx != invalidColIdx {
+		if colIdx != tree.NoColumnIdx {
 			prefix = &r.Source.SourceAlias
 			break
 		}
 	}
-	if colIdx == invalidColIdx {
+	if colIdx == tree.NoColumnIdx {
 		colAlloc := col
 		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&colAlloc))
 	}
@@ -165,7 +164,7 @@ func (r *ColumnResolver) Resolve(
 	// yet. Do this now.
 	// FindSourceMatchingName() was careful to set r.ResolverState.SrcIdx
 	// and r.ResolverState.ColSetIdx for us.
-	colIdx := invalidColIdx
+	colIdx := tree.NoColumnIdx
 	colName := string(col)
 	for idx := range r.Source.SourceColumns {
 		var err error
@@ -175,8 +174,8 @@ func (r *ColumnResolver) Resolve(
 		}
 	}
 
-	if colIdx == invalidColIdx {
-		r.ResolverState.ColIdx = invalidColIdx
+	if colIdx == tree.NoColumnIdx {
+		r.ResolverState.ColIdx = tree.NoColumnIdx
 		return nil, NewUndefinedColumnError(
 			tree.ErrString(tree.NewColumnItem(&r.Source.SourceAlias, tree.Name(colName))))
 	}
@@ -189,7 +188,7 @@ func (r *ColumnResolver) Resolve(
 func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, error) {
 	col := r.Source.SourceColumns[idx]
 	if col.Name == colName {
-		if colIdx != invalidColIdx {
+		if colIdx != tree.NoColumnIdx {
 			colString := tree.ErrString(r.Source.NodeFormatter(idx))
 			var msgBuf bytes.Buffer
 			name := tree.ErrString(&r.Source.SourceAlias)
@@ -197,7 +196,7 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 				name = "<anonymous>"
 			}
 			fmt.Fprintf(&msgBuf, "%s.%s", name, colString)
-			return invalidColIdx, pgerror.Newf(pgcode.AmbiguousColumn,
+			return tree.NoColumnIdx, pgerror.Newf(pgcode.AmbiguousColumn,
 				"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String())
 		}
 		colIdx = idx
@@ -206,13 +205,12 @@ func (r *ColumnResolver) findColHelper(colName string, colIdx, idx int) (int, er
 }
 
 // NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*TableDescriptor) NameResolutionResult() {}
+func (*ImmutableTableDescriptor) NameResolutionResult() {}
 
 // SchemaMeta implements the tree.SchemaMeta interface.
-func (*DatabaseDescriptor) SchemaMeta() {}
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-func (Descriptor) SchemaMeta() {}
-
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (Descriptor) NameResolutionResult() {}
+// TODO (rohany): I don't want to keep this here, but it seems to be used
+//  by backup only for the fake resolution that occurs in backup. Is it possible
+//  to have this implementation only visible there? Maybe by creating a type
+//  alias for database descriptor in the backupccl package, and then defining
+//  SchemaMeta on it?
+func (*ImmutableDatabaseDescriptor) SchemaMeta() {}

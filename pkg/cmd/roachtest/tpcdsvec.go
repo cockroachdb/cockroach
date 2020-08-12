@@ -96,6 +96,7 @@ func registerTPCDSVec(r *testRegistry) {
 
 		clusterConn := c.Conn(ctx, 1)
 		disableAutoStats(t, clusterConn)
+		disableVectorizeRowCountThresholdHeuristic(t, clusterConn)
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures/workload/tpcds/scalefactor=1/backup';`,

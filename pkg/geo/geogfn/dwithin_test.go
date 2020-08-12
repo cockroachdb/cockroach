@@ -106,4 +106,30 @@ func TestDWithin(t *testing.T) {
 		_, err := DWithin(geo.MustParseGeography("POINT(1.0 2.0)"), geo.MustParseGeography("POINT(3.0 4.0)"), -0.01, UseSpheroid)
 		require.Error(t, err)
 	})
+
+	t.Run("empty geographies are never dwithin each other", func(t *testing.T) {
+		for _, tc := range []struct {
+			a string
+			b string
+		}{
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION EMPTY"},
+			{"GEOMETRYCOLLECTION EMPTY", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"},
+			{"POINT(1.0 1.0)", "GEOMETRYCOLLECTION (POINT(1.0 1.0), LINESTRING EMPTY)"}, // This case errors (in a bad way) in PostGIS.
+		} {
+			for _, useSphereOrSpheroid := range []UseSphereOrSpheroid{
+				UseSphere,
+				UseSpheroid,
+			} {
+				t.Run(fmt.Sprintf("DWithin(%s,%s),spheroid=%t", tc.a, tc.b, useSphereOrSpheroid), func(t *testing.T) {
+					a, err := geo.ParseGeography(tc.a)
+					require.NoError(t, err)
+					b, err := geo.ParseGeography(tc.b)
+					require.NoError(t, err)
+					dwithin, err := DWithin(a, b, 0, useSphereOrSpheroid)
+					require.NoError(t, err)
+					require.False(t, dwithin)
+				})
+			}
+		}
+	})
 }

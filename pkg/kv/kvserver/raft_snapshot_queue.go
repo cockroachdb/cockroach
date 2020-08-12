@@ -51,7 +51,7 @@ func newRaftSnapshotQueue(store *Store, g *gossip.Gossip) *raftSnapshotQueue {
 			needsLease:           false,
 			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
-			processTimeoutFunc:   makeQueueSnapshotTimeoutFunc(recoverySnapshotRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(recoverySnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
@@ -81,7 +81,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 
 func (rq *raftSnapshotQueue) process(
 	ctx context.Context, repl *Replica, _ *config.SystemConfig,
-) error {
+) (processed bool, err error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
 		// raft.Status.Progress is only populated on the Raft group leader.
@@ -91,12 +91,13 @@ func (rq *raftSnapshotQueue) process(
 					log.Infof(ctx, "sending raft snapshot")
 				}
 				if err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
-					return err
+					return false, err
 				}
+				processed = true
 			}
 		}
 	}
-	return nil
+	return processed, nil
 }
 
 func (rq *raftSnapshotQueue) processRaftSnapshot(
@@ -123,7 +124,9 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			// bail for now and try again later.
 			err := errors.Errorf(
 				"skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
-			log.Infof(ctx, "%v", err)
+			// TODO(knz): print the error instead when the error package
+			// knows how to expose redactable strings.
+			log.Infof(ctx, "skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
 			// TODO(dan): This is super brittle and non-obvious. In the common case,
 			// this check avoids duplicate work, but in rare cases, we send the
 			// learner snap at an index before the one raft wanted here. The raft

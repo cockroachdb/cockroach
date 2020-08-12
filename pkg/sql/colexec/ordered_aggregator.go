@@ -121,24 +121,24 @@ func NewOrderedAggregator(
 	}
 
 	a := &orderedAggregator{}
-	if len(groupCols) == 0 {
-		// If there were no groupCols, we can't rely on the distinct operators to
-		// mark the first row as distinct, so we have to do it ourselves. Set up a
-		// oneShotOp to set the first row to distinct.
-		op = &oneShotOp{
-			OneInputNode: NewOneInputNode(op),
-			fn: func(batch coldata.Batch) {
-				if batch.Length() == 0 {
-					return
-				}
-				if sel := batch.Selection(); sel != nil {
-					groupCol[sel[0]] = true
-				} else {
-					groupCol[0] = true
-				}
-			},
-			outputSourceRef: &a.input,
-		}
+	// The contract of aggregateFunc.Init requires that the very first group in
+	// the whole input is not marked as a start of a new group with 'true'
+	// value in groupCol. In order to satisfy that requirement we plan a
+	// oneShotOp that explicitly sets groupCol for the very first tuple it
+	// sees to 'false' and then deletes itself from the operator tree.
+	op = &oneShotOp{
+		OneInputNode: NewOneInputNode(op),
+		fn: func(batch coldata.Batch) {
+			if batch.Length() == 0 {
+				return
+			}
+			if sel := batch.Selection(); sel != nil {
+				groupCol[sel[0]] = false
+			} else {
+				groupCol[0] = false
+			}
+		},
+		outputSourceRef: &a.input,
 	}
 
 	*a = orderedAggregator{
@@ -153,14 +153,14 @@ func NewOrderedAggregator(
 
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
-	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */)
+	funcsAlloc, err := newAggregateFuncsAlloc(a.allocator, aggTypes, aggFns, 1 /* allocSize */, false /* isHashAgg */)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
 		)
 	}
 	a.aggregateFuncs = funcsAlloc.makeAggregateFuncs()
-	a.outputTypes, err = makeAggregateFuncsOutputTypes(aggTypes, aggFns)
+	a.outputTypes, err = MakeAggregateFuncsOutputTypes(aggTypes, aggFns)
 	if err != nil {
 		return nil, errors.AssertionFailedf(
 			"this error should have been checked in isAggregateSupported\n%+v", err,
@@ -227,6 +227,9 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				// Now we need to restore the desired length for the Vec.
 				vec.SetLength(a.scratch.inputSize)
 				a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
+				// There might have been some NULLs set in the part that we
+				// have just copied over, so we need to unset the NULLs.
+				a.scratch.ColVec(i).Nulls().UnsetNullsAfter(newResumeIdx + 1)
 			}
 		})
 		a.scratch.resumeIdx = newResumeIdx
@@ -254,7 +257,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
 		batch := a.input.Next(ctx)
-		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batch.Length() > 0
+		batchLength := batch.Length()
+		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batchLength > 0
 		if !a.seenNonEmptyBatch {
 			// The input has zero rows.
 			if a.isScalar {
@@ -269,18 +273,24 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				a.scratch.resumeIdx = 0
 			}
 		} else {
-			if batch.Length() > 0 {
+			if batchLength > 0 {
+				sel := batch.Selection()
+				inputVecs := batch.ColVecs()
 				for i, fn := range a.aggregateFuncs {
-					fn.Compute(batch, a.aggCols[i])
+					fn.Compute(inputVecs, a.aggCols[i], batchLength, sel)
 				}
 			} else {
 				for _, fn := range a.aggregateFuncs {
-					fn.Flush()
+					// The aggregate function itself is responsible for
+					// tracking the output index, so we pass in an invalid
+					// index which will allow us to catch cases when the
+					// implementation is misbehaving.
+					fn.Flush(-1 /* outputIdx */)
 				}
 			}
 			a.scratch.resumeIdx = a.aggregateFuncs[0].CurrentOutputIndex()
 		}
-		if batch.Length() == 0 {
+		if batchLength == 0 {
 			a.done = true
 			break
 		}

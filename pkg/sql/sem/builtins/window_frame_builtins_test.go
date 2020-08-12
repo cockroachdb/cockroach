@@ -217,13 +217,11 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 	}
 }
 
-const noFilterIdx = -1
-
 func makeTestWindowFrameRun(count int) *tree.WindowFrameRun {
 	return &tree.WindowFrameRun{
 		Rows:         makeTestPartition(count),
 		ArgsIdxs:     []uint32{0},
-		FilterColIdx: noFilterIdx,
+		FilterColIdx: tree.NoColumnIdx,
 	}
 }
 

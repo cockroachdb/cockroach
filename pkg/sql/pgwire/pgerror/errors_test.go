@@ -16,15 +16,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 func TestPGError(t *testing.T) {
 	const msg = "err"
-	const code = "abc"
+	var code = pgcode.MakeCode("abc")
 
 	checkErr := func(pErr *pgerror.Error, errMsg string) {
-		if pErr.Code != code {
+		if pgcode.MakeCode(pErr.Code) != code {
 			t.Fatalf("got: %q\nwant: %q", pErr.Code, code)
 		}
 		if pErr.Message != errMsg {

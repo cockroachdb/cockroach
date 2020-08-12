@@ -1,6 +1,4 @@
-# 3node-tenant fails due to
-# https://github.com/cockroachdb/cockroach/issues/47900.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(52558)
 
 statement ok
 SET experimental_enable_hash_sharded_indexes = true
@@ -105,14 +103,14 @@ ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE child (
-           x INT8 NOT NULL,
-           y INT8 NOT NULL,
-           z INT8 NOT NULL,
-           CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
-           UNIQUE INDEX child_x_key (x ASC),
-           FAMILY fam_0_x_y_z (x, y, z)
-       ) INTERLEAVE IN PARENT parent (x, y)
+child                                        CREATE TABLE public.child (
+                                             x INT8 NOT NULL,
+                                             y INT8 NOT NULL,
+                                             z INT8 NOT NULL,
+                                             CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
+                                             UNIQUE INDEX child_x_key (x ASC),
+                                             FAMILY fam_0_x_y_z (x, y, z)
+) INTERLEAVE IN PARENT public.parent (x, y)
 
 
 query II rowsort
@@ -124,10 +122,11 @@ SELECT * FROM parent
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
 ----
-scan  ·            ·
-·     table        child@primary
-·     spans        /1/2/#/57/2-/4/6/#/57/3
-·     filter       (y >= 2) AND (y <= 6)
+filter     ·       ·
+ │         filter  (y >= 2) AND (y <= 6)
+ └── scan  ·       ·
+·          table   child@primary
+·          spans   /1/2/#/57/2-/4/6/#/57/3
 
 query III rowsort
 SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
@@ -165,7 +164,7 @@ ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (y, z)
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE child (
+child  CREATE TABLE public.child (
        x INT8 NOT NULL,
        y INT8 NOT NULL,
        z INT8 NOT NULL,
@@ -208,16 +207,16 @@ ALTER TABLE child ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE child (
-         x INT8 NOT NULL,
-         y INT8 NOT NULL,
-         z INT8 NOT NULL,
-         w INT8 NULL,
-         CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
-         UNIQUE INDEX child_x_y_key (x ASC, y ASC),
-         INDEX i (x ASC, w ASC) INTERLEAVE IN PARENT parent (x),
-         FAMILY fam_0_x_y_z_w (x, y, z, w)
-       ) INTERLEAVE IN PARENT parent (x)
+child                                     CREATE TABLE public.child (
+                                          x INT8 NOT NULL,
+                                          y INT8 NOT NULL,
+                                          z INT8 NOT NULL,
+                                          w INT8 NULL,
+                                          CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC, z ASC),
+                                          UNIQUE INDEX child_x_y_key (x ASC, y ASC),
+                                          INDEX i (x ASC, w ASC) INTERLEAVE IN PARENT public.parent (x),
+                                          FAMILY fam_0_x_y_z_w (x, y, z, w)
+) INTERLEAVE IN PARENT public.parent (x)
 
 # If child@i was not properly rewritten, we wouldn't be able to select
 # all columns in child from it without an index join
@@ -312,7 +311,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
@@ -345,7 +344,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NOT NULL,
@@ -384,7 +383,7 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -399,7 +398,7 @@ SELECT * FROM t@i1
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -414,7 +413,7 @@ SELECT * FROM t@i2
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -429,7 +428,7 @@ SELECT * FROM t@i3
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -444,7 +443,7 @@ SELECT * FROM t@i4
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -459,7 +458,7 @@ SELECT * FROM t@i5
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
-index-join  ·            ·
+index join  ·            ·
  │          table        t@primary
  │          key columns  y
  └── scan   ·            ·
@@ -488,7 +487,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT =
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
@@ -502,7 +501,7 @@ query TTT
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
 count                  ·            ·
- └── insert-fast-path  ·            ·
+ └── insert fast path  ·            ·
 ·                      into         t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
 ·                      strategy     inserter
 ·                      auto commit  ·
@@ -552,7 +551,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    z INT8 NULL,
@@ -580,7 +579,7 @@ CREATE TABLE t (rowid INT NOT NULL);
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    FAMILY "primary" (rowid, rowid_1)
 )
@@ -591,7 +590,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (rowid)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
    FAMILY "primary" (rowid, rowid_1)
@@ -662,7 +661,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
    FAMILY "primary" (x, rowid)
@@ -677,12 +676,12 @@ ALTER TABLE t2 ADD PRIMARY KEY (x, y) INTERLEAVE IN PARENT t1 (x)
 query TT
 SHOW CREATE t2
 ----
-t2 CREATE TABLE t2 (
-     x INT8 NOT NULL,
-     y INT8 NOT NULL,
-     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
-     FAMILY fam_0_x_y_rowid (x, y, rowid)
-) INTERLEAVE IN PARENT t1 (x)
+t2                                    CREATE TABLE public.t2 (
+                                      x INT8 NOT NULL,
+                                      y INT8 NOT NULL,
+                                      CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+                                      FAMILY fam_0_x_y_rowid (x, y, rowid)
+) INTERLEAVE IN PARENT public.t1 (x)
 
 # Check that changing the primary key of a table removes interleave
 # backreferences from the parent. The final drop will succeed if
@@ -702,7 +701,7 @@ ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH BUCKET_COUNT=4
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
    FAMILY "primary" (x, rowid, crdb_internal_x_shard_4)
@@ -716,7 +715,7 @@ ALTER TABLE t ADD CONSTRAINT "primary" PRIMARY KEY (x)
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
    FAMILY "primary" (x, rowid)
@@ -774,7 +773,7 @@ ALTER TABLE t DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (y
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
@@ -803,7 +802,7 @@ COMMIT
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC),
@@ -943,13 +942,13 @@ ALTER TABLE t2 DROP CONSTRAINT "primary", ADD CONSTRAINT "primary" PRIMARY KEY (
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE t2 (
-    x INT8 NOT NULL,
-    y INT8 NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
-    FAMILY fam_0_x (x),
-    FAMILY fam_1_y (y)
-) INTERLEAVE IN PARENT t (x)
+t2                                   CREATE TABLE public.t2 (
+                                     x INT8 NOT NULL,
+                                     y INT8 NOT NULL,
+                                     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+                                     FAMILY fam_0_x (x),
+                                     FAMILY fam_1_y (y)
+) INTERLEAVE IN PARENT public.t (x)
 
 subtest create_table_change_pk
 
@@ -971,7 +970,7 @@ COMMIT
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
@@ -1007,7 +1006,7 @@ COMMIT
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC),
@@ -1046,12 +1045,12 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2 CREATE TABLE t2 (
-     x INT8 NOT NULL,
-     y INT8 NOT NULL,
-     CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
-     FAMILY fam_0_x_y_rowid (x, y, rowid)
-   ) INTERLEAVE IN PARENT t1 (x)
+t2                                    CREATE TABLE public.t2 (
+                                      x INT8 NOT NULL,
+                                      y INT8 NOT NULL,
+                                      CONSTRAINT "primary" PRIMARY KEY (x ASC, y ASC),
+                                      FAMILY fam_0_x_y_rowid (x, y, rowid)
+) INTERLEAVE IN PARENT public.t1 (x)
 
 # We should get an error if we try to drop t1.
 statement error pq: unimplemented: "t1" is interleaved by table "t2"
@@ -1114,7 +1113,7 @@ COMMIT
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NULL,
    z INT8 NULL,
@@ -1146,7 +1145,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH BUCKET_COUNT=3
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
    FAMILY "primary" (crdb_internal_x_shard_2, x, crdb_internal_x_shard_3)
@@ -1162,7 +1161,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT=2
 query TT
 SHOW CREATE t
 ----
-t  CREATE TABLE t (
+t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    CONSTRAINT "primary" PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	math "math"
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 // compareRows compares l and r according to a column ordering. Returns -1 if
@@ -103,7 +105,7 @@ func TestDiskRowContainer(t *testing.T) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	evalCtx := tree.MakeTestingEvalContext(st)
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -125,7 +127,7 @@ func TestDiskRowContainer(t *testing.T) {
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, typs)
 				func() {
-					d := MakeDiskRowContainer(&diskMonitor, typs, ordering, tempEngine)
+					d := MakeDiskRowContainer(diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -175,7 +177,7 @@ func TestDiskRowContainer(t *testing.T) {
 			types := sqlbase.RandSortingTypes(rng, numCols)
 			rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
-				d := MakeDiskRowContainer(&diskMonitor, types, ordering, tempEngine)
+				d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
 				for i := 0; i < len(rows); i++ {
 					if err := d.AddRow(ctx, rows[i]); err != nil {
@@ -238,6 +240,127 @@ func TestDiskRowContainer(t *testing.T) {
 			}()
 		}
 	})
+
+	t.Run("DeDupingRowContainer", func(t *testing.T) {
+		numCols := 2
+		numRows := 10
+		ordering := sqlbase.ColumnOrdering{
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    0,
+				Direction: encoding.Ascending,
+			},
+			sqlbase.ColumnOrderInfo{
+				ColIdx:    1,
+				Direction: encoding.Descending,
+			},
+		}
+		// Use random types and random rows.
+		types := sqlbase.RandSortingTypes(rng, numCols)
+		numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
+		d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
+		defer d.Close(ctx)
+		d.DoDeDuplicate()
+		addRowsRepeatedly := func() {
+			// Add some number of de-duplicated rows using AddRow() to exercise the
+			// code path in DiskRowContainer that gets exercised by
+			// DiskBackedRowContainer when it spills from memory to disk.
+			addRowCalls := rng.Intn(numRows)
+			for i := 0; i < addRowCalls; i++ {
+				require.NoError(t, d.AddRow(ctx, rows[i]))
+				require.Equal(t, d.bufferedRows.NumPutsSinceFlush(), len(d.deDupCache))
+			}
+			// Repeatedly add the same set of rows.
+			for i := 0; i < 3; i++ {
+				if i == 2 && rng.Intn(2) == 0 {
+					// Clear the de-dup cache so that a SortedDiskMapIterator is needed
+					// to de-dup.
+					d.testingFlushBuffer(ctx)
+				}
+				for j := 0; j < numRows; j++ {
+					idx, err := d.AddRowWithDeDup(ctx, rows[j])
+					require.NoError(t, err)
+					require.Equal(t, j, idx)
+				}
+			}
+		}
+		addRowsRepeatedly()
+		// Reset and add the rows in a different order.
+		require.NoError(t, d.UnsafeReset(ctx))
+		rand.Shuffle(len(rows), func(i, j int) {
+			rows[i], rows[j] = rows[j], rows[i]
+		})
+		addRowsRepeatedly()
+	})
+
+	t.Run("NumberedRowIterator", func(t *testing.T) {
+		numCols := 2
+		numRows := 10
+		// Use random types and random rows.
+		types := sqlbase.RandSortingTypes(rng, numCols)
+		rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+		// There are no ordering columns when using the numberedRowIterator.
+		d := MakeDiskRowContainer(diskMonitor, types, nil, tempEngine)
+		defer d.Close(ctx)
+		for i := 0; i < numRows; i++ {
+			require.NoError(t, d.AddRow(ctx, rows[i]))
+		}
+		require.NotEqual(t, 0, d.MeanEncodedRowBytes())
+		iter := d.newNumberedIterator(ctx)
+		defer iter.Close()
+		// Checks equality of rows[index] and the current position of iter.
+		checkEq := func(index int) {
+			valid, err := iter.Valid()
+			require.True(t, valid)
+			require.NoError(t, err)
+			row, err := iter.Row()
+			require.NoError(t, err)
+			require.Equal(t, rows[index].String(types), row.String(types))
+		}
+		for i := 0; i < numRows; i++ {
+			// Seek to a random position and iterate until the end.
+			index := rng.Intn(numRows)
+			iter.seekToIndex(index)
+			checkEq(index)
+			for index++; index < numRows; index++ {
+				iter.Next()
+				checkEq(index)
+			}
+		}
+	})
+}
+
+// makeUniqueRows can return a row count < numRows (always > 0 when numRows >
+// 0), hence it also returns the actual returned count (to remind the caller).
+func makeUniqueRows(
+	t *testing.T,
+	evalCtx *tree.EvalContext,
+	rng *rand.Rand,
+	numRows int,
+	types []*types.T,
+	ordering sqlbase.ColumnOrdering,
+) (int, sqlbase.EncDatumRows) {
+	rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+	// It is possible there was some duplication, so remove duplicates.
+	var alloc sqlbase.DatumAlloc
+	sort.Slice(rows, func(i, j int) bool {
+		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
+		require.NoError(t, err)
+		return cmp < 0
+	})
+	deDupedRows := rows[:1]
+	for i := 1; i < len(rows); i++ {
+		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, deDupedRows[len(deDupedRows)-1])
+		require.NoError(t, err)
+		if cmp != 0 {
+			deDupedRows = append(deDupedRows, rows[i])
+		}
+	}
+	rows = deDupedRows
+	// Shuffle so that not adding in sorted order.
+	rand.Shuffle(len(rows), func(i, j int) {
+		rows[i], rows[j] = rows[j], rows[i]
+	})
+	return len(rows), rows
 }
 
 func TestDiskRowContainerDiskFull(t *testing.T) {
@@ -252,7 +375,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer tempEngine.Close()
 
 	// Make a monitor with no capacity.
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -264,7 +387,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
 	d := MakeDiskRowContainer(
-		&monitor,
+		monitor,
 		[]*types.T{types.Int},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
@@ -291,7 +414,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	diskMonitor := mon.MakeMonitor(
+	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -303,7 +426,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(&diskMonitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(diskMonitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
@@ -419,7 +542,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
 		nil, /* curCount */
@@ -430,7 +553,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(&monitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(monitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (

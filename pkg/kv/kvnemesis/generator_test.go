@@ -63,6 +63,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 // types.
 func TestRandStep(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const minEachType = 5
 	config := newAllOperationsConfig()
@@ -109,6 +110,12 @@ func TestRandStep(t *testing.T) {
 				} else {
 					client.PutMissing++
 				}
+			case *ScanOperation:
+				if o.ForUpdate {
+					client.ScanForUpdate++
+				} else {
+					client.Scan++
+				}
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -120,7 +127,7 @@ func TestRandStep(t *testing.T) {
 	for {
 		step := g.RandStep(rng)
 		switch o := step.Op.GetValue().(type) {
-		case *GetOperation, *PutOperation, *BatchOperation:
+		case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +30,7 @@ import (
 // cluster had been upgraded from a previous version of cockroach.
 func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Control our own split destiny.
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{Store: &StoreTestingKnobs{
@@ -40,7 +42,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	bKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(ctx, bKey, bKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, bKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +87,7 @@ func TestRangeDescriptorUpdateProtoChangedAcrossVersions(t *testing.T) {
 	// merges and replica changes, but they all go through updateRangeDescriptor
 	// so it's unnecessary.
 	cKey := roachpb.Key("c")
-	if err := kvDB.AdminSplit(ctx, cKey, cKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, cKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 }

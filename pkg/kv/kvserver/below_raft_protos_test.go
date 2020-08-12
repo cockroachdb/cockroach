@@ -17,11 +17,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -52,6 +52,13 @@ type fixture struct {
 	emptySum, populatedSum uint64
 }
 
+// belowRaftGoldenProtos are protos that we use below Raft. Care must be
+// taken to change these protos, as replica divergence could ensue (if the
+// old code and the new code handle the updated or old proto differently).
+// To reduce the chances of a bug like this, we track the protos that are
+// used below Raft and fail on any changes to their structure. When a
+// migration was put into place, the map below can be updated with the new
+// emptySum and populatedSum for the proto that was changed.
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -67,7 +74,7 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
 		emptySum:     615555020845646359,
-		populatedSum: 6873743885651366543,
+		populatedSum: 10390885694280604642,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
@@ -91,20 +98,6 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		},
 		emptySum:     13621293256077144893,
 		populatedSum: 13375098491754757572,
-	},
-	reflect.TypeOf(&roachpb.RangeDescriptor{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return roachpb.NewPopulatedRangeDescriptor(r, false)
-		},
-		emptySum:     5524024218313206949,
-		populatedSum: 16763861375349929891,
-	},
-	reflect.TypeOf(&storagepb.Liveness{}): {
-		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return storagepb.NewPopulatedLiveness(r, false)
-		},
-		emptySum:     892800390935990883,
-		populatedSum: 16231745342114354146,
 	},
 	// This is used downstream of Raft only to write it into unreplicated keyspace
 	// as part of VersionUnreplicatedRaftTruncatedState.
@@ -146,6 +139,7 @@ func init() {
 
 func TestBelowRaftProtos(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Enable the additional checks in TestMain. NB: running this test by itself
 	// will fail those extra checks - such failures are safe to ignore, so long

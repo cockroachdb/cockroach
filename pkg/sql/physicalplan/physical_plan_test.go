@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestProjectionAndRendering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We don't care about actual types, so we use ColumnType.Locale to store an
 	// arbitrary string.
@@ -314,6 +316,7 @@ func TestProjectionAndRendering(t *testing.T) {
 				{Spec: execinfrapb.ProcessorSpec{Post: tc.post}},
 			},
 			ResultRouters: []ProcessorIdx{0, 1},
+			Distribution:  LocalPlan,
 		}
 
 		if tc.ordering != "" {
@@ -337,7 +340,16 @@ func TestProjectionAndRendering(t *testing.T) {
 
 		tc.action(&p)
 
-		if post := p.GetLastStagePost(); !reflect.DeepEqual(post, tc.expPost) {
+		post := p.GetLastStagePost()
+		// The actual planning always sets unserialized LocalExpr field on the
+		// expressions, however, we don't do that for the expected results. In
+		// order to be able to use the deep comparison below we manually unset
+		// that unserialized field.
+		post.Filter.LocalExpr = nil
+		for i := range post.RenderExprs {
+			post.RenderExprs[i].LocalExpr = nil
+		}
+		if !reflect.DeepEqual(post, tc.expPost) {
 			t.Errorf("%d: incorrect post:\n%s\nexpected:\n%s", testIdx, &post, &tc.expPost)
 		}
 		var resTypes []string
@@ -364,6 +376,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	empty := []*types.T{}
 	null := []*types.T{types.Unknown}

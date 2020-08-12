@@ -18,14 +18,17 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/linkedin/goavro"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,7 +142,7 @@ func (g *intArrGen) Gen() interface{} {
 // A testHelper to generate avro data.
 type testHelper struct {
 	schemaJSON  string
-	schemaTable *sqlbase.TableDescriptor
+	schemaTable *sqlbase.ImmutableTableDescriptor
 	codec       *goavro.Codec
 	gens        []avroGen
 	settings    *cluster.Settings
@@ -315,6 +318,7 @@ func (th *testHelper) genRecordsData(
 
 func TestReadsAvroRecords(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t)
 
 	formats := []roachpb.AvroOptions_Format{
@@ -351,6 +355,7 @@ func TestReadsAvroRecords(t *testing.T) {
 
 func TestReadsAvroOcf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t)
 
 	for _, skip := range []bool{false, true} {
@@ -376,6 +381,7 @@ func TestReadsAvroOcf(t *testing.T) {
 
 func TestRelaxedAndStrictImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		name         string
@@ -420,6 +426,7 @@ func TestRelaxedAndStrictImport(t *testing.T) {
 
 func TestHandlesArrayData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	th := newTestHelper(t, &intArrGen{namedField{
 		name: "arr_of_ints",
 	}})
@@ -536,7 +543,7 @@ func BenchmarkBinaryJSONImport(b *testing.B) {
 }
 
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	b.SetBytes(120) // Raw input size. With 8 indexes, expect more on output side.
 
@@ -566,9 +573,10 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 
 	create := stmt.AST.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
+	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
-	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), NoFKs, 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	require.NoError(b, err)
 
 	kvCh := make(chan row.KVBatch)
@@ -581,7 +589,9 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	input, err := os.Open(testData)
 	require.NoError(b, err)
 
-	avro, err := newAvroInputReader(kvCh, tableDesc.TableDesc(), avroOpts, 0, 0, &evalCtx)
+	avro, err := newAvroInputReader(kvCh,
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor),
+		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 
 	limitStream := &limitAvroStream{

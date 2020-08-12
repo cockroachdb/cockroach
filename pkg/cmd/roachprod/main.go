@@ -135,19 +135,13 @@ func newCluster(name string) (*install.SyncedCluster, error) {
 
 	c, ok := install.Clusters[name]
 	if !ok {
-		// NB: We don't use fmt.Errorf due to a linter error about the error
-		// message containing capitals and punctuation. We don't use
-		// errors.New(fmt.Sprintf()) due to a linter error that we should use
-		// fmt.Errorf() instead. Sigh.
-		s := fmt.Sprintf(`unknown cluster: %s
-
+		err := errors.Newf(`unknown cluster: %s`, name)
+		err = errors.WithHintf(err, `
 Available clusters:
   %s
-
-Hint: use "roachprod sync" to update the list of available clusters.
-`,
-			name, strings.Join(sortedClusters(), "\n  "))
-		return nil, errors.New(s)
+`, strings.Join(sortedClusters(), "\n  "))
+		err = errors.WithHint(err, `Use "roachprod sync" to update the list of available clusters.`)
+		return nil, err
 	}
 
 	switch clusterType {
@@ -1114,21 +1108,17 @@ of nodes, outputting a line whenever a change is detected:
 		if err != nil {
 			return err
 		}
-		var errs []string
 		for msg := range c.Monitor(monitorIgnoreEmptyNodes, monitorOneShot) {
 			if msg.Err != nil {
 				msg.Msg += "error: " + msg.Err.Error()
 			}
-			s := fmt.Sprintf("%d: %s", msg.Index, msg.Msg)
+			thisError := errors.Newf("%d: %s", msg.Index, msg.Msg)
 			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
-				errs = append(errs, s)
+				err = errors.CombineErrors(err, thisError)
 			}
-			fmt.Println(s)
+			fmt.Println(thisError.Error())
 		}
-		if len(errs) != 0 {
-			return errors.New(strings.Join(errs, ", "))
-		}
-		return nil
+		return err
 	}),
 }
 
@@ -1196,7 +1186,7 @@ the 'zfs rollback' command:
 			return fmt.Errorf("unknown filesystem %q", fs)
 		}
 
-		err = c.Run(os.Stdout, os.Stderr, c.Nodes, install.OtherCmd, "reformatting", fmt.Sprintf(`
+		err = c.Run(os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
   sudo zpool destroy -f data1
@@ -1238,7 +1228,7 @@ var runCmd = &cobra.Command{
 		if len(title) > 30 {
 			title = title[:27] + "..."
 		}
-		return c.Run(os.Stdout, os.Stderr, c.Nodes, install.CockroachCmd, title, cmd)
+		return c.Run(os.Stdout, os.Stderr, c.Nodes, title, cmd)
 	}),
 }
 
@@ -1294,14 +1284,14 @@ Some examples of usage:
 		} else if c.IsLocal() {
 			os = runtime.GOOS
 		}
-		var debugArch, releaseArch string
+		var debugArch, releaseArch, libExt string
 		switch os {
 		case "linux":
-			debugArch, releaseArch = "linux-gnu-amd64", "linux-amd64"
+			debugArch, releaseArch, libExt = "linux-gnu-amd64", "linux-amd64", ".so"
 		case "darwin":
-			debugArch, releaseArch = "darwin-amd64", "darwin-10.9-amd64"
+			debugArch, releaseArch, libExt = "darwin-amd64", "darwin-10.9-amd64", ".dylib"
 		case "windows":
-			debugArch, releaseArch = "windows-amd64", "windows-6.2-amd64"
+			debugArch, releaseArch, libExt = "windows-amd64", "windows-6.2-amd64", ".dll"
 		default:
 			return errors.Errorf("cannot stage binary on %s", os)
 		}
@@ -1313,13 +1303,32 @@ Some examples of usage:
 		}
 		switch applicationName {
 		case "cockroach":
-			return install.StageRemoteBinary(
+			sha, err := install.StageRemoteBinary(
 				c, applicationName, "cockroach/cockroach", versionArg, debugArch,
 			)
+			if err != nil {
+				return err
+			}
+			// NOTE: libraries may not be present in older versions.
+			// Use the sha for the binary to download the same remote library.
+			for _, library := range []string{"libgeos", "libgeos_c"} {
+				if err := install.StageOptionalRemoteLibrary(
+					c,
+					library,
+					fmt.Sprintf("cockroach/lib/%s", library),
+					sha,
+					debugArch,
+					libExt,
+				); err != nil {
+					return err
+				}
+			}
+			return nil
 		case "workload":
-			return install.StageRemoteBinary(
+			_, err := install.StageRemoteBinary(
 				c, applicationName, "cockroach/workload", versionArg, "", /* arch */
 			)
+			return err
 		case "release":
 			return install.StageCockroachRelease(c, versionArg, releaseArch)
 		default:

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,11 +48,6 @@ import (
 // dependency between the server and kv packages. These tests rely on
 // starting a TestServer, which creates a "real" node and employs a
 // distributed sender server-side.
-
-func strToValue(s string) *roachpb.Value {
-	v := roachpb.MakeValueFromBytes([]byte(s))
-	return &v
-}
 
 func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
@@ -71,8 +67,9 @@ func startNoSplitMergeServer(t *testing.T) (serverutils.TestServerInterface, *kv
 // index record being read.
 func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create an intent on the meta1 record by writing directly to the
 	// engine.
@@ -88,16 +85,15 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
 	ambient := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
-	ds := kvcoord.NewDistSender(
-		kvcoord.DistSenderConfig{
-			AmbientCtx: ambient,
-			Clock:      s.Clock(),
-			RPCContext: s.RPCContext(),
-			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-			Settings:   cluster.MakeTestingClusterSettings(),
-		},
-		s.(*server.TestServer).Gossip(),
-	)
+	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+		AmbientCtx:         ambient,
+		Settings:           cluster.MakeTestingClusterSettings(),
+		Clock:              s.Clock(),
+		NodeDescs:          s.(*server.TestServer).Gossip(),
+		RPCContext:         s.RPCContext(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -106,7 +102,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		},
 		ds,
 	)
-	db := kv.NewDB(ambient, tsf, s.Clock())
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to
@@ -115,7 +111,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	// intent error. If it did, it would go into a deadloop attempting
 	// to push the transaction, which in turn requires another range
 	// lookup, etc, ad nauseam.
-	if _, err := db.Get(context.TODO(), "a"); err != nil {
+	if _, err := db.Get(context.Background(), "a"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -126,7 +122,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) error {
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
-		if err := db.AdminSplit(ctx, key /* spanKey */, key /* splitKey */, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(ctx, key /* splitKey */, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			return err
 		}
 	}
@@ -327,9 +323,10 @@ func checkReverseScanResults(
 // bounds.
 func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	db := s.DB()
 	splits := []string{"a", "b", "c", "d", "e", "f"}
@@ -518,8 +515,9 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 // responses can contain partial responses.
 func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -762,8 +760,9 @@ func checkResumeSpanDelRangeResults(
 // Tests multiple delete range requests across many ranges with multiple bounds.
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -823,8 +822,9 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 // batch responses can contain partial responses.
 func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1011,8 +1011,9 @@ func TestMultiRangeBoundedBatchDelRangePartialResponses(t *testing.T) {
 // boundary uses the range boundary as the start key in the response ResumeSpan.
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1057,8 +1058,9 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 // truncation. In that case, the request is skipped.
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "c", "d"); err != nil {
@@ -1080,8 +1082,9 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 // TestMultiRequestBatchWithFwdAndReverseRequests are disallowed.
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
@@ -1102,8 +1105,9 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 // DeleteRange and ResolveIntentRange work across ranges.
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	db := s.DB()
 	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
@@ -1160,6 +1164,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, rc := range []roachpb.ReadConsistencyType{
 		roachpb.READ_UNCOMMITTED,
@@ -1167,7 +1172,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	} {
 		t.Run(rc.String(), func(t *testing.T) {
 			s, _ := startNoSplitMergeServer(t)
-			ctx := context.TODO()
+			ctx := context.Background()
 			defer s.Stopper().Stop(ctx)
 			db := s.DB()
 			if err := setupMultipleRanges(ctx, db, "b"); err != nil {
@@ -1210,16 +1215,15 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 			} {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
 				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-				ds := kvcoord.NewDistSender(
-					kvcoord.DistSenderConfig{
-						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
-						Clock:      clock,
-						RPCContext: s.RPCContext(),
-						NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-						Settings:   cluster.MakeTestingClusterSettings(),
-					},
-					s.(*server.TestServer).Gossip(),
-				)
+				ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+					AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+					Settings:           cluster.MakeTestingClusterSettings(),
+					Clock:              clock,
+					NodeDescs:          s.(*server.TestServer).Gossip(),
+					RPCContext:         s.RPCContext(),
+					NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+					FirstRangeProvider: s.(*server.TestServer).Gossip(),
+				})
 
 				reply, err := kv.SendWrappedWith(context.Background(), ds, roachpb.Header{
 					ReadConsistency: rc,
@@ -1254,14 +1258,15 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 // dist sender.
 func TestParallelSender(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 	for _, key := range splitKeys {
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1288,7 +1293,7 @@ func TestParallelSender(t *testing.T) {
 	psCount = newPSCount
 
 	// Scan across all rows.
-	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+	if rows, err := db.Scan(context.Background(), "a", "z", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != len(splitKeys) {
 		t.Fatalf("expected %d rows; got %d", len(splitKeys), l)
@@ -1306,13 +1311,13 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(context.Background(), key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1323,10 +1328,11 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 // on a single range.
 func TestSingleRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, err := db.ReverseScan(ctx, "b", "d", 0); err != nil {
@@ -1368,10 +1374,11 @@ func TestSingleRangeReverseScan(t *testing.T) {
 // across multiple ranges.
 func TestMultiRangeReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Case 1: Request.EndKey is in the middle of the range.
 	if rows, pErr := db.ReverseScan(ctx, "a", "d", 0); pErr != nil {
@@ -1398,17 +1405,18 @@ func TestMultiRangeReverseScan(t *testing.T) {
 // #12603 for more details.
 func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Split first using the default client and scan to make sure that
 	// the range descriptor cache reflects the split.
 	for _, key := range []string{"b", "f"} {
-		if err := db.AdminSplit(context.TODO(), key, key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if rows, err := db.Scan(context.TODO(), "a", "z", 0); err != nil {
+	if rows, err := db.Scan(context.Background(), "a", "z", 0); err != nil {
 		t.Fatal(err)
 	} else if l := len(rows); l != 0 {
 		t.Fatalf("expected empty keyspace; got %d rows", l)
@@ -1416,15 +1424,15 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
-	ds := kvcoord.NewDistSender(
-		kvcoord.DistSenderConfig{
-			AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
-			Clock:      s.Clock(),
-			RPCContext: s.RPCContext(),
-			NodeDialer: nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
-			Settings:   cluster.MakeTestingClusterSettings(),
-		}, s.(*server.TestServer).Gossip(),
-	)
+	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+		AmbientCtx:         log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+		Clock:              s.Clock(),
+		NodeDescs:          s.(*server.TestServer).Gossip(),
+		RPCContext:         s.RPCContext(),
+		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(s.(*server.TestServer).Gossip())),
+		Settings:           cluster.MakeTestingClusterSettings(),
+		FirstRangeProvider: s.(*server.TestServer).Gossip(),
+	})
 	for _, key := range []string{"c"} {
 		req := &roachpb.AdminSplitRequest{
 			RequestHeader: roachpb.RequestHeader{
@@ -1445,7 +1453,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	for i, key := range []string{"a1", "b1", "c1", "d1", "f1"} {
 		b.Put(key, fmt.Sprintf("value-%d", i))
 	}
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1454,18 +1462,19 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 // across multiple ranges while range splits and merges happen.
 func TestReverseScanWithSplitAndMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _ := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	db := initReverseScanTestEnv(s, t)
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit(context.TODO(), "c", "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
 	// The ReverseScan will run into a stale descriptor.
-	if rows, err := db.ReverseScan(context.TODO(), "a", "d", 0); err != nil {
+	if rows, err := db.ReverseScan(context.Background(), "a", "d", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -1473,10 +1482,10 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 2: encounter with range merge .
 	// Merge the range ["e", "g") and ["g", "\xff\xff") .
-	if err := db.AdminMerge(context.TODO(), "e"); err != nil {
+	if err := db.AdminMerge(context.Background(), "e"); err != nil {
 		t.Fatal(err)
 	}
-	if rows, err := db.ReverseScan(context.TODO(), "d", "g", 0); err != nil {
+	if rows, err := db.ReverseScan(context.Background(), "d", "g", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -1485,12 +1494,13 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 func TestBadRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(andreimatei): This last assertion in this test was broken by #33150. " +
-		"I suspect the reason is that there is no longer a single Range " +
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 51795, "TODO(andreimatei): This last assertion in this test was broken by #33150. "+
+		"I suspect the reason is that there is no longer a single Range "+
 		"that spans [KeyMin, z), so we're not hitting the error.")
 	s, db := startNoSplitMergeServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	// Write key "a".
 	if err := db.Put(ctx, "a", "value"); err != nil {
@@ -1519,6 +1529,7 @@ func TestBadRequest(t *testing.T) {
 // to verify that.
 func TestPropagateTxnOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Inject these two observed timestamps into the parts of the batch's
 	// response that does not result in an error. Even though the batch as a
@@ -1546,7 +1557,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	var numCPuts int32
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			k := fArgs.Req.Header().Key
 			switch fArgs.Req.(type) {
 			case *roachpb.PutRequest:
@@ -1568,7 +1579,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
@@ -1581,11 +1592,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	if err := db.Put(ctx, keyB, &origVal); err != nil {
 		t.Fatal(err)
 	}
-	// After using origVal as an arg to CPut, we're not allowed to modify it.
-	// Passing it back to CPut again (which is the whole point of keeping it
-	// around) will clear and re-init the checksum, so defensively copy it before
-	// we save it.
-	origVal = roachpb.Value{RawBytes: append([]byte(nil), origVal.RawBytes...)}
+	origBytes := origVal.TagAndDataBytes()
 
 	// The following txn creates a batch request that is split into three
 	// requests: Put, CPut, and Put. The CPut operation will get a
@@ -1613,7 +1620,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 
 		b := txn.NewBatch()
 		b.Put(keyA, "val")
-		b.CPut(keyB, "new_val", &origVal)
+		b.CPut(keyB, "new_val", origBytes)
 		b.Put(keyC, "val2")
 		err := txn.CommitInBatch(ctx, b)
 		if epoch == 1 {
@@ -1641,6 +1648,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 // retry.
 func TestTxnStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -1696,6 +1704,7 @@ func TestTxnStarvation(t *testing.T) {
 // miss their writes).
 func TestAsyncAbortPoisons(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
@@ -1734,7 +1743,7 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	}
 
 	// Run a high-priority txn that will abort the previous one.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
@@ -1763,13 +1772,14 @@ func TestAsyncAbortPoisons(t *testing.T) {
 // but still fail in others, depending on different conditions.
 func TestTxnCoordSenderRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()
-			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+			if fn, ok := fnVal.(func(kvserverbase.FilterArgs) *roachpb.Error); ok && fn != nil {
 				return fn(fArgs)
 			}
 			return nil
@@ -1794,9 +1804,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	newUncertaintyFilter := func(key roachpb.Key) func(storagebase.FilterArgs) *roachpb.Error {
+	newUncertaintyFilter := func(key roachpb.Key) func(kvserverbase.FilterArgs) *roachpb.Error {
 		var count int32
-		return func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		return func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if (fArgs.Req.Header().Key.Equal(key) ||
 				fArgs.Req.Header().Span().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
 				if atomic.AddInt32(&count, 1) > 1 {
@@ -1821,7 +1831,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		beforeTxnStart             func(context.Context, *kv.DB) error  // called before the txn starts
 		afterTxnStart              func(context.Context, *kv.DB) error  // called after the txn chooses a timestamp
 		retryable                  func(context.Context, *kv.Txn) error // called during the txn; may be retried
-		filter                     func(storagebase.FilterArgs) *roachpb.Error
+		filter                     func(kvserverbase.FilterArgs) *roachpb.Error
 		refreshSpansCondenseFilter func() bool
 		priorReads                 bool
 		tsLeaked                   bool
@@ -1869,7 +1879,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put")) // cput to advance txn ts, set update span
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put")) // cput to advance txn ts, set update span
 			},
 		},
 		{
@@ -1882,7 +1892,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put")) // cput to advance txn ts, set update span
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put")) // cput to advance txn ts, set update span
 			},
 			tsLeaked:    true,
 			clientRetry: true,
@@ -1933,7 +1943,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, 1pc commit.
@@ -2152,7 +2162,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				// Write again to make sure the timestamp of the second intent
 				// is correctly set to the txn's advanced timestamp. There was
-				// previously a bug where the txn's DeprecatedOrigTimestamp would be used
+				// previously a bug where the txn's original timestamp would be used
 				// and so on the txn refresh caused by the WriteTooOld flag, the
 				// out-of-band Put's value would be missed (see #23032).
 				return txn.Put(ctx, "a", "txn-value2")
@@ -2168,7 +2178,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("put"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 			},
 			txnCoordRetry: false,              // fails on first attempt at cput
 			expFailure:    "unexpected value", // the failure we get is a condition failed error
@@ -2182,7 +2192,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
 			expFailure:    "unexpected value", // the failure we get is a condition failed error
@@ -2196,7 +2206,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 		},
 		{
@@ -2208,7 +2218,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			priorReads:    true,
 			txnCoordRetry: true,
@@ -2383,6 +2393,41 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
+			name: "write too old with multi-range locking read (err on first range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				return err
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with multi-range locking read (err on second range)",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "b", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.ScanForUpdate(ctx, "a", "c", 0)
+				return err
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with multi-range batch of locking reads",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.ScanForUpdate("a", "a\x00")
+				b.ScanForUpdate("b", "b\x00")
+				return txn.Run(ctx, b)
+			},
+			txnCoordRetry: true,
+		},
+		{
 			// This test sends a 1PC batch with Put+EndTxn.
 			// The Put gets a write too old error but, since there's no refresh spans,
 			// the commit succeeds.
@@ -2432,7 +2477,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("put"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("put"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
 			// No client-side retries, 1PC commit. On the server-side, the batch is
@@ -2453,7 +2498,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
 			expFailure: "unexpected value", // The CPut cannot succeed.
@@ -2483,7 +2528,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
 			},
@@ -2502,7 +2547,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
 			},
@@ -2520,7 +2565,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				b.DelRange("a", "b", false /* returnKeys */)
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
 			txnCoordRetry: true,
@@ -2548,7 +2593,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
@@ -2565,7 +2610,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("orig"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				b.Put("c", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
@@ -2616,7 +2661,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("a"))),
 			txnCoordRetry: true,
@@ -2627,7 +2672,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
 			clientRetry: true,
@@ -2648,7 +2693,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if _, err := txn.Get(ctx, "ac"); err != nil {
 					return err
 				}
-				return txn.CPut(ctx, "a", "cput", strToValue("value"))
+				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("ac"))),
 			txnCoordRetry: true,
@@ -2686,7 +2731,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
@@ -2708,7 +2753,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("a", "cput", strToValue("value"))
+				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
@@ -2722,7 +2767,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				b := txn.NewBatch()
 				b.Put("a", "put")
-				b.CPut("c", "cput", strToValue("value"))
+				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
 			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
@@ -2812,7 +2857,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 			if tc.filter != nil {
 				filterFn.Store(tc.filter)
-				defer filterFn.Store((func(storagebase.FilterArgs) *roachpb.Error)(nil))
+				defer filterFn.Store((func(kvserverbase.FilterArgs) *roachpb.Error)(nil))
 			}
 			if tc.refreshSpansCondenseFilter != nil {
 				refreshSpansCondenseFilter.Store(tc.refreshSpansCondenseFilter)
@@ -2908,13 +2953,14 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 // first attempt). See subtests for more details.
 func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var filterFn atomic.Value
 	var storeKnobs kvserver.StoreTestingKnobs
 	storeKnobs.EvalKnobs.TestingEvalFilter =
-		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+		func(fArgs kvserverbase.FilterArgs) *roachpb.Error {
 			fnVal := filterFn.Load()
-			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+			if fn, ok := fnVal.(func(kvserverbase.FilterArgs) *roachpb.Error); ok && fn != nil {
 				return fn(fArgs)
 			}
 			return nil
@@ -3029,8 +3075,8 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			require.NoError(t, err)
 
 			b := txn.NewBatch()
-			b.CPut(keyA, "a", &origValA)
-			b.CPut(keyB, "b", &origValB)
+			b.CPut(keyA, "a", origValA.TagAndDataBytes())
+			b.CPut(keyB, "b", origValB.TagAndDataBytes())
 
 			var secondAttemptRejectKey roachpb.Key
 			if tc.sideRejectedOnSecondAttempt == left {
@@ -3042,7 +3088,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			// Install a filter which will reject requests touching
 			// secondAttemptRejectKey on the retry.
 			var count int32
-			filterFn.Store(func(args storagebase.FilterArgs) *roachpb.Error {
+			filterFn.Store(func(args kvserverbase.FilterArgs) *roachpb.Error {
 				put, ok := args.Req.(*roachpb.ConditionalPutRequest)
 				if !ok {
 					return nil
@@ -3084,6 +3130,7 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 //   that was refreshed before), we're good.
 func TestRefreshNoFalsePositive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)

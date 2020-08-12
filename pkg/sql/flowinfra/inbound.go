@@ -194,7 +194,10 @@ func processProducerMessage(
 	if err != nil {
 		return processMessageResult{
 			err: errors.Wrapf(err, "%s",
-				log.MakeMessage(ctx, "decoding error", nil /* args */)),
+				// TODO(knz): Instead of pre-formatting the string here, use
+				// errors.WithContextTags() here and let the error formatter
+				// show the tags later.
+				log.FormatWithContextTags(ctx, "decoding error")),
 			consumerClosed: false,
 		}
 	}

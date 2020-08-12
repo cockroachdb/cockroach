@@ -41,6 +41,28 @@ func IsLocalRequestContext(ctx context.Context) bool {
 	return ctx.Value(localRequestKey{}) != nil
 }
 
+// IsTimeout returns true if err's Cause is a gRPC timeout, or the request
+// was canceled by a context timeout.
+func IsTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	err = errors.Cause(err)
+	if s, ok := status.FromError(err); ok {
+		return s.Code() == codes.DeadlineExceeded
+	}
+	return false
+}
+
+// IsContextCanceled returns true if err's Cause is an error produced by gRPC
+// on context cancellation.
+func IsContextCanceled(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		return s.Code() == codes.Canceled && s.Message() == context.Canceled.Error()
+	}
+	return false
+}
+
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {
@@ -64,6 +86,15 @@ func IsClosedConnection(err error) bool {
 		return true
 	}
 	return netutil.IsClosedConnection(err)
+}
+
+// IsAuthenticationError returns true if err's Cause is an error produced by
+// gRPC due to invalid authentication credentials for the operation.
+func IsAuthenticationError(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		return s.Code() == codes.Unauthenticated
+	}
+	return false
 }
 
 // RequestDidNotStart returns true if the given error from gRPC

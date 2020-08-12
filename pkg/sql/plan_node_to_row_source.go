@@ -45,18 +45,21 @@ type planNodeToRowSource struct {
 func makePlanNodeToRowSource(
 	source planNode, params runParams, fastPath bool,
 ) (*planNodeToRowSource, error) {
-	nodeColumns := planColumns(source)
-
-	types := make([]*types.T, len(nodeColumns))
-	for i := range nodeColumns {
-		types[i] = nodeColumns[i].Typ
+	var typs []*types.T
+	if fastPath {
+		// If our node is a "fast path node", it means that we're set up to
+		// just return a row count meaning we'll output a single row with a
+		// single INT column.
+		typs = []*types.T{types.Int}
+	} else {
+		typs = getTypesFromResultColumns(planColumns(source))
 	}
-	row := make(sqlbase.EncDatumRow, len(nodeColumns))
+	row := make(sqlbase.EncDatumRow, len(typs))
 
 	return &planNodeToRowSource{
 		node:        source,
 		params:      params,
-		outputTypes: types,
+		outputTypes: typs,
 		row:         row,
 		fastPath:    fastPath,
 	}, nil
@@ -66,18 +69,23 @@ var _ execinfra.LocalProcessor = &planNodeToRowSource{}
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
+	flowCtx *execinfra.FlowCtx, post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
 		p,
 		post,
 		p.outputTypes,
-		nil, /* flowCtx */
+		flowCtx,
 		p.params.EvalContext(),
 		0, /* processorID */
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{},
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+				p.InternalClose()
+				return nil
+			},
+		},
 	)
 }
 
@@ -122,10 +130,9 @@ func (p *planNodeToRowSource) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (p *planNodeToRowSource) InternalClose() {
-	if p.ProcessorBase.InternalClose() {
-		p.started = true
-	}
+func (p *planNodeToRowSource) InternalClose() bool {
+	p.started = true
+	return p.ProcessorBase.InternalClose()
 }
 
 func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
@@ -188,10 +195,6 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 	return nil, p.DrainHelper()
 }
 
-func (p *planNodeToRowSource) ConsumerDone() {
-	p.MoveToDraining(nil /* err */)
-}
-
 func (p *planNodeToRowSource) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	p.InternalClose()
@@ -199,8 +202,16 @@ func (p *planNodeToRowSource) ConsumerClosed() {
 
 // IsException implements the VectorizeAlwaysException interface.
 func (p *planNodeToRowSource) IsException() bool {
-	_, ok := p.node.(*setVarNode)
-	return ok
+	if _, ok := p.node.(*setVarNode); ok {
+		// We need to make an exception for changing a session variable.
+		return true
+	}
+	if d, ok := p.node.(*delayedNode); ok {
+		// We want to make an exception for retrieving the current database
+		// name (which is done via a scan of 'session_variables' virtual table.
+		return d.name == "session_variables@primary"
+	}
+	return false
 }
 
 // forwardMetadata will be called by any upstream rowSourceToPlanNode processors

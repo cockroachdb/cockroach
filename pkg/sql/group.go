@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -86,18 +85,13 @@ type aggregateFuncHolder struct {
 	// key unchanged.
 	funcName string
 
-	resultType *types.T
-
 	// The argument of the function is a single value produced by the renderNode
 	// underneath. If the function has no argument (COUNT_ROWS), it is empty.
 	argRenderIdxs []int
 	// If there is a filter, the result is a single value produced by the
-	// renderNode underneath. If there is no filter, it is set to noRenderIdx.
+	// renderNode underneath. If there is no filter, it is set to
+	// tree.NoColumnIdx.
 	filterRenderIdx int
-
-	// create instantiates the built-in execution context for the
-	// aggregation function.
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
 
 	// arguments are constant expressions that can be optionally passed into an
 	// aggregator.
@@ -114,8 +108,6 @@ type aggregateFuncRun struct {
 	seen          map[string]struct{}
 }
 
-const noRenderIdx = -1
-
 // newAggregateFuncHolder creates an aggregateFuncHolder.
 //
 // If function is nil, this is an "ident" aggregation (meaning that the input is
@@ -124,19 +116,12 @@ const noRenderIdx = -1
 // If the aggregation function takes no arguments (e.g. COUNT_ROWS),
 // argRenderIdx is noRenderIdx.
 func (n *groupNode) newAggregateFuncHolder(
-	funcName string,
-	resultType *types.T,
-	argRenderIdxs []int,
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	arguments tree.Datums,
-	acc mon.BoundAccount,
+	funcName string, argRenderIdxs []int, arguments tree.Datums, acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		funcName:        funcName,
-		resultType:      resultType,
 		argRenderIdxs:   argRenderIdxs,
-		filterRenderIdx: noRenderIdx,
-		create:          create,
+		filterRenderIdx: tree.NoColumnIdx,
 		arguments:       arguments,
 		run: aggregateFuncRun{
 			buckets:       make(map[string]tree.AggregateFunc),
@@ -147,7 +132,7 @@ func (n *groupNode) newAggregateFuncHolder(
 }
 
 func (a *aggregateFuncHolder) hasFilter() bool {
-	return a.filterRenderIdx != noRenderIdx
+	return a.filterRenderIdx != tree.NoColumnIdx
 }
 
 // setDistinct causes a to ignore duplicate values of the argument.

@@ -1,0 +1,302 @@
+# Tests for predicates with OR expressions.
+
+# Atom filters
+
+predtest vars=(bool)
+@1
+=>
+@1 OR @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(bool, bool)
+@1
+=>
+@1 OR @2
+----
+true
+└── remaining filters: @1
+
+predtest vars=(bool, bool)
+@2
+=>
+@1 OR @2
+----
+true
+└── remaining filters: @2
+
+predtest vars=(int, int)
+(@1, @2) = (1, 2)
+=>
+@1 = 1 OR @2 = 2
+----
+true
+└── remaining filters: (@1 = 1) AND (@2 = 2)
+
+predtest vars=(bool, bool)
+NOT @2
+=>
+@1 OR @2
+----
+false
+
+# TODO(mgartner): This filter actually implies this predicate, but our logic
+# does not currently handle this case.
+predtest vars=(int)
+@1 IN (1, 2)
+=>
+@1 = 1 OR @1 = 2
+----
+false
+
+# Conjunction filters
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+@1 OR @1
+----
+true
+└── remaining filters: @2
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+@1 OR @2
+----
+true
+└── remaining filters: @1 AND @2
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+@2 OR @1
+----
+true
+└── remaining filters: @1 AND @2
+
+predtest vars=(bool, bool, bool)
+@1 AND @2 AND @3
+=>
+@1 OR @3
+----
+true
+└── remaining filters: (@1 AND @2) AND @3
+
+predtest vars=(bool, bool, bool)
+@1 AND @2 AND @3
+=>
+@1 OR @2
+----
+true
+└── remaining filters: (@1 AND @2) AND @3
+
+predtest vars=(bool, bool, bool)
+@1 AND @2 AND @3
+=>
+@3 OR @1 OR @2
+----
+true
+└── remaining filters: (@1 AND @2) AND @3
+
+predtest vars=(int, int)
+@1 > 10 AND @2 < 20
+=>
+@1 > 0 OR @2 < 30
+----
+true
+└── remaining filters: (@1 > 10) AND (@2 < 20)
+
+predtest vars=(bool, bool)
+@1 AND @2
+=>
+NOT @1 OR NOT @2
+----
+false
+
+predtest vars=(bool, bool, bool)
+@1 AND @2
+=>
+NOT @1 OR @3
+----
+false
+
+predtest vars=(int, int)
+@1 > 10 AND @2 < 20
+=>
+@1 > 11 OR @2 < 19
+----
+false
+
+# Range filters
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 10 OR @1 < 100
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 < 100 OR @1 > 10
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
+predtest vars=(int)
+@1 > 10 AND @1 < 100
+=>
+@1 > 0 OR @1 < 90
+----
+true
+└── remaining filters: (@1 > 10) AND (@1 < 100)
+
+predtest vars=(int, bool)
+@1 > 10 AND @2 AND @1 < 100
+=>
+@1 > 10 OR @1 < 100
+----
+true
+└── remaining filters: ((@1 > 10) AND (@1 < 100)) AND @2
+
+predtest vars=(int)
+@1 > 0 AND @1 < 90
+=>
+@1 > 10 OR @1 < 100
+----
+true
+└── remaining filters: (@1 > 0) AND (@1 < 90)
+
+predtest vars=(int)
+@1 > 0 AND @1 < 90
+=>
+@1 < 10 OR @1 > 100
+----
+false
+
+# Disjunction filters
+
+predtest vars=(bool)
+@1 OR @1
+=>
+@1 OR @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(int)
+@1 < 10 OR @1 > 100
+=>
+@1 < 20 OR @1 > 80
+----
+true
+└── remaining filters: (@1 < 10) OR (@1 > 100)
+
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@1 OR @2
+----
+true
+└── remaining filters: none
+
+# These filters could, in theory, be reduced to "none". However, doing so is
+# difficult because we don't remove exact expression matches inside Or
+# expressions in the predicate or filters. See the docs for
+# FilterImpliesPredicate for more details.
+predtest vars=(bool, bool)
+@1 OR @2
+=>
+@2 OR @1
+----
+true
+└── remaining filters: @1 OR @2
+
+predtest vars=(bool, bool, bool)
+@1 OR @2
+=>
+@1 OR @2 OR @3
+----
+true
+└── remaining filters: @1 OR @2
+
+predtest vars=(bool, bool, bool)
+@1 OR @2
+=>
+@3 OR @1 OR @2
+----
+true
+└── remaining filters: @1 OR @2
+
+predtest vars=(bool, bool, bool)
+@1 OR @2
+=>
+@1 OR @3
+----
+false
+
+# Combination conjunction and disjunction filters
+
+predtest vars=(int)
+(@1 > 10 OR @1 < 0) AND (@1 > 11 OR @1 < 0)
+=>
+@1 > 10 OR @1 < 0
+----
+true
+└── remaining filters: (@1 > 11) OR (@1 < 0)
+
+predtest vars=(int)
+(@1 > 10 OR @1 < 0) AND (@1 > 11 OR @1 < 0)
+=>
+@1 > 5 OR @1 < 1
+----
+true
+└── remaining filters: ((@1 > 10) OR (@1 < 0)) AND ((@1 > 11) OR (@1 < 0))
+
+predtest vars=(bool, bool, bool)
+@1 OR (@2 AND @3)
+=>
+@1 OR @3
+----
+true
+└── remaining filters: @1 OR (@2 AND @3)
+
+predtest vars=(bool, bool, bool)
+(@1 OR @2) AND @3
+=>
+@1 OR @2
+----
+true
+└── remaining filters: @3
+
+predtest vars=(bool, bool, bool)
+(@1 OR @2) AND (@1 OR @3)
+=>
+@1 OR @2
+----
+true
+└── remaining filters: @1 OR @3
+
+# These filters could, in theory, be reduced to "@1 OR @3". However, doing so is
+# difficult because we don't remove exact expression matches inside Or
+# expressions in the predicate or filters. See the docs for
+# FilterImpliesPredicate for more details.
+predtest vars=(bool, bool, bool)
+(@2 OR @1) AND (@1 OR @3)
+=>
+@1 OR @2
+----
+true
+└── remaining filters: (@2 OR @1) AND (@1 OR @3)
+
+predtest vars=(bool, bool, bool, bool)
+@1 OR (@2 AND @3) OR @4
+=>
+@1 OR @3 OR @4
+----
+true
+└── remaining filters: (@1 OR (@2 AND @3)) OR @4

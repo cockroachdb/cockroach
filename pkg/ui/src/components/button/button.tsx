@@ -8,27 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
-import cn from "classnames";
-import Back from "assets/back-arrow.svg";
-
-import "./button.styl";
+import React, { ButtonHTMLAttributes } from "react";
+import classNames from "classnames/bind";
+import styles from "./button.module.styl";
 
 export interface ButtonProps {
-  type?: "primary" | "secondary" | "flat";
+  type?: "primary" | "secondary" | "flat" | "unstyled-link";
   disabled?: boolean;
+  textAlign?: "left" | "right" | "center";
   size?: "default" | "small";
   children?: React.ReactNode;
   icon?: () => React.ReactNode;
   iconPosition?: "left" | "right";
   onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   className?: string;
+  buttonType?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
+  tabIndex?: ButtonHTMLAttributes<HTMLButtonElement>["tabIndex"];
 }
 
-export function Button(props: ButtonProps) {
-  const { children, type, disabled, size, icon, iconPosition, onClick, className } = props;
+const cx = classNames.bind(styles);
 
-  const rootStyles = cn(
+export function Button(props: ButtonProps) {
+  const { children, type, disabled, size, icon, iconPosition, onClick, className, buttonType, tabIndex, textAlign } = props;
+
+  const rootStyles = cx(
     "crl-button",
     `crl-button--type-${type}`,
     `crl-button--size-${size}`,
@@ -43,7 +46,7 @@ export function Button(props: ButtonProps) {
       return null;
     }
     return (
-      <div className={`crl-button__icon--push-${iconPosition}`}>
+      <div className={cx(`crl-button__icon--push-${iconPosition}`)}>
         { icon() }
       </div>
     );
@@ -54,10 +57,12 @@ export function Button(props: ButtonProps) {
       onClick={onClick}
       className={rootStyles}
       disabled={disabled}
+      type={buttonType}
+      tabIndex={tabIndex}
     >
-      <div className="crl-button__container">
+      <div className={cx("crl-button__container")}>
         { iconPosition === "left" && renderIcon() }
-        <div className="crl-button__content">
+        <div className={cx("crl-button__content")} style={{textAlign}}>
           {children}
         </div>
         { iconPosition === "right" && renderIcon() }
@@ -73,7 +78,6 @@ Button.defaultProps = {
   size: "default",
   className: "",
   iconPosition: "left",
+  buttonType: "button",
+  textAlign: "left",
 };
-
-// tslint:disable-next-line: variable-name
-export const BackIcon = () => <img src={Back} alt="back" />;

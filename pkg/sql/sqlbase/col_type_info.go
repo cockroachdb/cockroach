@@ -10,7 +10,10 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
 // ColTypeInfo is a type that allows multiple representations of column type
 // information (to avoid conversions and allocations).
@@ -31,7 +34,7 @@ func ColTypeInfoFromColTypes(colTypes []*types.T) ColTypeInfo {
 }
 
 // ColTypeInfoFromColDescs creates a ColTypeInfo from []ColumnDescriptor.
-func ColTypeInfoFromColDescs(colDescs []ColumnDescriptor) ColTypeInfo {
+func ColTypeInfoFromColDescs(colDescs []descpb.ColumnDescriptor) ColTypeInfo {
 	colTypes := make([]*types.T, len(colDescs))
 	for i, colDesc := range colDescs {
 		colTypes[i] = colDesc.Type
@@ -53,22 +56,4 @@ func (ti ColTypeInfo) Type(idx int) *types.T {
 		return ti.resCols[idx].Typ
 	}
 	return ti.colTypes[idx]
-}
-
-// MakeColTypeInfo returns a ColTypeInfo initialized from the given
-// TableDescriptor and map from column ID to row index.
-func MakeColTypeInfo(
-	tableDesc *ImmutableTableDescriptor, colIDToRowIndex map[ColumnID]int,
-) (ColTypeInfo, error) {
-	colTypeInfo := ColTypeInfo{
-		colTypes: make([]*types.T, len(colIDToRowIndex)),
-	}
-	for colID, rowIndex := range colIDToRowIndex {
-		col, err := tableDesc.FindColumnByID(colID)
-		if err != nil {
-			return ColTypeInfo{}, err
-		}
-		colTypeInfo.colTypes[rowIndex] = col.Type
-	}
-	return colTypeInfo, nil
 }

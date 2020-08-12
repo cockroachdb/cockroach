@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -51,6 +52,26 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 		}
 	}
 	return nil
+}
+
+// EarliestActiveTimestamp returns the earliest timestamp at which the batch
+// would operate, which is nominally ba.Timestamp but could be earlier if a
+// request in the batch operates on a time span such as ExportRequest or
+// RevertRangeRequest, which both specify the start of that span in their
+// arguments while using ba.Timestamp to indicate the upper bound of that span.
+func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
+	ts := ba.Timestamp
+	for _, ru := range ba.Requests {
+		switch t := ru.GetInner().(type) {
+		case *ExportRequest:
+			if !t.StartTime.IsEmpty() {
+				ts.Backward(t.StartTime)
+			}
+		case *RevertRangeRequest:
+			ts.Backward(t.TargetTime)
+		}
+	}
+	return ts
 }
 
 // UpdateTxn updates the batch transaction from the supplied one in
@@ -551,6 +572,16 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	return parts
 }
 
+// RequestsSafe lists all the request types in the batch. Also see Summary().
+func (ba BatchRequest) RequestsSafe() redact.SafeString {
+	var sb strings.Builder
+	for _, arg := range ba.Requests {
+		req := arg.GetInner()
+		sb.WriteString(req.Method().String() + " ")
+	}
+	return redact.SafeString(sb.String())
+}
+
 // String gives a brief summary of the contained requests and keys in the batch.
 // TODO(tschottdorf): the key range is useful information, but requires `keys`.
 // See #2198.
@@ -558,6 +589,9 @@ func (ba BatchRequest) String() string {
 	var str []string
 	if ba.Txn != nil {
 		str = append(str, fmt.Sprintf("[txn: %s]", ba.Txn.Short()))
+	}
+	if ba.WaitPolicy != lock.WaitPolicy_Block {
+		str = append(str, fmt.Sprintf("[wait-policy: %s]", ba.WaitPolicy))
 	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit

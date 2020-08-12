@@ -222,3 +222,47 @@ user root
 
 statement ok
 DROP TABLE t
+
+# Use of SELECT FOR UPDATE/SHARE in ReadOnly Transaction
+
+statement ok
+CREATE TABLE t (i INT PRIMARY KEY)
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR UPDATE in a read-only transaction
+SELECT * FROM t FOR UPDATE
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+SELECT * FROM t FOR NO KEY UPDATE
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR SHARE in a read-only transaction
+SELECT * FROM t FOR SHARE
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR KEY SHARE in a read-only transaction
+SELECT * FROM t FOR KEY SHARE
+
+statement ok
+ROLLBACK
+
+statement ok
+DROP TABLE t

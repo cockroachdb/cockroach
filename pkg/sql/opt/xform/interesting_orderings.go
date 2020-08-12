@@ -26,6 +26,10 @@ func DeriveInterestingOrderings(e memo.RelExpr) opt.OrderingSet {
 	}
 	l.SetAvailable(props.InterestingOrderings)
 
+	// We cache the interesting orderings for the entire group, so we always use
+	// the normalized expression.
+	e = e.FirstExpr()
+
 	var res opt.OrderingSet
 	switch e.Op() {
 	case opt.ScanOp:

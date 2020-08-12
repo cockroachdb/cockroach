@@ -17,17 +17,18 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,7 +72,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_FULL_OUTER,
+			joinType:          descpb.FullOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -102,7 +103,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:         sqlbase.JoinType_FULL_OUTER,
+			joinType:         descpb.FullOuterJoin,
 			leftEqColsAreKey: true,
 
 			expected: tuples{
@@ -134,7 +135,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_LEFT_OUTER,
+			joinType:          descpb.LeftOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -166,7 +167,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          descpb.RightOuterJoin,
 			leftEqColsAreKey:  true,
 			rightEqColsAreKey: true,
 
@@ -199,7 +200,7 @@ func init() {
 			leftOutCols:  []uint32{0},
 			rightOutCols: []uint32{0},
 
-			joinType:          sqlbase.JoinType_RIGHT_OUTER,
+			joinType:          descpb.RightOuterJoin,
 			rightEqColsAreKey: true,
 
 			expected: tuples{
@@ -379,22 +380,22 @@ func init() {
 
 			leftTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets},
 				{0},
-				{hashTableNumBuckets * 2},
+				{HashTableNumBuckets * 2},
 				{1},
 				{1},
-				{hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1},
 			},
 			rightTuples: tuples{
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 2},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 2},
+				{HashTableNumBuckets * 3},
 				{0},
 				{1},
-				{hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -407,15 +408,15 @@ func init() {
 			rightEqColsAreKey: false,
 
 			expected: tuples{
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets, hashTableNumBuckets},
-				{hashTableNumBuckets * 2, hashTableNumBuckets * 2},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets, HashTableNumBuckets},
+				{HashTableNumBuckets * 2, HashTableNumBuckets * 2},
 				{0, 0},
 				{0, 0},
 				{1, 1},
 				{1, 1},
-				{hashTableNumBuckets + 1, hashTableNumBuckets + 1},
+				{HashTableNumBuckets + 1, HashTableNumBuckets + 1},
 			},
 		},
 		{
@@ -500,14 +501,14 @@ func init() {
 			// hash to the same bucket.
 			leftTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 2},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 2},
+				{HashTableNumBuckets * 3},
 			},
 			rightTuples: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 3},
 			},
 
 			leftEqCols:   []uint32{0},
@@ -520,8 +521,8 @@ func init() {
 
 			expected: tuples{
 				{0},
-				{hashTableNumBuckets},
-				{hashTableNumBuckets * 3},
+				{HashTableNumBuckets},
+				{HashTableNumBuckets * 3},
 			},
 		},
 		{
@@ -606,17 +607,17 @@ func init() {
 			// Test multiple column with values that hash to the same bucket.
 			leftTuples: tuples{
 				{10, 0, 0},
-				{20, 0, hashTableNumBuckets},
-				{40, hashTableNumBuckets, 0},
-				{50, hashTableNumBuckets, hashTableNumBuckets},
-				{60, hashTableNumBuckets * 2, 0},
-				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
+				{20, 0, HashTableNumBuckets},
+				{40, HashTableNumBuckets, 0},
+				{50, HashTableNumBuckets, HashTableNumBuckets},
+				{60, HashTableNumBuckets * 2, 0},
+				{70, HashTableNumBuckets * 2, HashTableNumBuckets},
 			},
 			rightTuples: tuples{
-				{0, hashTableNumBuckets},
-				{hashTableNumBuckets * 2, hashTableNumBuckets},
+				{0, HashTableNumBuckets},
+				{HashTableNumBuckets * 2, HashTableNumBuckets},
 				{0, 0},
-				{0, hashTableNumBuckets * 2},
+				{0, HashTableNumBuckets * 2},
 			},
 
 			leftEqCols:   []uint32{1, 2},
@@ -628,8 +629,8 @@ func init() {
 			rightEqColsAreKey: true,
 
 			expected: tuples{
-				{20, 0, hashTableNumBuckets},
-				{70, hashTableNumBuckets * 2, hashTableNumBuckets},
+				{20, 0, HashTableNumBuckets},
+				{70, HashTableNumBuckets * 2, HashTableNumBuckets},
 				{10, 0, 0},
 			},
 		},
@@ -771,7 +772,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_SEMI,
+			joinType: descpb.LeftSemiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -804,7 +805,7 @@ func init() {
 			leftTypes:   []*types.T{types.Int},
 			rightTypes:  []*types.T{types.Int},
 
-			joinType: sqlbase.JoinType_LEFT_ANTI,
+			joinType: descpb.LeftAntiJoin,
 
 			leftTuples: tuples{
 				{0},
@@ -896,6 +897,30 @@ func init() {
 				{2, 4},
 			},
 		},
+		{
+			description: "25",
+			joinType:    descpb.IntersectAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {3}, {3}},
+		},
+		{
+			description: "26",
+			joinType:    descpb.ExceptAllJoin,
+			leftTypes:   []*types.T{types.Int},
+			rightTypes:  []*types.T{types.Int},
+			leftTuples:  tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+			rightTuples: tuples{{1}, {2}, {3}, {3}, {3}},
+			leftEqCols:  []uint32{0},
+			rightEqCols: []uint32{0},
+			leftOutCols: []uint32{0},
+			expected:    tuples{{1}, {2}, {2}},
+		},
 	}
 }
 
@@ -950,11 +975,13 @@ func runHashJoinTestCase(
 	} else {
 		runner = runTestsWithTyps
 	}
+	log.Infof(context.Background(), "%s", tc.description)
 	runner(t, inputs, typs, tc.expected, unorderedVerifier, hjOpConstructor)
 }
 
 func TestHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -977,14 +1004,14 @@ func TestHashJoiner(t *testing.T) {
 				for _, tc := range tc.mutateTypes() {
 					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
 						spec := createSpecForHashJoiner(tc)
-						args := NewColOperatorArgs{
+						args := &NewColOperatorArgs{
 							Spec:                spec,
 							Inputs:              sources,
 							StreamingMemAccount: testMemAcc,
 						}
 						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 						args.TestingKnobs.DiskSpillingDisabled = true
-						result, err := NewColOperator(ctx, flowCtx, args)
+						result, err := TestNewColOperator(ctx, flowCtx, args)
 						if err != nil {
 							return nil, err
 						}
@@ -1047,18 +1074,18 @@ func BenchmarkHashJoiner(b *testing.B) {
 									for i := 0; i < b.N; i++ {
 										leftSource := colexecbase.NewRepeatableBatchSource(testAllocator, batch, sourceTypes)
 										rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
-										joinType := sqlbase.JoinType_INNER
+										joinType := descpb.InnerJoin
 										if fullOuter {
-											joinType = sqlbase.JoinType_FULL_OUTER
+											joinType = descpb.FullOuterJoin
 										}
-										hjSpec, err := makeHashJoinerSpec(
+										hjSpec, err := MakeHashJoinerSpec(
 											joinType,
 											[]uint32{0, 1}, []uint32{2, 3},
 											sourceTypes, sourceTypes,
 											rightDistinct,
 										)
 										require.NoError(b, err)
-										hj := newHashJoiner(
+										hj := NewHashJoiner(
 											testAllocator, hjSpec,
 											leftSource, rightSource,
 										)
@@ -1084,6 +1111,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 // sure hashing with unsafe.Pointer doesn't allocate still works correctly.
 func TestHashingDoesNotAllocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var sum uintptr
 	foundAllocations := 0
@@ -1118,6 +1146,7 @@ func TestHashingDoesNotAllocate(t *testing.T) {
 // would occur.
 func TestHashJoinerProjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1158,14 +1187,14 @@ func TestHashJoinerProjection(t *testing.T) {
 
 	leftSource := newOpTestInput(1, leftTuples, leftTypes)
 	rightSource := newOpTestInput(1, rightTuples, rightTypes)
-	args := NewColOperatorArgs{
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              []colexecbase.Operator{leftSource, rightSource},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	args.TestingKnobs.DiskSpillingDisabled = true
-	hjOp, err := NewColOperator(ctx, flowCtx, args)
+	hjOp, err := TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Op.Init()
 	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {

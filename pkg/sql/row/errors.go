@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,11 +40,6 @@ func (f *singleKVFetcher) nextBatch(
 	}
 	f.done = true
 	return true, f.kvs[:], nil, roachpb.Span{}, nil
-}
-
-// GetRangesInfo implements the kvBatchFetcher interface.
-func (f *singleKVFetcher) GetRangesInfo() []roachpb.RangeInfo {
-	panic(errors.AssertionFailedf("GetRangesInfo() called on singleKVFetcher"))
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
@@ -82,7 +78,7 @@ func NewUniquenessConstraintViolationError(
 	if err != nil {
 		return err
 	}
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc.TableDesc(), key)
+	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
 		return err
 	}
@@ -95,8 +91,8 @@ func NewUniquenessConstraintViolationError(
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(index.ColumnIDs))
-	cols := make([]sqlbase.ColumnDescriptor, len(index.ColumnIDs))
+	colIdxMap := make(map[descpb.ColumnID]int, len(index.ColumnIDs))
+	cols := make([]descpb.ColumnDescriptor, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		colIdxMap[colID] = i
 		col, err := tableDesc.FindColumnByID(colID)
@@ -117,13 +113,16 @@ func NewUniquenessConstraintViolationError(
 	if err := rf.Init(
 		codec,
 		false, /* reverse */
-		sqlbase.ScanLockingStrength_FOR_NONE,
-		false, /* returnRangeInfo */
+		descpb.ScanLockingStrength_FOR_NONE,
 		false, /* isCheck */
 		&sqlbase.DatumAlloc{},
 		tableArgs,
 	); err != nil {
-		return err
+		return pgerror.Newf(pgcode.UniqueViolation,
+			"duplicate key value (%s)=(%v) violates unique constraint %q",
+			strings.Join(index.ColumnNames, ","),
+			errors.Wrapf(err, "couldn't fetch value"),
+			index.Name)
 	}
 	f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
 	if value != nil {

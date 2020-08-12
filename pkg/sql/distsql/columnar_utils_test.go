@@ -14,12 +14,16 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,17 +33,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
 type verifyColOperatorArgs struct {
 	// anyOrder determines whether the results should be matched in order (when
 	// anyOrder is false) or as sets (when anyOrder is true).
-	anyOrder    bool
-	inputTypes  [][]*types.T
-	inputs      []sqlbase.EncDatumRows
-	outputTypes []*types.T
-	pspec       *execinfrapb.ProcessorSpec
+	anyOrder bool
+	// colIdxsToCheckForEquality determines which columns of the rows to use
+	// for equality check. If left unset, full rows are compared. Use this
+	// with caution and leave a comment that justifies using this knob.
+	colIdxsToCheckForEquality []int
+	inputTypes                [][]*types.T
+	inputs                    []sqlbase.EncDatumRows
+	outputTypes               []*types.T
+	pspec                     *execinfrapb.ProcessorSpec
 	// forceDiskSpill, if set, will force the operator to spill to disk.
 	forceDiskSpill bool
 	// forcedDiskSpillMightNotOccur determines whether we error out if
@@ -53,12 +62,25 @@ type verifyColOperatorArgs struct {
 	// it is merging already created partitions into new one before proceeding
 	// to the next partition from the input).
 	numForcedRepartitions int
+	// rng (if set) will be used to randomize batch size.
+	rng *rand.Rand
 }
 
 // verifyColOperator passes inputs through both the processor defined by pspec
 // and the corresponding columnar operator and verifies that the results match.
 func verifyColOperator(args verifyColOperatorArgs) error {
 	const floatPrecision = 0.0000001
+	rng := args.rng
+	if rng == nil {
+		rng, _ = randutil.NewPseudoRand()
+	}
+	if rng.Float64() < 0.5 {
+		randomBatchSize := 1 + rng.Intn(3)
+		fmt.Printf("coldata.BatchSize() is set to %d\n", randomBatchSize)
+		if err := coldata.SetBatchSizeForTests(randomBatchSize); err != nil {
+			return err
+		}
+	}
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -103,7 +125,7 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 
 	acc := evalCtx.Mon.MakeBoundAccount()
 	defer acc.Close(ctx)
-	testAllocator := colmem.NewAllocator(ctx, &acc)
+	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecbase.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		c, err := colexec.NewColumnarizer(ctx, testAllocator, flowCtx, int32(i)+1, input)
@@ -113,20 +135,24 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		columnarizers[i] = c
 	}
 
-	constructorArgs := colexec.NewColOperatorArgs{
-		Spec:                 args.pspec,
-		Inputs:               columnarizers,
-		StreamingMemAccount:  &acc,
+	constructorArgs := &colexec.NewColOperatorArgs{
+		Spec:                args.pspec,
+		Inputs:              columnarizers,
+		StreamingMemAccount: &acc,
+		DiskQueueCfg:        colcontainer.DiskQueueCfg{FS: tempFS},
+		FDSemaphore:         colexecbase.NewTestingSemaphore(256),
+
+		// TODO(yuzefovich): adjust expression generator to not produce
+		// mixed-type timestamp-related expressions and then disallow the
+		// fallback again.
 		ProcessorConstructor: rowexec.NewProcessor,
-		DiskQueueCfg:         colcontainer.DiskQueueCfg{FS: tempFS},
-		FDSemaphore:          colexecbase.NewTestingSemaphore(256),
 	}
 	var spilled bool
 	if args.forceDiskSpill {
 		constructorArgs.TestingKnobs.SpillingCallbackFn = func() { spilled = true }
 	}
 	constructorArgs.TestingKnobs.NumForcedRepartitions = args.numForcedRepartitions
-	result, err := colexec.NewColOperator(ctx, flowCtx, constructorArgs)
+	result, err := colbuilder.NewColOperator(ctx, flowCtx, constructorArgs)
 	if err != nil {
 		return err
 	}
@@ -268,6 +294,13 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		}
 	}
 
+	colIdxsToCheckForEquality := args.colIdxsToCheckForEquality
+	if len(colIdxsToCheckForEquality) == 0 {
+		colIdxsToCheckForEquality = make([]int, len(args.outputTypes))
+		for i := range colIdxsToCheckForEquality {
+			colIdxsToCheckForEquality[i] = i
+		}
+	}
 	if args.anyOrder {
 		used := make([]bool, len(colOpRows))
 		for i, expStrRow := range procRows {
@@ -277,8 +310,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 					continue
 				}
 				foundDifference := false
-				for k, typ := range args.outputTypes {
-					match, err := datumsMatch(expStrRow[k], retStrRow[k], typ)
+				for _, colIdx := range colIdxsToCheckForEquality {
+					match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.outputTypes[colIdx])
 					if err != nil {
 						return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 							expStrRow, retStrRow, err.Error())
@@ -304,8 +337,8 @@ func verifyColOperator(args verifyColOperatorArgs) error {
 		for i, expStrRow := range procRows {
 			retStrRow := colOpRows[i]
 			// anyOrder is false, so the result rows must match in the same order.
-			for k, typ := range args.outputTypes {
-				match, err := datumsMatch(expStrRow[k], retStrRow[k], typ)
+			for _, colIdx := range colIdxsToCheckForEquality {
+				match, err := datumsMatch(expStrRow[colIdx], retStrRow[colIdx], args.outputTypes[colIdx])
 				if err != nil {
 					return errors.Errorf("error while parsing datum in rows\n%v\n%v\n%s",
 						expStrRow, retStrRow, err.Error())

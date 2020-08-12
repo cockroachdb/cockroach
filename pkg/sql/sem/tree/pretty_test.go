@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"golang.org/x/sync/errgroup"
 )
@@ -47,6 +48,7 @@ var (
 // the changed output.
 func TestPrettyDataShort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	matches, err := filepath.Glob(filepath.Join("testdata", "pretty", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
@@ -162,6 +164,7 @@ func runTestPrettyData(
 
 func TestPrettyVerify(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tests := map[string]string{
 		// Verify that INTERVAL is maintained.
 		`SELECT interval '-2µs'`: `SELECT '-00:00:00.000002':::INTERVAL`,
@@ -213,6 +216,7 @@ func BenchmarkPrettyData(b *testing.B) {
 
 func TestPrettyExprs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tests := map[tree.Expr]string{
 		&tree.CastExpr{
 			Expr: tree.NewDString("foo"),

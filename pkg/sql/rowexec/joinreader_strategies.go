@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -29,6 +30,8 @@ type defaultSpanGenerator struct {
 
 	indexKeyRow          sqlbase.EncDatumRow
 	keyToInputRowIndices map[string][]int
+
+	scratchSpans roachpb.Spans
 }
 
 // Generate spans for a given row.
@@ -69,7 +72,7 @@ func (g *defaultSpanGenerator) generateSpans(rows []sqlbase.EncDatumRow) (roachp
 	}
 	// We maintain a map from index key to the corresponding input rows so we can
 	// join the index results to the inputs.
-	var spans roachpb.Spans
+	g.scratchSpans = g.scratchSpans[:0]
 	for i, inputRow := range rows {
 		if g.hasNullLookupColumn(inputRow) {
 			continue
@@ -80,15 +83,18 @@ func (g *defaultSpanGenerator) generateSpans(rows []sqlbase.EncDatumRow) (roachp
 		}
 		inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
 		if inputRowIndices == nil {
-			spans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
-				spans, generatedSpan, len(g.lookupCols), containsNull)
+			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
 		}
 		g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
 	}
-	return spans, nil
+	return g.scratchSpans, nil
 }
 
 type joinReaderStrategy interface {
+	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
+	// rows.
+	getLookupRowsBatchSizeHint() int64
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
 	processLookupRows(rows []sqlbase.EncDatumRow) (roachpb.Spans, error)
@@ -99,6 +105,9 @@ type joinReaderStrategy interface {
 	// unsupported, but if an error is returned, the joinReader will transition
 	// to draining.
 	processLookedUpRow(ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key) (joinReaderState, error)
+	// prepareToEmit informs the strategy implementation that all looked up rows
+	// have been read, and that it should prepare for calls to nextRowToEmit.
+	prepareToEmit(ctx context.Context)
 	// nextRowToEmit gets the next row to emit from the strategy. An accompanying
 	// joinReaderState is also returned, indicating a state to transition to after
 	// emitting this row. A transition to jrStateUnknown is unsupported, but if an
@@ -141,6 +150,15 @@ type joinReaderNoOrderingStrategy struct {
 	}
 }
 
+// getLookupRowsBatchSizeHint returns the batch size for the join reader no
+// ordering strategy. This number was chosen by running TPCH queries 7, 9, 10,
+// and 11 with varying batch sizes and choosing the smallest batch size that
+// offered a significant performance improvement. Larger batch sizes offered
+// small to no marginal improvements.
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+	return 2 << 20 /* 2 MiB */
+}
+
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	rows []sqlbase.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -179,6 +197,8 @@ func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
 	return jrEmittingRows, nil
 }
 
+func (s *joinReaderNoOrderingStrategy) prepareToEmit(ctx context.Context) {}
+
 func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 	_ context.Context,
 ) (sqlbase.EncDatumRow, joinReaderState, error) {
@@ -208,7 +228,7 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 		inputRow := s.inputRows[s.emitState.unmatchedInputRowIndices[s.emitState.unmatchedInputRowIndicesCursor]]
 		s.emitState.unmatchedInputRowIndicesCursor++
-		if !shouldIncludeRightColsInOutput(s.joinType) {
+		if !s.joinType.ShouldIncludeRightColsInOutput() {
 			return inputRow, jrEmittingRows, nil
 		}
 		return s.renderUnmatchedRow(inputRow, leftSide), jrEmittingRows, nil
@@ -230,8 +250,8 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 		}
 
 		s.matched[inputRowIdx] = true
-		if !shouldIncludeRightColsInOutput(s.joinType) {
-			if s.joinType == sqlbase.LeftAntiJoin {
+		if !s.joinType.ShouldIncludeRightColsInOutput() {
+			if s.joinType == descpb.LeftAntiJoin {
 				// Skip emitting row.
 				continue
 			}
@@ -251,6 +271,67 @@ func (s *joinReaderNoOrderingStrategy) nextRowToEmit(
 func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 
 func (s *joinReaderNoOrderingStrategy) close(_ context.Context) {}
+
+// joinReaderIndexJoinStrategy is a joinReaderStrategy that executes an index
+// join. It does not maintain the ordering.
+type joinReaderIndexJoinStrategy struct {
+	*joinerBase
+	defaultSpanGenerator
+	inputRows []sqlbase.EncDatumRow
+
+	emitState struct {
+		// processingLookupRow is an explicit boolean that specifies whether the
+		// strategy is currently processing a match. This is set to true in
+		// processLookedUpRow and causes nextRowToEmit to process the data in
+		// emitState. If set to false, the strategy determines in nextRowToEmit
+		// that no more looked up rows need processing, so unmatched input rows need
+		// to be emitted.
+		processingLookupRow bool
+		lookedUpRow         sqlbase.EncDatumRow
+	}
+}
+
+// getLookupRowsBatchSizeHint returns the batch size for the join reader index
+// join strategy. This number was chosen by running TPCH queries 3, 4, 5, 9,
+// and 19 with varying batch sizes and choosing the smallest batch size that
+// offered a significant performance improvement. Larger batch sizes offered
+// small to no marginal improvements.
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
+	return 4 << 20 /* 4 MB */
+}
+
+func (s *joinReaderIndexJoinStrategy) processLookupRows(
+	rows []sqlbase.EncDatumRow,
+) (roachpb.Spans, error) {
+	s.inputRows = rows
+	return s.generateSpans(s.inputRows)
+}
+
+func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
+	ctx context.Context, row sqlbase.EncDatumRow, key roachpb.Key,
+) (joinReaderState, error) {
+	s.emitState.processingLookupRow = true
+	s.emitState.lookedUpRow = row
+	return jrEmittingRows, nil
+}
+
+func (s *joinReaderIndexJoinStrategy) prepareToEmit(ctx context.Context) {}
+
+func (s *joinReaderIndexJoinStrategy) nextRowToEmit(
+	ctx context.Context,
+) (sqlbase.EncDatumRow, joinReaderState, error) {
+	if !s.emitState.processingLookupRow {
+		return nil, jrReadingInput, nil
+	}
+	s.emitState.processingLookupRow = false
+	return s.emitState.lookedUpRow, jrPerformingLookup, nil
+}
+
+func (s *joinReaderIndexJoinStrategy) spilled() bool {
+	return false
+}
+
+func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {}
 
 // partialJoinSentinel is used as the inputRowIdxToLookedUpRowIndices value for
 // semi- and anti-joins, where we only need to know about the existence of a
@@ -277,7 +358,7 @@ type joinReaderOrderingStrategy struct {
 	inputRowIdxToLookedUpRowIndices [][]int
 
 	lookedUpRowIdx int
-	lookedUpRows   rowcontainer.IndexedRowContainer
+	lookedUpRows   *rowcontainer.DiskBackedNumberedRowContainer
 
 	// emitCursor contains information about where the next row to emit is within
 	// inputRowIdxToLookedUpRowIndices.
@@ -292,6 +373,12 @@ type joinReaderOrderingStrategy struct {
 		// match means that there's no need to output an outer or anti join row.
 		seenMatch bool
 	}
+}
+
+func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
+	// TODO(asubiotto): Eventually we might want to adjust this batch size
+	//  dynamically based on whether the result row container spilled or not.
+	return 10 << 10 /* 10 KiB */
 }
 
 func (s *joinReaderOrderingStrategy) processLookupRows(
@@ -325,7 +412,7 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 				row[i].Datum = tree.DNull
 			}
 		}
-		if err := s.lookedUpRows.AddRow(ctx, row); err != nil {
+		if _, err := s.lookedUpRows.AddRow(ctx, row); err != nil {
 			return jrStateUnknown, err
 		}
 	}
@@ -359,6 +446,12 @@ func (s *joinReaderOrderingStrategy) processLookedUpRow(
 	return jrPerformingLookup, nil
 }
 
+func (s *joinReaderOrderingStrategy) prepareToEmit(ctx context.Context) {
+	if !s.isPartialJoin {
+		s.lookedUpRows.SetupForRead(ctx, s.inputRowIdxToLookedUpRowIndices)
+	}
+}
+
 func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	ctx context.Context,
 ) (sqlbase.EncDatumRow, joinReaderState, error) {
@@ -386,13 +479,13 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		s.emitCursor.seenMatch = false
 		if !seenMatch {
 			switch s.joinType {
-			case sqlbase.LeftOuterJoin:
+			case descpb.LeftOuterJoin:
 				// An outer-join non-match means we emit the input row with NULLs for
 				// the right side (if it passes the ON-condition).
 				if renderedRow := s.renderUnmatchedRow(inputRow, leftSide); renderedRow != nil {
 					return renderedRow, jrEmittingRows, nil
 				}
-			case sqlbase.LeftAntiJoin:
+			case descpb.LeftAntiJoin:
 				// An anti-join non-match means we emit the input row.
 				return inputRow, jrEmittingRows, nil
 			}
@@ -403,21 +496,21 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 	lookedUpRowIdx := lookedUpRows[s.emitCursor.outputRowIdx]
 	s.emitCursor.outputRowIdx++
 	switch s.joinType {
-	case sqlbase.LeftSemiJoin:
+	case descpb.LeftSemiJoin:
 		// A semi-join match means we emit our input row.
 		s.emitCursor.seenMatch = true
 		return inputRow, jrEmittingRows, nil
-	case sqlbase.LeftAntiJoin:
+	case descpb.LeftAntiJoin:
 		// An anti-join match means we emit nothing.
 		s.emitCursor.seenMatch = true
 		return nil, jrEmittingRows, nil
 	}
 
-	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx)
+	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx, false /* skip */)
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
-	outputRow, err := s.render(inputRow, lookedUpRow.(rowcontainer.IndexedRow).Row)
+	outputRow, err := s.render(inputRow, lookedUpRow)
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
@@ -428,7 +521,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 }
 
 func (s *joinReaderOrderingStrategy) spilled() bool {
-	return s.lookedUpRows.(*rowcontainer.DiskBackedIndexedRowContainer).Spilled()
+	return s.lookedUpRows.Spilled()
 }
 
 func (s *joinReaderOrderingStrategy) close(ctx context.Context) {

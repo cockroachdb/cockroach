@@ -68,3 +68,7 @@ Tags for relational operators:
  - `DDL`: used for schema change operations; these operators cannot be executed
    following a mutation in the same transaction. Should always be used in
    conjunction with the `Mutation` tag.
+ - `WithBinding`: used for operators which associate a `WithID` with the
+   expression in the first child. Such expressions must implement a
+   `WithBindingID()` method.
+

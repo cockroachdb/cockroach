@@ -62,7 +62,7 @@ func BenchmarkStreamingReadFile(b *testing.B) {
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	factory := setUpService(b, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
-	blobClient, err := factory(context.TODO(), remoteNodeID)
+	blobClient, err := factory(context.Background(), remoteNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
 	for i := 0; i < b.N; i++ {
-		reader, err := tc.blobClient.ReadFile(context.TODO(), tc.fileName)
+		reader, err := tc.blobClient.ReadFile(context.Background(), tc.fileName)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -113,7 +113,7 @@ func BenchmarkStreamingWriteFile(b *testing.B) {
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
 	factory := setUpService(b, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
-	blobClient, err := factory(context.TODO(), remoteNodeID)
+	blobClient, err := factory(context.Background(), remoteNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func benchmarkStreamingWriteFile(b *testing.B, tc *benchmarkTestCase) {
 	b.ResetTimer()
 	b.SetBytes(tc.fileSize)
 	for i := 0; i < b.N; i++ {
-		err := tc.blobClient.WriteFile(context.TODO(), tc.fileName, bytes.NewReader(content))
+		err := tc.blobClient.WriteFile(context.Background(), tc.fileName, bytes.NewReader(content))
 		if err != nil {
 			b.Fatal(err)
 		}

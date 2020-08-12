@@ -12,13 +12,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 )
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
 
-// This test runs psycopg full test suite against a single cockroach node.
+// TODO(rafi): use a release tag once the commit below appears in a release.
+var supportedPsycopgTag = "cecff195fc17a83d593dd62c239aa188883a844e"
 
+// This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r *testRegistry) {
 	runPsycopg := func(
 		ctx context.Context,
@@ -48,6 +51,7 @@ func registerPsycopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest Psycopg release is %s.", latestTag)
+		c.l.Printf("Supported Psycopg release is %s.", supportedPsycopgTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -77,8 +81,20 @@ func registerPsycopg(r *testRegistry) {
 			c,
 			"https://github.com/psycopg/psycopg2.git",
 			"/mnt/data1/psycopg",
-			latestTag,
+			"master",
 			node,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// TODO(rafi): once there's a real release, change the clone step above, and
+		// remove this.
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"checkout supported tag",
+			fmt.Sprintf(`cd /mnt/data1/psycopg/ && git checkout %s`, supportedPsycopgTag),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -90,15 +106,15 @@ func registerPsycopg(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		blacklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
+		blocklistName, expectedFailures, ignoredlistName, ignoredlist := psycopgBlocklists.getLists(version)
 		if expectedFailures == nil {
-			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
+			t.Fatalf("No psycopg blocklist defined for cockroach version %s", version)
 		}
 		if ignoredlist == nil {
 			t.Fatalf("No psycopg ignorelist defined for cockroach version %s", version)
 		}
-		c.l.Printf("Running cockroach version %s, using blacklist %s, using ignoredlist %s",
-			version, blacklistName, ignoredlistName)
+		c.l.Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
+			version, blocklistName, ignoredlistName)
 
 		t.Status("running psycopg test suite")
 		// Note that this is expected to return an error, since the test suite
@@ -119,8 +135,8 @@ func registerPsycopg(r *testRegistry) {
 		results := newORMTestsResults()
 		results.parsePythonUnitTestOutput(rawResults, expectedFailures, ignoredlist)
 		results.summarizeAll(
-			t, "psycopg" /* ormName */, blacklistName, expectedFailures,
-			version, latestTag,
+			t, "psycopg" /* ormName */, blocklistName, expectedFailures,
+			version, supportedPsycopgTag,
 		)
 	}
 

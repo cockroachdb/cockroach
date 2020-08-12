@@ -251,34 +251,20 @@ func (t *pebbleTimeBoundPropCollector) Name() string {
 	return "TimeBoundTblPropCollectorFactory"
 }
 
-var _ pebble.NeedCompacter = &pebbleDeleteRangeCollector{}
+// pebbleDeleteRangeCollector is the equivalent table collector as the RocksDB
+// DeleteRangeTblPropCollector. Pebble does not require it because Pebble will
+// prioritize its own compactions of range tombstones.
+type pebbleDeleteRangeCollector struct{}
 
-// pebbleDeleteRangeCollector marks an sstable for compaction that contains a
-// range tombstone.
-type pebbleDeleteRangeCollector struct {
-	numRangeTombstones int
-}
-
-func (c *pebbleDeleteRangeCollector) Add(key pebble.InternalKey, value []byte) error {
-	if key.Kind() == pebble.InternalKeyKindRangeDelete {
-		c.numRangeTombstones++
-	}
+func (pebbleDeleteRangeCollector) Add(_ pebble.InternalKey, _ []byte) error {
 	return nil
 }
 
-// NeedCompact implements the pebble.NeedCompacter interface.
-func (c *pebbleDeleteRangeCollector) NeedCompact() bool {
-	// NB: Mark any file containing range deletions as requiring a
-	// compaction. This ensures that range deletions are quickly compacted out
-	// of existence.
-	return c.numRangeTombstones > 0
-}
-
-func (*pebbleDeleteRangeCollector) Finish(userProps map[string]string) error {
+func (pebbleDeleteRangeCollector) Finish(_ map[string]string) error {
 	return nil
 }
 
-func (*pebbleDeleteRangeCollector) Name() string {
+func (pebbleDeleteRangeCollector) Name() string {
 	// This constant needs to match the one used by the RocksDB version of this
 	// table property collector. DO NOT CHANGE.
 	return "DeleteRangeTblPropCollectorFactory"
@@ -313,6 +299,11 @@ func DefaultPebbleOptions() *pebble.Options {
 		MinFlushRate:                4 << 20, // 4 MB/sec
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 	}
+	opts.Experimental.L0SublevelCompactions = true
+	// Automatically flush 10s after the first range tombstone is added to a
+	// memtable. This ensures that we can reclaim space even when there's no
+	// activity on the database generating flushes.
+	opts.Experimental.DeleteRangeFlushDelay = 10 * time.Second
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
@@ -325,6 +316,12 @@ func DefaultPebbleOptions() *pebble.Options {
 		}
 		l.EnsureDefaults()
 	}
+
+	// Set the value for FlushSplitBytes to 2x the L0 TargetFileSize. This
+	// should generally create flush split keys after every pair of
+	// L0 files. The 2x factor helps to reduce some cases of excessive flush
+	// splitting, and the overhead that comes with that.
+	opts.Experimental.FlushSplitBytes = 2 * opts.Levels[0].TargetFileSize
 
 	// Do not create bloom filters for the last level (i.e. the largest level
 	// which contains data in the LSM store). This configuration reduces the size
@@ -472,24 +469,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
-	var auxDir string
-	if cfg.Dir == "" {
-		// TODO(peter): This is horribly hacky but matches what RocksDB does. For
-		// in-memory instances, we create an on-disk auxiliary directory. This is
-		// necessary because various tests expect the auxiliary directory to
-		// actually exist on disk even though they don't actually write files to
-		// the directory. See SSTSnapshotStorage for one example of this bad
-		// behavior.
-		var err error
-		auxDir, err = ioutil.TempDir(os.TempDir(), "cockroach-auxiliary")
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		auxDir = cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
-		if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
-			return nil, err
-		}
+	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
+	if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
+		return nil, err
 	}
 
 	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
@@ -580,18 +562,6 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-
-	if p.path == "" {
-		// Remove the temporary directory when the engine is in-memory. This
-		// matches the RocksDB behavior.
-		//
-		// TODO(peter): The aux-dir shouldn't be on-disk for in-memory
-		// engines. This is just a wart that needs to be removed.
-		if err := os.RemoveAll(p.auxDir); err != nil {
-			p.logger.Infof("%v", err)
-		}
-	}
-
 	_ = p.db.Close()
 }
 
@@ -800,6 +770,7 @@ func (p *Pebble) GetStats() (*Stats, error) {
 		TableReadersMemEstimate:        m.TableCache.Size,
 		PendingCompactionBytesEstimate: int64(m.Compact.EstimatedDebt),
 		L0FileCount:                    m.Levels[0].NumFiles,
+		L0SublevelCount:                int64(m.Levels[0].Sublevels),
 	}, nil
 }
 
@@ -848,7 +819,7 @@ func (p *Pebble) GetEnvStats() (*EnvStats, error) {
 	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize
 	for _, l := range m.Levels {
 		stats.TotalFiles += uint64(l.NumFiles)
-		stats.TotalBytes += l.Size
+		stats.TotalBytes += uint64(l.Size)
 	}
 
 	sstSizes := make(map[pebble.FileNum]uint64)
@@ -979,53 +950,30 @@ func (p *Pebble) WriteFile(filename string, data []byte) error {
 	return err
 }
 
-// DeleteFile implements the FS interface.
-func (p *Pebble) DeleteFile(filename string) error {
+// Remove implements the FS interface.
+func (p *Pebble) Remove(filename string) error {
 	return p.fs.Remove(filename)
 }
 
-// DeleteDirAndFiles implements the Engine interface.
-func (p *Pebble) DeleteDirAndFiles(dir string) error {
-	// NB RemoveAll does not return an error if dir does not exist, but we want
-	// DeleteDirAndFiles to return an error in that case to match the RocksDB
-	// behavior.
-	_, err := p.fs.Stat(dir)
-	if err != nil {
-		return err
-	}
+// RemoveAll implements the Engine interface.
+func (p *Pebble) RemoveAll(dir string) error {
 	return p.fs.RemoveAll(dir)
 }
 
-// LinkFile implements the FS interface.
-func (p *Pebble) LinkFile(oldname, newname string) error {
+// Link implements the FS interface.
+func (p *Pebble) Link(oldname, newname string) error {
 	return p.fs.Link(oldname, newname)
 }
 
 var _ fs.FS = &Pebble{}
 
-// CreateFile implements the FS interface.
-func (p *Pebble) CreateFile(name string) (fs.File, error) {
-	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
-	// directory does not exist. Various tests in the storage package depend on
-	// this because they are accidentally creating the required directory on the
-	// actual filesystem instead of in the memory filesystem. See
-	// diskSideloadedStorage and SSTSnapshotStrategy.
-	if p.InMem() {
-		_ = p.fs.MkdirAll(p.fs.PathDir(name), 0755)
-	}
+// Create implements the FS interface.
+func (p *Pebble) Create(name string) (fs.File, error) {
 	return p.fs.Create(name)
 }
 
-// CreateFileWithSync implements the FS interface.
-func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (fs.File, error) {
-	// TODO(peter): On RocksDB, the MemEnv allows creating a file when the parent
-	// directory does not exist. Various tests in the storage package depend on
-	// this because they are accidentally creating the required directory on the
-	// actual filesystem instead of in the memory filesystem. See
-	// diskSideloadedStorage and SSTSnapshotStrategy.
-	if p.InMem() {
-		_ = p.fs.MkdirAll(p.fs.PathDir(name), 0755)
-	}
+// CreateWithSync implements the FS interface.
+func (p *Pebble) CreateWithSync(name string, bytesPerSync int) (fs.File, error) {
 	f, err := p.fs.Create(name)
 	if err != nil {
 		return nil, err
@@ -1033,8 +981,8 @@ func (p *Pebble) CreateFileWithSync(name string, bytesPerSync int) (fs.File, err
 	return vfs.NewSyncingFile(f, vfs.SyncingFileOptions{BytesPerSync: bytesPerSync}), nil
 }
 
-// OpenFile implements the FS interface.
-func (p *Pebble) OpenFile(name string) (fs.File, error) {
+// Open implements the FS interface.
+func (p *Pebble) Open(name string) (fs.File, error) {
 	return p.fs.Open(name)
 }
 
@@ -1043,24 +991,31 @@ func (p *Pebble) OpenDir(name string) (fs.File, error) {
 	return p.fs.OpenDir(name)
 }
 
-// RenameFile implements the FS interface.
-func (p *Pebble) RenameFile(oldname, newname string) error {
+// Rename implements the FS interface.
+func (p *Pebble) Rename(oldname, newname string) error {
 	return p.fs.Rename(oldname, newname)
 }
 
-// CreateDir implements the FS interface.
-func (p *Pebble) CreateDir(name string) error {
+// MkdirAll implements the FS interface.
+func (p *Pebble) MkdirAll(name string) error {
 	return p.fs.MkdirAll(name, 0755)
 }
 
-// DeleteDir implements the FS interface.
-func (p *Pebble) DeleteDir(name string) error {
+// RemoveDir implements the FS interface.
+func (p *Pebble) RemoveDir(name string) error {
 	return p.fs.Remove(name)
 }
 
-// ListDir implements the FS interface.
-func (p *Pebble) ListDir(name string) ([]string, error) {
-	return p.fs.List(name)
+// List implements the FS interface.
+func (p *Pebble) List(name string) ([]string, error) {
+	dirents, err := p.fs.List(name)
+	sort.Strings(dirents)
+	return dirents, err
+}
+
+// Stat implements the FS interface.
+func (p *Pebble) Stat(name string) (os.FileInfo, error) {
+	return p.fs.Stat(name)
 }
 
 // CreateCheckpoint implements the Engine interface.

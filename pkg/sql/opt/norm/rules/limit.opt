@@ -26,15 +26,15 @@ $input
 (Limit
     (Project $input:* $projections:* $passthrough:*)
     $limit:*
-    $ordering:* & (HasColsInOrdering $input $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
 (Project
-    (Limit
-        $input
-        $limit
-        (PruneOrdering $ordering (OutputCols $input))
-    )
+    (Limit $input $limit (PruneOrdering $ordering $cols))
     $projections
     $passthrough
 )
@@ -46,15 +46,15 @@ $input
 (Offset
     (Project $input:* $projections:* $passthrough:*)
     $offset:*
-    $ordering:* & (HasColsInOrdering $input $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $input)
+        )
 )
 =>
 (Project
-    (Offset
-        $input
-        $offset
-        (PruneOrdering $ordering (OutputCols $input))
-    )
+    (Offset $input $offset (PruneOrdering $ordering $cols))
     $projections
     $passthrough
 )
@@ -101,7 +101,10 @@ $input
     (Ordinality $input:* $private:*)
     $limit:*
     $limitOrdering:* &
-        (HasColsInOrdering $input $limitOrdering) &
+        (OrderingCanProjectCols
+            $limitOrdering
+            (OutputCols $input)
+        ) &
         (OrderingIntersects
             (OrdinalityOrdering $private)
             $limitOrdering
@@ -120,31 +123,223 @@ $input
     $private
 )
 
-# PushLimitIntoLeftJoin pushes a Limit into the left input of a left join. Since
-# the left join creates an output row for each left input row, we only need that
-# many rows from that input. We can only do this if the limit ordering refers
-# only to the left input columns. We also check that the cardinality of the left
-# input is more than the limit, to prevent repeated applications of the rule.
-[PushLimitIntoLeftJoin, Normalize]
+# PushLimitIntoJoinLeft pushes a Limit into the left input of an InnerJoin or
+# LeftJoin when rows from the left input are guaranteed to be preserved by the
+# join. Since the join creates an output row for each left input row, we only
+# need that many rows from that input. We can only do this if the limit ordering
+# refers only to the left input columns. We check that the cardinality of the
+# left input is more than the limit, to prevent repeated applications of the
+# rule. We also check that the left input has no outer columns to avoid
+# interfering with decorrelation.
+#
+# Why can we only match InnerJoins and LeftJoins (e.g. not FullJoins)?
+#
+#   CREATE TABLE t_x (x INT PRIMARY KEY)
+#   CREATE TABLE t_r (r INT NOT NULL REFERENCES t_x(x))
+#
+#   SELECT * FROM t_r FULL JOIN t_x ON r = x LIMIT 10
+# vs
+#   SELECT * FROM (SELECT * FROM t_r LIMIT 10) FULL JOIN t_x ON r = x LIMIT 10
+#
+# In the first query, all rows from t_r (left rows) would have a chance to match
+# with a row from t_x. In the second query, left rows that otherwise would have
+# matched may be filtered out by the limit. Rows from t_x would then no longer
+# have matches, and would be outputted by the FullJoin with the left side
+# (t_r columns) null-extended. Therefore, pushing the limit into a join input
+# that may be null-extended (either input of a FullJoin) can lead to output rows
+# being replaced with null values.
+[PushLimitIntoJoinLeft, Normalize]
 (Limit
-    $input:(LeftJoin $left:* $right:* $on:* $private:*)
+    $input:(InnerJoin | LeftJoin
+            $left:* & ^(HasOuterCols $left)
+            $right:*
+            $on:*
+            $private:*
+        ) &
+        (JoinPreservesLeftRows $input)
     $limitExpr:(Const $limit:*) &
         (IsPositiveInt $limit) &
         ^(LimitGeMaxRows $limit $left)
-    $ordering:* & (HasColsInOrdering $left $ordering)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $left)
+        )
 )
 =>
 (Limit
-    (LeftJoin
-        (Limit
-            $left
-            $limitExpr
-            (PruneOrdering $ordering (OutputCols $left))
-        )
+    ((OpName $input)
+        (Limit $left $limitExpr (PruneOrdering $ordering $cols))
         $right
         $on
         $private
     )
     $limitExpr
     $ordering
+)
+
+# PushLimitIntoJoinRight mirrors PushLimitIntoJoinLeft.
+[PushLimitIntoJoinRight, Normalize]
+(Limit
+    $input:(InnerJoin
+            $left:*
+            $right:* & ^(HasOuterCols $right)
+            $on:*
+            $private:*
+        ) &
+        (JoinPreservesRightRows $input)
+    $limitExpr:(Const $limit:*) &
+        (IsPositiveInt $limit) &
+        ^(LimitGeMaxRows $limit $right)
+    $ordering:* &
+        (OrderingCanProjectCols
+            $ordering
+            $cols:(OutputCols $right)
+        )
+)
+=>
+(Limit
+    ((OpName $input)
+        $left
+        (Limit $right $limitExpr (PruneOrdering $ordering $cols))
+        $on
+        $private
+    )
+    $limitExpr
+    $ordering
+)
+
+# FoldLimits replaces a Limit on top of a Limit with a single Limit operator
+# when the outer limit value is smaller than or equal to the inner limit value
+# and the inner ordering implies the outer ordering. Note: the case when the
+# outer limit value is larger than the inner is handled by EliminateLimit.
+[FoldLimits, Normalize]
+(Limit
+    (Limit
+        $innerInput:*
+        $innerLimitExpr:(Const $innerLimit:*)
+        $innerOrdering:*
+    )
+    $outerLimitExpr:(Const $outerLimit:*) &
+        ^(IsGreaterThan $outerLimit $innerLimit)
+    $outerOrdering:* &
+        (OrderingImplies $innerOrdering $outerOrdering)
+)
+=>
+(Limit $innerInput $outerLimitExpr $innerOrdering)
+
+# AssociateLimitJoinsLeft reorders an InnerJoin and LeftJoin under a Limit if:
+# 1. The InnerJoin does not preserve rows from its left input.
+# 2. The InnerJoin's ON condition does not reference the right side of the
+#    LeftJoin (because the reordering would be invalid).
+# 3. Neither join has join hints.
+#
+# Why condition #1? If the InnerJoin preserves left rows, the limit can already
+# be pushed down into the LeftJoin, so there's no need to reorder the joins.
+#
+# Here's the transformation:
+#
+#   SELECT *
+#   FROM (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   INNER JOIN ab
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+# Citations: [1] (See identity (6) in section 2.2)
+[AssociateLimitJoinsLeft, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outsideLeft:(LeftJoin
+                $insideLeft:*
+                $insideRight:*
+                $insideOn:*
+                $insidePrivate:* & (NoJoinHints $insidePrivate)
+            )
+            $outsideRight:*
+            $outsideOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outsideOn)
+                    (OutputCols $insideRight)
+                )
+            $outsidePrivate:* & (NoJoinHints $outsidePrivate)
+        ) &
+        ^(JoinPreservesLeftRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $insideLeft
+            $outsideRight
+            $outsideOn
+            (EmptyJoinPrivate)
+        )
+        $insideRight
+        $insideOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
+)
+
+# AssociateLimitJoinsRight mirrors AssociateLimitJoinsLeft (it matches when the
+# LeftJoin is the right input of the InnerJoin, as opposed to the left input).
+# Here's the transformation:
+#
+#   SELECT *
+#   FROM ab
+#   INNER JOIN (SELECT * FROM xy LEFT JOIN uv ON u = x)
+#   ON a = y
+#   LIMIT 10
+# =>
+#   SELECT *
+#   FROM (SELECT * FROM xy INNER JOIN ab ON a = y)
+#   LEFT JOIN uv
+#   ON u = x
+#   LIMIT 10
+#
+[AssociateLimitJoinsRight, Normalize, LowPriority]
+(Limit
+    $limitInput:(InnerJoin
+            $outsideLeft:*
+            $outsideRight:(LeftJoin
+                $insideLeft:*
+                $insideRight:*
+                $insideOn:*
+                $insidePrivate:* & (NoJoinHints $insidePrivate)
+            )
+            $outsideOn:* &
+                ^(ColsIntersect
+                    (FilterOuterCols $outsideOn)
+                    (OutputCols $insideRight)
+                )
+            $outsidePrivate:* & (NoJoinHints $outsidePrivate)
+        ) &
+        ^(JoinPreservesRightRows $limitInput)
+    $limitValue:*
+    $limitOrdering:*
+)
+=>
+(Limit
+    (LeftJoin
+        (InnerJoin
+            $insideLeft
+            $outsideLeft
+            $outsideOn
+            (EmptyJoinPrivate)
+        )
+        $insideRight
+        $insideOn
+        (EmptyJoinPrivate)
+    )
+    $limitValue
+    $limitOrdering
 )

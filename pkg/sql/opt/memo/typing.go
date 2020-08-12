@@ -67,16 +67,17 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 //     [ WHEN <condval2> THEN <expr2> ] ...
 //     [ ELSE <expr> ]
 //   END
-// The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
-// the type of the ELSE <expr> value if all the previous types are unknown.
+// All possible values should have the same type, and that is the type of the
+// case.
 func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
+	result := orElse.DataType()
+	// Sanity check.
 	for _, when := range whens {
-		childType := when.DataType()
-		if childType.Family() != types.UnknownFamily {
-			return childType
+		if !result.Equivalent(when.DataType()) {
+			panic(errors.AssertionFailedf("inconsistent Case return types %s %s", when.DataType(), result))
 		}
 	}
-	return orElse.DataType()
+	return result
 }
 
 // BinaryOverloadExists returns true if the given binary operator exists with the
@@ -109,8 +110,13 @@ func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 	return false
 }
 
-func findOverload(e opt.ScalarExpr, name string) (overload *tree.Overload, ok bool) {
-	_, overloads := builtins.GetBuiltinProperties(name)
+// FindFunction returns the function properties and overload of the function
+// with the given name and argument types matching the children of the given
+// input.
+func FindFunction(
+	e opt.ScalarExpr, name string,
+) (props *tree.FunctionProperties, overload *tree.Overload, ok bool) {
+	props, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
 		matches := true
@@ -122,17 +128,17 @@ func findOverload(e opt.ScalarExpr, name string) (overload *tree.Overload, ok bo
 			}
 		}
 		if matches {
-			return overload, true
+			return props, overload, true
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // FindWindowOverload finds a window function overload that matches the
 // given window function expression. It panics if no match can be found.
 func FindWindowOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
 	name = opt.WindowOpReverseMap[e.Op()]
-	overload, ok := findOverload(e, name)
+	_, overload, ok := FindFunction(e, name)
 	if ok {
 		return name, overload
 	}
@@ -144,7 +150,7 @@ func FindWindowOverload(e opt.ScalarExpr) (name string, overload *tree.Overload)
 // given aggregate function expression. It panics if no match can be found.
 func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
 	name = opt.AggregateOpReverseMap[e.Op()]
-	overload, ok := findOverload(e, name)
+	_, overload, ok := FindFunction(e, name)
 	if ok {
 		return name, overload
 	}

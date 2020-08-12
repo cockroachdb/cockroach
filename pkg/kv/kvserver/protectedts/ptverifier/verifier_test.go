@@ -65,7 +65,7 @@ func TestVerifier(t *testing.T) {
 
 	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(sqlutil.InternalExecutor))
 	withDB := ptstorage.WithDatabase(pts, s.DB())
-	db := kv.NewDB(s.DB().AmbientContext, tsf, s.Clock())
+	db := kv.NewDB(s.DB().AmbientContext, tsf, s.Clock(), s.Stopper())
 	ptv := ptverifier.New(db, pts)
 	makeTableSpan := func(tableID uint32) roachpb.Span {
 		k := keys.SystemSQLCodec.TablePrefix(tableID)

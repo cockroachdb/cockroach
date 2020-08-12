@@ -25,6 +25,7 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -126,12 +128,18 @@ func createTestStoreWithOpts(
 	ac := log.AmbientContext{Tracer: tracer}
 	storeCfg.AmbientCtx = ac
 
-	rpcContext := rpc.NewContext(
-		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, storeCfg.Settings)
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: ac,
+		Config:     &base.Config{Insecure: true},
+		Clock:      storeCfg.Clock,
+		Stopper:    stopper,
+		Settings:   storeCfg.Settings,
+	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from
 	// unrelated concurrent tests.
-	rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+	rpcContext.ClusterID.Set(context.Background(), uuid.MakeV4())
 	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:26257"),
@@ -150,15 +158,17 @@ func createTestStoreWithOpts(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSender := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx: ac,
-		Clock:      storeCfg.Clock,
-		Settings:   storeCfg.Settings,
-		RPCContext: rpcContext,
+		AmbientCtx:         ac,
+		Settings:           storeCfg.Settings,
+		Clock:              storeCfg.Clock,
+		NodeDescs:          storeCfg.Gossip,
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retryOpts,
+		FirstRangeProvider: storeCfg.Gossip,
 		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: kvcoord.SenderTransportFactory(tracer, stores),
 		},
-		RPCRetryOptions: &retryOpts,
-	}, storeCfg.Gossip)
+	})
 
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
@@ -169,7 +179,7 @@ func createTestStoreWithOpts(
 		},
 		distSender,
 	)
-	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock)
+	storeCfg.DB = kv.NewDB(ac, tcsFactory, storeCfg.Clock, stopper)
 	storeCfg.StorePool = kvserver.NewTestStorePool(storeCfg)
 	storeCfg.Transport = kvserver.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -273,7 +283,7 @@ type multiTestContext struct {
 	transport  *kvserver.RaftTransport
 
 	// The per-store clocks slice normally contains aliases of
-	// multiTestContext.clock, but it may be populated before Start() to
+	// multiTestContext.clock, but it may be populleaseholderInfoated before Start() to
 	// use distinct clocks per store.
 	clocks      []*hlc.Clock
 	engines     []storage.Engine
@@ -363,12 +373,19 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	if m.rpcContext == nil {
-		m.rpcContext = rpc.NewContextWithTestingKnobs(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock(),
-			m.transportStopper, st, m.rpcTestingKnobs)
+		m.rpcContext = rpc.NewContext(rpc.ContextOptions{
+			TenantID:   roachpb.SystemTenantID,
+			AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+			Config:     &base.Config{Insecure: true},
+			Clock:      m.clock(),
+			Stopper:    m.transportStopper,
+			Settings:   st,
+			Knobs:      m.rpcTestingKnobs,
+		})
 		// Ensure that tests using this test context and restart/shut down
 		// their servers do not inadvertently start talking to servers from
 		// unrelated concurrent tests.
-		m.rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+		m.rpcContext.ClusterID.Set(context.Background(), uuid.MakeV4())
 		// We are sharing the same RPC context for all simulated nodes, so we can't enforce
 		// some of the RPC check validation.
 		m.rpcContext.TestingAllowNamedRPCToAnonymousServer = true
@@ -431,7 +448,7 @@ func (m *multiTestContext) Stop() {
 					// any test (TestRaftAfterRemove is a good example) results
 					// in deadlocks where a task can't finish because of
 					// getting stuck in addWriteCommand.
-					s.Quiesce(context.TODO())
+					s.Quiesce(context.Background())
 				}
 			}(s)
 		}
@@ -442,13 +459,13 @@ func (m *multiTestContext) Stop() {
 		defer m.mu.RUnlock()
 		for _, stopper := range m.stoppers {
 			if stopper != nil {
-				stopper.Stop(context.TODO())
+				stopper.Stop(context.Background())
 			}
 		}
-		m.transportStopper.Stop(context.TODO())
+		m.transportStopper.Stop(context.Background())
 
 		for _, s := range m.engineStoppers {
-			s.Stop(context.TODO())
+			s.Stop(context.Background())
 		}
 		close(done)
 	}()
@@ -515,7 +532,7 @@ func (m *multiTestContext) initGossipNetwork() {
 	m.gossipStores()
 	testutils.SucceedsSoon(m.t, func() error {
 		for i := 0; i < len(m.stores); i++ {
-			if _, alive, _ := m.storePools[i].GetStoreList(roachpb.RangeID(0)); alive != len(m.stores) {
+			if _, alive, _ := m.storePools[i].GetStoreList(); alive != len(m.stores) {
 				return errors.Errorf("node %d's store pool only has %d alive stores, expected %d",
 					m.stores[i].Ident.NodeID, alive, len(m.stores))
 			}
@@ -554,6 +571,13 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
+// magicMultiTestContextKVTransportError can be returned by kvserver from an RPC
+// to ask the multiTestContextKVTransport to inject an RPC error. This will
+// cause the DistSender to consider the result ambiguous and to try the next
+// replica. This is useful for triggering DistSender retries *after* the request
+// has already evaluated.
+const magicMultiTestContextKVTransportError = "inject RPC error (magicMultiTestContextKVTransportError)"
+
 func (t *multiTestContextKVTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
@@ -583,7 +607,7 @@ func (t *multiTestContextKVTransport) SendNext(
 
 	if s == nil {
 		t.setPending(rep.ReplicaID, false)
-		return nil, roachpb.NewSendError("store is stopped")
+		return nil, errors.New("store is stopped")
 	}
 
 	// Clone txn of ba args for sending.
@@ -597,6 +621,11 @@ func (t *multiTestContextKVTransport) SendNext(
 		br, pErr = sender.Send(ctx, ba)
 	}); err != nil {
 		pErr = roachpb.NewError(err)
+	}
+	if pErr != nil && strings.Contains(pErr.GoError().Error(), magicMultiTestContextKVTransportError) {
+		// We've been asked to inject an RPC error. This will cause the DistSender
+		// to consider the result ambiguous and to try the next replica.
+		return nil, errors.New("error injected by multiTestContextKVTransport after request has been evaluated")
 	}
 	if br == nil {
 		br = &roachpb.BatchResponse{}
@@ -645,6 +674,13 @@ func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
 		return roachpb.ReplicaDescriptor{}
 	}
 	return t.replicas[t.idx].ReplicaDescriptor
+}
+
+func (t *multiTestContextKVTransport) SkipReplica() {
+	if t.IsExhausted() {
+		return
+	}
+	t.idx++
 }
 
 func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
@@ -769,6 +805,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 	m.distSenders[idx] = kvcoord.NewDistSender(kvcoord.DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      m.clocks[idx],
+		NodeDescs:  m.gossips[idx],
 		RPCContext: m.rpcContext,
 		RangeDescriptorDB: mtcRangeDescriptorDB{
 			multiTestContext: m,
@@ -779,7 +816,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 			TransportFactory: m.kvTransportFactory,
 		},
 		RPCRetryOptions: &retryOpts,
-	}, m.gossips[idx])
+	})
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
 		kvcoord.TxnCoordSenderFactoryConfig{
 			AmbientCtx: ambient,
@@ -789,7 +826,7 @@ func (m *multiTestContext) populateDB(idx int, st *cluster.Settings, stopper *st
 		},
 		m.distSenders[idx],
 	)
-	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx])
+	m.dbs[idx] = kv.NewDB(ambient, tcsFactory, m.clocks[idx], stopper)
 }
 
 func (m *multiTestContext) populateStorePool(
@@ -1023,7 +1060,7 @@ func (m *multiTestContext) stopStore(i int) {
 	stopper := m.stoppers[i]
 	m.mu.RUnlock()
 
-	stopper.Stop(context.TODO())
+	stopper.Stop(context.Background())
 
 	m.mu.Lock()
 	m.stoppers[i] = nil
@@ -1298,13 +1335,13 @@ func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 		val, _, err := storage.MVCCGet(context.Background(), eng, key, m.clocks[i].Now(),
 			storage.MVCCGetOptions{})
 		if err != nil {
-			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
+			log.VEventf(context.Background(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
-			log.VEventf(context.TODO(), 1, "engine %d: missing key %s", i, key)
+			log.VEventf(context.Background(), 1, "engine %d: missing key %s", i, key)
 		} else {
 			results[i], err = val.GetInt()
 			if err != nil {
-				log.Errorf(context.TODO(), "engine %d: error decoding %s from key %s: %+v", i, val, key, err)
+				log.Errorf(context.Background(), "engine %d: error decoding %s from key %s: %+v", i, val, key, err)
 			}
 		}
 	}
@@ -1321,7 +1358,7 @@ func (m *multiTestContext) waitForValuesT(t testing.TB, key roachpb.Key, expecte
 	// teeing engine is being used. See
 	// https://github.com/cockroachdb/cockroach/issues/42656 for more context.
 	if storage.DefaultStorageEngine == enginepb.EngineTypeTeePebbleRocksDB {
-		t.Skip("disabled on teeing engine")
+		skip.IgnoreLint(t, "disabled on teeing engine")
 	}
 	testutils.SucceedsSoon(t, func() error {
 		actual := m.readIntFromEngines(key)
@@ -1524,6 +1561,7 @@ func pushTxnArgs(
 
 func TestSortRangeDescByAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var replicaDescs []roachpb.ReplicaDescriptor
 	var rangeDescs []*roachpb.RangeDescriptor
 
@@ -1590,7 +1628,7 @@ func verifyRangeStats(
 		return err
 	}
 	// Clear system counts as these are expected to vary.
-	ms.SysBytes, ms.SysCount = 0, 0
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	if ms != expMS {
 		return errors.Errorf("expected and actual stats differ:\n%s", pretty.Diff(expMS, ms))
 	}
@@ -1614,7 +1652,7 @@ func waitForTombstone(
 	testutils.SucceedsSoon(t, func() error {
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := storage.MVCCGetProto(
-			context.TODO(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			context.Background(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 		)
 		if err != nil {
 			t.Fatalf("failed to read tombstone: %v", err)

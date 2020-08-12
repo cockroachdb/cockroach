@@ -25,7 +25,20 @@ type DurationSetting struct {
 	validateFn   func(time.Duration) error
 }
 
+// DurationSettingWithExplicitUnit is like DurationSetting except it requires an
+// explicit unit when being set. (eg. 1s works, but 1 does not).
+type DurationSettingWithExplicitUnit struct {
+	DurationSetting
+}
+
 var _ extendedSetting = &DurationSetting{}
+
+var _ extendedSetting = &DurationSettingWithExplicitUnit{}
+
+// ErrorHint returns a hint message to be displayed on error to the user.
+func (d *DurationSettingWithExplicitUnit) ErrorHint() (bool, string) {
+	return true, "try using an interval value with explicit units, e.g 500ms or 1h2m"
+}
 
 // Get retrieves the duration value in the setting.
 func (d *DurationSetting) Get(sv *Values) time.Duration {
@@ -159,6 +172,28 @@ func RegisterValidatedDurationSetting(
 		defaultValue: defaultValue,
 		validateFn:   validateFn,
 	}
+	register(key, desc, setting)
+	return setting
+}
+
+// RegisterPublicNonNegativeDurationSettingWithExplicitUnit defines a new
+// public setting with type duration which requires an explicit unit when being
+// set.
+func RegisterPublicNonNegativeDurationSettingWithExplicitUnit(
+	key, desc string, defaultValue time.Duration,
+) *DurationSettingWithExplicitUnit {
+	setting := &DurationSettingWithExplicitUnit{
+		DurationSetting{
+			defaultValue: defaultValue,
+			validateFn: func(v time.Duration) error {
+				if v < 0 {
+					return errors.Errorf("cannot set %s to a negative duration: %s", key, v)
+				}
+				return nil
+			},
+		},
+	}
+	setting.SetVisibility(Public)
 	register(key, desc, setting)
 	return setting
 }

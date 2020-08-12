@@ -113,7 +113,7 @@ func classifyColumnItem(n *UnresolvedName) (VarName, error) {
 const (
 	// PublicSchema is the name of the physical schema in every
 	// database/catalog.
-	PublicSchema string = "public"
+	PublicSchema string = sessiondata.PublicSchemaName
 	// PublicSchemaName is the same, typed as Name.
 	PublicSchemaName Name = Name(PublicSchema)
 )
@@ -232,13 +232,15 @@ func (c *ColumnItem) Resolve(
 		}
 	}
 	if res == NoResults {
-		return nil, newSourceNotFoundError("no data source matches prefix: %s", c.TableName)
+		return nil, newSourceNotFoundError("no data source matches prefix: %s in this context", c.TableName)
 	}
 	return r.Resolve(ctx, srcName, srcMeta, -1, colName)
 }
 
 // ObjectNameTargetResolver is the helper interface to resolve object
-// names when the object is not expected to exist.
+// names when the object is not expected to exist. The planner implements
+// LookupSchema to return an object consisting of the parent database and
+// resolved target schema.
 type ObjectNameTargetResolver interface {
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }
@@ -296,7 +298,7 @@ func ResolveExisting(
 		if u.HasExplicitCatalog() {
 			// Already 3 parts: nothing to search. Delegate to the resolver.
 			namePrefix.CatalogName = Name(u.Catalog())
-			namePrefix.SchemaName = Name(u.Schema())
+			namePrefix.SchemaName = Name(scName)
 			found, result, err := r.LookupObject(ctx, lookupFlags, u.Catalog(), scName, u.Object())
 			return found, namePrefix, result, err
 		}
@@ -312,6 +314,7 @@ func ResolveExisting(
 		if found, objMeta, err := r.LookupObject(ctx, lookupFlags, curDb, scName, u.Object()); found || err != nil {
 			if err == nil {
 				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(scName)
 			}
 			return found, namePrefix, objMeta, err
 		}
@@ -371,6 +374,8 @@ func ResolveTarget(
 		}
 		if u.HasExplicitCatalog() {
 			// Already 3 parts: nothing to do.
+			namePrefix.CatalogName = Name(u.Catalog())
+			namePrefix.SchemaName = Name(scName)
 			found, scMeta, err = r.LookupSchema(ctx, u.Catalog(), scName)
 			return found, namePrefix, scMeta, err
 		}
@@ -379,6 +384,7 @@ func ResolveTarget(
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				namePrefix.CatalogName = Name(curDb)
+				namePrefix.SchemaName = Name(scName)
 			}
 			return found, namePrefix, scMeta, err
 		}
@@ -425,6 +431,7 @@ func (tp *ObjectNamePrefix) Resolve(
 		}
 		if tp.ExplicitCatalog {
 			// Catalog name is explicit; nothing to do.
+			tp.SchemaName = Name(scName)
 			return r.LookupSchema(ctx, tp.Catalog(), scName)
 		}
 		// Try with the current database. This may be empty, because
@@ -433,6 +440,7 @@ func (tp *ObjectNamePrefix) Resolve(
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
+				tp.SchemaName = Name(scName)
 			}
 			return found, scMeta, err
 		}
@@ -581,15 +589,59 @@ const (
 	TypeObject
 )
 
+// NewQualifiedObjectName returns an ObjectName of the corresponding kind.
+// It is used mainly for constructing appropriate error messages depending
+// on what kind of object was requested.
+func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKind) ObjectName {
+	switch kind {
+	case TableObject:
+		name := MakeTableNameWithSchema(Name(catalog), Name(schema), Name(object))
+		return &name
+	case TypeObject:
+		name := MakeNewQualifiedTypeName(catalog, schema, object)
+		return &name
+	}
+	return nil
+}
+
+// RequiredTableKind controls what kind of TableDescriptor backed object is
+// requested to be resolved.
+type RequiredTableKind int
+
+// RequiredTableKind options have descriptive names.
+const (
+	ResolveAnyTableKind RequiredTableKind = iota
+	ResolveRequireTableDesc
+	ResolveRequireViewDesc
+	ResolveRequireTableOrViewDesc
+	ResolveRequireSequenceDesc
+)
+
+var requiredTypeNames = [...]string{
+	ResolveAnyTableKind:           "any",
+	ResolveRequireTableDesc:       "table",
+	ResolveRequireViewDesc:        "view",
+	ResolveRequireTableOrViewDesc: "table or view",
+	ResolveRequireSequenceDesc:    "sequence",
+}
+
+func (r RequiredTableKind) String() string {
+	return requiredTypeNames[r]
+}
+
 // ObjectLookupFlags is the flag struct suitable for GetObjectDesc().
 type ObjectLookupFlags struct {
 	CommonLookupFlags
 	// return a MutableTableDescriptor
 	RequireMutable         bool
 	IncludeOffline         bool
+	IncludeDropped         bool
 	AllowWithoutPrimaryKey bool
 	// Control what type of object is being requested.
 	DesiredObjectKind DesiredObjectKind
+	// Control what kind of table object is being requested. This field is
+	// only respected when DesiredObjectKind is TableObject.
+	DesiredTableDescKind RequiredTableKind
 }
 
 // ObjectLookupFlagsWithRequired returns a default ObjectLookupFlags object
@@ -598,5 +650,15 @@ type ObjectLookupFlags struct {
 func ObjectLookupFlagsWithRequired() ObjectLookupFlags {
 	return ObjectLookupFlags{
 		CommonLookupFlags: CommonLookupFlags{Required: true},
+	}
+}
+
+// ObjectLookupFlagsWithRequiredTableKind returns an ObjectLookupFlags with
+// Required set to true, and the DesiredTableDescKind set to the input kind.
+func ObjectLookupFlagsWithRequiredTableKind(kind RequiredTableKind) ObjectLookupFlags {
+	return ObjectLookupFlags{
+		CommonLookupFlags:    CommonLookupFlags{Required: true},
+		DesiredObjectKind:    TableObject,
+		DesiredTableDescKind: kind,
 	}
 }

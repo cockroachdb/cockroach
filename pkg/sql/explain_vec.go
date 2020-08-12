@@ -16,13 +16,13 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -36,16 +36,13 @@ type explainVecNode struct {
 	optColumnsSlot
 
 	options *tree.ExplainOptions
-	plan    planNode
-
-	stmtType tree.StatementType
+	plan    planComponents
 
 	run struct {
 		lines []string
 		// The current row returned by the node.
 		values tree.Datums
 	}
-	subqueryPlans []subquery
 }
 
 type flowWithNode struct {
@@ -56,31 +53,28 @@ type flowWithNode struct {
 func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute := willDistributePlanForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan,
+	distribution := getPlanDistributionForExplainPurposes(
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, n.plan.main,
 	)
+	willDistribute := distribution.WillDistribute()
 	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, n.stmtType, n.subqueryPlans, willDistribute)
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	plan, err := makePhysicalPlan(planCtx, distSQLPlanner, n.plan)
+	physPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, n.plan.main)
 	if err != nil {
-		if len(n.subqueryPlans) > 0 {
+		if len(n.plan.subqueryPlans) > 0 {
 			return errors.New("running EXPLAIN (VEC) on this query is " +
 				"unsupported because of the presence of subqueries")
 		}
 		return err
 	}
 
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
-	nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
-	if err != nil {
-		return err
-	}
-	flows := plan.GenerateFlowSpecs(nodeID)
-	flowCtx := makeFlowCtx(planCtx, plan, params)
+	distSQLPlanner.FinalizePlan(planCtx, physPlan)
+	flows := physPlan.GenerateFlowSpecs()
+	flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
 	flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
 	// We want to get the vectorized plan which would be executed with the
@@ -102,14 +96,13 @@ func (n *explainVecNode) startExec(params runParams) error {
 	tp := treeprinter.NewWithIndent(false /* leftPad */, true /* rightPad */, 0 /* edgeLength */)
 	root := tp.Child("")
 	verbose := n.options.Flags[tree.ExplainFlagVerbose]
-	thisNodeID := distSQLPlanner.nodeDesc.NodeID
+	thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
 	for _, flow := range sortedFlows {
 		node := root.Childf("Node %d", flow.nodeID)
-		fuseOpt := flowinfra.FuseNormally
-		if flow.nodeID == thisNodeID && !willDistribute {
-			fuseOpt = flowinfra.FuseAggressively
-		}
-		opChains, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.flow.Processors, fuseOpt, nil /* output */)
+		scheduledOnRemoteNode := flow.nodeID != thisNodeID
+		opChains, err := colflow.SupportsVectorized(
+			params.ctx, flowCtx, flow.flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
+		)
 		if err != nil {
 			return err
 		}
@@ -128,8 +121,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *execinfra.FlowCtx {
-	flowCtx := &execinfra.FlowCtx{
+func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, params runParams) *execinfra.FlowCtx {
+	return &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
 		Cfg: &execinfra.ServerConfig{
@@ -137,22 +130,20 @@ func makeFlowCtx(planCtx *PlanningCtx, plan PhysicalPlan, params runParams) *exe
 			DiskMonitor:    &mon.BytesMonitor{},
 			VecFDSemaphore: params.p.execCfg.DistSQLSrv.VecFDSemaphore,
 		},
+		TypeResolverFactory: &descs.DistSQLTypeResolverFactory{
+			Descriptors: params.p.Descriptors(),
+		},
 	}
-	return flowCtx
 }
 
-func makeExplainPlanningCtx(
+func newPlanningCtxForExplainPurposes(
 	distSQLPlanner *DistSQLPlanner,
 	params runParams,
-	stmtType tree.StatementType,
 	subqueryPlans []subquery,
-	willDistribute bool,
+	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	planCtx.isLocal = !willDistribute
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, distribution.WillDistribute())
 	planCtx.ignoreClose = true
-	planCtx.planner = params.p
-	planCtx.stmtType = stmtType
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {
 		p := &planCtx.planner.curPlan.subqueryPlans[i]
@@ -214,5 +205,5 @@ func (n *explainVecNode) Next(runParams) (bool, error) {
 
 func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.plan.close(ctx)
 }

@@ -30,7 +30,7 @@ func TestNodeIDContainer(t *testing.T) {
 	}
 
 	for i := 0; i < 2; i++ {
-		n.Set(context.TODO(), 5)
+		n.Set(context.Background(), 5)
 		if val := n.Get(); val != 5 {
 			t.Errorf("value should be 5, not %d", val)
 		}

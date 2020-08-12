@@ -16,8 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -47,7 +48,7 @@ type Limiters struct {
 type EvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
-	EvalKnobs() storagebase.BatchEvalTestingKnobs
+	EvalKnobs() kvserverbase.BatchEvalTestingKnobs
 
 	Engine() storage.Engine
 	Clock() *hlc.Clock
@@ -65,6 +66,7 @@ type EvalContext interface {
 	GetFirstIndex() (uint64, error)
 	GetTerm(uint64) (uint64, error)
 	GetLeaseAppliedIndex() uint64
+	GetTracker() closedts.TrackerI
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -92,9 +94,11 @@ type EvalContext interface {
 	GetGCThreshold() hlc.Timestamp
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
+	GetDescAndLease(context.Context) (roachpb.RangeDescriptor, roachpb.Lease)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
-	GetExternalStorageFromURI(ctx context.Context, uri string) (cloud.ExternalStorage, error)
+	GetExternalStorageFromURI(ctx context.Context, uri string, user string) (cloud.ExternalStorage,
+		error)
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -131,8 +135,8 @@ func (m *mockEvalCtxImpl) String() string {
 func (m *mockEvalCtxImpl) ClusterSettings() *cluster.Settings {
 	return m.MockEvalCtx.ClusterSettings
 }
-func (m *mockEvalCtxImpl) EvalKnobs() storagebase.BatchEvalTestingKnobs {
-	return storagebase.BatchEvalTestingKnobs{}
+func (m *mockEvalCtxImpl) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
+	return kvserverbase.BatchEvalTestingKnobs{}
 }
 func (m *mockEvalCtxImpl) Engine() storage.Engine {
 	panic("unimplemented")
@@ -176,6 +180,9 @@ func (m *mockEvalCtxImpl) GetTerm(uint64) (uint64, error) {
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
 	panic("unimplemented")
 }
+func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
+	panic("unimplemented")
+}
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
 }
@@ -202,6 +209,11 @@ func (m *mockEvalCtxImpl) GetLastReplicaGCTimestamp(context.Context) (hlc.Timest
 func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return m.Lease, roachpb.Lease{}
 }
+func (m *mockEvalCtxImpl) GetDescAndLease(
+	ctx context.Context,
+) (roachpb.RangeDescriptor, roachpb.Lease) {
+	return *m.Desc(), m.Lease
+}
 
 func (m *mockEvalCtxImpl) GetExternalStorage(
 	ctx context.Context, dest roachpb.ExternalStorage,
@@ -210,7 +222,7 @@ func (m *mockEvalCtxImpl) GetExternalStorage(
 }
 
 func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
-	ctx context.Context, uri string,
+	ctx context.Context, uri string, user string,
 ) (cloud.ExternalStorage, error) {
 	panic("unimplemented")
 }

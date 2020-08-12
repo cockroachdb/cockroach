@@ -289,13 +289,15 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
 
     return (
       <div>
-        <Dropdown
-          title="Units"
-          selected={this.currentAxisUnits().toString()}
-          options={axisUnitsOptions}
-          onChange={this.changeAxisUnits}
-        />
-        <button className="edit-button chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
+        <div className="custom-metric__chart-controls-container">
+          <Dropdown
+            title="Units"
+            selected={this.currentAxisUnits().toString()}
+            options={axisUnitsOptions}
+            onChange={this.changeAxisUnits}
+          />
+          <button className="edit-button chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
+        </div>
         { table }
         <button className="edit-button metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
       </div>

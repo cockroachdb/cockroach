@@ -335,10 +335,11 @@ func TestOrderingChoice_MatchesAt(t *testing.T) {
 }
 
 func TestOrderingChoice_Copy(t *testing.T) {
-	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5)")
+	ordering := physical.ParseOrderingChoice("+1,-(2|3) opt(4,5,100)")
 	copied := ordering.Copy()
 	col := physical.OrderingColumnChoice{Group: opt.MakeColSet(6, 7), Descending: true}
 	copied.Columns = append(copied.Columns, col)
+	copied.Optional.Remove(opt.ColumnID(100))
 
 	// ()-->(8)
 	// (3)==(9)
@@ -348,7 +349,7 @@ func TestOrderingChoice_Copy(t *testing.T) {
 	fd.AddEquivalency(3, 9)
 	copied.Simplify(&fd)
 
-	if ordering.String() != "+1,-(2|3) opt(4,5)" {
+	if ordering.String() != "+1,-(2|3) opt(4,5,100)" {
 		t.Errorf("original was modified: %s", ordering.String())
 	}
 

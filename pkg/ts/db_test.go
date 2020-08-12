@@ -79,7 +79,7 @@ type testModelRunner struct {
 // be called before using it.
 func newTestModelRunner(t *testing.T) testModelRunner {
 	st := cluster.MakeTestingClusterSettings()
-	workerMonitor := mon.MakeUnlimitedMonitor(
+	workerMonitor := mon.NewUnlimitedMonitor(
 		context.Background(),
 		"timeseries-test-worker",
 		mon.MemoryResource,
@@ -88,7 +88,7 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		math.MaxInt64,
 		st,
 	)
-	resultMonitor := mon.MakeUnlimitedMonitor(
+	resultMonitor := mon.NewUnlimitedMonitor(
 		context.Background(),
 		"timeseries-test-result",
 		mon.MemoryResource,
@@ -101,8 +101,8 @@ func newTestModelRunner(t *testing.T) testModelRunner {
 		t:                      t,
 		model:                  testmodel.NewModelDB(),
 		LocalTestCluster:       &localtestcluster.LocalTestCluster{},
-		workerMemMonitor:       &workerMonitor,
-		resultMemMonitor:       &resultMonitor,
+		workerMemMonitor:       workerMonitor,
+		resultMemMonitor:       resultMonitor,
 		queryMemoryBudget:      math.MaxInt64,
 		firstColumnarTimestamp: make(map[string]int64),
 	}
@@ -280,11 +280,11 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 		for _, d := range data {
 			rdata = append(rdata, computeRollupsFromData(d, r.SampleDuration()))
 		}
-		if err := tm.DB.storeRollup(context.TODO(), r, rdata); err != nil {
+		if err := tm.DB.storeRollup(context.Background(), r, rdata); err != nil {
 			tm.t.Fatalf("error storing time series rollups: %s", err)
 		}
 	} else {
-		if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
+		if err := tm.DB.StoreData(context.Background(), r, data); err != nil {
 			tm.t.Fatalf("error storing time series data: %s", err)
 		}
 	}
@@ -303,7 +303,7 @@ func (tm *testModelRunner) storeTimeSeriesData(r Resolution, data []tspb.TimeSer
 func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInfo) {
 	// Prune time series from the system under test.
 	if err := tm.DB.pruneTimeSeries(
-		context.TODO(),
+		context.Background(),
 		tm.LocalTestCluster.DB,
 		timeSeries,
 		hlc.Timestamp{
@@ -352,7 +352,7 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 	qmc QueryMemoryContext, nowNanos int64, timeSeries ...timeSeriesResolutionInfo,
 ) {
 	if err := tm.DB.rollupTimeSeries(
-		context.TODO(),
+		context.Background(),
 		timeSeries,
 		hlc.Timestamp{
 			WallTime: nowNanos,
@@ -408,7 +408,7 @@ func (tm *testModelRunner) maintain(nowNanos int64) {
 	snap := tm.Store.Engine().NewSnapshot()
 	defer snap.Close()
 	if err := tm.DB.MaintainTimeSeries(
-		context.TODO(),
+		context.Background(),
 		snap,
 		roachpb.RKey(keys.TimeseriesPrefix),
 		roachpb.RKey(keys.TimeseriesKeyMax),
@@ -549,9 +549,9 @@ func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 	memContext := MakeQueryMemoryContext(
 		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
 	)
-	defer memContext.Close(context.TODO())
+	defer memContext.Close(context.Background())
 	return mq.modelRunner.DB.Query(
-		context.TODO(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
+		context.Background(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
 	)
 }
 

@@ -19,6 +19,8 @@ import (
 )
 
 var (
+	emptyRect            = geo.MustParseGeometry("POLYGON EMPTY")
+	emptyLine            = geo.MustParseGeometry("LINESTRING EMPTY")
 	leftRect             = geo.MustParseGeometry("POLYGON((-1.0 0.0, 0.0 0.0, 0.0 1.0, -1.0 1.0, -1.0 0.0))")
 	leftRectPoint        = geo.MustParseGeometry("POINT(-0.5 0.5)")
 	rightRect            = geo.MustParseGeometry("POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))")
@@ -40,9 +42,9 @@ func TestCovers(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Covers(tc.a, tc.b)
+			ret, err := Covers(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -65,9 +67,9 @@ func TestCoveredBy(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := CoveredBy(tc.a, tc.b)
+			ret, err := CoveredBy(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -92,9 +94,9 @@ func TestContains(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Contains(tc.a, tc.b)
+			ret, err := Contains(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -117,9 +119,9 @@ func TestContainsProperly(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := ContainsProperly(tc.a, tc.b)
+			ret, err := ContainsProperly(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -144,14 +146,38 @@ func TestCrosses(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Crosses(tc.a, tc.b)
+			ret, err := Crosses(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
 		_, err := Crosses(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
+		requireMismatchingSRIDError(t, err)
+	})
+}
+
+func TestDisjoint(t *testing.T) {
+	testCases := []struct {
+		a        *geo.Geometry
+		b        *geo.Geometry
+		expected bool
+	}{
+		{rightRect, rightRectPoint, false},
+		{leftRect, rightRectPoint, true},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
+			ret, err := Disjoint(tc.a, tc.b)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+
+	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
+		_, err := Disjoint(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
 }
@@ -162,6 +188,9 @@ func TestEquals(t *testing.T) {
 		b        *geo.Geometry
 		expected bool
 	}{
+		{emptyLine, emptyRect, true},
+		{emptyLine, emptyLine, true},
+		{emptyRect, emptyRect, true},
 		{rightRect, rightRectPoint, false},
 		{rightRectPoint, rightRect, false},
 		{leftRect, rightRect, false},
@@ -170,9 +199,9 @@ func TestEquals(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Equals(tc.a, tc.b)
+			ret, err := Equals(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -198,9 +227,9 @@ func TestIntersects(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Intersects(tc.a, tc.b)
+			ret, err := Intersects(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -224,9 +253,9 @@ func TestOverlaps(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Overlaps(tc.a, tc.b)
+			ret, err := Overlaps(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -249,9 +278,9 @@ func TestTouches(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Touches(tc.a, tc.b)
+			ret, err := Touches(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 
@@ -274,9 +303,9 @@ func TestWithin(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("tc:%d", i), func(t *testing.T) {
-			g, err := Within(tc.a, tc.b)
+			ret, err := Within(tc.a, tc.b)
 			require.NoError(t, err)
-			require.Equal(t, tc.expected, g)
+			require.Equal(t, tc.expected, ret)
 		})
 	}
 

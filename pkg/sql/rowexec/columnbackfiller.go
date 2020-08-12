@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,27 +29,22 @@ type columnBackfiller struct {
 
 	backfill.ColumnBackfiller
 
-	desc        *sqlbase.ImmutableTableDescriptor
-	otherTables []*sqlbase.ImmutableTableDescriptor
+	desc *sqlbase.ImmutableTableDescriptor
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
 var _ chunkBackfiller = &columnBackfiller{}
 
 func newColumnBackfiller(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
-	otherTables := make([]*sqlbase.ImmutableTableDescriptor, len(spec.OtherTables))
-	for i, tbl := range spec.OtherTables {
-		otherTables[i] = sqlbase.NewImmutableTableDescriptor(tbl)
-	}
 	cb := &columnBackfiller{
-		desc:        sqlbase.NewImmutableTableDescriptor(spec.Table),
-		otherTables: otherTables,
+		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,
@@ -60,7 +56,7 @@ func newColumnBackfiller(
 	}
 	cb.backfiller.chunks = cb
 
-	if err := cb.ColumnBackfiller.Init(cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
+	if err := cb.ColumnBackfiller.InitForDistributedUse(ctx, flowCtx, cb.desc); err != nil {
 		return nil, err
 	}
 
@@ -81,7 +77,7 @@ func (cb *columnBackfiller) CurrentBufferFill() float32 {
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(
 	ctx context.Context,
-	mutations []sqlbase.DescriptorMutation,
+	mutations []descpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
@@ -103,7 +99,6 @@ func (cb *columnBackfiller) runChunk(
 			ctx,
 			txn,
 			cb.desc,
-			cb.otherTables,
 			sp,
 			chunkSize,
 			true,  /*alsoCommit*/

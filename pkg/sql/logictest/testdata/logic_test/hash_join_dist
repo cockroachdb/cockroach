@@ -66,3 +66,8 @@ SELECT small.b, large.d FROM large RIGHT HASH JOIN small ON small.b = large.c AN
 9   NULL
 12  24
 15  NULL
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.exec.query.is-distributed' AND usage_count > 0
+----
+sql.exec.query.is-distributed

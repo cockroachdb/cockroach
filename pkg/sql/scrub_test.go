@@ -22,12 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestScrubIndexMissingIndexEntry tests that
@@ -37,8 +41,9 @@ import (
 // the expected secondary index k/v.
 func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
@@ -54,10 +59,10 @@ INSERT INTO t."tEst" VALUES (10, 20);
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -74,7 +79,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 	}
 
 	// Delete the entry.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -110,8 +115,9 @@ INSERT INTO t."tEst" VALUES (10, 20);
 // dangling index error as the corresponding primary k/v is not equal.
 func TestScrubIndexDanglingIndexReference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -122,10 +128,10 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -142,7 +148,7 @@ CREATE INDEX secondary ON t.test (v);
 	}
 
 	// Put the new secondary k/v into the database.
-	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -202,8 +208,9 @@ CREATE INDEX secondary ON t.test (v);
 // index k/v is updated using the KV client to have a different value.
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -215,10 +222,10 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
@@ -236,7 +243,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Delete the existing secondary k/v.
-	if err := kvDB.Del(context.TODO(), secondaryIndex[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndex[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -248,7 +255,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Put the incorrect secondary k/v.
-	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -322,8 +329,9 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 // the constraint..
 func TestScrubCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -334,9 +342,9 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -368,7 +376,7 @@ INSERT INTO t.test VALUES (10, 2);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Run SCRUB and find the CHECK violation created.
@@ -412,8 +420,9 @@ INSERT INTO t.test VALUES (10, 2);
 // violation.
 func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
 	// Create the table and the row entry.
@@ -432,13 +441,13 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		INSERT INTO t.child VALUES (10, 314);
 	`)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
 
 	// Construct datums for the child row values (child_id, parent_id).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -456,7 +465,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
+	if err := kvDB.Del(context.Background(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -475,7 +484,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	}
 
 	// Add the new, replacement secondary index entry.
-	if err := kvDB.Put(context.TODO(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
+	if err := kvDB.Put(context.Background(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -512,8 +521,9 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 // constraint in this test with corrupted KVs.
 func TestScrubFKConstraintFKNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -557,8 +567,9 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 // the column is the only one in the family.
 func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -569,12 +580,12 @@ INSERT INTO t.test VALUES (217, 314);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -595,7 +606,7 @@ INSERT INTO t.test VALUES (217, 314);
 	var value roachpb.Value
 	value.SetTuple([]byte(nil))
 
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -638,8 +649,9 @@ INSERT INTO t.test VALUES (217, 314);
 // the columns that belongs in the family.
 func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -650,12 +662,12 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v, b).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
@@ -686,7 +698,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -730,9 +742,10 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 // using the KV client which has the ID of the first family.
 func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("currently KV pairs with unexpected family IDs are not noticed by the fetcher")
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 51797, "currently KV pairs with unexpected family IDs are not noticed by the fetcher")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -748,19 +761,19 @@ CREATE TABLE t.test (
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	oldTableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	oldTableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Drop the first column family.
 	if _, err := db.Exec(`ALTER TABLE t.test DROP COLUMN v1`); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v1).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
@@ -786,7 +799,7 @@ CREATE TABLE t.test (
 	value.SetTuple(valueBuf)
 
 	// Insert the value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKeyWithFamily, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -804,7 +817,7 @@ CREATE TABLE t.test (
 	value.SetTuple(valueBuf)
 
 	// Insert the incorrect family k/v.
-	if err := kvDB.Put(context.TODO(), primaryIndexKeyWithFamily, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKeyWithFamily, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -847,9 +860,10 @@ CREATE TABLE t.test (
 // descriptor. To test this, a row is inserted using the KV client.
 func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("the test is not failing, as it would be expected")
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 51797, "the test is not failing, as it would be expected")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -858,12 +872,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Construct datums for our row values (k, v1, v2).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[descpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
@@ -897,7 +911,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	value.SetTuple(valueBuf)
 
 	// Overwrite the existing value.
-	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+	if err := kvDB.Put(context.Background(), primaryIndexKey, &value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 

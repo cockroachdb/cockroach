@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestBoolVecToSelOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tcs := []struct {
 		boolCol  uint32
 		tuples   tuples
@@ -32,7 +34,7 @@ func TestBoolVecToSelOp(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, tc.expected, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-			return NewBoolVecToSelOp(input[0], 0), nil
+			return newBoolVecToSelOp(input[0], 0), nil
 		})
 	}
 }

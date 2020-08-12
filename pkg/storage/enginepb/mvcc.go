@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
@@ -167,6 +167,7 @@ func (ms *MVCCStats) Add(oms MVCCStats) {
 	ms.IntentCount += oms.IntentCount
 	ms.SysBytes += oms.SysBytes
 	ms.SysCount += oms.SysCount
+	ms.AbortSpanBytes += oms.AbortSpanBytes
 }
 
 // Subtract removes oms from ms. The ages will be moved forward to the larger of
@@ -192,6 +193,7 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 	ms.IntentCount -= oms.IntentCount
 	ms.SysBytes -= oms.SysBytes
 	ms.SysCount -= oms.SysCount
+	ms.AbortSpanBytes -= oms.AbortSpanBytes
 }
 
 // IsInline returns true if the value is inlined in the metadata.
@@ -387,7 +389,7 @@ func (t TxnMeta) SafeMessage() string {
 	return buf.String()
 }
 
-var _ log.SafeMessager = (*TxnMeta)(nil)
+var _ errors.SafeMessager = (*TxnMeta)(nil)
 
 // FormatBytesAsKey is injected by module roachpb as dependency upon initialization.
 var FormatBytesAsKey = func(k []byte) string {

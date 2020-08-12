@@ -14,6 +14,7 @@ import (
 	"context"
 	encjson "encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -41,7 +42,7 @@ var showTableStatsJSONColumns = sqlbase.ResultColumns{
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
-	desc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.Table, true /*required*/, ResolveRequireTableDesc)
+	desc, err := p.ResolveUncachedTableDescriptorEx(ctx, n.Table, true /*required*/, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +171,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 }
 
 func statColumnString(desc *ImmutableTableDescriptor, colID tree.Datum) string {
-	id := sqlbase.ColumnID(*colID.(*tree.DInt))
+	id := descpb.ColumnID(*colID.(*tree.DInt))
 	colDesc, err := desc.FindColumnByID(id)
 	if err != nil {
 		// This can happen if a column was removed.

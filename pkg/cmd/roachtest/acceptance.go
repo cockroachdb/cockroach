@@ -35,27 +35,28 @@ func registerAcceptance(r *testRegistry) {
 		{name: "build-info", fn: runBuildInfo},
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},
-		{name: "decommission", fn: runDecommissionAcceptance},
 		{name: "cluster-init", fn: runClusterInit},
 		{name: "event-log", fn: runEventLog},
 		{name: "gossip/peerings", fn: runGossipPeerings},
 		{name: "gossip/restart", fn: runGossipRestart},
 		{name: "gossip/restart-node-one", fn: runGossipRestartNodeOne},
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
+		{
+			name:       "multitenant",
+			minVersion: "v20.2.0", // multitenancy is introduced in this cycle
+			fn:         runAcceptanceMultitenant,
+		},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{
 			name: "many-splits", fn: runManySplits,
 			minVersion: "v19.2.0", // SQL syntax unsupported on 19.1.x
+			skip:       "https://github.com/cockroachdb/cockroach/issues/47325",
 		},
 		{name: "status-server", fn: runStatusServer},
 		{
 			name: "version-upgrade",
 			fn: func(ctx context.Context, t *test, c *cluster) {
-				predV, err := PredecessorVersion(r.buildVersion)
-				if err != nil {
-					t.Fatal(err)
-				}
-				runVersionUpgrade(ctx, t, c, predV)
+				runVersionUpgrade(ctx, t, c, r.buildVersion)
 			},
 			// This test doesn't like running on old versions because it upgrades to
 			// the latest released version and then it tries to "head", where head is
@@ -63,7 +64,8 @@ func registerAcceptance(r *testRegistry) {
 			// running. If that branch corresponds to an older release, then upgrading
 			// to head after 19.2 fails.
 			minVersion: "v19.2.0",
-			timeout:    30 * time.Minute},
+			timeout:    30 * time.Minute,
+		},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4

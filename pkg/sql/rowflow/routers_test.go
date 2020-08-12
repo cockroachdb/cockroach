@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -57,7 +58,7 @@ func setupRouter(
 		t.Fatal(err)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
@@ -79,7 +80,7 @@ func TestRouters(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -279,7 +280,7 @@ var (
 		Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 			{
 				Column:   0,
-				Encoding: sqlbase.DatumEncoding_ASCENDING_KEY,
+				Encoding: descpb.DatumEncoding_ASCENDING_KEY,
 			},
 		},
 	}
@@ -292,7 +293,7 @@ var (
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -442,13 +443,13 @@ func preimageAttack(
 	}
 }
 
-// Test that metadata records get forwarded by routers. Regardless of the type
-// of router, the records are supposed to be forwarded on the first output
-// stream that's not closed.
+// Test that metadata records get forwarded by routers. Depending on the type
+// of the metadata, it might need to be forward to either one or all non-closed
+// streams (regardless of the type of the router).
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
@@ -473,89 +474,144 @@ func TestMetadataIsForwarded(t *testing.T) {
 		},
 	}
 
+	// metaConfigs describe different configuration of metadata handling. It
+	// assumes the test is working in 4 stages with the following events:
+	// - stage 1 is finished with ConsumerDone() call on stream 0
+	// - stage 2 is finished with ConsumerClosed() call on stream 0 (at this
+	// point only stream 1 is non-closed)
+	// - stage 3 is finished with ConsumerClosed() call on stream 1 (at this
+	// point all streams are closed).
+	metaConfigs := []struct {
+		name    string
+		getMeta func(stage int) *execinfrapb.ProducerMetadata
+		// getReceiverStreamIDs returns the streamIDs of streams that are
+		// expected to receive the metadata on the given stage.
+		getReceiverStreamIDs func(stage int) []int
+		assertExpected       func(streamID int, meta *execinfrapb.ProducerMetadata, stage int)
+	}{
+		{
+			name: "error",
+			getMeta: func(stage int) *execinfrapb.ProducerMetadata {
+				return &execinfrapb.ProducerMetadata{
+					Err: errors.Errorf("test error %d", stage),
+				}
+			},
+			getReceiverStreamIDs: func(stage int) []int {
+				switch stage {
+				case 1, 2:
+					// Errors are propagated to all non-closed streams.
+					return []int{0, 1}
+				default:
+					// Stream 0 is closed after stage 2, so now only stream 1
+					// is expected to receive metadata.
+					return []int{1}
+				}
+			},
+			assertExpected: func(streamID int, meta *execinfrapb.ProducerMetadata, stage int) {
+				expected := errors.Errorf("test error %d", stage)
+				if !errors.Is(meta.Err, expected) {
+					t.Fatalf("stream %d: unexpected meta.Err %v, expected %s", streamID, meta.Err, expected)
+				}
+			},
+		},
+		{
+			name: "non-error",
+			getMeta: func(stage int) *execinfrapb.ProducerMetadata {
+				return &execinfrapb.ProducerMetadata{
+					RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{RowNum: int32(stage)},
+				}
+			},
+			getReceiverStreamIDs: func(stage int) []int {
+				switch stage {
+				case 1, 2:
+					return []int{0}
+				default:
+					return []int{1}
+				}
+			},
+			assertExpected: func(streamID int, meta *execinfrapb.ProducerMetadata, stage int) {
+				if meta.RowNum.RowNum != int32(stage) {
+					t.Fatalf("streamID %d: unexpected meta %v, expected RowNum=%d in stage %d", streamID, meta, stage, stage)
+				}
+			},
+		},
+	}
+
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			chans := make([]execinfra.RowChannel, 2)
-			recvs := make([]execinfra.RowReceiver, 2)
-			tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
-			for i := 0; i < 2; i++ {
-				chans[i].InitWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
-				recvs[i] = &chans[i]
-				tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
-			}
-			router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, nil /* no columns */, recvs)
-
-			err1 := errors.Errorf("test error 1")
-			err2 := errors.Errorf("test error 2")
-			err3 := errors.Errorf("test error 3")
-			err4 := errors.Errorf("test error 4")
-
-			// Push metadata; it should go to stream 0.
-			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err1})
-				if consumerStatus != execinfra.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+		for _, metaConfig := range metaConfigs {
+			t.Run(fmt.Sprintf("%s/%s", tc.name, metaConfig.name), func(t *testing.T) {
+				chans := make([]execinfra.RowChannel, 2)
+				recvs := make([]execinfra.RowReceiver, 2)
+				tc.spec.Streams = make([]execinfrapb.StreamEndpointSpec, 2)
+				for i := 0; i < 2; i++ {
+					chans[i].InitWithBufSizeAndNumSenders(nil /* no column types */, 1, 1)
+					recvs[i] = &chans[i]
+					tc.spec.Streams[i] = execinfrapb.StreamEndpointSpec{StreamID: execinfrapb.StreamID(i)}
 				}
-				_, meta := chans[0].Next()
-				if !errors.Is(meta.Err, err1) {
-					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err1)
-				}
-			}
+				router, wg := setupRouter(t, st, evalCtx, diskMonitor, tc.spec, nil /* no columns */, recvs)
 
-			chans[0].ConsumerDone()
-			// Push metadata; it should still go to stream 0.
-			for i := 0; i < 10; i++ {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err2})
-				if consumerStatus != execinfra.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+				stage := 1
+				for i := 0; i < 10; i++ {
+					consumerStatus := router.Push(nil /* row */, metaConfig.getMeta(stage))
+					if consumerStatus != execinfra.NeedMoreRows {
+						t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+					}
+					for _, streamID := range metaConfig.getReceiverStreamIDs(stage) {
+						_, meta := chans[streamID].Next()
+						metaConfig.assertExpected(streamID, meta, stage)
+					}
 				}
-				_, meta := chans[0].Next()
-				if !errors.Is(meta.Err, err2) {
-					t.Fatalf("unexpected meta.Err %v, expected %s", meta.Err, err2)
-				}
-			}
+				chans[0].ConsumerDone()
 
-			chans[0].ConsumerClosed()
-
-			// Metadata should switch to going to stream 1 once the new status is
-			// observed.
-			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err3})
-				if consumerStatus != execinfra.NeedMoreRows {
-					t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+				stage = 2
+				for i := 0; i < 10; i++ {
+					consumerStatus := router.Push(nil /* row */, metaConfig.getMeta(stage))
+					if consumerStatus != execinfra.NeedMoreRows {
+						t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+					}
+					for _, streamID := range metaConfig.getReceiverStreamIDs(stage) {
+						_, meta := chans[streamID].Next()
+						metaConfig.assertExpected(streamID, meta, stage)
+					}
 				}
-				// Receive on stream 1 if there is a message waiting. Metadata may still
-				// try to go to 0 for a little while.
-				select {
-				case d := <-chans[1].C:
-					if !errors.Is(d.Meta.Err, err3) {
-						t.Fatalf("unexpected meta.Err %v, expected %s", d.Meta.Err, err3)
+				chans[0].ConsumerClosed()
+
+				stage = 3
+				testutils.SucceedsSoon(t, func() error {
+					consumerStatus := router.Push(nil /* row */, metaConfig.getMeta(stage))
+					if consumerStatus != execinfra.NeedMoreRows {
+						t.Fatalf("expected status %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
+					}
+					// Receive on stream 1 if there is a message waiting. Metadata may still
+					// try to go to 0 for a little while.
+					select {
+					case d := <-chans[1].C:
+						metaConfig.assertExpected(1 /* streamID */, d.Meta, stage)
+						return nil
+					default:
+						return errors.Errorf("no metadata on stream 1")
+					}
+				})
+				chans[1].ConsumerClosed()
+
+				stage = 4
+				// Start drain the channels in the background.
+				for i := range chans {
+					go drainRowChannel(&chans[i])
+				}
+				testutils.SucceedsSoon(t, func() error {
+					consumerStatus := router.Push(nil /* row */, metaConfig.getMeta(stage))
+					if consumerStatus != execinfra.ConsumerClosed {
+						return fmt.Errorf("expected status %d, got: %d", execinfra.ConsumerClosed, consumerStatus)
 					}
 					return nil
-				default:
-					return errors.Errorf("no metadata on stream 1")
-				}
+				})
+
+				router.ProducerDone()
+
+				wg.Wait()
 			})
-
-			chans[1].ConsumerClosed()
-
-			// Start drain the channels in the background.
-			for i := range chans {
-				go drainRowChannel(&chans[i])
-			}
-
-			testutils.SucceedsSoon(t, func() error {
-				consumerStatus := router.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err4})
-				if consumerStatus != execinfra.ConsumerClosed {
-					return fmt.Errorf("expected status %d, got: %d", execinfra.ConsumerClosed, consumerStatus)
-				}
-				return nil
-			})
-
-			router.ProducerDone()
-
-			wg.Wait()
-		})
+		}
 	}
 }
 
@@ -607,7 +663,7 @@ func TestRouterBlocks(t *testing.T) {
 				t.Fatal(err)
 			}
 			st := cluster.MakeTestingClusterSettings()
-			ctx := context.TODO()
+			ctx := context.Background()
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(ctx)
 			diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
@@ -720,7 +776,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	// the number of rows that wil eventually be added to the underlying
 	// rowContainer. This is a bytes value that will ensure we fall back to disk
 	// but use memory for at least a couple of rows.
-	monitor := mon.MakeMonitorWithLimit(
+	monitor := mon.NewMonitorWithLimit(
 		"test-monitor",
 		mon.MemoryResource,
 		(numRows-routerRowBufSize)/2, /* limit */
@@ -730,7 +786,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		math.MaxInt64,                /* noteworthy */
 		st,
 	)
-	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

@@ -42,8 +42,7 @@ const (
 
 func main() {
 	ctx := context.Background()
-
-	f := func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error {
+	fileIssue := func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error {
 		log.Printf("filing issue with title: %s", title)
 		req := issues.PostRequest{
 			// TODO(tbg): actually use this as a template and not a hard-coded
@@ -59,7 +58,7 @@ func main() {
 		return issues.Post(ctx, req)
 	}
 
-	if err := listFailures(ctx, os.Stdin, f); err != nil {
+	if err := listFailures(ctx, os.Stdin, fileIssue); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -110,7 +109,9 @@ func trimPkg(pkg string) string {
 func listFailures(
 	ctx context.Context,
 	input io.Reader,
-	f func(ctx context.Context, title, packageName, testName, testMessage, authorEmail string) error,
+	fileIssue func(
+		ctx context.Context, title, packageName, testName, testMessage, authorEmail string,
+	) error,
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
@@ -162,7 +163,7 @@ func listFailures(
 				continue
 			}
 			if err := json.Unmarshal([]byte(line), &te); err != nil {
-				return errors.Wrap(err, line)
+				return errors.Wrapf(err, "unable to parse %q", line)
 			}
 		}
 		lastEvent = te
@@ -241,7 +242,13 @@ func listFailures(
 				}
 			case "pass", "skip":
 				if timedOutCulprit.name != "" {
-					panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
+					// NB: we used to do this:
+					//   panic(fmt.Sprintf("detected test timeout but test seems to have passed (%+v)", te))
+					// but it would get hit. There is no good way to
+					// blame a timeout on a particular test. We should probably remove this
+					// logic in the first place, but for now make sure we don't panic as
+					// a result of it.
+					timedOutCulprit = scopedTest{}
 				}
 				delete(outstandingOutput, scoped(te))
 				if te.Elapsed > shortTestFilterSecs {
@@ -309,7 +316,7 @@ func listFailures(
 		}
 		trimmedPkgName := trimPkg(packageName)
 		title := fmt.Sprintf("%s: package failed", trimmedPkgName)
-		if err := f(
+		if err := fileIssue(
 			ctx, title, packageName, unknown, packageOutput.String(), "", /* authorEmail */
 		); err != nil {
 			return errors.Wrap(err, "failed to post issue")
@@ -345,7 +352,7 @@ func listFailures(
 			}
 			message := strings.Join(outputs, "")
 			title := fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name)
-			if err := f(ctx, title, test.pkg, test.name, message, authorEmail); err != nil {
+			if err := fileIssue(ctx, title, test.pkg, test.name, message, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		}
@@ -384,7 +391,7 @@ func listFailures(
 			}
 			title := fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name)
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
-			if err := f(ctx, title, timedOutCulprit.pkg, timedOutCulprit.name, report, authorEmail); err != nil {
+			if err := fileIssue(ctx, title, timedOutCulprit.pkg, timedOutCulprit.name, report, authorEmail); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}
 		} else {
@@ -394,13 +401,12 @@ func listFailures(
 			}
 			trimmedPkgName := trimPkg(packageName)
 			title := fmt.Sprintf("%s: package timed out", trimmedPkgName)
-			// Andrei gets these reports for now, but don't think I'll fix anything
-			// you fools.
-			// TODO(andrei): Figure out how to assign to the on-call engineer. Maybe
-			// get their name from the Slack channel?
+			// TODO(irfansharif): These are assigned to nobody given our lack of
+			// a story around #51653. It'd be nice to be able to go from pkg
+			// name to team-name, and be able to assign to a specific team.
 			log.Printf("timeout culprit not found\n")
-			if err := f(
-				ctx, title, packageName, "(unknown)" /* testName */, report, "andreimatei1@gmail.com",
+			if err := fileIssue(
+				ctx, title, packageName, "(unknown)" /* testName */, report, "",
 			); err != nil {
 				return errors.Wrap(err, "failed to post issue")
 			}

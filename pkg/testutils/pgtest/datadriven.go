@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
 	"github.com/jackc/pgx/pgproto3"
 )
@@ -58,6 +59,10 @@ func WalkWithNewServer(
 //
 // "receive": Like "until", but only output matching messages instead of all
 // messages.
+//
+// If the argument crdb_only is given and the server is non-crdb (e.g.
+// posrgres), then the exchange is skipped. With noncrdb_only, the inverse
+// happens.
 func RunTest(t *testing.T, path, addr, user string) {
 	p, err := NewPGTest(context.Background(), addr, user)
 	if err != nil {
@@ -65,7 +70,20 @@ func RunTest(t *testing.T, path, addr, user string) {
 	}
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
+		case "only":
+			if d.HasArg("crdb") && !p.isCockroachDB {
+				skip.IgnoreLint(t, "only crdb")
+			}
+			if d.HasArg("noncrdb") && p.isCockroachDB {
+				skip.IgnoreLint(t, "only non-crdb")
+			}
+			return d.Expected
+
 		case "send":
+			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
+				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
+				return d.Expected
+			}
 			for _, line := range strings.Split(d.Input, "\n") {
 				sp := strings.SplitN(line, " ", 2)
 				msg := toMessage(sp[0])
@@ -80,6 +98,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 			}
 			return ""
 		case "receive":
+			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
+				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
+				return d.Expected
+			}
 			until := parseMessages(d.Input)
 			msgs, err := p.Receive(hasKeepErrMsg(d), until...)
 			if err != nil {
@@ -87,6 +109,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 			}
 			return msgsToJSONWithIgnore(msgs, d)
 		case "until":
+			if (d.HasArg("crdb_only") && !p.isCockroachDB) ||
+				(d.HasArg("noncrdb_only") && p.isCockroachDB) {
+				return d.Expected
+			}
 			until := parseMessages(d.Input)
 			msgs, err := p.Until(hasKeepErrMsg(d), until...)
 			if err != nil {
@@ -126,6 +152,24 @@ func msgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 	for _, arg := range args.CmdArgs {
 		switch arg.Key {
 		case "keepErrMessage":
+		case "crdb_only":
+		case "noncrdb_only":
+		case "ignore_table_oids":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.RowDescription); ok {
+					for i := range m.Fields {
+						m.Fields[i].TableOID = 0
+					}
+				}
+			}
+		case "ignore_type_oids":
+			for _, msg := range msgs {
+				if m, ok := msg.(*pgproto3.RowDescription); ok {
+					for i := range m.Fields {
+						m.Fields[i].DataTypeOID = 0
+					}
+				}
+			}
 		case "ignore":
 			for _, typ := range arg.Vals {
 				ignore[fmt.Sprintf("*pgproto3.%s", typ)] = true
@@ -191,6 +235,14 @@ func toMessage(typ string) interface{} {
 		return &pgproto3.ReadyForQuery{}
 	case "Sync":
 		return &pgproto3.Sync{}
+	case "ParameterStatus":
+		return &pgproto3.ParameterStatus{}
+	case "BindComplete":
+		return &pgproto3.BindComplete{}
+	case "ParseComplete":
+		return &pgproto3.ParseComplete{}
+	case "RowDescription":
+		return &pgproto3.RowDescription{}
 	default:
 		panic(fmt.Errorf("unknown type %q", typ))
 	}

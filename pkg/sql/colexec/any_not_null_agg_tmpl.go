@@ -20,34 +20,19 @@
 package colexec
 
 import (
-	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
-
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
 
 // {{/*
 
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
 
 // _GOTYPESLICE is the template variable.
 type _GOTYPESLICE interface{}
@@ -60,16 +45,17 @@ const _TYPE_WIDTH = 0
 
 // */}}
 
-func newAnyNotNullAggAlloc(
+func newAnyNotNull_AGGKINDAggAlloc(
 	allocator *colmem.Allocator, t *types.T, allocSize int64,
 ) (aggregateFuncAlloc, error) {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return &anyNotNull_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
+			return &anyNotNull_TYPE_AGGKINDAggAlloc{aggAllocBase: allocBase}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -80,78 +66,96 @@ func newAnyNotNullAggAlloc(
 // {{range .}}
 // {{range .WidthOverloads}}
 
-// anyNotNull_TYPEAgg implements the ANY_NOT_NULL aggregate, returning the
+// anyNotNull_TYPE_AGGKINDAgg implements the ANY_NOT_NULL aggregate, returning the
 // first non-null value in the input column.
-type anyNotNull_TYPEAgg struct {
+type anyNotNull_TYPE_AGGKINDAgg struct {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
+	// {{end}}
 	allocator                   *colmem.Allocator
-	groups                      []bool
 	vec                         coldata.Vec
 	col                         _GOTYPESLICE
-	nulls                       *coldata.Nulls
-	curIdx                      int
 	curAgg                      _GOTYPE
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &anyNotNull_TYPEAgg{}
+var _ aggregateFunc = &anyNotNull_TYPE_AGGKINDAgg{}
 
-const sizeOfAnyNotNull_TYPEAgg = int64(unsafe.Sizeof(anyNotNull_TYPEAgg{}))
+const sizeOfAnyNotNull_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(anyNotNull_TYPE_AGGKINDAgg{}))
 
-func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
-	a.groups = groups
+func (a *anyNotNull_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
+	// {{end}}
 	a.vec = vec
 	a.col = vec.TemplateType()
-	a.nulls = vec.Nulls()
 	a.Reset()
 }
 
-func (a *anyNotNull_TYPEAgg) Reset() {
-	a.curIdx = -1
+func (a *anyNotNull_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
-	if a.curIdx != -1 {
-		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(idx + 1)
+func (a *anyNotNull_TYPE_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	// {{if eq "_AGGKIND" "Hash"}}
+	if a.foundNonNullForCurrentGroup {
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
 	}
-}
+	// {{end}}
 
-func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec.TemplateType(), vec.Nulls()
 
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
 		func() {
+			// Capture col to force bounds check to work. See
+			// https://github.com/golang/go/issues/39756
+			col := col
+			_ = col.Get(inputLen - 1)
+			// {{if eq "_AGGKIND" "Ordered"}}
+			groups := a.groups
+			// {{end}}
 			if nulls.MaybeHasNulls() {
 				if sel != nil {
 					sel = sel[:inputLen]
 					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, true)
+					// {{if eq "_AGGKIND" "Ordered"}}
+					_ = groups[inputLen-1]
+					// {{end}}
+					for i := 0; i < inputLen; i++ {
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, true)
 					}
 				}
 			} else {
 				if sel != nil {
 					sel = sel[:inputLen]
 					for _, i := range sel {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
 				} else {
-					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
-						_FIND_ANY_NOT_NULL(a, nulls, i, false)
+					// {{if eq "_AGGKIND" "Ordered"}}
+					_ = groups[inputLen-1]
+					// {{end}}
+					for i := 0; i < inputLen; i++ {
+						_FIND_ANY_NOT_NULL(a, groups, nulls, i, false)
 					}
 				}
 			}
@@ -159,33 +163,36 @@ func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *anyNotNull_TYPEAgg) Flush() {
+func (a *anyNotNull_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// If we haven't found any non-nulls for this group so far, the output for
 	// this group should be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		execgen.SET(a.col, a.curIdx, a.curAgg)
-	}
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
+	// {{end}}
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		execgen.SET(a.col, outputIdx, a.curAgg)
+	}
 }
 
-func (a *anyNotNull_TYPEAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+type anyNotNull_TYPE_AGGKINDAggAlloc struct {
+	aggAllocBase
+	aggFuncs []anyNotNull_TYPE_AGGKINDAgg
 }
 
-type anyNotNull_TYPEAggAlloc struct {
-	allocator *colmem.Allocator
-	allocSize int64
-	aggFuncs  []anyNotNull_TYPEAgg
-}
+var _ aggregateFuncAlloc = &anyNotNull_TYPE_AGGKINDAggAlloc{}
 
-var _ aggregateFuncAlloc = &anyNotNull_TYPEAggAlloc{}
-
-func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *anyNotNull_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNull_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]anyNotNull_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOfAnyNotNull_TYPE_AGGKINDAgg * a.allocSize)
+		a.aggFuncs = make([]anyNotNull_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
@@ -201,26 +208,27 @@ func (a *anyNotNull_TYPEAggAlloc) newAggFunc() aggregateFunc {
 // row. If a non-null value was already found, then it does nothing. If this is
 // the first row of a new group, and no non-nulls have been found for the
 // current group, then the output for the current group is set to null.
-func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
+func _FIND_ANY_NOT_NULL(
+	a *anyNotNull_TYPE_AGGKINDAgg, groups []bool, nulls *coldata.Nulls, i int, _HAS_NULLS bool,
+) { // */}}
 	// {{define "findAnyNotNull" -}}
 
-	if a.groups[i] {
-		// The `a.curIdx` check is necessary because for the first
-		// group in the result set there is no "current group."
-		if a.curIdx >= 0 {
-			// If this is a new group, check if any non-nulls have been found for the
-			// current group.
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
-			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
-			}
+	// {{if eq "_AGGKIND" "Ordered"}}
+	if groups[i] {
+		// If this is a new group, check if any non-nulls have been found for the
+		// current group.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			// {{with .Global}}
+			execgen.SET(a.col, a.curIdx, a.curAgg)
+			// {{end}}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
+	// {{end}}
+
 	var isNull bool
 	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
@@ -229,13 +237,19 @@ func _FIND_ANY_NOT_NULL(a *anyNotNull_TYPEAgg, nulls *coldata.Nulls, i int, _HAS
 	// {{end}}
 	if !a.foundNonNullForCurrentGroup && !isNull {
 		// If we haven't seen any non-nulls for the current group yet, and the
-		// current value is non-null, then we can pick the current value to be the
-		// output.
+		// current value is non-null, then we can pick the current value to be
+		// the output.
 		// {{with .Global}}
-		val := execgen.UNSAFEGET(col, i)
+		val := col.Get(i)
 		execgen.COPYVAL(a.curAgg, val)
 		// {{end}}
 		a.foundNonNullForCurrentGroup = true
+		// {{if eq "_AGGKIND" "Hash"}}
+		// We have already seen non-null for the current group, and since there
+		// is at most a single group when performing hash aggregation, we can
+		// finish computing.
+		return
+		// {{end}}
 	}
 	// {{end}}
 

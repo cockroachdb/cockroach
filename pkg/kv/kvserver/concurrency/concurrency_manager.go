@@ -16,9 +16,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 // managerImpl implements the Manager interface.
@@ -72,7 +71,8 @@ func (c *Config) initDefaults() {
 // NewManager creates a new concurrency Manager structure.
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
-	return &managerImpl{
+	m := new(managerImpl)
+	*m = managerImpl{
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
 		// pkg/storage/concurrency/latch package. Make it implement the
 		// latchManager interface directly, if possible.
@@ -89,6 +89,7 @@ func NewManager(cfg Config) Manager {
 			st:                cfg.Settings,
 			stopper:           cfg.Stopper,
 			ir:                cfg.IntentResolver,
+			lm:                m,
 			disableTxnPushing: cfg.DisableTxnPushing,
 		},
 		// TODO(nvanbenschoten): move pkg/storage/txnwait to a new
@@ -102,6 +103,7 @@ func NewManager(cfg Config) Manager {
 			Knobs:     cfg.TxnWaitKnobs,
 		}),
 	}
+	return m
 }
 
 // SequenceReq implements the RequestSequencer interface.
@@ -243,7 +245,7 @@ func (m *managerImpl) FinishReq(g *Guard) {
 
 // HandleWriterIntentError implements the ContentionHandler interface.
 func (m *managerImpl) HandleWriterIntentError(
-	ctx context.Context, g *Guard, t *roachpb.WriteIntentError,
+	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *roachpb.WriteIntentError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
 		log.Fatalf(ctx, "cannot handle WriteIntentError %v for request without "+
@@ -256,9 +258,9 @@ func (m *managerImpl) HandleWriterIntentError(
 	wait := false
 	for i := range t.Intents {
 		intent := &t.Intents[i]
-		added, err := m.lt.AddDiscoveredLock(intent, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(intent, seq, g.ltg)
 		if err != nil {
-			log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			wait = true
@@ -305,14 +307,14 @@ func (m *managerImpl) HandleTransactionPushError(
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.AcquireLock(&acq.Txn, acq.Key, lock.Exclusive, acq.Durability); err != nil {
-		log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
-		log.Fatalf(ctx, "%v", errors.HandleAsAssertionFailure(err))
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -332,16 +334,19 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseUpdated(isLeaseholder bool) {
+func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
-		m.lt.Enable()
-		m.twq.Enable()
+		m.lt.Enable(seq)
+		m.twq.Enable(seq)
 	} else {
 		// Disable all queues - the concurrency manager will no longer be
 		// informed about all state transitions to locks and transactions.
 		const disable = true
 		m.lt.Clear(disable)
 		m.twq.Clear(disable)
+		// Also clear caches, since they won't be needed any time soon and
+		// consume memory.
+		m.ltw.ClearCaches()
 	}
 }
 
@@ -384,7 +389,7 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 }
 
 // LatchMetrics implements the MetricExporter interface.
-func (m *managerImpl) LatchMetrics() (global, local storagepb.LatchManagerInfo) {
+func (m *managerImpl) LatchMetrics() (global, local kvserverpb.LatchManagerInfo) {
 	return m.lm.Info()
 }
 

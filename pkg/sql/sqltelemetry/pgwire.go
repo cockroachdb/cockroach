@@ -35,7 +35,7 @@ var BinaryDecimalInfinityCounter = telemetry.GetCounterOnce("pgwire.#32489.binar
 
 // UncategorizedErrorCounter is to be incremented every time an error
 // flows to the client without having been decorated with a pg error.
-var UncategorizedErrorCounter = telemetry.GetCounterOnce("othererror." + pgcode.Uncategorized)
+var UncategorizedErrorCounter = telemetry.GetCounterOnce("othererror." + pgcode.Uncategorized.String())
 
 // InterleavedPortalRequestCounter is to be incremented every time an open
 // portal attempts to interleave work with another portal.

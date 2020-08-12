@@ -103,7 +103,6 @@ class DatabaseTablesList extends React.Component<DatabaseListProps> {
         {
           user.map(n => <DatabaseSummaryTables name={n} key={n} />)
         }
-        <hr />
         {
           system.map(n => <DatabaseSummaryTables name={n} key={n} />)
         }
@@ -134,7 +133,6 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps> {
         {
           user.map(n => <DatabaseSummaryGrants name={n} key={n} />)
         }
-        <hr />
         {
           system.map(n => <DatabaseSummaryGrants name={n} key={n} />)
         }

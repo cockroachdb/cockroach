@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -29,11 +30,13 @@ import (
 // TestNumBatches is a unit test for NumBatches field of VectorizedStats.
 func TestNumBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(
 		noop, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* isStall */
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
+		nil, /* inputStatsCollectors */
 	)
 	vsc.Init()
 	for {
@@ -48,12 +51,14 @@ func TestNumBatches(t *testing.T) {
 // TestNumTuples is a unit test for NumTuples field of VectorizedStats.
 func TestNumTuples(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	nBatches := 10
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
 		vsc := NewVectorizedStatsCollector(
 			noop, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* isStall */
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
+			nil, /* inputStatsCollectors */
 		)
 		vsc.Init()
 		for {
@@ -72,12 +77,12 @@ func TestNumTuples(t *testing.T) {
 // expected.
 func TestVectorizedStatsCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for nBatches := 1; nBatches < 5; nBatches++ {
 		timeSource := timeutil.NewTestTimeSource()
 		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
-
 		leftSource := &timeAdvancingOperator{
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
@@ -85,9 +90,8 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		leftInput := NewVectorizedStatsCollector(
 			leftSource, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* isStall */
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
+			nil, /* inputStatsCollectors */
 		)
-		leftInput.SetOutputWatch(mjInputWatch)
-
 		rightSource := &timeAdvancingOperator{
 			OneInputNode: NewOneInputNode(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize())),
 			timeSource:   timeSource,
@@ -95,12 +99,11 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput := NewVectorizedStatsCollector(
 			rightSource, 1 /* id */, execinfrapb.ProcessorIDTagKey, true, /* isStall */
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
+			nil, /* inputStatsCollectors */
 		)
-		rightInput.SetOutputWatch(mjInputWatch)
-
-		mergeJoiner, err := newMergeJoinOp(
+		mergeJoiner, err := NewMergeJoinOp(
 			testAllocator, defaultMemoryLimit, queueCfg,
-			colexecbase.NewTestingSemaphore(4), sqlbase.InnerJoin, leftInput, rightInput,
+			colexecbase.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0}},
@@ -113,9 +116,11 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			OneInputNode: NewOneInputNode(mergeJoiner),
 			timeSource:   timeSource,
 		}
+
 		mjStatsCollector := NewVectorizedStatsCollector(
 			timeAdvancingMergeJoiner, 2 /* id */, execinfrapb.ProcessorIDTagKey, false, /* isStall */
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
+			[]*VectorizedStatsCollector{leftInput, rightInput},
 		)
 
 		// The inputs are identical, so the merge joiner should output nBatches

@@ -36,14 +36,6 @@ type ordinalityNode struct {
 	source      planNode
 	columns     sqlbase.ResultColumns
 	reqOrdering ReqOrdering
-
-	run ordinalityRun
-}
-
-// ordinalityRun contains the run-time state of ordinalityNode during local execution.
-type ordinalityRun struct {
-	row    tree.Datums
-	curCnt int64
 }
 
 func (o *ordinalityNode) startExec(runParams) error {

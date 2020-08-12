@@ -12,7 +12,6 @@ package main
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"text/template"
 
@@ -21,29 +20,19 @@ import (
 
 const distinctOpsTmpl = "pkg/sql/colexec/distinct_tmpl.go"
 
-func genDistinctOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(distinctOpsTmpl)
-	if err != nil {
-		return err
-	}
-
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
-	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
+func genDistinctOps(inputFileContents string, wr io.Writer) error {
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_GOTYPE", "{{.GoType}}",
+		"_TYPE", "{{.VecMethod}}",
+		"TemplateType", "{{.VecMethod}}")
+	s := r.Replace(inputFileContents)
 
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
 
-	innerLoopRe := makeFunctionRegex("_CHECK_DISTINCT", 5)
-	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" buildDict "Global" .}}`)
-
-	innerLoopNullsRe := makeFunctionRegex("_CHECK_DISTINCT_WITH_NULLS", 7)
-	s = innerLoopNullsRe.ReplaceAllString(s, `{{template "checkDistinctWithNulls" buildDict "Global" .}}`)
 	s = replaceManipulationFuncs(s)
 
 	// Now, generate the op, from the template.
@@ -54,6 +43,7 @@ func genDistinctOps(wr io.Writer) error {
 
 	return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.NE])
 }
+
 func init() {
 	registerGenerator(genDistinctOps, "distinct.eg.go", distinctOpsTmpl)
 }

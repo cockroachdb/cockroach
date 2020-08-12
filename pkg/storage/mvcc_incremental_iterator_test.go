@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -185,6 +186,7 @@ func assertEqualKVs(
 
 func TestMVCCIncrementalIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	var (
@@ -426,6 +428,7 @@ func slurpKVsInTimeRange(
 // time range is rewritten at a timestamp outside of its time range.
 func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -500,6 +503,7 @@ func TestMVCCIncrementalIteratorIntentRewrittenConcurrently(t *testing.T) {
 // has been deleted, but the time-bound iterator doesn't see the deletion.
 func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
 		return &roachpb.Transaction{
@@ -614,6 +618,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 
 func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Create a DB containing 2 keys, a and b, where b has an intent. We use the
 	// regular MVCCPut operation to generate these keys, which we'll later be
@@ -731,6 +736,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 
 func TestMVCCIterateTimeBound(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()

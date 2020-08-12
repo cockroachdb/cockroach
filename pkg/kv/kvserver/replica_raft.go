@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,10 +40,10 @@ import (
 	"go.etcd.io/etcd/raft/tracker"
 )
 
-func makeIDKey() storagebase.CmdIDKey {
+func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
-	return storagebase.CmdIDKey(idKeyBuf)
+	return kvserverbase.CmdIDKey(idKeyBuf)
 }
 
 // evalAndPropose prepares the necessary pending command struct and initializes
@@ -172,7 +172,7 @@ func (r *Replica) evalAndPropose(
 	}()
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		filterArgs := storagebase.ProposalFilterArgs{
+		filterArgs := kvserverbase.ProposalFilterArgs{
 			Ctx:   ctx,
 			Cmd:   *proposal.command,
 			CmdID: idKey,
@@ -287,7 +287,7 @@ func (r *Replica) propose(ctx context.Context, p *ProposalData) (index int64, pE
 		preLen = raftCommandPrefixLen
 	}
 	cmdLen := p.command.Size()
-	cap := preLen + cmdLen + storagepb.MaxRaftCommandFooterSize()
+	cap := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
 	data := make([]byte, preLen, cap)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
@@ -1066,7 +1066,6 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		Term:          msg.Term,
 		Commit:        msg.Commit,
 		Quiesce:       quiesce,
-		ToIsLearner:   toReplica.GetType() == roachpb.LEARNER,
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -1186,7 +1185,6 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		RangeStartKey: startKey, // usually nil
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
-		req.release()
 		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 			r.mu.droppedMessages++
 			raftGroup.ReportUnreachable(msg.To)
@@ -1440,10 +1438,10 @@ func (r *Replica) withRaftGroup(
 }
 
 func shouldCampaignOnWake(
-	leaseStatus storagepb.LeaseStatus,
+	leaseStatus kvserverpb.LeaseStatus,
 	lease roachpb.Lease,
 	storeID roachpb.StoreID,
-	raftStatus raft.Status,
+	raftStatus raft.BasicStatus,
 ) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
@@ -1451,7 +1449,7 @@ func shouldCampaignOnWake(
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
-	anotherOwnsLease := leaseStatus.State == storagepb.LeaseState_VALID && !lease.OwnedBy(storeID)
+	anotherOwnsLease := leaseStatus.State == kvserverpb.LeaseState_VALID && !lease.OwnedBy(storeID)
 
 	// If we're already campaigning or know who the leader is, don't
 	// start a new term.
@@ -1470,8 +1468,8 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		return
 	}
 
-	leaseStatus := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
-	raftStatus := r.mu.internalRaftGroup.Status()
+	leaseStatus := r.leaseStatus(ctx, *r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	raftStatus := r.mu.internalRaftGroup.BasicStatus()
 	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
@@ -1593,7 +1591,7 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 // After this method returns successfully the RHS of the split or merge
 // is guaranteed to exist in the Store using GetReplica().
 func (r *Replica) maybeAcquireSplitMergeLock(
-	ctx context.Context, raftCmd storagepb.RaftCommand,
+	ctx context.Context, raftCmd kvserverpb.RaftCommand,
 ) (func(), error) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
@@ -1607,9 +1605,9 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID,
-		rightReplDesc.ReplicaID, nil, /* creatingReplica */
-		rightReplDesc.GetType() == roachpb.LEARNER)
+	rightRepl, _, err := r.store.getOrCreateReplica(
+		ctx, split.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
+	)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
 	if errors.HasType(err, (*roachpb.RaftGroupDeletedError)(nil)) {
@@ -1637,18 +1635,10 @@ func (r *Replica) acquireMergeLock(
 	// for the right-hand range will block on raftMu, waiting for the merge to
 	// complete, after which the replica will realize it has been destroyed and
 	// reject the snapshot.
-	//
-	// These guarantees would not be held if we were catching up from a preemptive
-	// snapshot and were not part of the range. That scenario, however, never
-	// arises because prior to 19.2 we would ensure that a preemptive snapshot had
-	// been applied before adding a store to the range which would fail if the
-	// range had merged another range and in 19.2 we detect if the raft messages
-	// we're processing are for a learner and our current state is due to a
-	// preemptive snapshot and remove the preemptive snapshot.
 	rightReplDesc, _ := merge.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID,
-		rightReplDesc.ReplicaID, nil, /* creatingReplica */
-		rightReplDesc.GetType() == roachpb.LEARNER)
+	rightRepl, _, err := r.store.getOrCreateReplica(
+		ctx, merge.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,10 @@
 # Tests that verify we retrieve the stats correctly. Note that we can't create
 # statistics if distsql mode is OFF.
 
+# Disable automatic stats to prevent flakes if auto stats run.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
 statement ok
 CREATE TABLE uv (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
 INSERT INTO uv VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
@@ -11,19 +15,35 @@ statement ok
 CREATE STATISTICS u ON u FROM uv;
 CREATE STATISTICS v ON v FROM uv
 
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE uv]
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+u                {u}           8          2               0           true
+v                {v}           8          7               0           true
+
 statement ok
 set enable_zigzag_join = false
 
 # Verify we scan index v which has the more selective constraint.
-query TTTTT
+query TTTTT retry
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_v_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       u = 1        ·       ·
+·          distribution  full         ·       ·
+·          vectorized    true         ·       ·
+filter     ·             ·            (u, v)  ·
+ │         filter        u = 1        ·       ·
+ └── scan  ·             ·            (u, v)  ·
+·          table         uv@uv_v_idx  ·       ·
+·          spans         /1-/2        ·       ·
 
 # Verify that injecting different statistics changes the plan.
 statement ok
@@ -45,12 +65,13 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_u_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       v = 1        ·       ·
+·          distribution  full         ·       ·
+·          vectorized    true         ·       ·
+filter     ·             ·            (u, v)  ·
+ │         filter        v = 1        ·       ·
+ └── scan  ·             ·            (u, v)  ·
+·          table         uv@uv_u_idx  ·       ·
+·          spans         /1-/2        ·       ·
 
 # Verify that injecting different statistics with null counts
 # changes the plan.
@@ -75,12 +96,13 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_u_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       v = 1        ·       ·
+·          distribution  full         ·       ·
+·          vectorized    true         ·       ·
+filter     ·             ·            (u, v)  ·
+ │         filter        v = 1        ·       ·
+ └── scan  ·             ·            (u, v)  ·
+·          table         uv@uv_u_idx  ·       ·
+·          spans         /1-/2        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
@@ -103,12 +125,13 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·     distributed  true         ·       ·
-·     vectorized   true         ·       ·
-scan  ·            ·            (u, v)  ·
-·     table        uv@uv_v_idx  ·       ·
-·     spans        /1-/2        ·       ·
-·     filter       u = 1        ·       ·
+·          distribution  full         ·       ·
+·          vectorized    true         ·       ·
+filter     ·             ·            (u, v)  ·
+ │         filter        u = 1        ·       ·
+ └── scan  ·             ·            (u, v)  ·
+·          table         uv@uv_v_idx  ·       ·
+·          spans         /1-/2        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
@@ -253,3 +276,70 @@ distinct-on
       ├── ordering: +1
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
+
+# Verify basic stats for JSON are used.
+
+statement ok
+CREATE TABLE tj (j JSON)
+
+statement ok
+INSERT INTO tj VALUES (NULL), ('1'), ('true'), ('true'), ('{}')
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT DISTINCT j FROM tj WHERE j IS NULL
+----
+limit
+ ├── columns: j:1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 222.06
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: j:1
+ │    ├── immutable
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=10]
+ │    ├── cost: 222.04
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── scan tj
+ │    │    ├── columns: j:1
+ │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │    ├── cost: 212.02
+ │    │    ├── limit hint: 100.00
+ │    │    └── prune: (1)
+ │    └── filters
+ │         └── j:1 IS NULL [outer=(1), immutable, constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ └── 1
+
+statement ok
+CREATE STATISTICS tj FROM tj
+
+query T retry
+EXPLAIN (OPT, VERBOSE) SELECT DISTINCT j FROM tj WHERE j IS NULL
+----
+limit
+ ├── columns: j:1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── cost: 5.41
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── select
+ │    ├── columns: j:1
+ │    ├── immutable
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
+ │    ├── cost: 5.39
+ │    ├── fd: ()-->(1)
+ │    ├── limit hint: 1.00
+ │    ├── scan tj
+ │    │    ├── columns: j:1
+ │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
+ │    │    ├── cost: 5.32
+ │    │    ├── limit hint: 5.00
+ │    │    └── prune: (1)
+ │    └── filters
+ │         └── j:1 IS NULL [outer=(1), immutable, constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+ └── 1

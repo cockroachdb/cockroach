@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -88,7 +90,7 @@ func (n *scrubNode) startExec(params runParams) error {
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := params.p.ResolveExistingObjectEx(
-			params.ctx, n.n.Table, true /*required*/, ResolveRequireTableDesc)
+			params.ctx, n.n.Table, true /*required*/, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return err
 		}
@@ -159,14 +161,14 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		return err
 	}
 
-	schemas, err := p.Tables().getSchemasForDatabase(ctx, p.txn, dbDesc.ID)
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
 
 	var tbNames TableNames
 	for _, schema := range schemas {
-		toAppend, err := GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true /*explicitPrefix*/)
+		toAppend, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true /*explicitPrefix*/)
 		if err != nil {
 			return err
 		}
@@ -206,7 +208,7 @@ func (n *scrubNode) startScrubTable(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
 ) error {
-	ts, hasTS, err := p.getTimestamp(n.n.AsOf)
+	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func (n *scrubNode) startScrubTable(
 			}
 			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 		default:
-			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
+			panic(errors.AssertionFailedf("Unhandled SCRUB option received: %+v", v))
 		}
 	}
 
@@ -282,7 +284,7 @@ func (n *scrubNode) startScrubTable(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -428,7 +430,7 @@ func createConstraintCheckOperations(
 	// Keep only the constraints specified by the constraints in
 	// constraintNames.
 	if constraintNames != nil {
-		wantedConstraints := make(map[string]sqlbase.ConstraintDetail)
+		wantedConstraints := make(map[string]descpb.ConstraintDetail)
 		for _, constraintName := range constraintNames {
 			if v, ok := constraints[string(constraintName)]; ok {
 				wantedConstraints[string(constraintName)] = v
@@ -443,14 +445,14 @@ func createConstraintCheckOperations(
 	// Populate results with all constraints on the table.
 	for _, constraint := range constraints {
 		switch constraint.Kind {
-		case sqlbase.ConstraintTypeCheck:
+		case descpb.ConstraintTypeCheck:
 			results = append(results, newSQLCheckConstraintCheckOperation(
 				tableName,
 				tableDesc,
 				constraint.CheckConstraint,
 				asOf,
 			))
-		case sqlbase.ConstraintTypeFK:
+		case descpb.ConstraintTypeFK:
 			results = append(results, newSQLForeignKeyCheckOperation(
 				tableName,
 				tableDesc,
@@ -476,7 +478,6 @@ func scrubRunDistSQL(
 		rowResultWriter,
 		tree.Rows,
 		p.ExecCfg().RangeDescriptorCache,
-		p.ExecCfg().LeaseHolderCache,
 		p.txn,
 		func(ts hlc.Timestamp) {
 			p.ExecCfg().Clock.Update(ts)

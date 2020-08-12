@@ -13,6 +13,7 @@ SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
  ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -20,9 +21,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      ├── k:1 > (i:2 + 1) [outer=(1,2), constraints=(/1: (/NULL - ])]
-      ├── i:2 >= (k:1 - 1) [outer=(1,2), constraints=(/2: (/NULL - ])]
-      ├── k:1 < (i:2 * i:2) [outer=(1,2), constraints=(/1: (/NULL - ])]
+      ├── k:1 > (i:2 + 1) [outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
+      ├── i:2 >= (k:1 - 1) [outer=(1,2), immutable, constraints=(/2: (/NULL - ])]
+      ├── k:1 < (i:2 * i:2) [outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
       └── i:2 <= (k:1 / 2) [outer=(1,2), constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
@@ -33,6 +34,7 @@ SELECT * FROM a WHERE 5+1<i+k AND 5*5/3<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
  ├── columns: k:1!null i:2!null f:3 s:4!null j:5 d:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -40,8 +42,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      ├── (i:2 + k:1) > 6 [outer=(1,2)]
-      ├── (i:2 * 2) >= 8.3333333333333333333 [outer=(2)]
+      ├── (i:2 + k:1) > 6 [outer=(1,2), immutable]
+      ├── (i:2 * 2) >= 8.3333333333333333333 [outer=(2), immutable]
       ├── i:2 < 5 [outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── s:4 <= 'foo' [outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
@@ -50,6 +52,7 @@ SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -57,8 +60,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      ├── (i:2 + k:1) > 4 [outer=(1,2)]
-      └── (i:2 * 2) >= 3 [outer=(2)]
+      ├── (i:2 + k:1) > 4 [outer=(1,2), immutable]
+      └── (i:2 * 2) >= 3 [outer=(2), immutable]
 
 # Impure function should not be considered constant.
 norm expect-not=CommuteConstInequality
@@ -66,7 +69,7 @@ SELECT * FROM a WHERE random()::int>a.i+a.i
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
- ├── side-effects
+ ├── volatile
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -74,7 +77,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── random()::INT8 > (i:2 + i:2) [outer=(2), side-effects]
+      └── random()::INT8 > (i:2 + i:2) [outer=(2), volatile]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst
@@ -92,6 +95,7 @@ WHERE
 select
  ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── scan a
@@ -101,8 +105,8 @@ select
  └── filters
       ├── (i:2 >= 2) AND (i:2 > 6) [outer=(2), constraints=(/2: [/7 - ]; tight)]
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      ├── (f:3 + f:3) < 3.0 [outer=(3)]
-      └── i:2::INTERVAL >= '01:00:00' [outer=(2)]
+      ├── (f:3 + f:3) < 3.0 [outer=(3), immutable]
+      └── i:2::INTERVAL >= '01:00:00' [outer=(2), immutable]
 
 # Try case that should not match pattern because Minus overload is not defined.
 norm expect-not=NormalizeCmpPlusConst
@@ -110,6 +114,7 @@ SELECT * FROM a WHERE s::date + '02:00:00'::time = '2000-01-01T02:00:00'::timest
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── stable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -117,7 +122,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── (s:4::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [outer=(4)]
+      └── (s:4::DATE + '02:00:00') = '2000-01-01 02:00:00' [outer=(4), stable]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
@@ -136,6 +141,7 @@ WHERE
 select
  ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6!null
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── scan a
@@ -145,8 +151,8 @@ select
  └── filters
       ├── (i:2 >= 4) AND (i:2 < 14) [outer=(2), constraints=(/2: [/4 - /13]; tight)]
       ├── k:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
-      ├── (f:3 + f:3) < 7.0 [outer=(3)]
-      ├── (f:3 + i:2::FLOAT8) >= 110.0 [outer=(2,3)]
+      ├── (f:3 + f:3) < 7.0 [outer=(3), immutable]
+      ├── (f:3 + i:2::FLOAT8) >= 110.0 [outer=(2,3), immutable]
       └── d:6 >= '2018-09-30' [outer=(6), constraints=(/6: [/'2018-09-30' - ]; tight)]
 
 # Try case that should not match pattern because Plus overload is not defined.
@@ -155,6 +161,7 @@ SELECT * FROM a WHERE s::json - 1 = '[1]'::json
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -162,7 +169,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── (s:4::JSONB - 1) = '[1]' [outer=(4)]
+      └── (s:4::JSONB - 1) = '[1]' [outer=(4), immutable]
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
@@ -180,6 +187,7 @@ WHERE
 select
  ├── columns: k:1!null i:2!null f:3 s:4 j:5 d:6
  ├── cardinality: [0 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(1-6)
  ├── scan a
@@ -189,8 +197,8 @@ select
  └── filters
       ├── (i:2 >= -2) AND (i:2 > 10) [outer=(2), constraints=(/2: [/11 - ]; tight)]
       ├── k:1 = -1 [outer=(1), constraints=(/1: [/-1 - /-1]; tight), fd=()-->(1)]
-      ├── (f:3 + f:3) > -3.0 [outer=(3)]
-      └── (f:3 + i:2::FLOAT8) <= -90.0 [outer=(2,3)]
+      ├── (f:3 + f:3) > -3.0 [outer=(3), immutable]
+      └── (f:3 + i:2::FLOAT8) <= -90.0 [outer=(2,3), immutable]
 
 # Try case that should not match pattern because Minus overload is not defined.
 norm expect-not=NormalizeCmpConstMinus
@@ -198,6 +206,7 @@ SELECT * FROM a WHERE '[1, 2]'::json - i = '[1]'
 ----
 select
  ├── columns: k:1!null i:2 f:3 s:4 j:5 d:6
+ ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan a
@@ -205,7 +214,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── ('[1, 2]' - i:2) = '[1]' [outer=(2)]
+      └── ('[1, 2]' - i:2) = '[1]' [outer=(2), immutable]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
@@ -363,16 +372,26 @@ values
  ├── fd: ()-->(1)
  └── (true,)
 
+norm expect=FoldNullTupleIsTupleNull
+SELECT () IS NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
 norm expect-not=FoldNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
+ ├── columns: "?column?":8!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":7, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":8, outer=(1)]
 
 # --------------------------------------------------
 # FoldNonNullTupleIsTupleNull
@@ -401,11 +420,11 @@ norm expect=FoldNonNullTupleIsTupleNull
 SELECT (1, k) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
- ├── fd: ()-->(7)
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
  ├── scan a
  └── projections
-      └── false [as="?column?":7]
+      └── false [as="?column?":8]
 
 norm expect=FoldNonNullTupleIsTupleNull
 SELECT ((NULL, NULL), NULL) IS NULL AS r
@@ -431,12 +450,12 @@ norm expect-not=FoldNonNullTupleIsTupleNull
 SELECT (k, NULL) IS NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
+ ├── columns: "?column?":8!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (k:1, NULL) IS NULL [as="?column?":7, outer=(1)]
+      └── (k:1, NULL) IS NULL [as="?column?":8, outer=(1)]
 
 # --------------------------------------------------
 # FoldIsNotNull
@@ -461,16 +480,16 @@ norm expect=FoldNonNullIsNotNull
 SELECT 1 IS NOT NULL AS r, k IS NOT NULL AS s, i IS NOT NULL AS t FROM a
 ----
 project
- ├── columns: r:7!null s:8!null t:9!null
- ├── fd: ()-->(7)
+ ├── columns: r:8!null s:9!null t:10!null
+ ├── fd: ()-->(8)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── true [as=r:7]
-      ├── k:1 IS NOT NULL [as=s:8, outer=(1)]
-      └── i:2 IS NOT NULL [as=t:9, outer=(2)]
+      ├── true [as=r:8]
+      ├── k:1 IS NOT NULL [as=s:9, outer=(1)]
+      └── i:2 IS NOT NULL [as=t:10, outer=(2)]
 
 norm expect=FoldNonNullIsNotNull
 SELECT (1, 2, 3) IS DISTINCT FROM NULL AS r
@@ -535,16 +554,26 @@ values
  ├── fd: ()-->(1)
  └── (true,)
 
+norm expect=FoldNonNullTupleIsTupleNotNull
+SELECT () IS NOT NULL AS r
+----
+values
+ ├── columns: r:1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
 norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
+ ├── columns: "?column?":8!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":7, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":8, outer=(1)]
 
 # --------------------------------------------------
 # FoldNullTupleIsTupleNotNull
@@ -563,22 +592,22 @@ norm expect=FoldNullTupleIsTupleNotNull
 SELECT (k, NULL) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
- ├── fd: ()-->(7)
+ ├── columns: "?column?":8!null
+ ├── fd: ()-->(8)
  ├── scan a
  └── projections
-      └── false [as="?column?":7]
+      └── false [as="?column?":8]
 
 norm expect-not=FoldNonNullTupleIsTupleNotNull
 SELECT (1, k) IS NOT NULL FROM a
 ----
 project
- ├── columns: "?column?":7!null
+ ├── columns: "?column?":8!null
  ├── scan a
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── projections
-      └── (1, k:1) IS NOT NULL [as="?column?":7, outer=(1)]
+      └── (1, k:1) IS NOT NULL [as="?column?":8, outer=(1)]
 
 # --------------------------------------------------
 # CommuteNullIs
@@ -604,44 +633,45 @@ norm expect=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', ts) >= '2020-06-01 12:35:55-07' FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 >= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]
+      └── ts:1 >= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunction
 SELECT '2020-06-01 12:35:55-07' >= timezone('America/Denver', ts)  FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', ts) >= tz FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
+ ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":4, outer=(1,2)]
+      └── tz:2 <= timezone('America/Denver', ts:1) [as="?column?":5, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunction
 SELECT timezone('America/Denver', '2020-06-01 12:35:55'::TIMESTAMP) >= tz FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeCmpTimeZoneFunctionTZ
@@ -650,41 +680,42 @@ norm expect=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', tz) >= '2020-06-01 12:35:55' FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+      └── tz:2 >= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
 
 # Apply after commuting the inequality.
 norm expect=NormalizeCmpTimeZoneFunctionTZ
 SELECT '2020-06-01 12:35:55' >= timezone('America/Denver', tz)  FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: tz:2
  └── projections
-      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":4, outer=(2)]
+      └── tz:2 <= '2020-06-01 18:35:55+00:00' [as="?column?":5, outer=(2)]
 
 # Don't normalize when the right-hand-side is not a constant.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', tz) >= ts FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
+ ├── immutable
  ├── scan t
  │    └── columns: ts:1 tz:2
  └── projections
-      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":4, outer=(1,2)]
+      └── ts:1 <= timezone('America/Denver', tz:2) [as="?column?":5, outer=(1,2), immutable]
 
 # Don't normalize when the timezone() arguments are constants.
 norm expect-not=NormalizeCmpTimeZoneFunctionTZ
 SELECT timezone('America/Denver', '2020-06-01 12:35:55-07'::TIMESTAMPTZ) >= ts FROM t
 ----
 project
- ├── columns: "?column?":4
+ ├── columns: "?column?":5
  ├── scan t
  │    └── columns: ts:1
  └── projections
-      └── ts:1 <= '2020-06-01 13:35:55+00:00' [as="?column?":4, outer=(1)]
+      └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]

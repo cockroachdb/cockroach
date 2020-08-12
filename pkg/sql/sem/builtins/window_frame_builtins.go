@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -403,7 +403,7 @@ func (w *avgWindowFunc) Compute(
 		return &avg, err
 	case *tree.DInt:
 		dd := tree.DDecimal{}
-		dd.SetFinite(int64(*t), 0)
+		dd.SetInt64(int64(*t))
 		var avg tree.DDecimal
 		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)

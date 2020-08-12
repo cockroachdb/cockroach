@@ -568,12 +568,12 @@ func (s *scanner) scanIdent(lval *sqlSymType) {
 	if lval.id != lex.IDENT {
 		if isExperimental {
 			if _, ok := lex.AllowedExperimental[kw]; !ok {
-				// If the parsed token is not on the whitelisted set of keywords,
+				// If the parsed token is not on the allowlisted set of keywords,
 				// then it might have been intended to be parsed as something else.
 				// In that case, re-tokenize the original string.
 				lval.id = lex.GetKeywordID(lval.str)
 			} else {
-				// It is a whitelisted keyword, so remember the shortened
+				// It is a allowlisted keyword, so remember the shortened
 				// keyword for further processing.
 				lval.str = kw
 			}

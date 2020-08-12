@@ -17,10 +17,10 @@ import (
 	"regexp"
 )
 
-var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: u?['"](?P<reason>.*)['"])?`)
+var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*?)(?: u?['"](?P<reason>.*)['"])?$`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(
-	input []byte, expectedFailures blacklist, ignoredList blacklist,
+	input []byte, expectedFailures blocklist, ignoredList blocklist,
 ) {
 	scanner := bufio.NewScanner(bytes.NewReader(input))
 	for scanner.Scan() {
@@ -31,11 +31,12 @@ func (r *ormTestsResults) parsePythonUnitTestOutput(
 				groups[pythonUnitTestOutputRegex.SubexpNames()[i]] = name
 			}
 			test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
-			var skipReason string
-			if groups["result"] == "skipped" {
+			skipped := groups["result"] == "skipped" || groups["result"] == "expected failure"
+			skipReason := ""
+			if skipped {
 				skipReason = groups["reason"]
 			}
-			pass := groups["result"] == "ok"
+			pass := groups["result"] == "ok" || groups["result"] == "unexpected success"
 			r.allTests = append(r.allTests, test)
 
 			ignoredIssue, expectedIgnored := ignoredList[test]
@@ -44,10 +45,10 @@ func (r *ormTestsResults) parsePythonUnitTestOutput(
 			case expectedIgnored:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
 				r.ignoredCount++
-			case len(skipReason) > 0 && expectedFailure:
+			case skipped && expectedFailure:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
 				r.unexpectedSkipCount++
-			case len(skipReason) > 0:
+			case skipped:
 				r.results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
 				r.skipCount++
 			case pass && !expectedFailure:

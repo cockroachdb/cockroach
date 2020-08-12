@@ -22,14 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -109,6 +108,7 @@ func newChangeAggregatorProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeAggregatorSpec,
+	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -120,8 +120,8 @@ func newChangeAggregatorProcessor(
 	}
 	if err := ca.Init(
 		ca,
-		&execinfrapb.PostProcessSpec{},
-		nil, /* types */
+		post,
+		changefeedResultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -144,10 +144,6 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
-func (ca *changeAggregator) OutputTypes() []*types.T {
-	return changefeedResultTypes
-}
-
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
@@ -165,7 +161,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 
 	if ca.sink, err = getSink(
 		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI,
+		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User,
 	); err != nil {
 		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -200,12 +196,12 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if knobs.MemBufferCapacity != 0 {
 		kvFeedMemMonCapacity = knobs.MemBufferCapacity
 	}
-	kvFeedMemMon := mon.MakeMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
 	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
-	ca.kvFeedMemMon = &kvFeedMemMon
+	ca.kvFeedMemMon = kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
-	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*sql.LeaseManager)
+	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
 		spans, withDiff, buf, metrics)
@@ -240,7 +236,7 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
-	leaseMgr *sql.LeaseManager,
+	leaseMgr *lease.Manager,
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
@@ -350,9 +346,9 @@ func (ca *changeAggregator) close() {
 func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
-			return ca.changedRowBuf.Pop(), nil
+			return ca.ProcessRowHelper(ca.changedRowBuf.Pop()), nil
 		} else if !ca.resolvedSpanBuf.IsEmpty() {
-			return ca.resolvedSpanBuf.Pop(), nil
+			return ca.ProcessRowHelper(ca.resolvedSpanBuf.Pop()), nil
 		}
 		if err := ca.tick(); err != nil {
 			select {
@@ -483,6 +479,7 @@ func newChangeFrontierProcessor(
 	processorID int32,
 	spec execinfrapb.ChangeFrontierSpec,
 	input execinfra.RowSource,
+	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -495,7 +492,8 @@ func newChangeFrontierProcessor(
 		sf:      span.MakeFrontier(spec.TrackedSpans...),
 	}
 	if err := cf.Init(
-		cf, &execinfrapb.PostProcessSpec{},
+		cf,
+		post,
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
@@ -532,10 +530,6 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
-func (cf *changeFrontier) OutputTypes() []*types.T {
-	return changefeedResultTypes
-}
-
 // Start is part of the RowSource interface.
 func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.input.Start(ctx)
@@ -554,7 +548,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	var nilOracle timestampLowerBoundOracle
 	if cf.sink, err = getSink(
 		ctx, cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
-		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI,
+		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User,
 	); err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
@@ -656,9 +650,9 @@ func (cf *changeFrontier) shouldProtectBoundaries() bool {
 func (cf *changeFrontier) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for cf.State == execinfra.StateRunning {
 		if !cf.passthroughBuf.IsEmpty() {
-			return cf.passthroughBuf.Pop(), nil
+			return cf.ProcessRowHelper(cf.passthroughBuf.Pop()), nil
 		} else if !cf.resolvedBuf.IsEmpty() {
-			return cf.resolvedBuf.Pop(), nil
+			return cf.ProcessRowHelper(cf.resolvedBuf.Pop()), nil
 		}
 
 		if cf.schemaChangeBoundaryReached() && cf.shouldFailOnSchemaChange() {

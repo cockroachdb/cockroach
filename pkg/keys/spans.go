@@ -34,9 +34,6 @@ var (
 	NodeLivenessSpan = roachpb.Span{Key: NodeLivenessPrefix, EndKey: NodeLivenessKeyMax}
 
 	// SystemConfigSpan is the range of system objects which will be gossiped.
-	//
-	// TODO(nvanbenschoten): references to this span need to be prefixed by
-	// tenant ID. This is tracked in #48184.
 	SystemConfigSpan = roachpb.Span{Key: SystemConfigSplitKey, EndKey: SystemConfigTableDataMax}
 
 	// NoSplitSpans describes the ranges that should never be split.

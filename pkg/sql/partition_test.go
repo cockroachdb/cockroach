@@ -17,12 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -30,6 +33,7 @@ import (
 // dealing with partitions. Some things are expected to work, others aren't.
 func TestRemovePartitioningOSS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -41,21 +45,21 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tableKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.PrimaryIndex.Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p1",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
-	tableDesc.Indexes[0].Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.Indexes[0].Partitioning = descpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []descpb.PartitioningDescriptor_Range{{
 			Name:          "p2",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
@@ -64,12 +68,12 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	// Note that this is really a gross hack - it breaks planner caches, which
 	// assume that nothing is going to change out from under them like this. We
 	// "fix" the issue by altering the table's name to refresh the cache, below.
-	if err := kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+	if err := kvDB.Put(ctx, tableKey, tableDesc.DescriptorProto()); err != nil {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, "ALTER TABLE t.kv RENAME to t.kv2")
 	sqlDB.Exec(t, "ALTER TABLE t.kv2 RENAME to t.kv")
-	exp := `CREATE TABLE kv (
+	exp := `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),
@@ -131,7 +135,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE t.kv PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
 
-	exp = `CREATE TABLE kv (
+	exp = `CREATE TABLE public.kv (
 	k INT8 NOT NULL,
 	v INT8 NULL,
 	CONSTRAINT "primary" PRIMARY KEY (k ASC),

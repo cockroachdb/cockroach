@@ -675,7 +675,7 @@ EXECUTE change_loc
 2000-01-01 18:05:10.123 +0000 UTC
 
 statement ok
-SET TIME ZONE 'EST';
+SET TIME ZONE 'EST'
 
 query T
 EXECUTE change_loc
@@ -683,7 +683,36 @@ EXECUTE change_loc
 2000-01-01 18:05:10.123 -0500 EST
 
 statement ok
-SET TIME ZONE 'UTC';
+SET TIME ZONE 'UTC'
+
+# Similar test with a location-dependent operator. Note that the specified
+# timestamps include the timezone offset so they are the same (as shown by the
+# first column); the difference in the second column comes only from the
+# timezone at the time of execution.
+statement ok
+PREPARE loc_dependent_operator AS
+SELECT
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00'),
+  extract(EPOCH FROM TIMESTAMP WITH TIME ZONE '2010-11-06 23:59:00-05:00' + INTERVAL '1 day')
+
+statement ok
+SET TIME ZONE 'America/Chicago'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919594e+09
+
+statement ok
+SET TIME ZONE 'Europe/Berlin'
+
+query RR
+EXECUTE loc_dependent_operator
+----
+1.28910594e+09  1.28919234e+09
+
+statement ok
+SET TIME ZONE 'UTC'
 
 ## Permissions: Grant and then revoke permission to select from a table. The
 ## prepared plan should be invalidated.
@@ -1140,8 +1169,9 @@ EXECUTE e
 ----
 select
  ├── columns: k:1 str:2
+ ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1050.03
+ ├── cost: 1050.04
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
@@ -1153,7 +1183,7 @@ select
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)
  └── filters
-      └── (k:1 % 2) = 1 [outer=(1)]
+      └── (k:1 % 2) = 1 [outer=(1), immutable]
 
 # Only root may use PREPARE AS OPT PLAN.
 
@@ -1247,3 +1277,95 @@ query I
 EXECUTE tview_prep
 ----
 2
+
+# Use of SELECT FOR UPDATE/SHARE in ReadOnly Transaction
+
+statement ok
+CREATE TABLE t3 (i INT PRIMARY KEY)
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR NO KEY UPDATE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR NO KEY UPDATE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+PREPARE a1 AS SELECT * FROM t3 FOR KEY SHARE
+
+statement ok
+BEGIN READ ONLY
+
+statement error cannot execute FOR KEY SHARE in a read-only transaction
+EXECUTE a1
+
+statement ok
+ROLLBACK
+
+statement ok
+DEALLOCATE a1
+
+statement ok
+DROP TABLE t3
+
+# Ensure that changes to used types in tables invalidate prepared statements.
+statement ok
+SET experimental_enable_enums = true;
+CREATE TYPE greeting AS ENUM ('hello', 'hi');
+CREATE TABLE greeting_table (x greeting NOT NULL, y INT, INDEX (x, y))
+
+# This query plan emits constrained lookups based on each enum value.
+statement ok
+PREPARE enum_query AS SELECT x, y FROM greeting_table WHERE y = 2
+
+# Now alter the enum to have a new value.
+statement ok
+ALTER TYPE greeting ADD VALUE 'howdy'
+
+# Insert a value of this new enum into the table.
+statement ok
+INSERT INTO greeting_table VALUES ('howdy', 2)
+
+# If the query plan wasn't invalidated, we wouldn't scan the desired row.
+query TI
+EXECUTE enum_query
+----
+howdy 2

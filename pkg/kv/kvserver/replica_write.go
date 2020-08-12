@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -63,7 +63,7 @@ import (
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
@@ -78,7 +78,7 @@ func (r *Replica) executeWriteBatch(
 	// at proposal time, not at application time, because the spanlatch manager
 	// will synchronize all requests (notably EndTxn with SplitTrigger) that may
 	// cause this condition to change.
-	if err := r.checkExecutionCanProceed(ba, g, &st); err != nil {
+	if err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -142,11 +142,23 @@ func (r *Replica) executeWriteBatch(
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
-	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
-	// In both cases, we don't need to communicate a MLAI. Furthermore, for lease proposals we
-	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI explicitly
-	// as a side effect of stepping up as leaseholder.
+	// A max lease index of zero is returned when no proposal was made or a lease
+	// was proposed. In case no proposal was made or a lease was proposed, we
+	// don't need to communicate a MLAI. Furthermore, for lease proposals we
+	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI
+	// explicitly as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
+		if r.mergeInProgress() {
+			// The correctness of range merges relies on the invariant that the
+			// LeaseAppliedIndex of the range is not bumped while a range is in its
+			// subsumed state. If this invariant is ever violated, the follower
+			// replicas of the subsumed range (RHS) are free to activate any future
+			// closed timestamp updates even before the merge completes. This would be
+			// a serializability violation.
+			//
+			// See comment block in Subsume() in cmd_subsume.go for details.
+			log.Fatalf(ctx, "lease applied index bumped while the range was subsumed")
+		}
 		untrack(ctx, ctpb.Epoch(st.Lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
@@ -313,7 +325,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 // retryable error.
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (storage.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
@@ -386,7 +398,7 @@ type onePCResult struct {
 // immediately deleting intents.
 func (r *Replica) evaluate1PC(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	ba *roachpb.BatchRequest,
 	latchSpans *spanset.SpanSet,
 ) (onePCRes onePCResult) {
@@ -505,7 +517,7 @@ func (r *Replica) evaluate1PC(
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -547,7 +559,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 // with filling out result.LogicalOpLog.
 func (r *Replica) evaluateWriteBatchWrapper(
 	ctx context.Context,
-	idKey storagebase.CmdIDKey,
+	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba *roachpb.BatchRequest,
@@ -557,7 +569,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, false /* readOnly */)
 	if pErr == nil {
 		if opLogger != nil {
-			res.LogicalOpLog = &storagepb.LogicalOpLog{
+			res.LogicalOpLog = &kvserverpb.LogicalOpLog{
 				Ops: opLogger.LogicalOps(),
 			}
 		}

@@ -17,15 +17,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/marusama/semaphore"
@@ -34,6 +35,7 @@ import (
 
 func TestExternalHashJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -62,45 +64,43 @@ func TestExternalHashJoiner(t *testing.T) {
 		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
 			for _, tc := range tcs {
 				delegateFDAcquisitions := rng.Float64() < 0.5
-				t.Run(fmt.Sprintf("spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions), func(t *testing.T) {
-					var semsToCheck []semaphore.Semaphore
-					if !tc.onExpr.Empty() {
-						// When we have ON expression, there might be other operators (like
-						// selections) on top of the external hash joiner in
-						// diskSpiller.diskBackedOp chain. This will not allow for Close()
-						// call to propagate to the external hash joiner, so we will skip
-						// allNullsInjection test for now.
-						defer func(oldValue bool) {
-							tc.skipAllNullsInjection = oldValue
-						}(tc.skipAllNullsInjection)
-						tc.skipAllNullsInjection = true
-					}
-					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-						sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
-						semsToCheck = append(semsToCheck, sem)
-						spec := createSpecForHashJoiner(tc)
-						// TODO(asubiotto): Pass in the testing.T of the caller to this
-						//  function and do substring matching on the test name to
-						//  conditionally explicitly call Close() on the hash joiner
-						//  (through result.ToClose) in cases where it is known the sorter
-						//  will not be drained.
-						hjOp, newAccounts, newMonitors, closers, err := createDiskBackedHashJoiner(
-							ctx, flowCtx, spec, sources, func() {}, queueCfg,
-							2 /* numForcedPartitions */, delegateFDAcquisitions, sem,
-						)
-						// Expect three closers. These are the external hash joiner, and
-						// one external sorter for each input.
-						// TODO(asubiotto): Explicitly Close when testing.T is passed into
-						//  this constructor and we do a substring match.
-						require.Equal(t, 3, len(closers))
-						accounts = append(accounts, newAccounts...)
-						monitors = append(monitors, newMonitors...)
-						return hjOp, err
-					})
-					for i, sem := range semsToCheck {
-						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
-					}
+				log.Infof(ctx, "spillForced=%t/%s/delegateFDAcquisitions=%t", spillForced, tc.description, delegateFDAcquisitions)
+				var semsToCheck []semaphore.Semaphore
+				oldSkipAllNullsInjection := tc.skipAllNullsInjection
+				if !tc.onExpr.Empty() {
+					// When we have ON expression, there might be other operators (like
+					// selections) on top of the external hash joiner in
+					// diskSpiller.diskBackedOp chain. This will not allow for Close()
+					// call to propagate to the external hash joiner, so we will skip
+					// allNullsInjection test for now.
+					tc.skipAllNullsInjection = true
+				}
+				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+					sem := colexecbase.NewTestingSemaphore(externalHJMinPartitions)
+					semsToCheck = append(semsToCheck, sem)
+					spec := createSpecForHashJoiner(tc)
+					// TODO(asubiotto): Pass in the testing.T of the caller to this
+					//  function and do substring matching on the test name to
+					//  conditionally explicitly call Close() on the hash joiner
+					//  (through result.ToClose) in cases where it is known the sorter
+					//  will not be drained.
+					hjOp, newAccounts, newMonitors, closers, err := createDiskBackedHashJoiner(
+						ctx, flowCtx, spec, sources, func() {}, queueCfg,
+						2 /* numForcedPartitions */, delegateFDAcquisitions, sem,
+					)
+					// Expect three closers. These are the external hash joiner, and
+					// one external sorter for each input.
+					// TODO(asubiotto): Explicitly Close when testing.T is passed into
+					//  this constructor and we do a substring match.
+					require.Equal(t, 3, len(closers))
+					accounts = append(accounts, newAccounts...)
+					monitors = append(monitors, newMonitors...)
+					return hjOp, err
 				})
+				for i, sem := range semsToCheck {
+					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
+				}
+				tc.skipAllNullsInjection = oldSkipAllNullsInjection
 			}
 		}
 	}
@@ -118,6 +118,7 @@ func TestExternalHashJoiner(t *testing.T) {
 // the same tuple many times.
 func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -141,7 +142,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	leftSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	rightSource := newFiniteBatchSource(batch, sourceTypes, nBatches)
 	tc := &joinTestCase{
-		joinType:     sqlbase.JoinType_INNER,
+		joinType:     descpb.InnerJoin,
 		leftTypes:    sourceTypes,
 		leftOutCols:  []uint32{0},
 		leftEqCols:   []uint32{0},
@@ -240,9 +241,9 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 					name := fmt.Sprintf(
 						"nulls=%t/fullOuter=%t/batches=%d/spillForced=%t",
 						hasNulls, fullOuter, nBatches, spillForced)
-					joinType := sqlbase.JoinType_INNER
+					joinType := descpb.InnerJoin
 					if fullOuter {
-						joinType = sqlbase.JoinType_FULL_OUTER
+						joinType = descpb.FullOuterJoin
 					}
 					tc := &joinTestCase{
 						joinType:     joinType,
@@ -303,8 +304,8 @@ func createDiskBackedHashJoiner(
 	numForcedRepartitions int,
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
-) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []IdempotentCloser, error) {
-	args := NewColOperatorArgs{
+) (colexecbase.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []Closer, error) {
+	args := &NewColOperatorArgs{
 		Spec:                spec,
 		Inputs:              inputs,
 		StreamingMemAccount: testMemAcc,
@@ -317,6 +318,6 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
-	result, err := NewColOperator(ctx, flowCtx, args)
+	result, err := TestNewColOperator(ctx, flowCtx, args)
 	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

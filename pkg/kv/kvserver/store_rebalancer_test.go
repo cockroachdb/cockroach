@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
 	"go.etcd.io/etcd/raft"
@@ -108,6 +109,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 
 func TestChooseLeaseToTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -116,7 +118,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800
@@ -191,6 +193,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 
 func TestChooseReplicaToRebalance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -199,7 +202,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800
@@ -297,6 +300,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 
 func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Lots of setup boilerplate.
 
@@ -307,7 +311,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	stopper, g, _, a, _ := createTestAllocator(10, false /* deterministic */)
 	defer stopper.Stop(context.Background())
 	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
-	storeList, _, _ := a.storePool.getStoreList(firstRangeID, storeFilterThrottled)
+	storeList, _, _ := a.storePool.getStoreList(storeFilterThrottled)
 	storeMap := storeListToMap(storeList)
 
 	const minQPS = 800

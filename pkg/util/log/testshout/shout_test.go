@@ -34,9 +34,6 @@ func Example_shout_before_log() {
 	if err := flag.Set(logflags.LogToStderrName, "WARNING"); err != nil {
 		panic(err)
 	}
-	if err := flag.Set(logflags.NoRedirectStderrName, "false"); err != nil {
-		panic(err)
-	}
 
 	log.Shout(context.Background(), log.Severity_INFO, "hello world")
 

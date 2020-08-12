@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestParse verifies that we can parse the supplied SQL and regenerate the SQL
@@ -86,22 +88,29 @@ func TestParse(t *testing.T) {
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
 		{`CREATE INDEX ON a (b) STORING (c)`},
+		{`CREATE INDEX ON a (b) WHERE c > 3`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c (d)`},
 		{`CREATE INDEX ON a (b) INTERLEAVE IN PARENT c.d (e)`},
 		{`CREATE INDEX ON a (b ASC, c DESC)`},
 		{`CREATE INDEX ON a (b NULLS FIRST, c ASC NULLS FIRST, d DESC NULLS LAST)`},
+		{`CREATE INDEX IF NOT EXISTS i ON a (b) WHERE c > 3`},
 		{`CREATE UNIQUE INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b (c) STORING (d)`},
+		{`CREATE UNIQUE INDEX a ON b (c) WHERE d > 3`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
 		{`CREATE INVERTED INDEX a ON b (c)`},
 		{`CREATE INVERTED INDEX a ON b.c (d)`},
 		{`CREATE INVERTED INDEX a ON b (c) STORING (d)`},
+		{`CREATE INVERTED INDEX a ON b (c) WHERE d > 3`},
 		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
+		{`CREATE INVERTED INDEX IF NOT EXISTS a ON b (c) WHERE d > 3`},
+		{`CREATE INDEX a ON b (c) WITH (fillfactor = 100, y_bounds = 50)`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TEMPORARY TABLE a (b INT8)`},
+		{`CREATE UNLOGGED TABLE a (b INT8)`},
 		{`EXPLAIN CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT8, c INT8)`},
@@ -118,6 +127,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b TIMETZ)`},
 		{`CREATE TABLE a (b TIME(3))`},
 		{`CREATE TABLE a (b TIMETZ(3))`},
+		{`CREATE TABLE a (b GEOGRAPHY)`},
+		{`CREATE TABLE a (b GEOGRAPHY(POINT))`},
 		{`CREATE TABLE a (b GEOGRAPHY(POINT,4326))`},
 		{`CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326))`},
 		{`CREATE TABLE a (b GEOGRAPHY(POLYGON,4326))`},
@@ -217,6 +228,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT)`},
 		{`CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL)`},
 		{`CREATE TABLE a (b INT8, INDEX (b) STORING (c))`},
+		{`CREATE TABLE a (b INT8, INDEX (b) WHERE b > 3)`},
+		{`CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 3)`},
 		{`CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c))`},
 		{`CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))`},
 		{`CREATE TABLE a (b INT8, FAMILY (b))`},
@@ -328,6 +341,8 @@ func TestParse(t *testing.T) {
 
 		{`CREATE STATISTICS a ON col1 FROM t`},
 		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
+		{`CREATE STATISTICS a FROM t`},
+		{`CREATE STATISTICS a FROM [53]`},
 		{`CREATE STATISTICS a ON col1, col2 FROM t`},
 		{`CREATE STATISTICS a ON col1 FROM d.t`},
 		{`CREATE STATISTICS a ON col1 FROM t`},
@@ -335,11 +350,21 @@ func TestParse(t *testing.T) {
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'`},
 
+		{`ANALYZE t`},
+		{`ANALYZE db.sc.t`},
+
 		{`CREATE TYPE a AS ENUM ()`},
 		{`CREATE TYPE a AS ENUM ('a')`},
 		{`CREATE TYPE a AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b AS ENUM ('a', 'b', 'c')`},
 		{`CREATE TYPE a.b.c AS ENUM ('a', 'b', 'c')`},
+
+		{`DROP SCHEMA a`},
+		{`DROP SCHEMA a, b`},
+		{`DROP SCHEMA IF EXISTS a, b, c`},
+		{`DROP SCHEMA IF EXISTS a, b CASCADE`},
+		{`DROP SCHEMA IF EXISTS a, b RESTRICT`},
+		{`DROP SCHEMA a RESTRICT`},
 
 		{`DROP TYPE a`},
 		{`DROP TYPE a, b, c`},
@@ -421,10 +446,39 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN RESUME JOBS SELECT a`},
 		{`PAUSE JOBS SELECT a`},
 		{`EXPLAIN PAUSE JOBS SELECT a`},
+		{`PAUSE SCHEDULES SELECT a`},
+		{`EXPLAIN PAUSE SCHEDULES SELECT a`},
+		{`RESUME SCHEDULES SELECT a`},
+		{`EXPLAIN RESUME SCHEDULES SELECT a`},
+		{`DROP SCHEDULES SELECT a`},
+		{`EXPLAIN DROP SCHEDULES SELECT a`},
 		{`SHOW JOBS SELECT a`},
 		{`EXPLAIN SHOW JOBS SELECT a`},
 		{`SHOW JOBS WHEN COMPLETE SELECT a`},
 		{`EXPLAIN SHOW JOBS WHEN COMPLETE SELECT a`},
+		{`PAUSE JOBS FOR SCHEDULES SELECT 1`},
+		{`EXPLAIN PAUSE JOBS FOR SCHEDULES SELECT 1`},
+		{`RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])`},
+		{`EXPLAIN RESUME JOBS FOR SCHEDULES SELECT unnest(ARRAY[1, 2, 3])`},
+		{`CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)`},
+		{`EXPLAIN CANCEL JOBS FOR SCHEDULES (SELECT schedule_id FROM somewhere WHERE something = true)`},
+		{`SHOW JOBS FOR SCHEDULES SELECT 123`},
+		{`EXPLAIN SHOW JOBS FOR SCHEDULES SELECT 123`},
+
+		{`SHOW SCHEDULE 123`},
+		{`EXPLAIN SHOW SCHEDULE 123`},
+		{`SHOW SCHEDULES`},
+		{`EXPLAIN SHOW SCHEDULES`},
+		{`SHOW SCHEDULES FOR BACKUP`},
+		{`EXPLAIN SHOW SCHEDULES FOR BACKUP`},
+		{`SHOW PAUSED SCHEDULES`},
+		{`EXPLAIN SHOW PAUSED SCHEDULES`},
+		{`SHOW RUNNING SCHEDULES`},
+		{`EXPLAIN SHOW RUNNING SCHEDULES`},
+		{`SHOW PAUSED SCHEDULES FOR BACKUP`},
+		{`EXPLAIN SHOW PAUSED SCHEDULES FOR BACKUP`},
+		{`SHOW RUNNING SCHEDULES FOR BACKUP`},
+		{`EXPLAIN SHOW RUNNING SCHEDULES FOR BACKUP`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
@@ -447,6 +501,8 @@ func TestParse(t *testing.T) {
 
 		{`SHOW DATABASES`},
 		{`EXPLAIN SHOW DATABASES`},
+		{`SHOW ENUMS`},
+		{`EXPLAIN SHOW ENUMS`},
 		{`SHOW SCHEMAS`},
 		{`EXPLAIN SHOW SCHEMAS`},
 		{`SHOW SCHEMAS FROM a`},
@@ -507,6 +563,7 @@ func TestParse(t *testing.T) {
 		{`SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION`},
 		{`EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION`},
 		{`SHOW STATISTICS FOR TABLE t`},
+		{`SHOW STATISTICS USING JSON FOR TABLE t`},
 		{`EXPLAIN SHOW STATISTICS FOR TABLE t`},
 		{`SHOW STATISTICS FOR TABLE d.t`},
 		{`SHOW HISTOGRAM 123`},
@@ -557,6 +614,7 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN SHOW TRANSACTION STATUS`},
 		{`SHOW SAVEPOINT STATUS`},
 		{`EXPLAIN SHOW SAVEPOINT STATUS`},
+		{`SHOW LAST QUERY STATISTICS`},
 
 		{`SHOW SYNTAX 'select 1'`},
 		{`EXPLAIN SHOW SYNTAX 'select 1'`},
@@ -781,7 +839,9 @@ func TestParse(t *testing.T) {
 		{`SELECT 'foo'::TIME(6)`},
 		{`SELECT '0'::INTERVAL`},
 
+		{`SELECT 'foo'::GEOGRAPHY`},
 		{`SELECT 'foo'::GEOGRAPHY(POINT,4326)`},
+		{`SELECT 'foo'::GEOGRAPHY(POINT)`},
 		{`SELECT 'foo'::GEOMETRY`},
 		{`SELECT 'foo'::GEOMETRY(POINT)`},
 		{`SELECT 'foo'::GEOMETRY(POINT,4326)`},
@@ -1198,6 +1258,8 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
 
+		{`ALTER SCHEMA s RENAME TO s2`},
+
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
@@ -1251,9 +1313,19 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a ALTER COLUMN b SET DATA TYPE STRING COLLATE en USING b::STRING`},
 		{`ALTER TABLE a ALTER COLUMN b SET DATA TYPE DECIMAL(10)[]`},
 
+		{`ALTER TABLE a SET SCHEMA s`},
+		{`ALTER TABLE IF EXISTS a SET SCHEMA s`},
+
+		{`ALTER VIEW v SET SCHEMA s`},
+		{`ALTER VIEW IF EXISTS a SET SCHEMA s`},
+
+		{`ALTER SEQUENCE seq SET SCHEMA s`},
+		{`ALTER SEQUENCE IF EXISTS seq SET SCHEMA s`},
+
 		{`COPY t FROM STDIN`},
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
+		{`COPY t (a, b, c) FROM STDIN WITH BINARY`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
@@ -1414,6 +1486,15 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
 		{`BACKUP TABLE foo TO 'bar'`},
+		{`BACKUP TABLE foo INTO 'bar'`},
+		{`BACKUP TABLE foo INTO LATEST IN 'bar'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING '@hourly'`},
+		{`CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo TO 'bar' RECURRING '@daily'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo TO 'bar' RECURRING '@daily'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' RECURRING '@daily' FULL BACKUP ALWAYS`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' RECURRING '@daily' FULL BACKUP '@weekly'`},
+		{`CREATE SCHEDULE FOR BACKUP TABLE foo, bar, buz TO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly'`},
+		{`CREATE SCHEDULE FOR BACKUP TO 'bar' WITH revision_history RECURRING '@daily' FULL BACKUP '@weekly' WITH EXPERIMENTAL SCHEDULE OPTIONS foo = 'bar'`},
 		{`EXPLAIN BACKUP TABLE foo TO 'bar'`},
 		{`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
 
@@ -1435,10 +1516,15 @@ func TestParse(t *testing.T) {
 		{`BACKUP DATABASE foo TO ($1, $2)`},
 		{`BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'`},
 
+		{`BACKUP TENANT 36 TO 'bar'`},
+
 		{`RESTORE TABLE foo FROM 'bar'`},
 		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
+		{`RESTORE TABLE foo FROM $2 IN $1`},
 		{`RESTORE TABLE foo FROM $1, $2, 'bar'`},
+		{`RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'`},
+		{`RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 
@@ -1453,8 +1539,10 @@ func TestParse(t *testing.T) {
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4)`},
 		{`RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'`},
 
-		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
-		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
+		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
+
+		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
+		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences`},
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
@@ -1529,6 +1617,8 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT8)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b))`,
 			`CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b))`},
+		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3)`,
+			`CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 3)`},
 		{`CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))`,
 			`CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d))`},
 		{`CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))`,
@@ -1537,6 +1627,8 @@ func TestParse2(t *testing.T) {
 		{`CREATE INDEX ON a (b) INCLUDE (c)`, `CREATE INDEX ON a (b) STORING (c)`},
 
 		{`CREATE INDEX a ON b USING GIN (c)`,
+			`CREATE INVERTED INDEX a ON b (c)`},
+		{`CREATE INDEX a ON b USING GIST (c)`,
 			`CREATE INVERTED INDEX a ON b (c)`},
 		{`CREATE UNIQUE INDEX a ON b USING GIN (c)`,
 			`CREATE UNIQUE INVERTED INDEX a ON b (c)`},
@@ -1565,11 +1657,11 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
 			`CREATE TABLE a (b VARBIT(2), c BIT)`},
-		{`CREATE TABLE a (b GEOGRAPHY(POINT))`, `CREATE TABLE a (b GEOGRAPHY(POINT,4326))`},
-		{`CREATE TABLE a (b GEOGRAPHY)`, `CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326))`},
 
 		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
 			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
+
+		{`ANALYSE t`, `ANALYZE t`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
@@ -1577,9 +1669,6 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS _int8)`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`, `SELECT INT8 'foo', 'foo'::INT8`},
-
-		{`SELECT 'foo'::GEOGRAPHY`, `SELECT 'foo'::GEOGRAPHY(GEOMETRY,4326)`},
-		{`SELECT 'foo'::GEOGRAPHY(POINT)`, `SELECT 'foo'::GEOGRAPHY(POINT,4326)`},
 
 		{`SELECT 'a'::TIMESTAMP(3)`, `SELECT 'a'::TIMESTAMP(3)`},
 		{`SELECT 'a'::TIMESTAMP(3) WITHOUT TIME ZONE`, `SELECT 'a'::TIMESTAMP(3)`},
@@ -1986,12 +2075,27 @@ $function$`,
 
 		{`CANCEL JOB a`, `CANCEL JOBS VALUES (a)`},
 		{`EXPLAIN CANCEL JOB a`, `EXPLAIN CANCEL JOBS VALUES (a)`},
+		{`CANCEL JOBS FOR SCHEDULE a`, `CANCEL JOBS FOR SCHEDULES VALUES (a)`},
+		{`EXPLAIN CANCEL JOBS FOR SCHEDULE a`, `EXPLAIN CANCEL JOBS FOR SCHEDULES VALUES (a)`},
 		{`RESUME JOB a`, `RESUME JOBS VALUES (a)`},
 		{`EXPLAIN RESUME JOB a`, `EXPLAIN RESUME JOBS VALUES (a)`},
+		{`RESUME JOBS FOR SCHEDULE a`, `RESUME JOBS FOR SCHEDULES VALUES (a)`},
+		{`EXPLAIN RESUME JOBS FOR SCHEDULE a`, `EXPLAIN RESUME JOBS FOR SCHEDULES VALUES (a)`},
 		{`PAUSE JOB a`, `PAUSE JOBS VALUES (a)`},
 		{`EXPLAIN PAUSE JOB a`, `EXPLAIN PAUSE JOBS VALUES (a)`},
+		{`PAUSE JOBS FOR SCHEDULE a`, `PAUSE JOBS FOR SCHEDULES VALUES (a)`},
+		{`EXPLAIN PAUSE JOBS FOR SCHEDULE a`, `EXPLAIN PAUSE JOBS FOR SCHEDULES VALUES (a)`},
+		{`PAUSE SCHEDULE a`, `PAUSE SCHEDULES VALUES (a)`},
+		{`EXPLAIN PAUSE SCHEDULE a`, `EXPLAIN PAUSE SCHEDULES VALUES (a)`},
+		{`RESUME SCHEDULE a`, `RESUME SCHEDULES VALUES (a)`},
+		{`EXPLAIN RESUME SCHEDULE a`, `EXPLAIN RESUME SCHEDULES VALUES (a)`},
+		{`DROP SCHEDULE a`, `DROP SCHEDULES VALUES (a)`},
+		{`EXPLAIN DROP SCHEDULE a`, `EXPLAIN DROP SCHEDULES VALUES (a)`},
 		{`SHOW JOB a`, `SHOW JOBS VALUES (a)`},
 		{`EXPLAIN SHOW JOB a`, `EXPLAIN SHOW JOBS VALUES (a)`},
+		{`SHOW JOBS FOR SCHEDULE a`, `SHOW JOBS FOR SCHEDULES VALUES (a)`},
+		{`EXPLAIN SHOW JOBS FOR SCHEDULE a`, `EXPLAIN SHOW JOBS FOR SCHEDULES VALUES (a)`},
+
 		{`SHOW JOB WHEN COMPLETE a`, `SHOW JOBS WHEN COMPLETE VALUES (a)`},
 		{`EXPLAIN SHOW JOB WHEN COMPLETE a`, `EXPLAIN SHOW JOBS WHEN COMPLETE VALUES (a)`},
 		{`CANCEL QUERY a`, `CANCEL QUERIES VALUES (a)`},
@@ -2065,6 +2169,9 @@ $function$`,
 		{`ALTER TABLE a RENAME b TO c`,
 			`ALTER TABLE a RENAME COLUMN b TO c`},
 
+		{`COPY t (a, b, c) FROM STDIN BINARY`,
+			`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+
 		// Identifier handling for zone configs.
 
 		{`ALTER TABLE t CONFIGURE ZONE = NULL`,
@@ -2106,6 +2213,8 @@ $function$`,
 			`BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 		{`BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`,
 			`BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
+		{`BACKUP TO 'bar'`,
+			`BACKUP TO 'bar'`},
 		// Tables named "role" are handled specially to support SHOW GRANTS ON ROLE,
 		// but that special handling should not impact BACKUP.
 		{`BACKUP role TO 'bar'`,
@@ -2116,14 +2225,29 @@ $function$`,
 			`RESTORE TABLE foo FROM $1`},
 		{`RESTORE foo FROM $1, $2, 'bar'`,
 			`RESTORE TABLE foo FROM $1, $2, 'bar'`},
+		{`RESTORE FROM $1, $2, 'bar'`,
+			`RESTORE FROM $1, $2, 'bar'`},
 		{`RESTORE foo, baz FROM 'bar'`,
 			`RESTORE TABLE foo, baz FROM 'bar'`},
 		{`RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`,
 			`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
-		{`BACKUP foo TO 'bar' WITH key1, key2 = 'value'`,
-			`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
-		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
-			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
+		{`BACKUP foo TO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret'`},
+		{`BACKUP foo TO 'bar' WITH KMS = 'foo', revision_history`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, kms='foo'`},
+		{`BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, kms=('foo', 'bar')`},
+		{`BACKUP foo TO 'bar' WITH OPTIONS (detached, ENCRYPTION_PASSPHRASE = 'secret', revision_history)`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase='secret', detached`},
+		{`BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)`,
+			`BACKUP TABLE foo TO 'bar' WITH revision_history, detached, kms=('foo', 'bar')`},
+
+		{`RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz', 
+skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views)`,
+			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
+		{`RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, 
+SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS`,
+			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
 
 		{`CREATE CHANGEFEED FOR foo INTO 'sink'`, `CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 
@@ -2320,6 +2444,7 @@ $function$`,
 			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL)`,
 			`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE ON UPDATE SET NULL)`,
 		},
+		{`CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b) STORED)`, `CREATE TABLE a (b INT8 AS (a + b) STORED)`},
 
 		{`ALTER TABLE a ALTER b DROP STORED`, `ALTER TABLE a ALTER COLUMN b DROP STORED`},
 		{`ALTER TABLE a ADD b INT8`, `ALTER TABLE a ADD COLUMN b INT8`},
@@ -2446,527 +2571,45 @@ func TestParseSyntax(t *testing.T) {
 	}
 }
 
-func TestParseError(t *testing.T) {
-	testData := []struct {
-		sql      string
+func TestParseDatadriven(t *testing.T) {
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "error":
+				_, err := parser.Parse(d.Input)
+				if err == nil {
+					return ""
+				}
+				pgerr := pgerror.Flatten(err)
+				msg := pgerr.Message
+				if pgerr.Detail != "" {
+					msg += "\nDETAIL: " + pgerr.Detail
+				}
+				if pgerr.Hint != "" {
+					msg += "\nHINT: " + pgerr.Hint
+				}
+				return msg
+			}
+			d.Fatalf(t, "unsupported command: %s", d.Cmd)
+			return ""
+		})
+	})
+}
+
+func TestParseTableNameWithQualifiedNames(t *testing.T) {
+	testdata := []struct {
+		name     string
 		expected string
 	}{
-		{`SELECT2 1`,
-			`at or near "select2": syntax error
-DETAIL: source SQL:
-SELECT2 1
-^`},
-		{`SELECT 1 FROM (t)`,
-			`at or near ")": syntax error
-DETAIL: source SQL:
-SELECT 1 FROM (t)
-                ^
-HINT: try \h <SOURCE>`},
-		{`SET TIME ZONE INTERVAL 'foobar'`,
-			`at or near "EOF": syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar"
-DETAIL: source SQL:
-SET TIME ZONE INTERVAL 'foobar'
-                               ^`},
-		{`SELECT INTERVAL 'foo'`,
-			`at or near "EOF": syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo"
-DETAIL: source SQL:
-SELECT INTERVAL 'foo'
-                     ^`},
-		{`SELECT 1 /* hello`,
-			`lexical error: unterminated comment
-DETAIL: source SQL:
-SELECT 1 /* hello
-         ^`},
-		{`SELECT '1`,
-			`lexical error: unterminated string
-DETAIL: source SQL:
-SELECT '1
-       ^
-HINT: try \h SELECT`},
-		{`SELECT * FROM t WHERE k=`,
-			`at or near "EOF": syntax error
-DETAIL: source SQL:
-SELECT * FROM t WHERE k=
-                        ^
-HINT: try \h SELECT`,
-		},
-		{`CREATE TABLE test (
-  CONSTRAINT foo INDEX (bar)
-)`,
-			`at or near "index": syntax error
-DETAIL: source SQL:
-CREATE TABLE test (
-  CONSTRAINT foo INDEX (bar)
-                 ^
-HINT: try \h CREATE TABLE`},
-		{`CREATE TABLE test (
-  foo BIT(0)
-)`,
-			`at or near ")": syntax error: length for type bit must be at least 1
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo BIT(0)
-           ^`},
-		{`CREATE TABLE test (
-  foo INT8 DEFAULT 1 DEFAULT 2
-)`,
-			`at or near ")": syntax error: multiple default values specified for column "foo"
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo INT8 DEFAULT 1 DEFAULT 2
-)
-^`},
-		{`CREATE TABLE test (
-  foo INT8 REFERENCES t1 REFERENCES t2
-)`,
-			`at or near ")": syntax error: multiple foreign key constraints specified for column "foo"
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo INT8 REFERENCES t1 REFERENCES t2
-)
-^`},
-		{`CREATE TABLE test (
-  foo INT8 FAMILY a FAMILY b
-)`,
-			`at or near ")": syntax error: multiple column families specified for column "foo"
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo INT8 FAMILY a FAMILY b
-)
-^`},
-		{`SELECT family FROM test`,
-			`at or near "from": syntax error
-DETAIL: source SQL:
-SELECT family FROM test
-              ^
-HINT: try \h SELECT`},
-		{`CREATE TABLE test (
-  foo INT8 NOT NULL NULL
-)`,
-			`at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo INT8 NOT NULL NULL
-)
-^`},
-		{`CREATE TABLE test (
-  foo INT8 NULL NOT NULL
-)`,
-			`at or near ")": syntax error: conflicting NULL/NOT NULL declarations for column "foo"
-DETAIL: source SQL:
-CREATE TABLE test (
-  foo INT8 NULL NOT NULL
-)
-^`},
-		{`CREATE DATABASE a b`,
-			`at or near "b": syntax error
-DETAIL: source SQL:
-CREATE DATABASE a b
-                  ^`},
-		{`CREATE DATABASE a b c`,
-			`at or near "b": syntax error
-DETAIL: source SQL:
-CREATE DATABASE a b c
-                  ^`},
-		{`CREATE INDEX ON a (b) STORING ()`,
-			`at or near ")": syntax error
-DETAIL: source SQL:
-CREATE INDEX ON a (b) STORING ()
-                               ^
-HINT: try \h CREATE INDEX`},
-		{`CREATE VIEW a`,
-			`at or near "EOF": syntax error
-DETAIL: source SQL:
-CREATE VIEW a
-             ^
-HINT: try \h CREATE VIEW`},
-		{`CREATE VIEW a () AS select * FROM b`,
-			`at or near ")": syntax error
-DETAIL: source SQL:
-CREATE VIEW a () AS select * FROM b
-               ^
-HINT: try \h CREATE VIEW`},
-		{`SELECT FROM t`,
-			`at or near "from": syntax error
-DETAIL: source SQL:
-SELECT FROM t
-       ^
-HINT: try \h SELECT`},
-
-		{"SELECT 1e-\n-1",
-			`lexical error: invalid floating point literal
-DETAIL: source SQL:
-SELECT 1e-
-       ^
-HINT: try \h SELECT`},
-		{
-			`SELECT 0x FROM t`,
-			`lexical error: invalid hexadecimal numeric literal
-DETAIL: source SQL:
-SELECT 0x FROM t
-       ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT x'fail' FROM t`,
-			`lexical error: invalid hexadecimal bytes literal
-DETAIL: source SQL:
-SELECT x'fail' FROM t
-       ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT x'AAB' FROM t`,
-			`lexical error: invalid hexadecimal bytes literal
-DETAIL: source SQL:
-SELECT x'AAB' FROM t
-       ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT POSITION('high', 'a')`,
-			`at or near ",": syntax error
-DETAIL: source SQL:
-SELECT POSITION('high', 'a')
-                      ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT a FROM foo@{FORCE_INDEX}`,
-			`at or near "}": syntax error
-DETAIL: source SQL:
-SELECT a FROM foo@{FORCE_INDEX}
-                              ^
-HINT: try \h <SOURCE>`,
-		},
-		{
-			`SELECT a FROM foo@{FORCE_INDEX=}`,
-			`at or near "}": syntax error
-DETAIL: source SQL:
-SELECT a FROM foo@{FORCE_INDEX=}
-                               ^
-HINT: try \h <SOURCE>`,
-		},
-		{
-			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
-			`at or near "baz": syntax error: FORCE_INDEX specified multiple times
-DETAIL: source SQL:
-SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
-                                               ^`,
-		},
-		{
-			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
-			`at or near "}": syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN
-DETAIL: source SQL:
-SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
-                                                ^`,
-		},
-		{
-			`SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}`,
-			`at or near "no_index_join": syntax error: NO_INDEX_JOIN specified multiple times
-DETAIL: source SQL:
-SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
-                                 ^`,
-		},
-		{
-			`SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}`,
-			`at or near "ignore_foreign_keys": syntax error: IGNORE_FOREIGN_KEYS specified multiple times
-DETAIL: source SQL:
-SELECT a FROM foo@{IGNORE_FOREIGN_KEYS,IGNORE_FOREIGN_KEYS}
-                                       ^`,
-		},
-		{
-			`SELECT a FROM foo@{ASC}`,
-			`at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
-DETAIL: source SQL:
-SELECT a FROM foo@{ASC}
-                      ^`,
-		},
-		{
-			`SELECT a FROM foo@{DESC}`,
-			`at or near "}": syntax error: ASC/DESC must be specified in conjunction with an index
-DETAIL: source SQL:
-SELECT a FROM foo@{DESC}
-                       ^`,
-		},
-		{
-			`INSERT INTO a@b VALUES (1, 2)`,
-			`at or near "@": syntax error
-DETAIL: source SQL:
-INSERT INTO a@b VALUES (1, 2)
-             ^
-HINT: try \h INSERT`,
-		},
-		{
-			`ALTER TABLE t RENAME COLUMN x TO family`,
-			`at or near "family": syntax error
-DETAIL: source SQL:
-ALTER TABLE t RENAME COLUMN x TO family
-                                 ^
-HINT: try \h ALTER TABLE`,
-		},
-		{
-			`CREATE USER foo WITH PASSWORD`,
-			`at or near "EOF": syntax error
-DETAIL: source SQL:
-CREATE USER foo WITH PASSWORD
-                             ^
-HINT: try \h CREATE ROLE`,
-		},
-		{
-			`ALTER TABLE t RENAME TO t[TRUE]`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-ALTER TABLE t RENAME TO t[TRUE]
-                         ^`,
-		},
-		{
-			`TABLE abc[TRUE]`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-TABLE abc[TRUE]
-         ^`,
-		},
-		{
-			`UPDATE kv SET k[0] = 9`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-UPDATE kv SET k[0] = 9
-               ^
-HINT: try \h UPDATE`,
-		},
-		{
-			`SELECT (0) FROM y[array[]]`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-SELECT (0) FROM y[array[]]
-                 ^`,
-		},
-		{
-			`INSERT INTO kv (k[0]) VALUES ('hello')`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-INSERT INTO kv (k[0]) VALUES ('hello')
-                 ^
-HINT: try \h <SELECTCLAUSE>`,
-		},
-		{
-			`SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-SELECT CASE 1 = 1 WHEN true THEN ARRAY[1, 2] ELSE ARRAY[2, 3] END[1]
-                                                                 ^`,
-		},
-		{
-			`SELECT EXISTS(SELECT 1)[1]`,
-			`at or near "[": syntax error
-DETAIL: source SQL:
-SELECT EXISTS(SELECT 1)[1]
-                       ^`,
-		},
-		{
-			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
-			`at or near "EOF": syntax error: + ANY <array> is invalid because "+" is not a boolean operator
-DETAIL: source SQL:
-SELECT 1 + ANY ARRAY[1, 2, 3]
-                             ^`,
-		},
-		// Ensure that the support for ON ROLE <namelist> doesn't leak
-		// where it should not be recognized.
-		{
-			`GRANT SELECT ON ROLE foo, bar TO blix`,
-			`at or near "foo": syntax error
-DETAIL: source SQL:
-GRANT SELECT ON ROLE foo, bar TO blix
-                     ^
-HINT: try \h GRANT`,
-		},
-		{
-			`REVOKE SELECT ON ROLE foo, bar FROM blix`,
-			`at or near "foo": syntax error
-DETAIL: source SQL:
-REVOKE SELECT ON ROLE foo, bar FROM blix
-                      ^
-HINT: try \h REVOKE`,
-		},
-		{
-			`BACKUP ROLE foo, bar TO 'baz'`,
-			`at or near "foo": syntax error
-DETAIL: source SQL:
-BACKUP ROLE foo, bar TO 'baz'
-            ^
-HINT: try \h BACKUP`,
-		},
-		{
-			`RESTORE ROLE foo, bar FROM 'baz'`,
-			`at or near "foo": syntax error
-DETAIL: source SQL:
-RESTORE ROLE foo, bar FROM 'baz'
-             ^
-HINT: try \h RESTORE`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t`,
-			`at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
-                                   ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t`,
-			`at or near "following": syntax error: frame starting from following row cannot end with current row
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
-                           ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
-			`at or near "following": syntax error: frame start cannot be UNBOUNDED FOLLOWING
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
-                                                                   ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t`,
-			`at or near "preceding": syntax error: frame end cannot be UNBOUNDED PRECEDING
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
-                                                                   ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t`,
-			`at or near "preceding": syntax error: frame starting from current row cannot have preceding rows
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
-                                                   ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t`,
-			`at or near "preceding": syntax error: frame starting from following row cannot have preceding rows
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
-                                                   ^`,
-		},
-		{
-			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t`,
-			`at or near "row": syntax error: frame starting from following row cannot have preceding rows
-DETAIL: source SQL:
-SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
-                                                         ^`,
-		},
-		{
-			`CREATE TABLE foo(a CHAR(0))`,
-			`at or near ")": syntax error: length for type CHAR must be at least 1
-DETAIL: source SQL:
-CREATE TABLE foo(a CHAR(0))
-                         ^`,
-		},
-		{
-			`e'\xad'::string`,
-			`lexical error: invalid UTF-8 byte sequence
-DETAIL: source SQL:
-e'\xad'::string
-^`,
-		},
-		{
-			`EXPLAIN EXECUTE a`,
-			`at or near "execute": syntax error
-DETAIL: source SQL:
-EXPLAIN EXECUTE a
-        ^
-HINT: try \h EXPLAIN`,
-		},
-		{
-			`SELECT $0`,
-			`lexical error: placeholder index must be between 1 and 65536
-DETAIL: source SQL:
-SELECT $0
-       ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT $-1`,
-			`at or near "$": syntax error
-DETAIL: source SQL:
-SELECT $-1
-       ^
-HINT: try \h SELECT`,
-		},
-		{
-			`SELECT $123456789`,
-			`lexical error: placeholder index must be between 1 and 65536
-DETAIL: source SQL:
-SELECT $123456789
-       ^
-HINT: try \h SELECT`,
-		},
-
-		{
-			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0`,
-			`at or near "2.0": syntax error: THROTTLING fraction must be between 0 and 1
-DETAIL: source SQL:
-CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
-                                                           ^`,
-		},
-		{
-			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5`,
-			`at or near "0.5": syntax error: THROTTLING specified multiple times
-DETAIL: source SQL:
-CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
-                                                                          ^`,
-		},
-		{
-			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'`,
-			`at or near "EOF": syntax error: AS OF specified multiple times
-DETAIL: source SQL:
-CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
-                                                                                                              ^`,
-		},
-		{
-			`ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1`,
-			`at or near "idx": syntax error: index name should not be specified in ALTER PARTITION ... OF TABLE
-DETAIL: source SQL:
-ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
-                               ^
-HINT: try ALTER PARTITION ... OF INDEX`,
-		},
-		{
-			`ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1`,
-			`at or near "configure": syntax error: index wildcard unsupported in ALTER PARTITION ... OF TABLE
-DETAIL: source SQL:
-ALTER PARTITION p OF TABLE tbl@* CONFIGURE ZONE USING num_replicas = 1
-                                 ^
-HINT: try ALTER PARTITION <partition> OF INDEX <tablename>@*`,
-		},
-		{
-			`SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x;`,
-			`at or near ")": syntax error: multiple ORDER BY clauses are not supported in this function
-DETAIL: source SQL:
-SELECT percentile_disc(0.50) WITHIN GROUP (ORDER BY f, s) FROM x
-                                                        ^`,
-		},
+		{"unique", `"unique"`},
+		{"unique.index", `"unique".index`},
+		{"table.index.primary", `"table".index.primary`},
 	}
-	for _, d := range testData {
-		t.Run(d.sql, func(t *testing.T) {
-			_, err := parser.Parse(d.sql)
-			if err == nil {
-				t.Errorf("expected error, got nil for:\n%s", d.sql)
-				return
-			}
-			pgerr := pgerror.Flatten(err)
-			msg := pgerr.Message
-			if pgerr.Detail != "" {
-				msg += "\nDETAIL: " + pgerr.Detail
-			}
-			if pgerr.Hint != "" {
-				msg += "\nHINT: " + pgerr.Hint
-			}
-			if msg != d.expected {
-				t.Errorf("%s:\nexpected:\n  %s\n\nbut found:\n  %s", d.sql,
-					strings.ReplaceAll(d.expected, "\n", "\n  "),
-					strings.ReplaceAll(msg, "\n", "\n  "))
-			}
-		})
+
+	for _, tc := range testdata {
+		name, err := parser.ParseTableNameWithQualifiedNames(tc.name)
+		require.NoError(t, err)
+		require.Equal(t, tc.expected, name.String())
 	}
 }
 
@@ -3228,7 +2871,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP OPERATOR a`, 0, `drop operator`, ``},
 		{`DROP PUBLICATION a`, 0, `drop publication`, ``},
 		{`DROP RULE a`, 0, `drop rule`, ``},
-		{`DROP SCHEMA a`, 26443, `drop`, ``},
 		{`DROP SERVER a`, 0, `drop server`, ``},
 		{`DROP SUBSCRIPTION a`, 0, `drop subscription`, ``},
 		{`DROP TEXT SEARCH a`, 7821, `drop text`, ``},
@@ -3242,8 +2884,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`SET CONSTRAINTS foo`, 0, `set constraints`, ``},
 		{`SET LOCAL foo = bar`, 32562, ``, ``},
 		{`SET foo FROM CURRENT`, 0, `set from current`, ``},
-
-		{`CREATE UNLOGGED TABLE a(b INT8)`, 0, `create unlogged`, ``},
 
 		{`CREATE TABLE a(x INT[][])`, 32552, ``, ``},
 		{`CREATE TABLE a(x INT[1][2])`, 32552, ``, ``},
@@ -3306,9 +2946,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo SET DATA TYPE typ COLLATE en RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 
-		{`CREATE INDEX a ON b(c) WHERE d > 0`, 9683, ``, ``},
 		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`, ``},
-		{`CREATE INDEX a ON b USING GIST (c)`, 0, `index using gist`, ``},
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
 
@@ -3408,7 +3046,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 					t.Errorf("%s: expected %q in telemetry keys, got %+v", d.sql, exp, tkeys)
 				}
 
-				exp2 := fmt.Sprintf("issues/%d", d.issue)
+				exp2 := fmt.Sprintf("issue/%d", d.issue)
 				found = false
 				hints := errors.GetAllHints(err)
 				for _, h := range hints {

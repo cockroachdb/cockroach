@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -141,7 +141,6 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		stopper:         stop.NewStopper(),
 		replicationMode: args.ReplicationMode,
 	}
-	tc.stopper = stop.NewStopper()
 
 	// Check if any of the args have a locality set.
 	noLocalities := true
@@ -199,8 +198,8 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = firstListener
 			serverArgs.Addr = firstListener.Addr().String()
 		} else {
-			//serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 			serverArgs.JoinAddr = firstListener.Addr().String()
+			serverArgs.NoAutoInitializeCluster = true
 		}
 
 		// Disable LBS if any server has a very low scan interval.
@@ -322,6 +321,9 @@ func (tc *TestCluster) AddServer(t testing.TB, serverArgs base.TestServerArgs) {
 
 func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs) error {
 	serverArgs.PartOfCluster = true
+	if serverArgs.JoinAddr != "" {
+		serverArgs.NoAutoInitializeCluster = true
+	}
 	// Check args even though they might have been checked in StartTestCluster;
 	// this method might be called for servers being added after the cluster was
 	// started, in which case the check has not been performed.
@@ -672,7 +674,7 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 	if err != nil {
 		return roachpb.ReplicationTarget{}, err
 	}
-	if !replica.IsLeaseValid(lease, now) {
+	if !replica.IsLeaseValid(context.TODO(), lease, now) {
 		return roachpb.ReplicationTarget{}, errors.New("no valid lease")
 	}
 	replicaDesc := lease.Replica
@@ -753,6 +755,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*kvserver.Store
 // TODO(andrei): This method takes inexplicably long.
 // I think it shouldn't need any retries. See #38565.
 func (tc *TestCluster) WaitForFullReplication() error {
+	log.Infof(context.TODO(), "WaitForFullReplication")
 	start := timeutil.Now()
 	defer func() {
 		end := timeutil.Now()
@@ -856,11 +859,11 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 		db := tc.Servers[0].DB()
 		for _, s := range tc.Servers {
 			key := keys.NodeLivenessKey(s.NodeID())
-			var liveness storagepb.Liveness
+			var liveness kvserverpb.Liveness
 			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
 				return err
 			}
-			if (liveness == storagepb.Liveness{}) {
+			if (liveness == kvserverpb.Liveness{}) {
 				return fmt.Errorf("no liveness record")
 			}
 			fmt.Printf("n%d: found liveness\n", s.NodeID())
@@ -872,6 +875,17 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 // ReplicationMode implements TestClusterInterface.
 func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
 	return tc.replicationMode
+}
+
+// ToggleReplicateQueues activates or deactivates the replication queues on all
+// the stores on all the nodes.
+func (tc *TestCluster) ToggleReplicateQueues(active bool) {
+	for _, s := range tc.Servers {
+		_ = s.Stores().VisitStores(func(store *kvserver.Store) error {
+			store.SetReplicateQueueActive(active)
+			return nil
+		})
+	}
 }
 
 type testClusterFactoryImpl struct{}

@@ -24,13 +24,12 @@ import (
 	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -91,10 +90,18 @@ func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
 
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
-func (s *Store) ConsistencyQueueShouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, cfg *config.SystemConfig,
+func ConsistencyQueueShouldQueue(
+	ctx context.Context,
+	now hlc.Timestamp,
+	desc *roachpb.RangeDescriptor,
+	getQueueLastProcessed func(ctx context.Context) (hlc.Timestamp, error),
+	isNodeLive func(nodeID roachpb.NodeID) (bool, error),
+	disableLastProcessedCheck bool,
+	interval time.Duration,
 ) (bool, float64) {
-	return s.consistencyQueue.shouldQueue(ctx, now, r, cfg)
+	return consistencyQueueShouldQueueImpl(ctx, now, consistencyShouldQueueData{
+		desc, getQueueLastProcessed, isNodeLive,
+		disableLastProcessedCheck, interval})
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
@@ -105,7 +112,7 @@ func (s *Store) LogReplicaChangeTest(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason storagepb.RangeLogEventReason,
+	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
 	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
@@ -165,8 +172,9 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
-	ctx := repl.AnnotateCtx(context.TODO())
-	return q.process(ctx, repl, cfg)
+	ctx := repl.AnnotateCtx(context.Background())
+	_, err := q.process(ctx, repl, cfg)
+	return err
 }
 
 // ManualGC processes the specified replica using the store's GC queue.
@@ -182,7 +190,7 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
-	return s.raftSnapshotQueue.processRaftSnapshot(context.TODO(), repl, target)
+	return s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
 }
 
 func (s *Store) ReservationCount() int {
@@ -238,8 +246,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		func() int {
 			return 1
 		},
-		func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus {
-			return storagepb.NodeLivenessStatus_LIVE
+		func(roachpb.NodeID, time.Time, time.Duration) kvserverpb.NodeLivenessStatus {
+			return kvserverpb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
@@ -375,8 +383,8 @@ func (r *Replica) IsRaftGroupInitialized() bool {
 
 // GetStoreList exposes getStoreList for testing only, but with a hardcoded
 // storeFilter of storeFilterNone.
-func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	list, available, throttled := sp.getStoreList(rangeID, storeFilterNone)
+func (sp *StorePool) GetStoreList() (StoreList, int, int) {
+	list, available, throttled := sp.getStoreList(storeFilterNone)
 	return list, available, len(throttled)
 }
 
@@ -455,8 +463,8 @@ func SetMockAddSSTable() (undo func()) {
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
 		return result.Result{
-			Replicated: storagepb.ReplicatedEvalResult{
-				AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,
 					CRC32: util.CRC32(args.Data),
 				},
@@ -500,15 +508,18 @@ func (r *Replica) ReadProtectedTimestamps(ctx context.Context) {
 }
 
 func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness storagepb.Liveness, drain bool,
+	ctx context.Context, liveness LivenessRecord, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain, nil /* reporter */)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness storagepb.Liveness, decommission bool,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	liveness LivenessRecord,
+	targetStatus kvserverpb.MembershipStatus,
 ) (changeCommitted bool, err error) {
-	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
+	return nl.setMembershipStatusInternal(ctx, nodeID, liveness, targetStatus)
 }
 
 // GetCircuitBreaker returns the circuit breaker controlling

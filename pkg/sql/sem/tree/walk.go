@@ -760,7 +760,6 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 func (stmt *Backup) copyNode() *Backup {
 	stmtCopy := *stmt
 	stmtCopy.IncrementalFrom = append(Exprs(nil), stmt.IncrementalFrom...)
-	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
 	return &stmtCopy
 }
 
@@ -794,13 +793,13 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.IncrementalFrom[i] = e
 		}
 	}
-	{
-		opts, changed := walkKVOptions(v, stmt.Options)
+	if stmt.Options.EncryptionPassphrase != nil {
+		pw, changed := WalkExpr(v, stmt.Options.EncryptionPassphrase)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.Options = opts
+			ret.Options.EncryptionPassphrase = pw
 		}
 	}
 	return ret
@@ -964,6 +963,22 @@ func (stmt *ControlJobs) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *ControlSchedules) copyNode() *ControlSchedules {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ControlSchedules) walkStmt(v Visitor) Statement {
+	sel, changed := walkStmt(v, n.Schedules)
+	if changed {
+		n = n.copyNode()
+		n.Schedules = sel.(*Select)
+	}
+	return n
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Import) copyNode() *Import {
 	stmtCopy := *stmt
 	stmtCopy.Files = append(Exprs(nil), stmt.Files...)
@@ -1016,8 +1031,7 @@ func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Restore) copyNode() *Restore {
 	stmtCopy := *stmt
-	stmtCopy.From = append([]PartitionedBackup(nil), stmt.From...)
-	stmtCopy.Options = append(KVOptions(nil), stmt.Options...)
+	stmtCopy.From = append([]StringOrPlaceholderOptList(nil), stmt.From...)
 	return &stmtCopy
 }
 
@@ -1044,13 +1058,24 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 			}
 		}
 	}
-	{
-		opts, changed := walkKVOptions(v, stmt.Options)
+
+	if stmt.Options.EncryptionPassphrase != nil {
+		pw, changed := WalkExpr(v, stmt.Options.EncryptionPassphrase)
 		if changed {
 			if ret == stmt {
 				ret = stmt.copyNode()
 			}
-			ret.Options = opts
+			ret.Options.EncryptionPassphrase = pw
+		}
+	}
+
+	if stmt.Options.IntoDB != nil {
+		intoDB, changed := WalkExpr(v, stmt.Options.IntoDB)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.IntoDB = intoDB
 		}
 	}
 	return ret
@@ -1404,6 +1429,7 @@ var _ walkableStmt = &ValuesClause{}
 var _ walkableStmt = &CancelQueries{}
 var _ walkableStmt = &CancelSessions{}
 var _ walkableStmt = &ControlJobs{}
+var _ walkableStmt = &ControlSchedules{}
 var _ walkableStmt = &BeginTransaction{}
 
 // walkStmt walks the entire parsed stmt calling WalkExpr on each

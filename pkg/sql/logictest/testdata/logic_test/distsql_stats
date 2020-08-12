@@ -107,9 +107,36 @@ NULL             {b}           256        4               0           true
 let $json_stats
 SHOW STATISTICS USING JSON FOR TABLE data
 
+# ANALYZE is syntactic sugar for CREATE STATISTICS with default columns.
+statement ok
+ANALYZE data
+
+query TTIIIB colnames
+SELECT
+	statistics_name,
+	column_names,
+	row_count,
+	distinct_count,
+	null_count,
+	histogram_id IS NOT NULL AS has_histogram
+FROM
+	[SHOW STATISTICS FOR TABLE data];
+----
+statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
+NULL             {a}           256        4               0           true
+NULL             {b}           256        4               0           true
+NULL             {a,b}         256        16              0           false
+NULL             {c}           256        4               0           true
+NULL             {a,b,c}       256        64              0           false
+NULL             {d}           256        4               0           true
+NULL             {a,b,c,d}     256        256             0           false
+NULL             {c,d}         256        16              0           false
+NULL             {e}           256        2               0           true
+
 statement ok
 DELETE FROM system.table_statistics
 
+# Restore the old stats.
 statement ok
 ALTER TABLE data INJECT STATISTICS '$json_stats'
 
@@ -185,9 +212,9 @@ WHERE statistics_name = 's3'
 ----
 column_names  row_count  distinct_count  null_count  has_histogram
 {a}           256        4               0           true
+{b}           256        4               0           true
 {c}           256        4               0           true
-{b}           256        4               0           false
-{d}           256        4               0           false
+{d}           256        4               0           true
 {e}           256        2               0           true
 
 
@@ -210,14 +237,14 @@ WHERE statistics_name = 's4'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
+{b}           256        4               0
 {a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {c}           256        4               0
+{a,b,c}       256        64              0
+{d}           256        4               0
+{a,b,c,d}     256        256             0
 {c,d}         256        16              0
 {c,b}         256        16              0
-{b}           256        4               0
-{d}           256        4               0
 {e}           256        2               0
 
 statement ok
@@ -235,12 +262,12 @@ WHERE statistics_name = 's5'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
-{a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {b}           256        4               0
+{a,b}         256        16              0
 {c}           256        4               0
+{a,b,c}       256        64              0
 {d}           256        4               0
+{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 # Table with a hidden primary key and no other indexes.
@@ -330,12 +357,12 @@ FROM [SHOW STATISTICS FOR TABLE data]
 statistics_name  column_names  row_count  distinct_count  null_count
 s4               {c,d}         256        16              0
 s4               {c,b}         256        16              0
-s5               {a,b}         256        16              0
-s5               {a,b,c}       256        64              0
-s5               {a,b,c,d}     256        256             0
 s5               {b}           256        4               0
+s5               {a,b}         256        16              0
 s5               {c}           256        4               0
+s5               {a,b,c}       256        64              0
 s5               {d}           256        4               0
+s5               {a,b,c,d}     256        256             0
 s5               {e}           256        2               0
 s6               {a}           256        4               0
 
@@ -350,12 +377,12 @@ WHERE statistics_name = '__auto__'
 ----
 column_names  row_count  distinct_count  null_count
 {a}           256        4               0
-{a,b}         256        16              0
-{a,b,c}       256        64              0
-{a,b,c,d}     256        256             0
 {b}           256        4               0
+{a,b}         256        16              0
 {c}           256        4               0
+{a,b,c}       256        64              0
 {d}           256        4               0
+{a,b,c,d}     256        256             0
 {e}           256        2               0
 
 #
@@ -533,54 +560,6 @@ CREATE TABLE t (x int); INSERT INTO t VALUES (1); ALTER TABLE t DROP COLUMN x
 statement ok
 CREATE STATISTICS s FROM t
 
-# Regression test for #35150.
-statement ok
-CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
-
-# Ensure that trying to create statistics on a JSON column gives an appropriate error.
-statement error CREATE STATISTICS is not supported for JSON columns
-CREATE STATISTICS s ON data FROM groups
-
-# The json column is not included in the default columns.
-statement ok
-CREATE STATISTICS s FROM groups
-
-query TT colnames
-SELECT statistics_name, column_names
-FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
-----
-statistics_name  column_names
-s                {rowid}
-
-# Regression test for #35764.
-statement ok
-CREATE TABLE users (
-  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  last_updated TIMESTAMP DEFAULT now(),
-  user_profile JSONB,
-  INVERTED INDEX user_details (user_profile)
-)
-
-statement ok
-INSERT INTO users (user_profile) VALUES
-  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
-  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
-  ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
-)
-
-# Ensure that trying to create statistics with default columns does not fail
-# when there is an inverted index.
-statement ok
-CREATE STATISTICS s FROM users
-
-query TTI colnames
-SELECT statistics_name, column_names, row_count
-FROM [SHOW STATISTICS FOR TABLE users] ORDER BY statistics_name, column_names::STRING
-----
-statistics_name  column_names    row_count
-s                {last_updated}  3
-s                {profile_id}    3
-
 # Arrays are supported.
 statement ok
 CREATE TABLE arr (x INT[])
@@ -599,7 +578,8 @@ statistics_name  column_names  row_count  distinct_count  null_count
 arr_stats        {rowid}       4          4               0
 arr_stats        {x}           4          3               1
 
-# Regression test for #46964. Do not try to create a histogram on the array column.
+# Regression test for #46964 (however we have added array histogram
+# support since this).
 statement ok
 CREATE STATISTICS arr_stats_x ON x FROM arr
 
@@ -616,4 +596,196 @@ ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 arr_stats        {rowid}       4          4               0           true
-arr_stats_x      {x}           4          3               1           false
+arr_stats_x      {x}           4          3               1           true
+
+# Test that enum columns always have histograms collected for them.
+statement ok
+SET experimental_enable_enums=true;
+CREATE TYPE e AS ENUM ('hello', 'howdy', 'hi');
+CREATE TABLE et (x e, y e, PRIMARY KEY (x));
+INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');
+CREATE STATISTICS s FROM et
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE et]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {x}           3          0           true
+s                {y}           3          0           true
+
+# JSON and other inverted-index columns. See also #35150.
+statement ok
+CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
+
+# JSON can be specified.
+statement ok
+CREATE STATISTICS s ON data FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+
+# JSON is auto-included.
+statement ok
+CREATE STATISTICS s FROM groups
+
+query TT colnames
+SELECT statistics_name, column_names
+FROM [SHOW STATISTICS FOR TABLE groups] ORDER BY statistics_name, column_names::STRING
+----
+statistics_name  column_names
+s                {data}
+s                {rowid}
+
+# See #35764
+statement ok
+CREATE TABLE users (
+  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  last_updated TIMESTAMP DEFAULT now(),
+  user_profile JSONB,
+  INVERTED INDEX user_details (user_profile)
+)
+
+statement ok
+INSERT INTO users (user_profile) VALUES
+  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}'),
+  (NULL),
+  ('{"first_name": "Carl", "last_name": "Kimball", "location": "NYC", "breed": "Boston Terrier"}'
+)
+
+statement ok
+SET tracing=on
+
+# Ensure that trying to create statistics with default columns does not fail
+# when there is an inverted index.
+statement ok
+CREATE STATISTICS s FROM users
+
+# Ensure that the trace includes the job by observing the job move through
+# the 'succeeded' state in the trace.
+
+query I
+SELECT count(*)
+  FROM [SHOW TRACE FOR SESSION]
+ WHERE message
+       LIKE '%job%: stepping through state succeeded with error: <nil>%'
+   AND message
+       NOT LIKE '%SELECT message%'
+----
+1
+
+statement ok
+SET tracing=off
+
+
+query TTIIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  distinct_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE users]
+ORDER BY
+  statistics_name, column_names
+----
+statistics_name  column_names    row_count  distinct_count  null_count  has_histogram
+s                {last_updated}  5          1               0           false
+s                {profile_id}    5          5               0           true
+s                {user_profile}  5          4               1           true
+
+
+# Test that individual columns in primary keys always have histograms collected
+# for them.
+
+statement ok
+SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
+
+statement ok
+CREATE TABLE prim (a INT, b INT, c INT, PRIMARY KEY (a, b, c));
+INSERT INTO prim VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM prim
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE prim]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+
+# Test that individual columns in secondary indexes always have histograms
+# collected for them.
+statement ok
+CREATE TABLE sec (a INT, b INT, c INT, INDEX (a, b, c));
+INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM sec
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE sec]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
+
+# Test that columns referenced in partial index predicates always have
+# histograms collected for them.
+statement ok
+SET experimental_partial_indexes=on;
+CREATE TABLE partial (a INT, b INT, c INT, INDEX (a) WHERE b > 0 OR c > 0);
+INSERT INTO partial VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM partial
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE partial]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true

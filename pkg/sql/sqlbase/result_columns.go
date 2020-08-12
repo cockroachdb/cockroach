@@ -11,10 +11,10 @@
 package sqlbase
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
@@ -28,36 +28,49 @@ type ResultColumn struct {
 	// TableID/PGAttributeNum identify the source of the column, if it is a simple
 	// reference to a column of a base table (or view). If it is not a simple
 	// reference, these fields are zeroes.
-	TableID        ID       // OID of column's source table (pg_attribute.attrelid).
-	PGAttributeNum ColumnID // Column's number in source table (pg_attribute.attnum).
+	TableID        descpb.ID // OID of column's source table (pg_attribute.attrelid).
+	PGAttributeNum uint32    // Column's number in source table (pg_attribute.attnum).
 }
 
 // ResultColumns is the type used throughout the sql module to
 // describe the column types of a table.
 type ResultColumns []ResultColumn
 
-// ResultColumnsFromColDescs converts ColumnDescriptors to ResultColumns.
-func ResultColumnsFromColDescs(tableID ID, colDescs []ColumnDescriptor) ResultColumns {
-	cols := make(ResultColumns, 0, len(colDescs))
-	for i := range colDescs {
-		// Convert the ColumnDescriptor to ResultColumn.
-		colDesc := &colDescs[i]
+// ResultColumnsFromColDescs converts []descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescs(
+	tableID descpb.ID, colDescs []descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
+		return &colDescs[i]
+	})
+}
+
+// ResultColumnsFromColDescPtrs converts []*descpb.ColumnDescriptor to []ResultColumn.
+func ResultColumnsFromColDescPtrs(
+	tableID descpb.ID, colDescs []*descpb.ColumnDescriptor,
+) ResultColumns {
+	return resultColumnsFromColDescs(tableID, len(colDescs), func(i int) *descpb.ColumnDescriptor {
+		return colDescs[i]
+	})
+}
+
+func resultColumnsFromColDescs(
+	tableID descpb.ID, numCols int, getColDesc func(int) *descpb.ColumnDescriptor,
+) ResultColumns {
+	cols := make(ResultColumns, numCols)
+	for i := range cols {
+		colDesc := getColDesc(i)
 		typ := colDesc.Type
 		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Family()))
+			panic(errors.AssertionFailedf("unsupported column type: %s", colDesc.Type.Family()))
 		}
-
-		hidden := colDesc.Hidden
-		cols = append(
-			cols,
-			ResultColumn{
-				Name:           colDesc.Name,
-				Typ:            typ,
-				Hidden:         hidden,
-				TableID:        tableID,
-				PGAttributeNum: colDesc.GetLogicalColumnID(),
-			},
-		)
+		cols[i] = ResultColumn{
+			Name:           colDesc.Name,
+			Typ:            typ,
+			Hidden:         colDesc.Hidden,
+			TableID:        tableID,
+			PGAttributeNum: colDesc.GetPGAttributeNum(),
+		}
 	}
 	return cols
 }
@@ -92,6 +105,45 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 // represents the column at the input column index.
 func (r ResultColumns) NodeFormatter(colIdx int) tree.NodeFormatter {
 	return &varFormatter{ColumnName: tree.Name(r[colIdx].Name)}
+}
+
+// String formats result columns to a string.
+// The column types are printed if printTypes is true.
+// The hidden property is printed if showHidden is true.
+func (r ResultColumns) String(printTypes bool, showHidden bool) string {
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	f.WriteByte('(')
+	for i := range r {
+		rCol := &r[i]
+		if i > 0 {
+			f.WriteString(", ")
+		}
+		f.FormatNameP(&rCol.Name)
+		// Output extra properties like [hidden,omitted].
+		hasProps := false
+		outputProp := func(prop string) {
+			if hasProps {
+				f.WriteByte(',')
+			} else {
+				f.WriteByte('[')
+			}
+			hasProps = true
+			f.WriteString(prop)
+		}
+		if showHidden && rCol.Hidden {
+			outputProp("hidden")
+		}
+		if hasProps {
+			f.WriteByte(']')
+		}
+
+		if printTypes {
+			f.WriteByte(' ')
+			f.WriteString(rCol.Typ.String())
+		}
+	}
+	f.WriteByte(')')
+	return f.CloseAndGetString()
 }
 
 // ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...
@@ -195,6 +247,15 @@ var ShowReplicaTraceColumns = ResultColumns{
 var ShowSyntaxColumns = ResultColumns{
 	{Name: "field", Typ: types.String},
 	{Name: "message", Typ: types.String},
+}
+
+// ShowLastQueryStatisticsColumns are the columns of a
+// SHOW LAST QUERY STATISTICS statement.
+var ShowLastQueryStatisticsColumns = ResultColumns{
+	{Name: "parse_latency", Typ: types.Interval},
+	{Name: "plan_latency", Typ: types.Interval},
+	{Name: "exec_latency", Typ: types.Interval},
+	{Name: "service_latency", Typ: types.Interval},
 }
 
 // ShowFingerprintsColumns are the result columns of a

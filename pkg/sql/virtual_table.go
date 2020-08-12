@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -191,15 +192,15 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *sqlbase.DatabaseDescriptor
-	table  *sqlbase.TableDescriptor
-	index  *sqlbase.IndexDescriptor
+	db     *sqlbase.ImmutableDatabaseDescriptor
+	table  *sqlbase.ImmutableTableDescriptor
+	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
 	eqCol             int
 	virtualTableEntry virtualDefEntry
 
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// columns is the join's output schema.
 	columns sqlbase.ResultColumns
@@ -241,13 +242,17 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	v.db, err = params.p.LogicalSchemaAccessor().GetDatabaseDesc(
+	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg().Codec,
 		v.dbName,
 		tree.DatabaseLookupFlags{Required: true, AvoidCached: params.p.avoidCachedDescriptors},
 	)
+	if err != nil {
+		return err
+	}
+	v.db = db.(*sqlbase.ImmutableDatabaseDescriptor)
 	return err
 }
 
@@ -293,7 +298,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		if err := genFunc(v); err != nil {
 			return false, err
 		}
-		if v.run.rows.Len() == 0 && v.joinType == sqlbase.LeftOuterJoin {
+		if v.run.rows.Len() == 0 && v.joinType == descpb.LeftOuterJoin {
 			// No matches - construct an outer match.
 			v.run.row = v.run.row[:len(v.inputCols)]
 			for i := len(inputRow); i < len(v.columns); i++ {

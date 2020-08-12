@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -36,6 +37,7 @@ import (
 
 func TestCancelSelectQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const queryToCancel = "SELECT * FROM generate_series(1,20000000)"
 
@@ -46,7 +48,7 @@ func TestCancelSelectQuery(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -92,6 +94,7 @@ func TestCancelSelectQuery(t *testing.T) {
 // various points of execution.
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
 	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s'", queryToCancel)
 
@@ -124,7 +127,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 				},
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -181,7 +184,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 }
 
 func testCancelSession(t *testing.T, hasActiveSession bool) {
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	numNodes := 2
 	tc := serverutils.StartTestCluster(t, numNodes,
@@ -275,7 +278,8 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 func TestCancelMultipleSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.TODO()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
@@ -318,22 +322,25 @@ func TestCancelMultipleSessions(t *testing.T) {
 
 func TestIdleCancelSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCancelSession(t, false /* hasActiveSession */)
 }
 
 func TestActiveCancelSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testCancelSession(t, true /* hasActiveSession */)
 }
 
 func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(context.Background())
 
 	conn := tc.ServerConn(0)
 
@@ -354,7 +361,68 @@ func TestCancelIfExists(t *testing.T) {
 
 func isClientsideQueryCanceledErr(err error) bool {
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		return pqErr.Code == pgcode.QueryCanceled
+		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
 	}
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
+}
+
+func TestIdleInSessionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	var err error
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `SET idle_in_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	// Make sure executing BEGIN resets the idle timer.
+	// BEGIN is the only statement that is not run by execStmtInOpenState.
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
 }

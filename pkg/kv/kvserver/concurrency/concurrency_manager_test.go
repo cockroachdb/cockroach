@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"reflect"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -52,19 +53,19 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] epoch=<int> [maxts=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [consistency]
+// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority] [inconsistent] [wait-policy=<policy>]
 //   <proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 // sequence     req=<req-name>
 // finish       req=<req-name>
 //
-// handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key>
+// handle-write-intent-error  req=<req-name> txn=<txn-name> key=<key> lease-seq=<seq>
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
-// on-lease-updated  leaseholder=<bool>
+// on-lease-updated  leaseholder=<bool> lease-seq=<seq>
 // on-split
 // on-merge
 // on-snapshot-applied
@@ -76,12 +77,13 @@ import (
 //
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, "testdata/concurrency_manager", func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
 		m := concurrency.NewManager(c.makeConfig())
-		m.OnRangeLeaseUpdated(true /* isLeaseholder */) // enable
+		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
 		c.m = m
 		mon := newMonitor()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -147,6 +149,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					readConsistency = roachpb.INCONSISTENT
 				}
 
+				waitPolicy := scanWaitPolicy(t, d, false /* required */)
+
 				// Each roachpb.Request is provided on an indented line.
 				var reqs []roachpb.Request
 				singleReqLines := strings.Split(d.Input, "\n")
@@ -165,6 +169,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					Timestamp: ts,
 					// TODO(nvanbenschoten): test Priority
 					ReadConsistency: readConsistency,
+					WaitPolicy:      waitPolicy,
 					Requests:        reqUnions,
 					LatchSpans:      latchSpans,
 					LockSpans:       lockSpans,
@@ -228,22 +233,40 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
-				txn, ok := c.txnsByName[txnName]
-				if !ok {
-					d.Fatalf(t, "unknown txn %s", txnName)
-				}
+				var leaseSeq int
+				d.ScanArgs(t, "lease-seq", &leaseSeq)
 
-				var key string
-				d.ScanArgs(t, "key", &key)
+				// Each roachpb.Intent is provided on an indented line.
+				var intents []roachpb.Intent
+				singleReqLines := strings.Split(d.Input, "\n")
+				for _, line := range singleReqLines {
+					var err error
+					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+					if err != nil {
+						d.Fatalf(t, "error parsing single intent: %v", err)
+					}
+					if d.Cmd != "intent" {
+						d.Fatalf(t, "expected \"intent\", found %s", d.Cmd)
+					}
+
+					var txnName string
+					d.ScanArgs(t, "txn", &txnName)
+					txn, ok := c.txnsByName[txnName]
+					if !ok {
+						d.Fatalf(t, "unknown txn %s", txnName)
+					}
+
+					var key string
+					d.ScanArgs(t, "key", &key)
+
+					intents = append(intents, roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)))
+				}
 
 				opName := fmt.Sprintf("handle write intent error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{
-						roachpb.MakeIntent(&txn.TxnMeta, roachpb.Key(key)),
-					}}
-					guard, err := m.HandleWriterIntentError(ctx, prev, wiErr)
+					seq := roachpb.LeaseSequence(leaseSeq)
+					wiErr := &roachpb.WriteIntentError{Intents: intents}
+					guard, err := m.HandleWriterIntentError(ctx, prev, seq, wiErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", wiErr, err)
 						c.mu.Lock()
@@ -384,13 +407,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				var isLeaseholder bool
 				d.ScanArgs(t, "leaseholder", &isLeaseholder)
 
+				var leaseSeq int
+				d.ScanArgs(t, "lease-seq", &leaseSeq)
+
 				mon.runSync("transfer lease", func(ctx context.Context) {
 					if isLeaseholder {
 						log.Event(ctx, "acquired")
 					} else {
 						log.Event(ctx, "released")
 					}
-					m.OnRangeLeaseUpdated(isLeaseholder)
+					m.OnRangeLeaseUpdated(roachpb.LeaseSequence(leaseSeq), isLeaseholder)
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -514,22 +540,22 @@ func (c *cluster) makeConfig() concurrency.Config {
 // PushTransaction implements the concurrency.IntentResolver interface.
 func (c *cluster) PushTransaction(
 	ctx context.Context, pushee *enginepb.TxnMeta, h roachpb.Header, pushType roachpb.PushTxnType,
-) (roachpb.Transaction, *roachpb.Error) {
+) (*roachpb.Transaction, *roachpb.Error) {
 	pusheeRecord, err := c.getTxnRecord(pushee.ID)
 	if err != nil {
-		return roachpb.Transaction{}, roachpb.NewError(err)
+		return nil, roachpb.NewError(err)
 	}
 	var pusherRecord *txnRecord
 	if h.Txn != nil {
 		pusherID := h.Txn.ID
 		pusherRecord, err = c.getTxnRecord(pusherID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 
 		push, err := c.registerPush(ctx, pusherID, pushee.ID)
 		if err != nil {
-			return roachpb.Transaction{}, roachpb.NewError(err)
+			return nil, roachpb.NewError(err)
 		}
 		defer c.unregisterPush(push)
 	}
@@ -540,23 +566,29 @@ func (c *cluster) PushTransaction(
 		switch pushType {
 		case roachpb.PUSH_TIMESTAMP:
 			pushed = h.Timestamp.Less(pusheeTxn.WriteTimestamp) || pusheeTxn.Status.IsFinalized()
-		case roachpb.PUSH_ABORT:
+		case roachpb.PUSH_ABORT, roachpb.PUSH_TOUCH:
 			pushed = pusheeTxn.Status.IsFinalized()
 		default:
-			return roachpb.Transaction{}, roachpb.NewErrorf("unexpected push type: %s", pushType)
+			return nil, roachpb.NewErrorf("unexpected push type: %s", pushType)
 		}
 		if pushed {
 			return pusheeTxn, nil
 		}
+		// If PUSH_TOUCH, return error instead of waiting.
+		if pushType == roachpb.PUSH_TOUCH {
+			log.Eventf(ctx, "pushee not abandoned")
+			err := roachpb.NewTransactionPushError(*pusheeTxn)
+			return nil, roachpb.NewError(err)
+		}
 		// Or the pusher aborted?
 		var pusherRecordSig chan struct{}
 		if pusherRecord != nil {
-			var pusherTxn roachpb.Transaction
+			var pusherTxn *roachpb.Transaction
 			pusherTxn, pusherRecordSig = pusherRecord.asTxn()
 			if pusherTxn.Status == roachpb.ABORTED {
 				log.Eventf(ctx, "detected pusher aborted")
 				err := roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED)
-				return roachpb.Transaction{}, roachpb.NewError(err)
+				return nil, roachpb.NewError(err)
 			}
 		}
 		// Wait until either record is updated.
@@ -564,7 +596,7 @@ func (c *cluster) PushTransaction(
 		case <-pusheeRecordSig:
 		case <-pusherRecordSig:
 		case <-ctx.Done():
-			return roachpb.Transaction{}, roachpb.NewError(ctx.Err())
+			return nil, roachpb.NewError(ctx.Err())
 		}
 	}
 }
@@ -575,6 +607,19 @@ func (c *cluster) ResolveIntent(
 ) *roachpb.Error {
 	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
+	return nil
+}
+
+// ResolveIntents implements the concurrency.IntentResolver interface.
+func (c *cluster) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
+) *roachpb.Error {
+	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
+	for _, intent := range intents {
+		if err := c.ResolveIntent(ctx, intent, opts); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -621,10 +666,10 @@ func (c *cluster) updateTxnRecord(
 	return nil
 }
 
-func (r *txnRecord) asTxn() (roachpb.Transaction, chan struct{}) {
+func (r *txnRecord) asTxn() (*roachpb.Transaction, chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	txn := *r.txn
+	txn := r.txn.Clone()
 	if r.updatedStatus > txn.Status {
 		txn.Status = r.updatedStatus
 	}
@@ -735,8 +780,8 @@ func (c *cluster) reset() error {
 		return errors.Errorf("outstanding latches")
 	}
 	// Clear the lock table by transferring the lease away and reacquiring it.
-	c.m.OnRangeLeaseUpdated(false /* isLeaseholder */)
-	c.m.OnRangeLeaseUpdated(true /* isLeaseholder */)
+	c.m.OnRangeLeaseUpdated(1, false /* isLeaseholder */)
+	c.m.OnRangeLeaseUpdated(1, true /* isLeaseholder */)
 	return nil
 }
 
@@ -898,10 +943,17 @@ func (m *monitor) collectRecordings() string {
 		if log.g.opSeq != 0 {
 			seq = strconv.Itoa(log.g.opSeq)
 		}
-		fmt.Fprintf(&buf, "[%s] %s: %s", seq, log.g.opName, log.value)
+		logValue := stripFileLinePrefix(log.value)
+		fmt.Fprintf(&buf, "[%s] %s: %s", seq, log.g.opName, logValue)
 	}
 	return buf.String()
 }
+
+func stripFileLinePrefix(s string) string {
+	return reFileLinePrefix.ReplaceAllString(s, "")
+}
+
+var reFileLinePrefix = regexp.MustCompile(`^[^:]+:\d+ `)
 
 func (m *monitor) hasNewEvents(g *monitoredGoroutine) bool {
 	events := 0

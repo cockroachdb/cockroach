@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,6 +42,7 @@ func constantTimeoutFunc(d time.Duration) func(*cluster.Settings, replicaInQueue
 // impl, which are defined at the end of the file.
 func TestBaseQueueConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -77,16 +78,16 @@ func TestBaseQueueConcurrent(t *testing.T) {
 
 	// Set up a queue impl that will return random results from processing.
 	impl := fakeQueueImpl{
-		pr: func(context.Context, *Replica, *config.SystemConfig) error {
+		pr: func(context.Context, *Replica, *config.SystemConfig) (bool, error) {
 			n := rand.Intn(4)
 			if n == 0 {
-				return nil
+				return true, nil
 			} else if n == 1 {
-				return errors.New("injected regular error")
+				return false, errors.New("injected regular error")
 			} else if n == 2 {
-				return &benignError{errors.New("injected benign error")}
+				return false, &benignError{errors.New("injected benign error")}
 			}
-			return &testPurgatoryError{}
+			return false, &testPurgatoryError{}
 		},
 	}
 	bq := newBaseQueue("test", impl, store, nil /* Gossip */, cfg)
@@ -127,7 +128,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 }
 
 type fakeQueueImpl struct {
-	pr func(context.Context, *Replica, *config.SystemConfig) error
+	pr func(context.Context, *Replica, *config.SystemConfig) (processed bool, err error)
 }
 
 func (fakeQueueImpl) shouldQueue(
@@ -138,7 +139,7 @@ func (fakeQueueImpl) shouldQueue(
 
 func (fq fakeQueueImpl) process(
 	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
-) error {
+) (bool, error) {
 	return fq.pr(ctx, repl, cfg)
 }
 
@@ -169,11 +170,11 @@ func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
 func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context) {}
 func (fr *fakeReplica) redirectOnOrAcquireLease(
 	context.Context,
-) (storagepb.LeaseStatus, *roachpb.Error) {
+) (kvserverpb.LeaseStatus, *roachpb.Error) {
 	// baseQueue only checks that the returned error is nil.
-	return storagepb.LeaseStatus{}, nil
+	return kvserverpb.LeaseStatus{}, nil
 }
-func (fr *fakeReplica) IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool { return true }
+func (fr *fakeReplica) IsLeaseValid(context.Context, roachpb.Lease, hlc.Timestamp) bool { return true }
 func (fr *fakeReplica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return roachpb.Lease{}, roachpb.Lease{}
 }

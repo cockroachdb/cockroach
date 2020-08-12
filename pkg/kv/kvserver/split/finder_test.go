@@ -28,7 +28,7 @@ import (
 func TestSplitFinderKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	const ReservoirKeyOffset = 1000
 
@@ -165,7 +165,7 @@ func TestSplitFinderKey(t *testing.T) {
 func TestSplitFinderRecorder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	const ReservoirKeyOffset = 1000
 

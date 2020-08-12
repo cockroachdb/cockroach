@@ -10,6 +10,8 @@
 
 package tree
 
+import "fmt"
+
 // ControlJobs represents a PAUSE/RESUME/CANCEL JOBS statement.
 type ControlJobs struct {
 	Jobs    *Select
@@ -69,3 +71,55 @@ func (node *CancelSessions) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Sessions)
 }
+
+// ScheduleCommand determines which type of action to effect on the selected job(s).
+type ScheduleCommand int
+
+// ScheduleCommand values
+const (
+	PauseSchedule ScheduleCommand = iota
+	ResumeSchedule
+	DropSchedule
+)
+
+func (c ScheduleCommand) String() string {
+	switch c {
+	case PauseSchedule:
+		return "PAUSE"
+	case ResumeSchedule:
+		return "RESUME"
+	case DropSchedule:
+		return "DROP"
+	default:
+		panic("unhandled schedule command")
+	}
+}
+
+// ControlSchedules represents PAUSE/RESUME SCHEDULE statement.
+type ControlSchedules struct {
+	Schedules *Select
+	Command   ScheduleCommand
+}
+
+var _ Statement = &ControlSchedules{}
+
+// Format implements NodeFormatter interface
+func (n *ControlSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s SCHEDULES ", n.Command)
+	n.Schedules.Format(ctx)
+}
+
+// ControlJobsForSchedules represents PAUSE/RESUME/CANCEL clause
+// which applies job command to the jobs matching specified schedule(s).
+type ControlJobsForSchedules struct {
+	Schedules *Select
+	Command   JobCommand
+}
+
+// Format implements NodeFormatter interface
+func (n *ControlJobsForSchedules) Format(ctx *FmtCtx) {
+	fmt.Fprintf(ctx, "%s JOBS FOR SCHEDULES %s",
+		JobCommandToStatement[n.Command], AsString(n.Schedules))
+}
+
+var _ Statement = &ControlJobsForSchedules{}

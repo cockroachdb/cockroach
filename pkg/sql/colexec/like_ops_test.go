@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestLikeOperators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	for _, tc := range []struct {
 		pattern  string
 		negate   bool
@@ -114,9 +116,11 @@ func BenchmarkLikeOps(b *testing.B) {
 	// everything out.
 	prefix := "abc"
 	suffix := "xyz"
+	contains := "lmn"
 	for i := 0; i < coldata.BatchSize()/2; i++ {
 		copy(col.Get(i)[:3], prefix)
 		copy(col.Get(i)[width-3:], suffix)
+		copy(col.Get(i)[width/2:], contains)
 	}
 
 	batch.SetLength(coldata.BatchSize())
@@ -135,6 +139,10 @@ func BenchmarkLikeOps(b *testing.B) {
 		selConstOpBase: base,
 		constArg:       []byte(suffix),
 	}
+	containsOp := &selContainsBytesBytesConstOp{
+		selConstOpBase: base,
+		constArg:       []byte(contains),
+	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
 	regexpOp := &selRegexpBytesBytesConstOp{
 		selConstOpBase: base,
@@ -147,6 +155,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	}{
 		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
 		{name: "selSuffixBytesBytesConstOp", op: suffixOp},
+		{name: "selContainsBytesBytesConstOp", op: containsOp},
 		{name: "selRegexpBytesBytesConstOp", op: regexpOp},
 	}
 	for _, tc := range testCases {

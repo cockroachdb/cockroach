@@ -25,6 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -51,7 +56,7 @@ const (
 	// per chunk during an index truncation. This value is larger than the
 	// other chunk constants because the operation involves only running a
 	// DeleteRange().
-	indexTruncateChunkSize = 600
+	indexTruncateChunkSize = row.TableTruncateChunkSize
 
 	// indexTxnBackfillChunkSize is the maximum number index entries backfilled
 	// per chunk during an index backfill done in a txn. The index backfill
@@ -75,7 +80,7 @@ var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
-type columnsByID []sqlbase.ColumnDescriptor
+type columnsByID []descpb.ColumnDescriptor
 
 func (cds columnsByID) Len() int {
 	return len(cds)
@@ -87,7 +92,7 @@ func (cds columnsByID) Swap(i, j int) {
 	cds[i], cds[j] = cds[j], cds[i]
 }
 
-type indexesByID []sqlbase.IndexDescriptor
+type indexesByID []descpb.IndexDescriptor
 
 func (ids indexesByID) Len() int {
 	return len(ids)
@@ -151,12 +156,12 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
-	var droppedIndexDescs []sqlbase.IndexDescriptor
+	var droppedIndexDescs []descpb.IndexDescriptor
 	var addedIndexSpans []roachpb.Span
 
-	var constraintsToDrop []sqlbase.ConstraintToUpdate
-	var constraintsToAddBeforeValidation []sqlbase.ConstraintToUpdate
-	var constraintsToValidate []sqlbase.ConstraintToUpdate
+	var constraintsToDrop []descpb.ConstraintToUpdate
+	var constraintsToAddBeforeValidation []descpb.ConstraintToUpdate
+	var constraintsToValidate []descpb.ConstraintToUpdate
 
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
 	if err != nil {
@@ -169,8 +174,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	}
 	version := tableDesc.Version
 
-	log.Infof(ctx, "Running backfill for %q, v=%d, m=%d",
-		tableDesc.Name, tableDesc.Version, sc.mutationID)
+	log.Infof(ctx, "Running backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	needColumnBackfill := false
 	for _, m := range tableDesc.Mutations {
@@ -178,49 +182,49 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 			break
 		}
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case descpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *descpb.DescriptorMutation_Column:
 				if sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					needColumnBackfill = true
 				}
-			case *sqlbase.DescriptorMutation_Index:
+			case *descpb.DescriptorMutation_Index:
 				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(sc.execCfg.Codec, t.Index.ID))
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *descpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
-					if t.Constraint.Check.Validity == sqlbase.ConstraintValidity_Validating {
+				case descpb.ConstraintToUpdate_CHECK:
+					if t.Constraint.Check.Validity == descpb.ConstraintValidity_Validating {
 						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 					}
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
-					if t.Constraint.ForeignKey.Validity == sqlbase.ConstraintValidity_Validating {
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
+					if t.Constraint.ForeignKey.Validity == descpb.ConstraintValidity_Validating {
 						constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 						constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 					}
-				case sqlbase.ConstraintToUpdate_NOT_NULL:
+				case descpb.ConstraintToUpdate_NOT_NULL:
 					// NOT NULL constraints are always validated before they can be added
 					constraintsToAddBeforeValidation = append(constraintsToAddBeforeValidation, *t.Constraint)
 					constraintsToValidate = append(constraintsToValidate, *t.Constraint)
 				}
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap, *descpb.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 
-		case sqlbase.DescriptorMutation_DROP:
+		case descpb.DescriptorMutation_DROP:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *descpb.DescriptorMutation_Column:
 				needColumnBackfill = true
-			case *sqlbase.DescriptorMutation_Index:
+			case *descpb.DescriptorMutation_Index:
 				if !canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *descpb.DescriptorMutation_Constraint:
 				constraintsToDrop = append(constraintsToDrop, *t.Constraint)
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap, *descpb.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
@@ -285,8 +289,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 		}
 	}
 
-	log.Infof(ctx, "Completed backfill for %q, v=%d, m=%d",
-		tableDesc.Name, tableDesc.Version, sc.mutationID)
+	log.Infof(ctx, "Completed backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	if sc.testingKnobs.RunAfterBackfill != nil {
 		if err := sc.testingKnobs.RunAfterBackfill(*sc.job.ID()); err != nil {
@@ -301,32 +304,35 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 // the given constraint removed from it, and waits until the entire cluster is
 // on the new version of the table descriptor. It returns the new table descs.
 func (sc *SchemaChanger) dropConstraints(
-	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
-) (map[sqlbase.ID]*ImmutableTableDescriptor, error) {
-	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
+) (map[descpb.ID]*ImmutableTableDescriptor, error) {
+	log.Infof(ctx, "dropping %d constraints", len(constraints))
+
+	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 	for i := range constraints {
 		c := &constraints[i]
-		if c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			c.ForeignKey.ReferencedTableID != sc.tableID {
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
-	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
+	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
 
-	// Create update closure for the table and all other tables with backreferences
-	update := func(_ *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
-		scTable, ok := descs[sc.tableID]
+	// Create update closure for the table and all other tables with backreferences.
+	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
+		scDesc, ok := descs[sc.tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
-			case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 				found := false
 				for j, c := range scTable.Checks {
 					if c.Name == constraint.Name {
@@ -343,15 +349,16 @@ func (sc *SchemaChanger) dropConstraints(
 						constraint,
 					)
 				}
-			case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
 					if def.Name == constraint.Name {
-						backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
+						backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 						if !ok {
 							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 						}
+						backrefTable := backrefDesc.(*MutableTableDescriptor)
 						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable.TableDesc()); err != nil {
 							return err
 						}
@@ -377,47 +384,57 @@ func (sc *SchemaChanger) dropConstraints(
 	if err != nil {
 		return nil, err
 	}
-	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 		return nil, err
 	}
 	for id := range fksByBackrefTable {
-		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
 			return nil, err
 		}
 	}
-	return descs, nil
+
+	log.Info(ctx, "finished dropping constraints")
+
+	tableDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
+	for i := range descs {
+		tableDescs[i] = descs[i].(*ImmutableTableDescriptor)
+	}
+	return tableDescs, nil
 }
 
 // addConstraints publishes a new version of the given table descriptor with the
 // given constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
 func (sc *SchemaChanger) addConstraints(
-	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
 ) error {
-	fksByBackrefTable := make(map[sqlbase.ID][]*sqlbase.ConstraintToUpdate)
+	log.Infof(ctx, "adding %d constraints", len(constraints))
+
+	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
 	for i := range constraints {
 		c := &constraints[i]
-		if c.ConstraintType == sqlbase.ConstraintToUpdate_FOREIGN_KEY &&
+		if c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			c.ForeignKey.ReferencedTableID != sc.tableID {
 			fksByBackrefTable[c.ForeignKey.ReferencedTableID] = append(fksByBackrefTable[c.ForeignKey.ReferencedTableID], c)
 		}
 	}
-	tableIDsToUpdate := make([]sqlbase.ID, 0, len(fksByBackrefTable)+1)
+	tableIDsToUpdate := make([]descpb.ID, 0, len(fksByBackrefTable)+1)
 	tableIDsToUpdate = append(tableIDsToUpdate, sc.tableID)
 	for id := range fksByBackrefTable {
 		tableIDsToUpdate = append(tableIDsToUpdate, id)
 	}
 
 	// Create update closure for the table and all other tables with backreferences
-	update := func(_ *kv.Txn, descs map[sqlbase.ID]*sqlbase.MutableTableDescriptor) error {
-		scTable, ok := descs[sc.tableID]
+	update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
+		scDesc, ok := descs[sc.tableID]
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 		}
+		scTable := scDesc.(*MutableTableDescriptor)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
-			case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 				found := false
 				for _, c := range scTable.Checks {
 					if c.Name == constraint.Name {
@@ -429,7 +446,7 @@ func (sc *SchemaChanger) addConstraints(
 						)
 						// Ensure the constraint on the descriptor is set to Validating, in
 						// case we're in the middle of rolling back DROP CONSTRAINT
-						c.Validity = sqlbase.ConstraintValidity_Validating
+						c.Validity = descpb.ConstraintValidity_Validating
 						found = true
 						break
 					}
@@ -437,7 +454,7 @@ func (sc *SchemaChanger) addConstraints(
 				if !found {
 					scTable.Checks = append(scTable.Checks, &constraints[i].Check)
 				}
-			case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
@@ -452,17 +469,18 @@ func (sc *SchemaChanger) addConstraints(
 						}
 						// Ensure the constraint on the descriptor is set to Validating, in
 						// case we're in the middle of rolling back DROP CONSTRAINT
-						def.Validity = sqlbase.ConstraintValidity_Validating
+						def.Validity = descpb.ConstraintValidity_Validating
 						foundExisting = true
 						break
 					}
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKey)
-					backrefTable, ok := descs[constraint.ForeignKey.ReferencedTableID]
+					backrefDesc, ok := descs[constraint.ForeignKey.ReferencedTableID]
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.tableID)
 					}
+					backrefTable := backrefDesc.(*MutableTableDescriptor)
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 				}
 			}
@@ -473,14 +491,15 @@ func (sc *SchemaChanger) addConstraints(
 	if _, err := sc.leaseMgr.PublishMultiple(ctx, tableIDsToUpdate, update, nil); err != nil {
 		return err
 	}
-	if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
+	if err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.tableID); err != nil {
 		return err
 	}
 	for id := range fksByBackrefTable {
-		if err := sc.waitToUpdateLeases(ctx, id); err != nil {
+		if err := WaitToUpdateLeases(ctx, sc.leaseMgr, id); err != nil {
 			return err
 		}
 	}
+	log.Info(ctx, "finished adding constraints")
 	return nil
 }
 
@@ -490,11 +509,12 @@ func (sc *SchemaChanger) addConstraints(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateConstraints(
-	ctx context.Context, constraints []sqlbase.ConstraintToUpdate,
+	ctx context.Context, constraints []descpb.ConstraintToUpdate,
 ) error {
-	if testDisableTableLeases {
+	if lease.TestingTableLeasesAreDisabled() {
 		return nil
 	}
+	log.Infof(ctx, "validating %d new constraints", len(constraints))
 
 	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
 	if err != nil {
@@ -508,10 +528,10 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *sqlbase.ImmutableTableDescriptor
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		return err
 	}); err != nil {
 		return err
@@ -525,30 +545,41 @@ func (sc *SchemaChanger) validateConstraints(
 		c := constraints[i]
 		grp.GoCtx(func(ctx context.Context) error {
 			// Make the mutations public in a private copy of the descriptor
-			// and add it to the TableCollection, so that we can use SQL below to perform
+			// and add it to the Collection, so that we can use SQL below to perform
 			// the validation. We wouldn't have needed to do this if we could have
 			// updated the descriptor and run validation in the same transaction. However,
 			// our current system is incapable of running long running schema changes
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
+			desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
 			// Each check operates at the historical timestamp.
 			return runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
+				// If the constraint is a check constraint that fails validation, we
+				// need a semaContext set up that can resolve types in order to pretty
+				// print the check expression back to the user.
+				evalCtx.Txn = txn
+				// Use the DistSQLTypeResolver because we need to resolve types by ID.
+				semaCtx := tree.MakeSemaContext()
+				collection := descs.NewCollection(sc.leaseMgr, sc.settings)
+				semaCtx.TypeResolver = descs.NewDistSQLTypeResolver(collection, txn)
+				// TODO (rohany): When to release this? As of now this is only going to get released
+				//  after the check is validated.
+				defer func() { collection.ReleaseAll(ctx) }()
 				switch c.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+				case descpb.ConstraintToUpdate_CHECK:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						return err
 					}
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					if err := validateFkInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Name); err != nil {
 						return err
 					}
-				case sqlbase.ConstraintToUpdate_NOT_NULL:
-					if err := validateCheckInTxn(ctx, sc.leaseMgr, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
+				case descpb.ConstraintToUpdate_NOT_NULL:
+					if err := validateCheckInTxn(ctx, sc.leaseMgr, &semaCtx, &evalCtx.EvalContext, desc, txn, c.Check.Name); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
 						// return a different error code in the former case
@@ -561,7 +592,11 @@ func (sc *SchemaChanger) validateConstraints(
 			})
 		})
 	}
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished validating new constraints")
+	return nil
 }
 
 // getTableVersion retrieves the descriptor for the table being
@@ -572,9 +607,9 @@ func (sc *SchemaChanger) validateConstraints(
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
-	ctx context.Context, txn *kv.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.tableID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
 	}
@@ -589,8 +624,10 @@ func (sc *SchemaChanger) getTableVersion(
 // The indexes are dropped chunk by chunk, each chunk being deleted in
 // its own txn.
 func (sc *SchemaChanger) truncateIndexes(
-	ctx context.Context, version sqlbase.DescriptorVersion, dropped []sqlbase.IndexDescriptor,
+	ctx context.Context, version descpb.DescriptorVersion, dropped []descpb.IndexDescriptor,
 ) error {
+	log.Infof(ctx, "clearing data for %d indexes", len(dropped))
+
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
@@ -617,25 +654,18 @@ func (sc *SchemaChanger) truncateIndexes(
 				}
 
 				// Retrieve a lease for this table inside the current txn.
-				tc := &TableCollection{
-					leaseMgr: sc.leaseMgr,
-					settings: sc.settings,
-				}
-				defer tc.releaseTables(ctx)
+				tc := descs.NewCollection(sc.leaseMgr, sc.settings)
+				defer tc.ReleaseAll(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 				if err != nil {
 					return err
 				}
-
 				rd, err := row.MakeDeleter(
 					ctx,
 					txn,
 					sc.execCfg.Codec,
 					tableDesc,
 					nil,
-					nil,
-					row.SkipFKs,
-					nil, /* *tree.EvalContext */
 					alloc,
 				)
 				if err != nil {
@@ -671,6 +701,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			return err
 		}
 	}
+	log.Info(ctx, "finished clearing data for indexes")
 	return nil
 }
 
@@ -688,16 +719,16 @@ const (
 // associated with a table. We should get rid of MutationJobs and start looking
 // up the jobs in the jobs table instead.
 func getJobIDForMutationWithDescriptor(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc sqlbase.TableDescriptor, mutationID descpb.MutationID,
 ) (int64, error) {
-	for _, job := range tableDesc.MutationJobs {
+	for _, job := range tableDesc.GetMutationJobs() {
 		if job.MutationID == mutationID {
 			return job.JobID, nil
 		}
 	}
 
 	return 0, errors.AssertionFailedf(
-		"job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
+		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 
 // nRanges returns the number of ranges that cover a set of spans.
@@ -736,7 +767,7 @@ func (sc *SchemaChanger) nRanges(
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
-	version sqlbase.DescriptorVersion,
+	version descpb.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
@@ -817,40 +848,12 @@ func (sc *SchemaChanger) distBackfill(
 				}
 			}
 
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
+			tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 			// Use a leased table descriptor for the backfill.
-			defer tc.releaseTables(ctx)
+			defer tc.ReleaseAll(ctx)
 			tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
 			if err != nil {
 				return err
-			}
-			// otherTableDescs contains any other table descriptors required by the
-			// backfiller processor.
-			var otherTableDescs []sqlbase.TableDescriptor
-			if backfillType == columnBackfill {
-				fkTables, err := row.MakeFkMetadata(
-					ctx,
-					tableDesc,
-					row.CheckUpdates,
-					row.NoLookup,
-					row.NoCheckPrivilege,
-					nil, /* AnalyzeExprFunction */
-					nil, /* CheckHelper */
-				)
-				if err != nil {
-					return err
-				}
-
-				for k := range fkTables {
-					table, err := tc.getTableVersionByID(ctx, txn, k, tree.ObjectLookupFlags{})
-					if err != nil {
-						return err
-					}
-					otherTableDescs = append(otherTableDescs, *table.TableDesc())
-				}
 			}
 			metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.BulkProcessorProgress != nil {
@@ -859,14 +862,13 @@ func (sc *SchemaChanger) distBackfill(
 				}
 				return nil
 			}
-			cbw := metadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
+			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,
 				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,
-				sc.leaseHolderCache,
 				nil, /* txn - the flow does not run wholly in a txn */
 				func(ts hlc.Timestamp) {
 					sc.clock.Update(ts)
@@ -875,9 +877,9 @@ func (sc *SchemaChanger) distBackfill(
 			)
 			defer recv.Release()
 
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, txn)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn, true /* distribute */)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, otherTableDescs, readAsOf,
+				planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, todoSpans, readAsOf,
 			)
 			if err != nil {
 				return err
@@ -925,17 +927,21 @@ func (sc *SchemaChanger) distBackfill(
 // with the given value.
 //
 // The update is performed in a separate txn at the current logical
-// timestamp.
+// timestamp. Note that while a MutableTableDescriptor is returned, this is an
+// odd case in that the descriptor is not tied to the lifetime of a transaction.
+// TODO(ajwerner): Fix the transaction and descriptor lifetimes here.
 func (sc *SchemaChanger) updateJobRunningStatus(
 	ctx context.Context, status jobs.RunningStatus,
-) (*sqlbase.TableDescriptor, error) {
-	var tableDesc *sqlbase.TableDescriptor
+) (*sqlbase.MutableTableDescriptor, error) {
+	var tableDesc *sqlbase.MutableTableDescriptor
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.tableID, catalogkv.Mutable,
+			catalogkv.TableDescriptorKind, true /* required */)
 		if err != nil {
 			return err
 		}
+		tableDesc = desc.(*sqlbase.MutableTableDescriptor)
+
 		// Update running status of job.
 		updateJobRunningProgress := false
 		for _, mutation := range tableDesc.Mutations {
@@ -946,15 +952,15 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 			}
 
 			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
+			case descpb.DescriptorMutation_ADD:
 				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+				case descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					updateJobRunningProgress = true
 				}
 
-			case sqlbase.DescriptorMutation_DROP:
+			case descpb.DescriptorMutation_DROP:
 				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
+				case descpb.DescriptorMutation_DELETE_ONLY:
 					updateJobRunningProgress = true
 				}
 			}
@@ -977,9 +983,10 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
-	if testDisableTableLeases {
+	if lease.TestingTableLeasesAreDisabled() {
 		return nil
 	}
+	log.Info(ctx, "validating new indexes")
 
 	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
 	if err != nil {
@@ -993,29 +1000,29 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.execCfg.Codec, sc.tableID)
+	var tableDesc *sqlbase.ImmutableTableDescriptor
+	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
+		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.tableID)
 		return err
 	}); err != nil {
 		return err
 	}
 
-	var forwardIndexes []*sqlbase.IndexDescriptor
-	var invertedIndexes []*sqlbase.IndexDescriptor
+	var forwardIndexes []*descpb.IndexDescriptor
+	var invertedIndexes []*descpb.IndexDescriptor
 
 	for _, m := range tableDesc.Mutations {
 		if sc.mutationID != m.MutationID {
 			break
 		}
 		idx := m.GetIndex()
-		if idx == nil || m.Direction == sqlbase.DescriptorMutation_DROP {
+		if idx == nil || m.Direction == descpb.DescriptorMutation_DROP {
 			continue
 		}
 		switch idx.Type {
-		case sqlbase.IndexDescriptor_FORWARD:
+		case descpb.IndexDescriptor_FORWARD:
 			forwardIndexes = append(forwardIndexes, idx)
-		case sqlbase.IndexDescriptor_INVERTED:
+		case descpb.IndexDescriptor_INVERTED:
 			invertedIndexes = append(invertedIndexes, idx)
 		}
 	}
@@ -1036,7 +1043,11 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			return sc.validateInvertedIndexes(ctx, tableDesc, invertedIndexes, runHistoricalTxn)
 		})
 	}
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished validating new indexes")
+	return nil
 }
 
 // validateInvertedIndexes checks that the indexes have entries for
@@ -1048,8 +1059,8 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateInvertedIndexes(
 	ctx context.Context,
-	tableDesc *TableDescriptor,
-	indexes []*sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
@@ -1110,7 +1121,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 
 			start := timeutil.Now()
 			if len(idx.ColumnNames) != 1 {
-				panic(fmt.Sprintf("expected inverted index %s to have exactly 1 column, but found columns %+v",
+				panic(errors.AssertionFailedf("expected inverted index %s to have exactly 1 column, but found columns %+v",
 					idx.Name, idx.ColumnNames))
 			}
 			col := idx.ColumnNames[0]
@@ -1156,8 +1167,8 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateForwardIndexes(
 	ctx context.Context,
-	tableDesc *TableDescriptor,
-	indexes []*sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor,
+	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
@@ -1168,26 +1179,30 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	// Compute the size of each index.
 	for _, idx := range indexes {
 		idx := idx
+
+		// Skip partial indexes for now.
+		// TODO(mgartner): Validate partial index entry counts.
+		if idx.IsPartial() {
+			continue
+		}
+
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
 			// Make the mutations public in a private copy of the descriptor
-			// and add it to the TableCollection, so that we can use SQL below to perform
+			// and add it to the Collection, so that we can use SQL below to perform
 			// the validation. We wouldn't have needed to do this if we could have
 			// updated the descriptor and run validation in the same transaction. However,
 			// our current system is incapable of running long running schema changes
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			desc, err := sqlbase.NewImmutableTableDescriptor(*tableDesc).MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
+			desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
-			tc := &TableCollection{
-				leaseMgr: sc.leaseMgr,
-				settings: sc.settings,
-			}
+			tc := descs.NewCollection(sc.leaseMgr, sc.settings)
 			// pretend that the schema has been modified.
-			if err := tc.addUncommittedTable(*desc); err != nil {
+			if err := tc.AddUncommittedDescriptor(desc); err != nil {
 				return err
 			}
 
@@ -1271,17 +1286,23 @@ func (sc *SchemaChanger) validateForwardIndexes(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 func (sc *SchemaChanger) backfillIndexes(
-	ctx context.Context, version sqlbase.DescriptorVersion, addingSpans []roachpb.Span,
+	ctx context.Context, version descpb.DescriptorVersion, addingSpans []roachpb.Span,
 ) error {
+	log.Infof(ctx, "backfilling %d indexes", len(addingSpans))
+
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
 	}
 
-	expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
-
-	for _, span := range addingSpans {
-		if err := sc.db.AdminSplit(ctx, span.Key, span.Key, expirationTime); err != nil {
-			return err
+	// Split off a new range for each new index span. But only do so for the
+	// system tenant. Secondary tenants do not have mandatory split points
+	// between tables or indexes.
+	if sc.execCfg.Codec.ForSystemTenant() {
+		expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
+		for _, span := range addingSpans {
+			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1291,6 +1312,8 @@ func (sc *SchemaChanger) backfillIndexes(
 		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
+
+	log.Info(ctx, "finished backfilling indexes")
 	return sc.validateIndexes(ctx)
 }
 
@@ -1300,11 +1323,17 @@ func (sc *SchemaChanger) backfillIndexes(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 func (sc *SchemaChanger) truncateAndBackfillColumns(
-	ctx context.Context, version sqlbase.DescriptorVersion,
+	ctx context.Context, version descpb.DescriptorVersion,
 ) error {
-	return sc.distBackfill(
+	log.Infof(ctx, "clearing and backfilling columns")
+
+	if err := sc.distBackfill(
 		ctx, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		backfill.ColumnMutationFilter, nil)
+		backfill.ColumnMutationFilter, nil); err != nil {
+		return err
+	}
+	log.Info(ctx, "finished clearing and backfilling columns")
+	return nil
 }
 
 // runSchemaChangesInTxn runs all the schema changes immediately in a
@@ -1322,7 +1351,7 @@ func runSchemaChangesInTxn(
 		// Reclaim all the old names. Leave the data and descriptor
 		// cleanup for later.
 		for _, drain := range tableDesc.DrainingNames {
-			err := sqlbase.RemoveObjectNamespaceEntry(ctx, planner.Txn(), planner.ExecCfg().Codec,
+			err := catalogkv.RemoveObjectNamespaceEntry(ctx, planner.Txn(), planner.ExecCfg().Codec,
 				drain.ParentID, drain.ParentSchemaID, drain.Name, false /* KVTrace */)
 			if err != nil {
 				return err
@@ -1339,7 +1368,7 @@ func runSchemaChangesInTxn(
 	// all column mutations.
 	doneColumnBackfill := false
 	// Checks are validated after all other mutations have been applied.
-	var constraintsToValidate []sqlbase.ConstraintToUpdate
+	var constraintsToValidate []descpb.ConstraintToUpdate
 
 	// We use a range loop here as the processing of some mutations
 	// such as the primary key swap mutations result in queueing more
@@ -1348,30 +1377,32 @@ func runSchemaChangesInTxn(
 		m := tableDesc.Mutations[i]
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case descpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_PrimaryKeySwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap:
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
-			case *sqlbase.DescriptorMutation_Column:
+			case *descpb.DescriptorMutation_ComputedColumnSwap:
+				return AlterColTypeInTxnNotSupportedErr
+			case *descpb.DescriptorMutation_Column:
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.Tables(), planner.EvalContext(), immutDesc, traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
-			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), immutDesc, traceKV); err != nil {
+			case *descpb.DescriptorMutation_Index:
+				if err := indexBackfillInTxn(ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV); err != nil {
 					return err
 				}
 
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *descpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+				case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					fk := t.Constraint.ForeignKey
 					var referencedTableDesc *sqlbase.MutableTableDescriptor
 					// We don't want to lookup/edit a second copy of the same table.
@@ -1379,7 +1410,7 @@ func runSchemaChangesInTxn(
 					if selfReference {
 						referencedTableDesc = tableDesc
 					} else {
-						lookup, err := planner.Tables().getMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
+						lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.ReferencedTableID, planner.Txn())
 						if err != nil {
 							return errors.Errorf("error resolving referenced table ID %d: %v", fk.ReferencedTableID, err)
 						}
@@ -1391,9 +1422,10 @@ func runSchemaChangesInTxn(
 					// Write the other table descriptor here if it's not the current table
 					// we're already modifying.
 					if !selfReference {
-						// TODO (lucy): Have more consistent/informative names for dependent jobs.
 						if err := planner.writeSchemaChange(
-							ctx, referencedTableDesc, sqlbase.InvalidMutationID, "updating referenced table",
+							ctx, referencedTableDesc, descpb.InvalidMutationID,
+							fmt.Sprintf("updating referenced FK table %s(%d) table %s(%d)",
+								referencedTableDesc.Name, referencedTableDesc.ID, tableDesc.Name, tableDesc.ID),
 						); err != nil {
 							return err
 						}
@@ -1409,37 +1441,37 @@ func runSchemaChangesInTxn(
 					"unsupported mutation: %+v", m)
 			}
 
-		case sqlbase.DescriptorMutation_DROP:
+		case descpb.DescriptorMutation_DROP:
 			// Drop the name and drop the associated data later.
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *descpb.DescriptorMutation_Column:
 				if doneColumnBackfill {
 					break
 				}
 				if err := columnBackfillInTxn(
-					ctx, planner.Txn(), planner.Tables(), planner.EvalContext(), immutDesc, traceKV,
+					ctx, planner.Txn(), planner.EvalContext(), planner.SemaCtx(), immutDesc, traceKV,
 				); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
-			case *sqlbase.DescriptorMutation_Index:
+			case *descpb.DescriptorMutation_Index:
 				if err := indexTruncateInTxn(
 					ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, t.Index, traceKV,
 				); err != nil {
 					return err
 				}
 
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *descpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+				case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 					for i := range tableDesc.Checks {
 						if tableDesc.Checks[i].Name == t.Constraint.Name {
 							tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
 							break
 						}
 					}
-				case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					for i := range tableDesc.OutboundFKs {
 						fk := &tableDesc.OutboundFKs[i]
 						if fk.Name == t.Constraint.Name {
@@ -1479,14 +1511,14 @@ func runSchemaChangesInTxn(
 			// different because of how it access tables and how it needs to
 			// write the modified table descriptors explicitly.
 			for _, idxID := range append(
-				[]sqlbase.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
+				[]descpb.IndexID{pkSwap.OldPrimaryIndexId}, pkSwap.OldIndexes...) {
 				oldIndex, err := tableDesc.FindIndexByID(idxID)
 				if err != nil {
 					return err
 				}
 				if len(oldIndex.Interleave.Ancestors) != 0 {
 					ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-					ancestor, err := planner.Tables().getMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
+					ancestor, err := planner.Descriptors().GetMutableTableVersionByID(ctx, ancestorInfo.TableID, planner.txn)
 					if err != nil {
 						return err
 					}
@@ -1505,7 +1537,11 @@ func runSchemaChangesInTxn(
 							ancestorIdx.InterleavedBy = append(
 								ancestorIdx.InterleavedBy[:k], ancestorIdx.InterleavedBy[k+1:]...)
 							foundAncestor = true
-							if err := planner.writeSchemaChange(ctx, ancestor, sqlbase.InvalidMutationID, ""); err != nil {
+							if err := planner.writeSchemaChange(ctx, ancestor, descpb.InvalidMutationID,
+								fmt.Sprintf("remove interleaved backreference from table %s(%d) "+
+									"for primary key swap of table %s(%d)",
+									ancestor.Name, ancestor.ID, tableDesc.Name, tableDesc.ID,
+								)); err != nil {
 								return err
 							}
 						}
@@ -1520,13 +1556,13 @@ func runSchemaChangesInTxn(
 	// mutations applied, it can be used for validating check constraints
 	for _, c := range constraintsToValidate {
 		switch c.ConstraintType {
-		case sqlbase.ConstraintToUpdate_CHECK, sqlbase.ConstraintToUpdate_NOT_NULL:
+		case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
 			if err := validateCheckInTxn(
-				ctx, planner.Tables().leaseMgr, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
+				ctx, planner.Descriptors().LeaseManager(), &planner.semaCtx, planner.EvalContext(), tableDesc, planner.txn, c.Check.Name,
 			); err != nil {
 				return err
 			}
-		case sqlbase.ConstraintToUpdate_FOREIGN_KEY:
+		case descpb.ConstraintToUpdate_FOREIGN_KEY:
 			// We can't support adding a validated foreign key constraint in the same
 			// transaction as the CREATE TABLE statement. This would require adding
 			// the backreference to the other table and then validating the constraint
@@ -1542,7 +1578,7 @@ func runSchemaChangesInTxn(
 			for i := range tableDesc.OutboundFKs {
 				desc := &tableDesc.OutboundFKs[i]
 				if desc.Name == c.ForeignKey.Name {
-					desc.Validity = sqlbase.ConstraintValidity_Unvalidated
+					desc.Validity = descpb.ConstraintValidity_Unvalidated
 					break
 				}
 			}
@@ -1568,7 +1604,8 @@ func runSchemaChangesInTxn(
 // reuse an existing kv.Txn safely.
 func validateCheckInTxn(
 	ctx context.Context,
-	leaseMgr *LeaseManager,
+	leaseMgr *lease.Manager,
+	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
@@ -1576,12 +1613,9 @@ func validateCheckInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
+		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
 		}
 
@@ -1595,7 +1629,7 @@ func validateCheckInTxn(
 	if err != nil {
 		return err
 	}
-	return validateCheckExpr(ctx, check.Expr, tableDesc.TableDesc(), ie, txn)
+	return validateCheckExpr(ctx, semaCtx, check.Expr, tableDesc, ie, txn)
 }
 
 // validateFkInTxn validates foreign key constraints within the provided
@@ -1612,7 +1646,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	leaseMgr *LeaseManager,
+	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
 	tableDesc *MutableTableDescriptor,
 	txn *kv.Txn,
@@ -1620,12 +1654,9 @@ func validateFkInTxn(
 ) error {
 	ie := evalCtx.InternalExecutor.(*InternalExecutor)
 	if tableDesc.Version > tableDesc.ClusterVersion.Version {
-		newTc := &TableCollection{
-			leaseMgr: leaseMgr,
-			settings: evalCtx.Settings,
-		}
+		newTc := descs.NewCollection(leaseMgr, evalCtx.Settings)
 		// pretend that the schema has been modified.
-		if err := newTc.addUncommittedTable(*tableDesc); err != nil {
+		if err := newTc.AddUncommittedDescriptor(tableDesc); err != nil {
 			return err
 		}
 
@@ -1635,7 +1666,7 @@ func validateFkInTxn(
 		}()
 	}
 
-	var fk *sqlbase.ForeignKeyConstraint
+	var fk *descpb.ForeignKeyConstraint
 	for i := range tableDesc.OutboundFKs {
 		def := &tableDesc.OutboundFKs[i]
 		if def.Name == fkName {
@@ -1647,7 +1678,7 @@ func validateFkInTxn(
 		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
 
-	return validateForeignKey(ctx, tableDesc.TableDesc(), fk, ie, txn, evalCtx.Codec)
+	return validateForeignKey(ctx, tableDesc, fk, ie, txn, evalCtx.Codec)
 }
 
 // columnBackfillInTxn backfills columns for all mutation columns in
@@ -1658,8 +1689,8 @@ func validateFkInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	tc *TableCollection,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
@@ -1668,39 +1699,14 @@ func columnBackfillInTxn(
 		return nil
 	}
 	var backfiller backfill.ColumnBackfiller
-	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
-	}
-	// otherTableDescs contains any other table descriptors required by the
-	// backfiller processor.
-	var otherTableDescs []*sqlbase.ImmutableTableDescriptor
-	fkTables, err := row.MakeFkMetadata(
-		ctx,
-		tableDesc,
-		row.CheckUpdates,
-		row.NoLookup,
-		row.NoCheckPrivilege,
-		nil, /* AnalyzeExprFunction */
-		nil, /* CheckHelper */
-	)
-	if err != nil {
-		return err
-	}
-	// All the FKs here are guaranteed to be created in the same transaction
-	// or else this table would be created in the ADD state.
-	for k := range fkTables {
-		t := tc.getUncommittedTableByID(k)
-		if (uncommittedTable{}) == t || !t.IsNewTable() {
-			return errors.AssertionFailedf(
-				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
-		}
-		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)
 	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
 	for sp.Key != nil {
 		var err error
 		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx,
-			txn, tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize,
+			txn, tableDesc, sp, columnTruncateAndBackfillChunkSize,
 			false /*alsoCommit*/, traceKV)
 		if err != nil {
 			return err
@@ -1718,11 +1724,12 @@ func indexBackfillInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
-	if err := backfiller.Init(evalCtx, tableDesc); err != nil {
+	if err := backfiller.InitForLocalUse(ctx, evalCtx, semaCtx, tableDesc); err != nil {
 		return err
 	}
 	sp := tableDesc.PrimaryIndexSpan(evalCtx.Codec)
@@ -1746,14 +1753,14 @@ func indexTruncateInTxn(
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	idx *sqlbase.IndexDescriptor,
+	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
 	alloc := &sqlbase.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd, err := row.MakeDeleter(
-			ctx, txn, execCfg.Codec, tableDesc, nil, nil, row.SkipFKs, evalCtx, alloc,
+			ctx, txn, execCfg.Codec, tableDesc, nil, alloc,
 		)
 		if err != nil {
 			return err
@@ -1770,5 +1777,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []sqlbase.IndexDescriptor{*idx})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []descpb.IndexDescriptor{*idx})
 }

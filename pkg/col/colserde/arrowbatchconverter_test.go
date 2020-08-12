@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -33,23 +33,13 @@ func randomBatch(allocator *colmem.Allocator) ([]*types.T, coldata.Batch) {
 
 	typs := make([]*types.T, rng.Intn(maxTyps)+1)
 	for i := range typs {
-		typs[i] = typeconv.AllSupportedSQLTypes[rng.Intn(len(typeconv.AllSupportedSQLTypes))]
+		typs[i] = sqlbase.RandType(rng)
 	}
 
 	capacity := rng.Intn(coldata.BatchSize()) + 1
 	length := rng.Intn(capacity)
 	b := coldatatestutils.RandomBatch(allocator, rng, typs, capacity, length, rng.Float64())
 	return typs, b
-}
-
-func TestArrowBatchConverterRejectsUnsupportedTypes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	unsupportedTypes := []*types.T{types.INet}
-	for _, typ := range unsupportedTypes {
-		_, err := colserde.NewArrowBatchConverter([]*types.T{typ})
-		require.Error(t, err)
-	}
 }
 
 func TestArrowBatchConverterRandom(t *testing.T) {
@@ -61,11 +51,11 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
-	expected := coldatatestutils.CopyBatch(b, typs)
+	expected := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
 	arrowData, err := c.BatchToArrow(b)
 	require.NoError(t, err)
-	actual := coldata.NewMemBatchWithSize(typs, b.Length())
+	actual := testAllocator.NewMemBatchWithSize(typs, b.Length())
 	require.NoError(t, c.ArrowToBatch(arrowData, actual))
 
 	coldata.AssertEquivalentBatches(t, expected, actual)
@@ -95,7 +85,7 @@ func roundTripBatch(
 	if err := r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		return nil, err
 	}
-	actual := coldata.NewMemBatchWithSize(typs, b.Length())
+	actual := testAllocator.NewMemBatchWithSize(typs, b.Length())
 	if err := c.ArrowToBatch(arrowDataOut, actual); err != nil {
 		return nil, err
 	}
@@ -114,7 +104,7 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 
 		// Make a copy of the original batch because the converter modifies and
 		// casts data without copying for performance reasons.
-		expected := coldatatestutils.CopyBatch(b, typs)
+		expected := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 		actual, err := roundTripBatch(b, c, r, typs)
 		require.NoError(t, err)
 
@@ -214,7 +204,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			data, err := c.BatchToArrow(batch)
 			require.NoError(b, err)
 			testPrefix := fmt.Sprintf("%s/nullFraction=%0.2f", typ.String(), nullFraction)
-			result := coldata.NewMemBatch([]*types.T{typ})
+			result := testAllocator.NewMemBatch([]*types.T{typ})
 			b.Run(testPrefix+"/ArrowToBatch", func(b *testing.B) {
 				b.SetBytes(numBytes[typIdx])
 				for i := 0; i < b.N; i++ {

@@ -12,6 +12,7 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -41,21 +42,54 @@ type ReplicaSlice []ReplicaInfo
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
+//
+// Generally, only voting replicas are returned. However, if a non-nil
+// leaseholder is passed in, it will be included in the result even if the
+// descriptor has it as a learner (we assert that the leaseholder is part of the
+// descriptor). The idea is that the descriptor might be stale and list the
+// leaseholder as a learner erroneously, and lease info is a strong signal in
+// that direction. Note that the returned ReplicaSlice might still not include
+// the leaseholder if info for the respective node is missing from the
+// NodeDescStore.
+//
+// If there's no info in gossip for any of the nodes in the descriptor, a
+// sendError is returned.
 func NewReplicaSlice(
-	gossip interface {
-		GetNodeDescriptor(roachpb.NodeID) (*roachpb.NodeDescriptor, error)
-	},
-	replicas []roachpb.ReplicaDescriptor,
-) ReplicaSlice {
-	if gossip == nil {
-		return nil
+	ctx context.Context,
+	nodeDescs NodeDescStore,
+	desc *roachpb.RangeDescriptor,
+	leaseholder *roachpb.ReplicaDescriptor,
+) (ReplicaSlice, error) {
+	if leaseholder != nil {
+		if _, ok := desc.GetReplicaDescriptorByID(leaseholder.ReplicaID); !ok {
+			log.Fatalf(ctx, "leaseholder not in descriptor; leaseholder: %s, desc: %s", leaseholder, desc)
+		}
 	}
-	rs := make(ReplicaSlice, 0, len(replicas))
-	for _, r := range replicas {
-		nd, err := gossip.GetNodeDescriptor(r.NodeID)
+
+	// Learner replicas won't serve reads/writes, so we'll send only to the
+	// `Voters` replicas. This is just an optimization to save a network hop,
+	// everything would still work if we had `All` here.
+	voters := desc.Replicas().Voters()
+	// If we know a leaseholder, though, let's make sure we include it.
+	if leaseholder != nil && len(voters) < len(desc.Replicas().All()) {
+		found := false
+		for _, v := range voters {
+			if v == *leaseholder {
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Eventf(ctx, "the descriptor has the leaseholder as a learner; including it anyway")
+			voters = append(voters, *leaseholder)
+		}
+	}
+	rs := make(ReplicaSlice, 0, len(voters))
+	for _, r := range voters {
+		nd, err := nodeDescs.GetNodeDescriptor(r.NodeID)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "node %d is not gossiped: %v", r.NodeID, err)
+				log.Infof(ctx, "node %d is not gossiped: %v", r.NodeID, err)
 			}
 			continue
 		}
@@ -64,7 +98,11 @@ func NewReplicaSlice(
 			NodeDesc:          nd,
 		})
 	}
-	return rs
+	if len(rs) == 0 {
+		return nil, newSendError(
+			fmt.Sprintf("no replica node addresses available via gossip for r%d", desc.RangeID))
+	}
+	return rs, nil
 }
 
 // ReplicaSlice implements shuffle.Interface.
@@ -76,11 +114,10 @@ func (rs ReplicaSlice) Len() int { return len(rs) }
 // Swap swaps the replicas with indexes i and j.
 func (rs ReplicaSlice) Swap(i, j int) { rs[i], rs[j] = rs[j], rs[i] }
 
-// FindReplica returns the index of the replica which matches the specified store
-// ID. If no replica matches, -1 is returned.
-func (rs ReplicaSlice) FindReplica(storeID roachpb.StoreID) int {
+// Find returns the index of the specified ReplicaID, or -1 if missing.
+func (rs ReplicaSlice) Find(id roachpb.ReplicaID) int {
 	for i := range rs {
-		if rs[i].StoreID == storeID {
+		if rs[i].ReplicaID == id {
 			return i
 		}
 	}

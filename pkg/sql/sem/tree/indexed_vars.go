@@ -11,6 +11,8 @@
 package tree
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -53,8 +55,10 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
+func (v *IndexedVar) TypeCheck(
+	_ context.Context, semaCtx *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	if semaCtx.IVarContainer == nil || semaCtx.IVarContainer == unboundContainer {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
 		// a tad bit too technical for the average SQL use case and
@@ -64,7 +68,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 		return nil, pgerror.Newf(
 			pgcode.UndefinedColumn, "column reference @%d not allowed in this context", v.Idx+1)
 	}
-	v.typ = ctx.IVarContainer.IndexedVarResolvedType(v.Idx)
+	v.typ = semaCtx.IVarContainer.IndexedVarResolvedType(v.Idx)
 	return v, nil
 }
 
@@ -212,30 +216,10 @@ func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
 	return h.vars
 }
 
-// Reset re-initializes an IndexedVarHelper structure with the same
-// number of slots. After a helper has been reset, all the expressions
-// that were linked to the helper before it was reset must be
-// re-bound, e.g. using Rebind(). Resetting is useful to ensure that
-// the helper's knowledge of which IndexedVars are actually used by
-// linked expressions is up to date, especially after
-// optimizations/transforms which eliminate sub-expressions. The
-// optimizations performed by setNeededColumns() work then best.
-//
-// TODO(knz): groupNode and windowNode hold on to IndexedVar's after a Reset().
-func (h *IndexedVarHelper) Reset() {
-	h.vars = make([]IndexedVar, len(h.vars))
-}
-
-// Rebind collects all the IndexedVars in the given expression
-// and re-binds them to this helper.
-func (h *IndexedVarHelper) Rebind(expr TypedExpr, alsoReset, normalizeToNonNil bool) TypedExpr {
-	if alsoReset {
-		h.Reset()
-	}
-	if expr == nil || expr == DBoolTrue {
-		if normalizeToNonNil {
-			return DBoolTrue
-		}
+// Rebind collects all the IndexedVars in the given expression and re-binds them
+// to this helper.
+func (h *IndexedVarHelper) Rebind(expr TypedExpr) TypedExpr {
+	if expr == nil {
 		return nil
 	}
 	ret, _ := WalkExpr(h, expr)

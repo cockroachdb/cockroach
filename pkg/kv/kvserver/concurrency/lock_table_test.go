@@ -82,7 +82,7 @@ update txn=<name> ts=<int>[,<int>] epoch=<int> span=<start>[,<end>] [ignored-seq
 
  Updates locks for the named transaction.
 
-add-discovered r=<name> k=<key> txn=<name>
+add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>]
 ----
 <error string>
 
@@ -108,7 +108,7 @@ should-wait r=<name>
 
  Calls lockTableGuard.ShouldWait.
 
-enable
+enable [lease-seq=<seq>]
 ----
 
  Calls lockTable.Enable.
@@ -128,6 +128,7 @@ print
 
 func TestLockTableBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	datadriven.Walk(t, "testdata/lock_table", func(t *testing.T, path string) {
 		var lt lockTable
@@ -141,8 +142,9 @@ func TestLockTableBasic(t *testing.T) {
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
 				lt = &lockTableImpl{
-					enabled:  true,
-					maxLocks: int64(maxLocks),
+					enabled:    true,
+					enabledSeq: 1,
+					maxLocks:   int64(maxLocks),
 				}
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
@@ -333,7 +335,12 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
-				if _, err := lt.AddDiscoveredLock(&intent, g); err != nil {
+				seq := int(1)
+				if d.HasArg("lease-seq") {
+					d.ScanArgs(t, "lease-seq", &seq)
+				}
+				leaseSeq := roachpb.LeaseSequence(seq)
+				if _, err := lt.AddDiscoveredLock(&intent, leaseSeq, g); err != nil {
 					return err.Error()
 				}
 				return lt.(*lockTableImpl).String()
@@ -402,7 +409,11 @@ func TestLockTableBasic(t *testing.T) {
 					str, typeStr, txnS, state.key, state.held, state.guardAccess)
 
 			case "enable":
-				lt.Enable()
+				seq := int(1)
+				if d.HasArg("lease-seq") {
+					d.ScanArgs(t, "lease-seq", &seq)
+				}
+				lt.Enable(roachpb.LeaseSequence(seq))
 				return ""
 
 			case "clear":
@@ -516,7 +527,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.TODO(), item.request.LatchSpans)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans)
 			if err != nil {
 				return err
 			}
@@ -769,7 +780,7 @@ func (e *workloadExecutor) tryFinishTxn(
 func (e *workloadExecutor) execute(strict bool, maxNonStrictConcurrency int) error {
 	numOutstanding := 0
 	i := 0
-	group, ctx := errgroup.WithContext(context.TODO())
+	group, ctx := errgroup.WithContext(context.Background())
 	timer := time.NewTimer(time.Second)
 	timer.Stop()
 	var err error
@@ -867,6 +878,7 @@ L:
 // test executor can run in strict concurrency mode (see comment in execute()).
 func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	txnCounter := uint128.FromInts(0, 0)
 	var timestamps []hlc.Timestamp
@@ -937,6 +949,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 // General randomized test.
 func TestLockTableConcurrentRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// TODO(sbhola): different test cases with different settings of the
 	// randomization parameters.
@@ -1058,7 +1071,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.TODO(), item.LatchSpans); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1093,7 +1106,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.TODO(), item.LatchSpans); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1240,7 +1253,7 @@ func BenchmarkLockTable(b *testing.B) {
 							runRequests(b, iters, requestsPerGroup[0], env)
 						}
 						if log.V(1) {
-							log.Infof(context.TODO(), "num requests that waited: %d, num scan calls: %d\n",
+							log.Infof(context.Background(), "num requests that waited: %d, num scan calls: %d\n",
 								atomic.LoadUint64(&numRequestsWaited), atomic.LoadUint64(&numScanCalls))
 						}
 					})

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,7 +29,7 @@ type alterSequenceNode struct {
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
 	seqDesc, err := p.ResolveMutableTableDescriptorEx(
-		ctx, n.Name, !n.IfExists, ResolveRequireSequenceDesc,
+		ctx, n.Name, !n.IfExists, tree.ResolveRequireSequenceDesc,
 	)
 	if err != nil {
 		return nil, err
@@ -59,7 +60,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	}
 
 	if err := params.p.writeSchemaChange(
-		params.ctx, n.seqDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+		params.ctx, n.seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}

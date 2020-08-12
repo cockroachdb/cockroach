@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -28,12 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -105,8 +108,9 @@ func TestInternalExecutor(t *testing.T) {
 
 func TestQueryIsAdminWithNoTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -147,8 +151,9 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 
 func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
@@ -193,6 +198,7 @@ func TestSessionBoundInternalExecutor(t *testing.T) {
 // the cancellability of the query, and the listing in the application statistics.
 func TestInternalExecAppNameInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	params.Insecure = true
@@ -209,11 +215,11 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 
 	t.Run("root internal exec", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		testInternalExecutorAppNameInitialization(t, sem,
-			sqlbase.InternalAppNamePrefix+"-test-query", // app name in SHOW
-			sqlbase.InternalAppNamePrefix+"-test-query", // app name in stats
+			catconstants.InternalAppNamePrefix+"-test-query", // app name in SHOW
+			catconstants.InternalAppNamePrefix+"-test-query", // app name in stats
 			s.InternalExecutor().(*sql.InternalExecutor))
 	})
 
@@ -221,10 +227,10 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// as to reset the statement statistics properly.
 	t.Run("session bound exec", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.TODO())
+		defer s.Stopper().Stop(context.Background())
 
 		ie := sql.MakeInternalExecutor(
-			context.TODO(),
+			context.Background(),
 			s.(*server.TestServer).Server.PGServer().SQLServer,
 			sql.MemoryMetrics{},
 			s.ExecutorConfig().(sql.ExecutorConfig).Settings,
@@ -239,7 +245,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		testInternalExecutorAppNameInitialization(
 			t, sem,
 			"appname_findme", // app name in SHOW
-			sqlbase.DelegatedAppNamePrefix+"appname_findme", // app name in stats
+			catconstants.DelegatedAppNamePrefix+"appname_findme", // app name in stats
 			&ie,
 		)
 	})
@@ -261,7 +267,7 @@ func testInternalExecutorAppNameInitialization(
 	ie testInternalExecutor,
 ) {
 	// Check that the application_name is set properly in the executor.
-	if rows, err := ie.Query(context.TODO(), "test-query", nil,
+	if rows, err := ie.Query(context.Background(), "test-query", nil,
 		"SHOW application_name"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
@@ -274,7 +280,7 @@ func testInternalExecutorAppNameInitialization(
 	// have this keep running until we cancel it below.
 	errChan := make(chan error)
 	go func() {
-		_, err := ie.Query(context.TODO(),
+		_, err := ie.Query(context.Background(),
 			"test-query",
 			nil, /* txn */
 			"SELECT pg_sleep(1337666)")
@@ -290,7 +296,7 @@ func testInternalExecutorAppNameInitialization(
 	// When it does, we capture the query ID.
 	var queryID string
 	testutils.SucceedsSoon(t, func() error {
-		rows, err := ie.Query(context.TODO(),
+		rows, err := ie.Query(context.Background(),
 			"find-query",
 			nil, /* txn */
 			// We need to assemble the magic string so that this SELECT
@@ -319,7 +325,7 @@ func testInternalExecutorAppNameInitialization(
 	})
 
 	// Check that the query shows up in the internal tables without error.
-	if rows, err := ie.Query(context.TODO(), "find-query", nil,
+	if rows, err := ie.Query(context.Background(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_queries WHERE query LIKE '%337' || '666%'"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {
@@ -331,7 +337,7 @@ func testInternalExecutorAppNameInitialization(
 	// We'll want to look at statistics below, and finish the test with
 	// no goroutine leakage. To achieve this, cancel the query. and
 	// drain the goroutine.
-	if _, err := ie.Exec(context.TODO(), "cancel-query", nil, "CANCEL QUERY $1", queryID); err != nil {
+	if _, err := ie.Exec(context.Background(), "cancel-query", nil, "CANCEL QUERY $1", queryID); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -344,7 +350,7 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// Now check that it was properly registered in statistics.
-	if rows, err := ie.Query(context.TODO(), "find-query", nil,
+	if rows, err := ie.Query(context.Background(), "find-query", nil,
 		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
 		t.Fatal(err)
 	} else if len(rows) != 1 {

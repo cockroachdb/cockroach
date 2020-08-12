@@ -12,24 +12,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-count                          ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Use explicit target columns (which can use blind KV Put).
 query TTT
@@ -37,24 +37,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-count                          ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+count                          ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Add RETURNING clause (should still use blind KV Put).
 query TTT
@@ -62,24 +62,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k, v) TABLE kv ORDER BY v DESC LIMIT 2 RETURNING *
 ]
 ----
-·                              distributed  false
-·                              vectorized   false
-run                            ·            ·
- └── upsert                    ·            ·
-      │                        into         kv(k, v)
-      │                        strategy     opt upserter
-      │                        auto commit  ·
-      └── render               ·            ·
-           │                   render 0     k
-           │                   render 1     v
-           │                   render 2     v
-           └── limit           ·            ·
-                │              count        2
-                └── sort       ·            ·
-                     │         order        -v
-                     └── scan  ·            ·
-·                              table        kv@primary
-·                              spans        FULL SCAN
+·                              distribution  local
+·                              vectorized    false
+run                            ·             ·
+ └── upsert                    ·             ·
+      │                        into          kv(k, v)
+      │                        strategy      opt upserter
+      │                        auto commit   ·
+      └── render               ·             ·
+           │                   render 0      k
+           │                   render 1      v
+           │                   render 2      v
+           └── limit           ·             ·
+                │              count         2
+                └── sort       ·             ·
+                     │         order         -v
+                     └── scan  ·             ·
+·                              table         kv@primary
+·                              spans         FULL SCAN
 
 # Use subset of explicit target columns (which cannot use blind KV Put).
 query TTT
@@ -87,7 +87,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                                             distributed            false
+·                                             distribution           local
 ·                                             vectorized             false
 count                                         ·                      ·
  └── upsert                                   ·                      ·
@@ -96,9 +96,9 @@ count                                         ·                      ·
       │                                       auto commit            ·
       └── render                              ·                      ·
            │                                  render 0               k
-           │                                  render 1               column5
+           │                                  render 1               column7
            │                                  render 2               k
-           └── lookup-join                    ·                      ·
+           └── lookup join                    ·                      ·
                 │                             table                  kv@primary
                 │                             type                   inner
                 │                             equality               (k) = (k)
@@ -138,7 +138,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1)
 ]
 ----
-·                                distributed    false
+·                                distribution   local
 ·                                vectorized     false
 count                            ·              ·
  └── upsert                      ·              ·
@@ -147,29 +147,29 @@ count                            ·              ·
       │                          auto commit    ·
       └── render                 ·              ·
            │                     render 0       column1
-           │                     render 1       column6
-           │                     render 2       column7
-           │                     render 3       column8
+           │                     render 1       column7
+           │                     render 2       column8
+           │                     render 3       column9
            │                     render 4       a
            │                     render 5       b
            │                     render 6       c
            │                     render 7       d
-           │                     render 8       column6
-           │                     render 9       column7
-           │                     render 10      column8
+           │                     render 8       column7
+           │                     render 9       column8
+           │                     render 10      column9
            │                     render 11      a
            │                     render 12      check1
            └── render            ·              ·
-                │                render 0       column7 > 0
+                │                render 0       column8 > 0
                 │                render 1       column1
-                │                render 2       column6
-                │                render 3       column7
-                │                render 4       column8
+                │                render 2       column7
+                │                render 3       column8
+                │                render 4       column9
                 │                render 5       a
                 │                render 6       b
                 │                render 7       c
                 │                render 8       d
-                └── cross-join   ·              ·
+                └── cross join   ·              ·
                      │           type           left outer
                      ├── values  ·              ·
                      │           size           4 columns, 1 row
@@ -190,7 +190,7 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO indexed VALUES (1) RETURNING *
 ]
 ----
-·                      distributed    false
+·                      distribution   local
 ·                      vectorized     false
 run                    ·              ·
  └── upsert            ·              ·
@@ -199,12 +199,12 @@ run                    ·              ·
       │                auto commit    ·
       └── render       ·              ·
            │           render 0       column1
-           │           render 1       column6
-           │           render 2       column7
-           │           render 3       column8
-           │           render 4       column6
-           │           render 5       column7
-           │           render 6       column8
+           │           render 1       column7
+           │           render 2       column8
+           │           render 3       column9
+           │           render 4       column7
+           │           render 5       column8
+           │           render 6       column9
            │           render 7       check1
            └── values  ·              ·
 ·                      size           5 columns, 1 row
@@ -255,7 +255,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 table reader                          Scan /Table/57/1/2{-/#}
 flow                                  CPut /Table/57/1/2/0 -> /TUPLE/2:2:Int/3
 flow                                  InitPut /Table/57/2/3/0 -> /BYTES/0x8a
-kv.DistSender: sending partial batch  r32: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r34: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -269,7 +269,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 table reader                          Scan /Table/57/1/1{-/#}
 flow                                  CPut /Table/57/1/1/0 -> /TUPLE/2:2:Int/2
 flow                                  InitPut /Table/57/2/2/0 -> /BYTES/0x89
-kv.DistSender: sending partial batch  r32: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r34: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 flow                                  fast path completed
 exec stmt                             rows affected: 1
 
@@ -286,7 +286,7 @@ table reader                          fetched: /kv/primary/2/v -> /3
 flow                                  Put /Table/57/1/2/0 -> /TUPLE/2:2:Int/2
 flow                                  Del /Table/57/2/3/0
 flow                                  CPut /Table/57/2/2/0 -> /BYTES/0x8a (expecting does not exist)
-kv.DistSender: sending partial batch  r32: sending batch 1 Put, 1 EndTxn to (n1,s1):1
+kv.DistSender: sending partial batch  r34: sending batch 1 Put, 1 EndTxn to (n1,s1):1
 exec stmt                             execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 
 
@@ -349,42 +349,42 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                                  distributed   false                                                ·                            ·
-·                                                  vectorized    false                                                ·                            ·
-root                                               ·             ·                                                    (z)                          +z
- ├── sort                                          ·             ·                                                    (z)                          +z
- │    │                                            order         +z                                                   ·                            ·
- │    └── scan buffer node                         ·             ·                                                    (z)                          ·
- │                                                 label         buffer 1                                             ·                            ·
- └── subquery                                      ·             ·                                                    ·                            ·
-      │                                            id            @S1                                                  ·                            ·
-      │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                            ·
-      │                                            exec mode     all rows                                             ·                            ·
-      └── buffer node                              ·             ·                                                    (z)                          ·
-           │                                       label         buffer 1                                             ·                            ·
-           └── spool                               ·             ·                                                    (z)                          ·
-                └── render                         ·             ·                                                    (z)                          ·
-                     │                             render 0      z                                                    ·                            ·
-                     └── run                       ·             ·                                                    (z, rowid[hidden])           ·
-                          └── upsert               ·             ·                                                    (z, rowid[hidden])           ·
-                               │                   into          xyz(x, y, z, rowid)                                  ·                            ·
-                               │                   strategy      opt upserter                                         ·                            ·
-                               └── render          ·             ·                                                    (a, b, c, column9, a, b, c)  ·
-                                    │              render 0      a                                                    ·                            ·
-                                    │              render 1      b                                                    ·                            ·
-                                    │              render 2      c                                                    ·                            ·
-                                    │              render 3      column9                                              ·                            ·
-                                    │              render 4      a                                                    ·                            ·
-                                    │              render 5      b                                                    ·                            ·
-                                    │              render 6      c                                                    ·                            ·
-                                    └── render     ·             ·                                                    (column9, a, b, c)           ·
-                                         │         render 0      unique_rowid()                                       ·                            ·
-                                         │         render 1      a                                                    ·                            ·
-                                         │         render 2      b                                                    ·                            ·
-                                         │         render 3      c                                                    ·                            ·
-                                         └── scan  ·             ·                                                    (a, b, c)                    ·
-·                                                  table         abc@primary                                          ·                            ·
-·                                                  spans         FULL SCAN                                            ·                            ·
+·                                                  distribution  local                                                ·                             ·
+·                                                  vectorized    false                                                ·                             ·
+root                                               ·             ·                                                    (z)                           +z
+ ├── sort                                          ·             ·                                                    (z)                           +z
+ │    │                                            order         +z                                                   ·                             ·
+ │    └── scan buffer                              ·             ·                                                    (z)                           ·
+ │                                                 label         buffer 1                                             ·                             ·
+ └── subquery                                      ·             ·                                                    ·                             ·
+      │                                            id            @S1                                                  ·                             ·
+      │                                            original sql  UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                             ·
+      │                                            exec mode     all rows                                             ·                             ·
+      └── buffer                                   ·             ·                                                    (z)                           ·
+           │                                       label         buffer 1                                             ·                             ·
+           └── spool                               ·             ·                                                    (z)                           ·
+                └── render                         ·             ·                                                    (z)                           ·
+                     │                             render 0      z                                                    ·                             ·
+                     └── run                       ·             ·                                                    (z, rowid)                    ·
+                          └── upsert               ·             ·                                                    (z, rowid)                    ·
+                               │                   into          xyz(x, y, z, rowid)                                  ·                             ·
+                               │                   strategy      opt upserter                                         ·                             ·
+                               └── render          ·             ·                                                    (a, b, c, column11, a, b, c)  ·
+                                    │              render 0      a                                                    ·                             ·
+                                    │              render 1      b                                                    ·                             ·
+                                    │              render 2      c                                                    ·                             ·
+                                    │              render 3      column11                                             ·                             ·
+                                    │              render 4      a                                                    ·                             ·
+                                    │              render 5      b                                                    ·                             ·
+                                    │              render 6      c                                                    ·                             ·
+                                    └── render     ·             ·                                                    (column11, a, b, c)           ·
+                                         │         render 0      unique_rowid()                                       ·                             ·
+                                         │         render 1      a                                                    ·                             ·
+                                         │         render 2      b                                                    ·                             ·
+                                         │         render 3      c                                                    ·                             ·
+                                         └── scan  ·             ·                                                    (a, b, c)                     ·
+·                                                  table         abc@primary                                          ·                             ·
+·                                                  spans         FULL SCAN                                            ·                             ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
@@ -414,7 +414,7 @@ INSERT INTO t35364 (x) VALUES (1.5) ON CONFLICT (x) DO UPDATE SET x=2.5 RETURNIN
 ----
 3  3  9
 
-statement error pq: failed to satisfy CHECK constraint \(z >= 7\)
+statement error pq: failed to satisfy CHECK constraint \(z >= 7:::DECIMAL\)
 UPSERT INTO t35364 (x) VALUES (0)
 
 # ------------------------------------------------------------------------------
@@ -432,7 +432,7 @@ BEGIN; ALTER TABLE table38627 ADD COLUMN c INT NOT NULL DEFAULT 5
 query TTTTT
 EXPLAIN (VERBOSE) UPSERT INTO table38627 SELECT * FROM table38627 WHERE a=1
 ----
-·                           distributed            false               ·                      ·
+·                           distribution           local               ·                      ·
 ·                           vectorized             false               ·                      ·
 count                       ·                      ·                   ()                     ·
  └── upsert                 ·                      ·                   ()                     ·
@@ -446,7 +446,7 @@ count                       ·                      ·                   ()     
            │                render 4               c                   ·                      ·
            │                render 5               b                   ·                      ·
            │                render 6               a                   ·                      ·
-           └── lookup-join  ·                      ·                   (a, b, a, b, c)        ·
+           └── lookup join  ·                      ·                   (a, b, a, b, c)        ·
                 │           table                  table38627@primary  ·                      ·
                 │           type                   inner               ·                      ·
                 │           equality               (a) = (a)           ·                      ·
@@ -472,7 +472,7 @@ query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO tdup VALUES (2, 2, 2), (3, 2, 2) ON CONFLICT (z, y) DO UPDATE SET z=1
 ----
-·                                     distributed            false                                        ·                                                  ·
+·                                     distribution           local                                        ·                                                  ·
 ·                                     vectorized             false                                        ·                                                  ·
 count                                 ·                      ·                                            ()                                                 ·
  └── upsert                           ·                      ·                                            ()                                                 ·
@@ -496,7 +496,7 @@ count                                 ·                      ·                
                 │                     render 4               x                                            ·                                                  ·
                 │                     render 5               y                                            ·                                                  ·
                 │                     render 6               z                                            ·                                                  ·
-                └── lookup-join       ·                      ·                                            (column1, column2, column3, x, y, z)               ·
+                └── lookup join       ·                      ·                                            (column1, column2, column3, x, y, z)               ·
                      │                table                  tdup@tdup_y_z_key                            ·                                                  ·
                      │                type                   left outer                                   ·                                                  ·
                      │                equality               (column2, column3) = (y, z)                  ·                                                  ·
@@ -528,42 +528,44 @@ EXPLAIN (VERBOSE)
 INSERT INTO target SELECT x, y, z FROM source WHERE (y IS NULL OR y > 0) AND x <> 1
 ON CONFLICT (b, c) DO UPDATE SET b=5
 ----
-·                                   distributed            false                                  ·                                ·
-·                                   vectorized             false                                  ·                                ·
-count                               ·                      ·                                      ()                               ·
- └── upsert                         ·                      ·                                      ()                               ·
-      │                             into                   target(a, b, c)                        ·                                ·
-      │                             strategy               opt upserter                           ·                                ·
-      │                             auto commit            ·                                      ·                                ·
-      └── render                    ·                      ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
-           │                        render 0               x                                      ·                                ·
-           │                        render 1               y                                      ·                                ·
-           │                        render 2               z                                      ·                                ·
-           │                        render 3               a                                      ·                                ·
-           │                        render 4               b                                      ·                                ·
-           │                        render 5               c                                      ·                                ·
-           │                        render 6               upsert_b                               ·                                ·
-           │                        render 7               a                                      ·                                ·
-           └── render               ·                      ·                                      (upsert_b, x, y, z, a, b, c)     ·
-                │                   render 0               CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
-                │                   render 1               x                                      ·                                ·
-                │                   render 2               y                                      ·                                ·
-                │                   render 3               z                                      ·                                ·
-                │                   render 4               a                                      ·                                ·
-                │                   render 5               b                                      ·                                ·
-                │                   render 6               c                                      ·                                ·
-                └── lookup-join     ·                      ·                                      (x, y, z, a, b, c)               ·
-                     │              table                  target@target_b_c_key                  ·                                ·
-                     │              type                   left outer                             ·                                ·
-                     │              equality               (y, z) = (b, c)                        ·                                ·
-                     │              equality cols are key  ·                                      ·                                ·
-                     │              parallel               ·                                      ·                                ·
-                     └── distinct   ·                      ·                                      (x, y, z)                        ·
-                          │         distinct on            y, z                                   ·                                ·
-                          │         nulls are distinct     ·                                      ·                                ·
-                          │         error on duplicate     ·                                      ·                                ·
-                          │         order key              y, z                                   ·                                ·
-                          └── scan  ·                      ·                                      (x, y, z)                        +y,+z
-·                                   table                  source@source_y_z_idx                  ·                                ·
-·                                   spans                  /NULL-/!NULL /1-                       ·                                ·
-·                                   filter                 x != 1                                 ·                                ·
+·                                        distribution        local                                  ·                                ·
+·                                        vectorized          false                                  ·                                ·
+count                                    ·                   ·                                      ()                               ·
+ └── upsert                              ·                   ·                                      ()                               ·
+      │                                  into                target(a, b, c)                        ·                                ·
+      │                                  strategy            opt upserter                           ·                                ·
+      │                                  auto commit         ·                                      ·                                ·
+      └── render                         ·                   ·                                      (x, y, z, a, b, c, upsert_b, a)  ·
+           │                             render 0            x                                      ·                                ·
+           │                             render 1            y                                      ·                                ·
+           │                             render 2            z                                      ·                                ·
+           │                             render 3            a                                      ·                                ·
+           │                             render 4            b                                      ·                                ·
+           │                             render 5            c                                      ·                                ·
+           │                             render 6            upsert_b                               ·                                ·
+           │                             render 7            a                                      ·                                ·
+           └── render                    ·                   ·                                      (upsert_b, x, y, z, a, b, c)     ·
+                │                        render 0            CASE WHEN a IS NULL THEN y ELSE 5 END  ·                                ·
+                │                        render 1            x                                      ·                                ·
+                │                        render 2            y                                      ·                                ·
+                │                        render 3            z                                      ·                                ·
+                │                        render 4            a                                      ·                                ·
+                │                        render 5            b                                      ·                                ·
+                │                        render 6            c                                      ·                                ·
+                └── merge join           ·                   ·                                      (a, b, c, x, y, z)               ·
+                     │                   type                right outer                            ·                                ·
+                     │                   equality            (b, c) = (y, z)                        ·                                ·
+                     │                   mergeJoinOrder      +"(b=y)",+"(c=z)"                      ·                                ·
+                     ├── scan            ·                   ·                                      (a, b, c)                        +b,+c
+                     │                   table               target@target_b_c_key                  ·                                ·
+                     │                   spans               FULL SCAN                              ·                                ·
+                     └── distinct        ·                   ·                                      (x, y, z)                        +y,+z
+                          │              distinct on         y, z                                   ·                                ·
+                          │              nulls are distinct  ·                                      ·                                ·
+                          │              error on duplicate  ·                                      ·                                ·
+                          │              order key           y, z                                   ·                                ·
+                          └── filter     ·                   ·                                      (x, y, z)                        +y,+z
+                               │         filter              x != 1                                 ·                                ·
+                               └── scan  ·                   ·                                      (x, y, z)                        +y,+z
+·                                        table               source@source_y_z_idx                  ·                                ·
+·                                        spans               /NULL-/!NULL /1-                       ·                                ·

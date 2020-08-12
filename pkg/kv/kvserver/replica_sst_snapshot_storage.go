@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 
@@ -57,7 +56,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 
 // Clear removes all created directories and SSTs.
 func (s *SSTSnapshotStorage) Clear() error {
-	return os.RemoveAll(s.dir)
+	return s.engine.RemoveAll(s.dir)
 }
 
 // SSTSnapshotStorageScratch keeps track of the SST files incrementally created
@@ -75,30 +74,27 @@ func (s *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
-	// TODO(peter): The directory creation needs to be plumbed through the Engine
-	// interface. Right now, this is creating a directory on disk even when the
-	// Engine has an in-memory filesystem. The only reason everything still works
-	// is because RocksDB MemEnvs allow the creation of files when the parent
-	// directory doesn't exist.
-	err := os.MkdirAll(s.snapDir, 0755)
+	err := s.storage.engine.MkdirAll(s.snapDir)
 	s.dirCreated = s.dirCreated || err == nil
 	return err
 }
 
 // NewFile adds another file to SSTSnapshotStorageScratch. This file is lazily
 // created when the file is written to the first time. A nonzero value for
-// chunkSize buffers up writes until the buffer is greater than chunkSize.
+// bytesPerSync will sync dirty data periodically as it is written. The syncing
+// does not provide persistency guarantees, but is used to smooth out disk
+// writes. Sync() must be called for data persistence.
 func (s *SSTSnapshotStorageScratch) NewFile(
-	ctx context.Context, chunkSize int64,
+	ctx context.Context, bytesPerSync int64,
 ) (*SSTSnapshotStorageFile, error) {
 	id := len(s.ssts)
 	filename := s.filename(id)
 	s.ssts = append(s.ssts, filename)
 	f := &SSTSnapshotStorageFile{
-		scratch:   s,
-		filename:  filename,
-		ctx:       ctx,
-		chunkSize: chunkSize,
+		scratch:      s,
+		filename:     filename,
+		ctx:          ctx,
+		bytesPerSync: bytesPerSync,
 	}
 	return f, nil
 }
@@ -110,7 +106,7 @@ func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) e
 	if len(data) == 0 {
 		return nil
 	}
-	f, err := s.NewFile(ctx, 0)
+	f, err := s.NewFile(ctx, 512<<10 /* 512 KB */)
 	if err != nil {
 		return err
 	}
@@ -120,6 +116,9 @@ func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) e
 		_ = f.Close()
 	}()
 	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
 		return err
 	}
 	return f.Close()
@@ -132,22 +131,21 @@ func (s *SSTSnapshotStorageScratch) SSTs() []string {
 
 // Clear removes the directory and SSTs created for a particular snapshot.
 func (s *SSTSnapshotStorageScratch) Clear() error {
-	return os.RemoveAll(s.snapDir)
+	return s.storage.engine.RemoveAll(s.snapDir)
 }
 
 // SSTSnapshotStorageFile is an SST file managed by a
 // SSTSnapshotStorageScratch.
 type SSTSnapshotStorageFile struct {
-	scratch   *SSTSnapshotStorageScratch
-	created   bool
-	file      fs.File
-	filename  string
-	ctx       context.Context
-	chunkSize int64
-	buffer    []byte
+	scratch      *SSTSnapshotStorageScratch
+	created      bool
+	file         fs.File
+	filename     string
+	ctx          context.Context
+	bytesPerSync int64
 }
 
-func (f *SSTSnapshotStorageFile) openFile() error {
+func (f *SSTSnapshotStorageFile) ensureFile() error {
 	if f.created {
 		if f.file == nil {
 			return errors.Errorf("file has already been closed")
@@ -159,11 +157,15 @@ func (f *SSTSnapshotStorageFile) openFile() error {
 			return err
 		}
 	}
-	file, err := f.scratch.storage.engine.CreateFile(f.filename)
+	var err error
+	if f.bytesPerSync > 0 {
+		f.file, err = f.scratch.storage.engine.CreateWithSync(f.filename, int(f.bytesPerSync))
+	} else {
+		f.file, err = f.scratch.storage.engine.Create(f.filename)
+	}
 	if err != nil {
 		return err
 	}
-	f.file = file
 	f.created = true
 	return nil
 }
@@ -175,27 +177,11 @@ func (f *SSTSnapshotStorageFile) Write(contents []byte) (int, error) {
 	if len(contents) == 0 {
 		return 0, nil
 	}
-	if err := f.openFile(); err != nil {
+	if err := f.ensureFile(); err != nil {
 		return 0, err
 	}
 	limitBulkIOWrite(f.ctx, f.scratch.storage.limiter, len(contents))
-	if f.chunkSize > 0 {
-		if int64(len(contents)+len(f.buffer)) < f.chunkSize {
-			// Don't write to file yet - buffer write until next time.
-			f.buffer = append(f.buffer, contents...)
-			return len(contents), nil
-		} else if len(f.buffer) > 0 {
-			// Write buffered writes and then empty the buffer.
-			if _, err := f.file.Write(f.buffer); err != nil {
-				return 0, err
-			}
-			f.buffer = f.buffer[:0]
-		}
-	}
-	if _, err := f.file.Write(contents); err != nil {
-		return 0, err
-	}
-	return len(contents), f.file.Sync()
+	return f.file.Write(contents)
 }
 
 // Close closes the file. Calling this function multiple times is idempotent.
@@ -208,13 +194,6 @@ func (f *SSTSnapshotStorageFile) Close() error {
 	}
 	if f.file == nil {
 		return nil
-	}
-	if len(f.buffer) > 0 {
-		// Write out any buffered data.
-		if _, err := f.file.Write(f.buffer); err != nil {
-			return err
-		}
-		f.buffer = f.buffer[:0]
 	}
 	if err := f.file.Close(); err != nil {
 		return err

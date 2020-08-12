@@ -144,7 +144,7 @@ func (b *bank) Tables() []workload.Table {
 				if rowEnd > b.rows {
 					rowEnd = b.rows
 				}
-				cb.Reset(bankTypes, rowEnd-rowBegin)
+				cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
 				idCol := cb.ColVec(0).Int64()
 				balanceCol := cb.ColVec(1).Int64()
 				payloadCol := cb.ColVec(2).Bytes()
@@ -177,7 +177,9 @@ func (b *bank) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (b *bank) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+func (b *bank) Ops(
+	ctx context.Context, urls []string, reg *histogram.Registry,
+) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

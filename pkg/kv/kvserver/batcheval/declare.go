@@ -102,14 +102,10 @@ func DeclareKeysForBatch(
 			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
-	if header.ReturnRangeInfo {
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-	}
 }
 
 // CommandArgs contains all the arguments to a command.
-// TODO(bdarnell): consider merging with storagebase.FilterArgs (which
+// TODO(bdarnell): consider merging with kvserverbase.FilterArgs (which
 // would probably require removing the EvalCtx field due to import order
 // constraints).
 type CommandArgs struct {

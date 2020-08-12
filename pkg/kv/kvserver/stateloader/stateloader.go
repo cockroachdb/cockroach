@@ -15,7 +15,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -28,7 +28,7 @@ import (
 )
 
 // StateLoader contains accessor methods to read or write the
-// fields of storagebase.ReplicaState. It contains an internal buffer
+// fields of kvserverbase.ReplicaState. It contains an internal buffer
 // which is reused to avoid an allocation on frequently-accessed code
 // paths.
 //
@@ -57,24 +57,24 @@ func Make(rangeID roachpb.RangeID) StateLoader {
 // under the convention that that is the latest committed version.
 func (rsl StateLoader) Load(
 	ctx context.Context, reader storage.Reader, desc *roachpb.RangeDescriptor,
-) (storagepb.ReplicaState, error) {
-	var s storagepb.ReplicaState
+) (kvserverpb.ReplicaState, error) {
+	var s kvserverpb.ReplicaState
 	// TODO(tschottdorf): figure out whether this is always synchronous with
 	// on-disk state (likely iffy during Split/ChangeReplica triggers).
 	s.Desc = protoutil.Clone(desc).(*roachpb.RangeDescriptor)
 	// Read the range lease.
 	lease, err := rsl.LoadLease(ctx, reader)
 	if err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 	s.Lease = &lease
 
 	if s.GCThreshold, err = rsl.LoadGCThreshold(ctx, reader); err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 
 	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	} else if as != nil {
 		s.UsingAppliedStateKey = true
 
@@ -85,12 +85,12 @@ func (rsl StateLoader) Load(
 		s.Stats = &ms
 	} else {
 		if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
-			return storagepb.ReplicaState{}, err
+			return kvserverpb.ReplicaState{}, err
 		}
 
 		ms, err := rsl.LoadMVCCStats(ctx, reader)
 		if err != nil {
-			return storagepb.ReplicaState{}, err
+			return kvserverpb.ReplicaState{}, err
 		}
 		s.Stats = &ms
 	}
@@ -99,7 +99,7 @@ func (rsl StateLoader) Load(
 	// pointless), but it is and the migration is not worth it.
 	truncState, _, err := rsl.LoadRaftTruncatedState(ctx, reader)
 	if err != nil {
-		return storagepb.ReplicaState{}, err
+		return kvserverpb.ReplicaState{}, err
 	}
 	s.TruncatedState = &truncState
 
@@ -131,7 +131,7 @@ const (
 func (rsl StateLoader) Save(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	state storagepb.ReplicaState,
+	state kvserverpb.ReplicaState,
 	truncStateType TruncatedStateType,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
@@ -396,16 +396,51 @@ func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex 
 func (rsl StateLoader) writeLegacyMVCCStatsInternal(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	// NB: newMS is copied to prevent conditional calls to this method from
-	// causing the stats argument to escape. This is legacy code which does
-	// not need to be optimized for performance.
-	newMSCopy := *newMS
-	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &newMSCopy)
+	// We added a new field to the MVCCStats struct to track abort span bytes, which
+	// enlarges the size of the struct itself. This is mostly fine - we persist
+	// MVCCStats under the RangeAppliedState key and don't account for the size of
+	// the MVCCStats struct itself when doing so (we ignore the RangeAppliedState key
+	// in ComputeStatsGo). This would not therefore not cause replica state divergence
+	// in mixed version clusters (the enlarged struct does not contribute to a
+	// persisted stats difference on disk because we're not accounting for the size of
+	// the struct itself).
+
+	// That's all fine and good except for the fact that historically we persisted
+	// MVCCStats under a dedicated RangeStatsLegacyKey (as we're doing so here), and
+	// in this key we also accounted for the size of the MVCCStats object itself
+	// (which made it super cumbersome to update the schema of the MVCCStats object,
+	// and we basically never did).
+
+	// Now, in order to add this extra field to the MVCCStats object, we need to be
+	// careful with what we write to the RangeStatsLegacyKey. We can't write this new
+	// version of MVCCStats, as it is going to account for it's now (enlarged) size
+	// and persist a value for sysbytes different from other replicas that are unaware
+	// of this new representation (as would be the case in mixed-version settings). To
+	// this end we've constructed a copy of the legacy MVCCStats representation and
+	// are careful to persist only that (and sidestepping any inconsistencies due to
+	// the differing MVCCStats schema).
+	legacyMS := enginepb.MVCCStatsLegacyRepresentation{
+		ContainsEstimates: newMS.ContainsEstimates,
+		LastUpdateNanos:   newMS.LastUpdateNanos,
+		IntentAge:         newMS.IntentAge,
+		GCBytesAge:        newMS.GCBytesAge,
+		LiveBytes:         newMS.LiveBytes,
+		LiveCount:         newMS.LiveCount,
+		KeyBytes:          newMS.KeyBytes,
+		KeyCount:          newMS.KeyCount,
+		ValBytes:          newMS.ValBytes,
+		ValCount:          newMS.ValCount,
+		IntentBytes:       newMS.IntentBytes,
+		IntentCount:       newMS.IntentCount,
+		SysBytes:          newMS.SysBytes,
+		SysCount:          newMS.SysCount,
+	}
+	return storage.MVCCPutProto(ctx, readWriter, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, &legacyMS)
 }
 
 // SetLegacyMVCCStats overwrites the legacy MVCC stats key.
 //
-// The range applied state key cannot already exist or an assetion will be
+// The range applied state key cannot already exist or an assertion will be
 // triggered. See comment on SetRangeAppliedState for why this is "legacy".
 func (rsl StateLoader) SetLegacyMVCCStats(
 	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,
@@ -620,8 +655,8 @@ func (rsl StateLoader) SynthesizeHardState(
 	}
 
 	if oldHS.Commit > newHS.Commit {
-		return log.Safe(errors.Errorf("can't decrease HardState.Commit from %d to %d",
-			oldHS.Commit, newHS.Commit))
+		return errors.Newf("can't decrease HardState.Commit from %d to %d",
+			log.Safe(oldHS.Commit), log.Safe(newHS.Commit))
 	}
 	if oldHS.Term > newHS.Term {
 		// The existing HardState is allowed to be ahead of us, which is

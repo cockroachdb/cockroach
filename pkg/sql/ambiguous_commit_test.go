@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 )
@@ -58,6 +59,7 @@ func (t *interceptingTransport) SendNext(
 // duplicate key violations. See #6053, #7604, and #10023.
 func TestAmbiguousCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "ambiguousSuccess", func(t *testing.T, ambiguousSuccess bool) {
 		var params base.TestServerArgs
@@ -138,7 +140,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		const numReplicas = 3
 		tc := testcluster.StartTestCluster(t, numReplicas, testClusterArgs)
-		defer tc.Stopper().Stop(context.TODO())
+		defer tc.Stopper().Stop(context.Background())
 
 		// Avoid distSQL so we can reliably hydrate the intended dist
 		// sender's cache below.
@@ -175,7 +177,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		if _, err := sqlDB.Exec(`INSERT INTO test.t (v) VALUES (1)`); ambiguousSuccess {
 			if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-				if pqErr.Code != pgcode.StatementCompletionUnknown {
+				if pgcode.MakeCode(string(pqErr.Code)) != pgcode.StatementCompletionUnknown {
 					t.Errorf("expected code %q, got %q (err: %s)",
 						pgcode.StatementCompletionUnknown, pqErr.Code, err)
 				}

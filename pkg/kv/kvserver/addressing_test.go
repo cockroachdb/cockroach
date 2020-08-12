@@ -55,8 +55,9 @@ func meta2Key(key roachpb.RKey) []byte {
 // correctly updated on creation of new range descriptors.
 func TestUpdateRangeAddressing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: false}, stopper)
 	// When split is false, merging treats the right range as the merged
 	// range. With merging, expNewLeft indicates the addressing keys we
@@ -144,7 +145,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			},
 			store.TestSender(),
 		)
-		db := kv.NewDB(actx, tcsf, store.cfg.Clock)
+		db := kv.NewDB(actx, tcsf, store.cfg.Clock, stopper)
 		ctx := context.Background()
 		txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 		if err := txn.Run(ctx, b); err != nil {
@@ -248,6 +249,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 // of meta1 records.
 func TestUpdateRangeAddressingSplitMeta1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	left := &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: meta1Key(roachpb.RKey("a"))}
 	right := &roachpb.RangeDescriptor{StartKey: meta1Key(roachpb.RKey("a")), EndKey: roachpb.RKeyMax}
 	if err := splitRangeAddressing(&kv.Batch{}, left, right); err == nil {

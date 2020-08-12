@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -160,15 +159,9 @@ type externalHashJoiner struct {
 	NonExplainable
 	closerHelper
 
-	// mu is used to protect against concurrent IdempotentClose and Next calls,
-	// which are currently allowed.
-	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
-	//  Next, which will simplify this model.
-	mu syncutil.Mutex
-
 	state              externalHashJoinerState
 	unlimitedAllocator *colmem.Allocator
-	spec               hashJoinerSpec
+	spec               HashJoinerSpec
 	diskQueueCfg       colcontainer.DiskQueueCfg
 
 	// fdState is used to acquire file descriptors up front.
@@ -219,7 +212,7 @@ type externalHashJoiner struct {
 	inMemHashJoiner                   *hashJoiner
 	// diskBackedSortMerge is a side chain of disk-backed sorters that feed into
 	// disk-backed merge joiner which the external hash joiner can fall back to.
-	diskBackedSortMerge resettableOperator
+	diskBackedSortMerge ResettableOperator
 
 	memState struct {
 		// maxRightPartitionSizeToJoin indicates the maximum memory size of a
@@ -257,7 +250,7 @@ const (
 	rightSide
 )
 
-// newExternalHashJoiner returns a disk-backed hash joiner.
+// NewExternalHashJoiner returns a disk-backed hash joiner.
 // - unlimitedAllocator must have been created with a memory account derived
 // from an unlimited memory monitor. It will be used by several internal
 // components of the external hash joiner which is responsible for making sure
@@ -268,9 +261,9 @@ const (
 // - delegateFDAcquisitions specifies whether the external hash joiner should
 // let the partitioned disk queues acquire file descriptors instead of acquiring
 // them up front in Next. Should be true only in tests.
-func newExternalHashJoiner(
+func NewExternalHashJoiner(
 	unlimitedAllocator *colmem.Allocator,
-	spec hashJoinerSpec,
+	spec HashJoinerSpec,
 	leftInput, rightInput colexecbase.Operator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
@@ -351,7 +344,7 @@ func newExternalHashJoiner(
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	diskBackedSortMerge, err := newMergeJoinOp(
+	diskBackedSortMerge, err := NewMergeJoinOp(
 		unlimitedAllocator, memoryLimit, diskQueueCfg,
 		partitionedDiskQueueSemaphore, spec.joinType, leftPartitionSorter, rightPartitionSorter,
 		spec.left.sourceTypes, spec.right.sourceTypes, leftOrdering, rightOrdering,
@@ -378,7 +371,7 @@ func newExternalHashJoiner(
 		partitionsToJoinUsingSortMerge: make([]int, 0),
 		leftJoinerInput:                leftJoinerInput,
 		rightJoinerInput:               rightJoinerInput,
-		inMemHashJoiner: newHashJoiner(
+		inMemHashJoiner: NewHashJoiner(
 			unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
@@ -486,8 +479,6 @@ func (hj *externalHashJoiner) partitionBatch(
 }
 
 func (hj *externalHashJoiner) Next(ctx context.Context) coldata.Batch {
-	hj.mu.Lock()
-	defer hj.mu.Unlock()
 StateChanged:
 	for {
 		switch hj.state {
@@ -701,7 +692,7 @@ StateChanged:
 			return b
 
 		case externalHJFinished:
-			if err := hj.idempotentCloseLocked(ctx); err != nil {
+			if err := hj.Close(ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -711,13 +702,7 @@ StateChanged:
 	}
 }
 
-func (hj *externalHashJoiner) IdempotentClose(ctx context.Context) error {
-	hj.mu.Lock()
-	defer hj.mu.Unlock()
-	return hj.idempotentCloseLocked(ctx)
-}
-
-func (hj *externalHashJoiner) idempotentCloseLocked(ctx context.Context) error {
+func (hj *externalHashJoiner) Close(ctx context.Context) error {
 	if !hj.close() {
 		return nil
 	}
@@ -728,10 +713,8 @@ func (hj *externalHashJoiner) idempotentCloseLocked(ctx context.Context) error {
 	if err := hj.rightPartitioner.Close(ctx); err != nil && retErr == nil {
 		retErr = err
 	}
-	if c, ok := hj.diskBackedSortMerge.(IdempotentCloser); ok {
-		if err := c.IdempotentClose(ctx); err != nil && retErr == nil {
-			retErr = err
-		}
+	if err := hj.diskBackedSortMerge.(Closer).Close(ctx); err != nil && retErr == nil {
+		retErr = err
 	}
 	if !hj.testingKnobs.delegateFDAcquisitions && hj.fdState.acquiredFDs > 0 {
 		hj.fdState.fdSemaphore.Release(hj.fdState.acquiredFDs)

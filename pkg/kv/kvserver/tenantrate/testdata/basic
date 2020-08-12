@@ -1,0 +1,85 @@
+init
+requests: { rate: 1, burst: 2 }
+readbytes: { rate: 1024, burst: 2048 }
+writebytes: { rate: 1024, burst: 2048 }
+----
+00:00:00.000
+
+# Set up three tenants with refcounts 2, 1, and 3 respectively.
+
+get_tenants
+[2, 2, 3, 5, 5, 5]
+----
+[2#2, 3#1, 5#3]
+
+# Launch two requests on behalf of tenant 2 and one on behalf of 3.
+
+launch
+- { id: g1, tenant: 2 }
+- { id: g2, tenant: 2 }
+- { id: g3, tenant: 3 }
+----
+[g1@2, g2@2, g3@3]
+
+# Ensure that none of the above requests get blocked because they use less
+# than the configured burst for their respective limiters.
+
+await
+[g1, g2, g3]
+----
+[]
+
+# Launch another request on behalf of tenant 2, it will block due to the request
+# rate limit.
+
+launch
+- { id: g4, tenant: 2 }
+----
+[g4@2]
+
+# Ensure that it the above request was blocked by observing the timer it creates
+# to wait for available quota.
+
+timers
+----
+00:00:01.000
+
+# Observe that the "current_blocked" counter has appropriate values to indicate
+# that there is one blocked request for tenant 2 and total.
+
+metrics
+current_blocked
+----
+kv_tenant_rate_limit_current_blocked 1
+kv_tenant_rate_limit_current_blocked{tenant_id="2"} 1
+kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
+kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+
+# Release the tenant 3 rate limiter.
+
+release_tenants
+[3]
+----
+[2#2, 5#3]
+
+# Observe that tenant 3 no longer appears in the metrics.
+
+metrics
+\{tenant_id="3"\}
+----
+
+
+# Advance time to the timer deadline.
+
+advance
+1s1ms
+----
+00:00:01.001
+
+# Observe that the blocked request is now unblocked.
+
+await
+- g4
+----
+[]

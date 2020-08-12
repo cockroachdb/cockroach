@@ -19,16 +19,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	a := assert.New(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
@@ -60,7 +62,7 @@ func TestLogGC(t *testing.T) {
 				timestamp,
 				testRangeID,
 				1, // storeID
-				storagepb.RangeLogEventType_add.String(),
+				kvserverpb.RangeLogEventType_add.String(),
 			)
 			a.NoError(err)
 		}
@@ -135,6 +137,7 @@ func TestLogGC(t *testing.T) {
 
 func TestLogGCTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	systemLogRowCount := func(ctx context.Context, db *gosql.DB, table string, ts time.Time) int {
 		var count int
 		err := db.QueryRowContext(ctx,
@@ -195,7 +198,7 @@ func TestLogGCTrigger(t *testing.T) {
              cast(now() - interval '10s' as timestamp), -- cast from timestamptz
 						 100, 1, $1
           )`,
-		storagepb.RangeLogEventType_add.String(),
+		kvserverpb.RangeLogEventType_add.String(),
 	); err != nil {
 		t.Fatal(err)
 	}

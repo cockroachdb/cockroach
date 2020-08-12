@@ -82,7 +82,7 @@ func TestInternalError(t *testing.T) {
 				// Verify that the information is captured.
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, ie+"woo waa")
-					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Code, pgcode.Internal.String())
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 					ml(t, e.Detail, []string{"stack trace:",
@@ -90,36 +90,15 @@ func TestInternalError(t *testing.T) {
 						".*testing.go.*tRunner()"})
 				}},
 
-				// Verify that internal errors carry safe details.
-				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[0].SafeMessage, `.*TestInternalError.*`)
-					m(t, e.SafeDetail[1].SafeMessage, `woo %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
-				}},
-
 				// Verify that formatting works.
 				{"format", func(t *testing.T, e *Error) {
 					eq(t, f("%v", e), ie+"woo waa")
 					eq(t, f("%s", e), ie+"woo waa")
 					eq(t, f("%#v", e), "(XX000) "+ie+"woo waa")
-					vErr := f("%+v", e)
-					m(t, vErr,
+					m(t, f("%+v", e),
 						// Heading line: source, code, error message.
 						`.*internal_errors_test.go:\d+ in TestInternalError\(\): \(XX000\) `+
 							ie+"woo waa")
-					// Safe message.
-					m(t, vErr, "woo %s")
-					m(t, vErr, "arg 1: <string>")
-				}},
-			},
-		},
-		{
-			errors.AssertionFailedf("safe %s", errors.Safe("waa")),
-			[]pred{
-				// Verify that safe details are preserved.
-				{"safedetail", func(t *testing.T, e *Error) {
-					m(t, e.SafeDetail[1].SafeMessage, `safe %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: waa`)
 				}},
 			},
 		},
@@ -130,7 +109,7 @@ func TestInternalError(t *testing.T) {
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, "syn %s")
-					eq(t, e.Code, pgcode.Syntax)
+					eq(t, e.Code, pgcode.Syntax.String())
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
 				}},
@@ -141,7 +120,7 @@ func TestInternalError(t *testing.T) {
 			Wrap(errors.Wrap(makeNormal(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, pgcode.Syntax)
+					eq(t, e.Code, pgcode.Syntax.String())
 					eq(t, e.Message, "wrapB: wrapA: syn")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
@@ -154,7 +133,7 @@ func TestInternalError(t *testing.T) {
 			Wrap(errors.Wrap(makeBoo(), "wrapA"), pgcode.Syntax, "wrapB"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
-					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Code, pgcode.Internal.String())
 					eq(t, e.Message, ie+"wrapB: wrapA: boo")
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
@@ -166,7 +145,6 @@ func TestInternalError(t *testing.T) {
 						`stack trace:`,
 						`.*makeBoo.*`,
 					})
-					m(t, e.SafeDetail[0].SafeMessage, pgcode.Syntax)
 				}},
 			},
 		},
@@ -178,7 +156,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: syn foo")
 					// Original code is preserved.
-					eq(t, e.Code, pgcode.Syntax)
+					eq(t, e.Code, pgcode.Syntax.String())
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -193,7 +171,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, pgcode.AdminShutdown)
+					eq(t, e.Code, pgcode.AdminShutdown.String())
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -208,7 +186,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrapx waa: fmt err")
 					// New code was added.
-					eq(t, e.Code, pgcode.AdminShutdown)
+					eq(t, e.Code, pgcode.AdminShutdown.String())
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -226,7 +204,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, "wrap2 waa: wrap1: fmt")
 					// New code was added.
-					eq(t, e.Code, pgcode.AdminShutdown)
+					eq(t, e.Code, pgcode.AdminShutdown.String())
 					// Source info is stored.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -245,7 +223,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"wrap woo: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Code, pgcode.Internal.String())
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "makeBoo")
@@ -260,10 +238,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, pgcode.AdminShutdown)
-					m(t, e.SafeDetail[2].SafeMessage, `wrap %s`)
-					m(t, e.SafeDetail[3].SafeMessage, `arg 1: <string>`)
-					m(t, e.SafeDetail[5].SafeMessage, `boo`)
 				}},
 			},
 		},
@@ -276,7 +250,7 @@ func TestInternalError(t *testing.T) {
 					// Wrap adds a prefix to the message.
 					eq(t, e.Message, ie+"iewrap waa: syn err")
 					// Internal error was preserved.
-					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Code, pgcode.Internal.String())
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					eq(t, e.Source.Function, "TestInternalError")
@@ -290,9 +264,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
-					m(t, e.SafeDetail[1].SafeMessage, `iewrap %s`)
-					m(t, e.SafeDetail[2].SafeMessage, `arg 1: <string>`)
 				}},
 			},
 		},
@@ -307,7 +278,7 @@ func TestInternalError(t *testing.T) {
 					// Ensure the "internal error" prefix only occurs once.
 					eq(t, e.Message, ie+"iewrap2 waa: boo")
 					// Internal error was preserved.
-					eq(t, e.Code, pgcode.Internal)
+					eq(t, e.Code, pgcode.Internal.String())
 					// Source info is preserved from original error.
 					m(t, e.Source.File, ".*internal_errors_test.go")
 					// The original cause is masked by the barrier.
@@ -323,8 +294,6 @@ func TestInternalError(t *testing.T) {
 							".*tRunner.*",
 						},
 					)
-					m(t, e.SafeDetail[0].SafeMessage, "TestInternalError")
-					m(t, e.SafeDetail[1].SafeMessage, `iewrap2`)
 				}},
 			},
 		},

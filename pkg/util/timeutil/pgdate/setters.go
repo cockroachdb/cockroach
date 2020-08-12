@@ -144,7 +144,7 @@ func fieldSetterRelativeDate(fe *fieldExtract, s string) error {
 		offset = 1
 	}
 
-	year, month, day := fe.now.AddDate(0, 0, offset).Date()
+	year, month, day := fe.now().AddDate(0, 0, offset).Date()
 
 	if err := fe.Set(fieldYear, year); err != nil {
 		return err
@@ -158,7 +158,7 @@ func fieldSetterRelativeDate(fe *fieldExtract, s string) error {
 // fieldSetterUTC unconditionally sets the timezone to UTC and
 // removes the TZ fields from the wanted list.
 func fieldSetterUTC(fe *fieldExtract, _ string) error {
-	fe.now = fe.now.In(time.UTC)
+	fe.location = time.UTC
 	fe.wanted = fe.wanted.ClearAll(tzFields)
 	return nil
 }

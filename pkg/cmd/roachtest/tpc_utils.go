@@ -38,7 +38,7 @@ func loadTPCHDataset(
 		if err := db.QueryRowContext(
 			ctx, `SELECT count(*) FROM tpch.supplier`,
 		).Scan(&supplierCardinality); err != nil {
-			if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) && pqErr.Code == pgcode.UndefinedTable) {
+			if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) && pgcode.MakeCode(string(pqErr.Code)) == pgcode.UndefinedTable) {
 				return err
 			}
 			// Table does not exist. Set cardinality to 0.
@@ -62,7 +62,7 @@ func loadTPCHDataset(
 		c.Start(ctx, t, roachNodes)
 		m.ResetDeaths()
 	} else if pqErr := (*pq.Error)(nil); !(errors.As(err, &pqErr) &&
-		string(pqErr.Code) == pgcode.InvalidCatalogName) {
+		pgcode.MakeCode(string(pqErr.Code)) == pgcode.InvalidCatalogName) {
 		return err
 	}
 
@@ -108,5 +108,17 @@ func createStatsFromTables(t *test, conn *gosql.DB, tableNames []string) {
 		); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// disableVectorizeRowCountThresholdHeuristic sets
+// 'vectorize_row_count_threshold' cluster setting to zero so that the test
+// would use the vectorized engine with 'vectorize=on' regardless of the
+// fact whether the stats are present or not (if we don't set it, then when
+// the stats are not present, we fallback to row-by-row engine even with
+// `vectorize=on` set).
+func disableVectorizeRowCountThresholdHeuristic(t *test, conn *gosql.DB) {
+	if _, err := conn.Exec("SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold=0"); err != nil {
+		t.Fatal(err)
 	}
 }

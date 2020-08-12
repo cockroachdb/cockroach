@@ -11,7 +11,6 @@ package storageccl_test
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -20,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,8 +38,8 @@ func BenchmarkAddSSTable(b *testing.B) {
 	for _, numEntries := range []int{100, 1000, 10000, 300000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
-			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir,
+				strconv.Itoa(numEntries))
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
@@ -48,7 +49,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -95,8 +96,8 @@ func BenchmarkWriteBatch(b *testing.B) {
 	for _, numEntries := range []int{100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
-			backupDir := filepath.Join(tempDir, strconv.Itoa(numEntries))
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir,
+				strconv.Itoa(numEntries))
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
@@ -106,7 +107,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 			var batch storage.RocksDBBatchBuilder
 
 			var totalLen int64
@@ -147,12 +148,12 @@ func BenchmarkImport(b *testing.B) {
 		b.Run(fmt.Sprintf("numEntries=%d", numEntries), func(b *testing.B) {
 			bankData := bank.FromRows(numEntries).Tables()[0]
 			subdir := strconv.Itoa(numEntries)
-			backupDir := filepath.Join(tempDir, subdir)
-			backup, err := sampledataccl.ToBackup(b, bankData, backupDir)
+			backup, err := sampledataccl.ToBackup(b, bankData, tempDir, subdir)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
-			storage, err := cloud.ExternalStorageConfFromURI(`nodelocal://0/` + subdir)
+			storage, err := cloudimpl.ExternalStorageConfFromURI(`nodelocal://0/`+subdir,
+				security.RootUser)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
@@ -162,7 +163,7 @@ func BenchmarkImport(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descpb.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -174,14 +175,14 @@ func BenchmarkImport(b *testing.B) {
 				{
 					// TODO(dan): The following should probably make it into
 					// dataccl.Backup somehow.
-					tableDesc := backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1].Table(hlc.Timestamp{})
+					tableDesc := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(&backup.Desc.Descriptors[len(backup.Desc.Descriptors)-1], hlc.Timestamp{}))
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
 					oldStartKey = sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, tableDesc, tableDesc.PrimaryIndex.ID)
-					newDesc := *tableDesc
+					newDesc := sqlbase.NewMutableCreatedTableDescriptor(*tableDesc.TableDesc())
 					newDesc.ID = id
-					newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))
+					newDescBytes, err := protoutil.Marshal(newDesc.DescriptorProto())
 					if err != nil {
 						panic(err)
 					}

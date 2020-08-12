@@ -62,7 +62,7 @@ func startTestWriter(
 			return
 		default:
 			first := true
-			err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+			err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 				if first && txnChannel != nil {
 					select {
 					case txnChannel <- struct{}{}:
@@ -96,10 +96,11 @@ func startTestWriter(
 // which are resolved synchronously with EndTxn and via RPC.
 func TestRangeSplitMeta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	splitKeys := []roachpb.RKey{roachpb.RKey("G"), keys.RangeMetaKey(roachpb.RKey("F")),
 		keys.RangeMetaKey(roachpb.RKey("K")), keys.RangeMetaKey(roachpb.RKey("H"))}
@@ -108,7 +109,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	for _, splitRKey := range splitKeys {
 		splitKey := roachpb.Key(splitRKey)
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -127,6 +128,7 @@ func TestRangeSplitMeta(t *testing.T) {
 // composed of a random mix of puts.
 func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s := createTestDB(t)
 	defer s.Stop()
 
@@ -146,7 +148,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		go startTestWriter(s.DB, int64(i), 1<<7, &wg, &retries, txnChannel, done, t)
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	// Execute the consecutive splits.
 	for _, splitKey := range splitKeys {
 		// Allow txns to start before initiating split.
@@ -154,7 +156,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -173,6 +175,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 // a range to 256K and writes data until there are five ranges.
 func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	// Override default zone config.
 	cfg := zonepb.DefaultZoneConfigRef()
 	cfg.RangeMaxBytes = proto.Int64(1 << 18)
@@ -190,7 +193,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)
 
 	// This is purely to silence log spam.
-	config.TestingSetupZoneConfigHook(s.Stopper)
+	config.TestingSetupZoneConfigHook(s.Stopper())
 	defer s.Stop()
 
 	// Start test writer write about a 32K/key so there aren't too many
@@ -200,7 +203,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	wg.Add(1)
 	go startTestWriter(s.DB, int64(0), 1<<15, &wg, nil, nil, done, t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Check that we split 5 times in allotted time.
 	testutils.SucceedsSoon(t, func() error {
@@ -236,22 +239,23 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 // on the same splitKey succeeds.
 func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	defer log.Scope(t).Close(t)
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
 	})
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "split at key %q first time complete", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -263,19 +267,20 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 //    the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDBWithContextAndKnobs(t, kv.DefaultDBContext(), &kvserver.StoreTestingKnobs{
+	defer log.Scope(t).Close(t)
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
 		DisableScanner:    true,
 		DisableSplitQueue: true,
 		DisableMergeQueue: true,
 	})
 	defer s.Stop()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	splitKey := roachpb.RKey("aa")
 	descKey := keys.RangeDescriptorKey(splitKey)
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -295,7 +300,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	}
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 

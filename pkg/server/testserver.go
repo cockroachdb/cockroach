@@ -31,12 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -60,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -72,43 +74,60 @@ const (
 // Certs with the test certs directory.
 // We need to override the certs loader.
 func makeTestConfig(st *cluster.Settings) Config {
-	cfg := MakeConfig(context.TODO(), st)
+	return Config{
+		BaseConfig: makeTestBaseConfig(st),
+		KVConfig:   makeTestKVConfig(),
+		SQLConfig:  makeTestSQLConfig(st, roachpb.SystemTenantID),
+	}
+}
 
+func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
+	baseCfg := MakeBaseConfig(st)
 	// Test servers start in secure mode by default.
-	cfg.Insecure = false
-
+	baseCfg.Insecure = false
 	// Configure test storage engine.
-	cfg.StorageEngine = storage.DefaultStorageEngine
-
-	// Configure the default in-memory temp storage for all tests unless
-	// otherwise configured.
-	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
-
+	baseCfg.StorageEngine = storage.DefaultStorageEngine
+	// Resolve the storage engine to a specific type if it's the default value.
+	if baseCfg.StorageEngine == enginepb.EngineTypeDefault {
+		baseCfg.StorageEngine = enginepb.EngineTypePebble
+	}
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,
 	// which has the test certs compiled in. Typically this is done
 	// once per package, in main_test.go.
-	cfg.SSLCertsDir = security.EmbeddedCertsDir
-
+	baseCfg.SSLCertsDir = security.EmbeddedCertsDir
 	// Addr defaults to localhost with port set at time of call to
 	// Start() to an available port. May be overridden later (as in
 	// makeTestConfigFromParams). Call TestServer.ServingRPCAddr() and
 	// .ServingSQLAddr() for the full address (including bound port).
-	cfg.Addr = util.TestAddr.String()
-	cfg.SQLAddr = util.TestAddr.String()
-	cfg.AdvertiseAddr = util.TestAddr.String()
-	cfg.SQLAdvertiseAddr = util.TestAddr.String()
-	cfg.SplitListenSQL = true
-	cfg.HTTPAddr = util.TestAddr.String()
+	baseCfg.Addr = util.TestAddr.String()
+	baseCfg.AdvertiseAddr = util.TestAddr.String()
+	baseCfg.SQLAddr = util.TestAddr.String()
+	baseCfg.SQLAdvertiseAddr = util.TestAddr.String()
+	baseCfg.SplitListenSQL = true
+	baseCfg.TenantAddr = util.TestAddr.String()
+	baseCfg.TenantAdvertiseAddr = util.TestAddr.String()
+	baseCfg.SplitListenTenant = true
+	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
-	cfg.User = security.NodeUser
-	cfg.TimestampCachePageSize = tscache.TestSklPageSize
+	baseCfg.User = security.NodeUser
+	return baseCfg
+}
 
+func makeTestKVConfig() KVConfig {
+	kvCfg := MakeKVConfig(base.DefaultTestStoreSpec)
 	// Enable web session authentication.
-	cfg.EnableWebSessionAuthentication = true
+	kvCfg.EnableWebSessionAuthentication = true
+	return kvCfg
+}
 
-	return cfg
+func makeTestSQLConfig(st *cluster.Settings, tenID roachpb.TenantID) SQLConfig {
+	sqlCfg := MakeSQLConfig(tenID, base.DefaultTestTempStorageConfig(st))
+	// Configure the default in-memory temp storage for all tests unless
+	// otherwise configured.
+	sqlCfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
+	return sqlCfg
 }
 
 // makeTestConfigFromParams creates a Config from a TestServerParams.
@@ -132,6 +151,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.ClusterName = params.ClusterName
 	cfg.Insecure = params.Insecure
+	cfg.AutoInitializeCluster = !params.NoAutoInitializeCluster
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
@@ -170,7 +190,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.EventLogEnabled = false
 	}
 	if params.SQLMemoryPoolSize != 0 {
-		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
+		cfg.MemoryPoolSize = params.SQLMemoryPoolSize
 	}
 	if params.CacheSize != 0 {
 		cfg.CacheSize = params.CacheSize
@@ -187,13 +207,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.AdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAddr = util.IsolatedTestAddr.String()
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
+		cfg.TenantAddr = util.IsolatedTestAddr.String()
+		cfg.TenantAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
-	} else {
-		cfg.Addr = util.TestAddr.String()
-		cfg.AdvertiseAddr = util.TestAddr.String()
-		cfg.SQLAddr = util.TestAddr.String()
-		cfg.SQLAdvertiseAddr = util.TestAddr.String()
-		cfg.HTTPAddr = util.TestAddr.String()
 	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr
@@ -202,6 +218,17 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLAddr != "" {
 		cfg.SQLAddr = params.SQLAddr
 		cfg.SQLAdvertiseAddr = params.SQLAddr
+	}
+	if params.TenantAddr != nil {
+		addr := *params.TenantAddr
+		if addr == "" {
+			// Empty address disables the tenant server.
+			cfg.SplitListenTenant = false
+			cfg.TenantAddr = ""
+		} else {
+			cfg.TenantAddr = addr
+			cfg.TenantAdvertiseAddr = addr
+		}
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
@@ -240,7 +267,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
-	if params.TempStorageConfig != (base.TempStorageConfig{}) {
+	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 
@@ -411,22 +438,6 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	return ts.Server.Start(ctx)
 }
 
-type allErrorsFakeLiveness struct{}
-
-var _ jobs.NodeLiveness = (*allErrorsFakeLiveness)(nil)
-
-func (allErrorsFakeLiveness) Self() (storagepb.Liveness, error) {
-	return storagepb.Liveness{}, errors.New("fake liveness")
-
-}
-func (allErrorsFakeLiveness) GetLivenesses() []storagepb.Liveness {
-	return nil
-}
-
-func (allErrorsFakeLiveness) IsLive(roachpb.NodeID) (bool, error) {
-	return false, errors.New("fake liveness")
-}
-
 type dummyProtectedTSProvider struct {
 	protectedts.Provider
 }
@@ -435,18 +446,93 @@ func (d dummyProtectedTSProvider) Protect(context.Context, *kv.Txn, *ptpb.Record
 	return errors.New("fake protectedts.Provider")
 }
 
-func testSQLServerArgs(ts *TestServer) sqlServerArgs {
-	st := cluster.MakeTestingClusterSettings()
-	stopper := ts.Stopper()
+const fakeNodeID = roachpb.NodeID(123456789)
 
-	cfg := makeTestConfig(st)
+func makeSQLServerArgs(
+	stopper *stop.Stopper, kvClusterName string, baseCfg BaseConfig, sqlCfg SQLConfig,
+) (sqlServerArgs, error) {
+	st := baseCfg.Settings
+	baseCfg.AmbientCtx.AddLogTag("sql", nil)
+	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
+	// and this tenant work.
+	//
+	// TODO(tbg): address this when we introduce the real tenant RPCs in:
+	// https://github.com/cockroachdb/cockroach/issues/47898
+	baseCfg.ClusterName = kvClusterName
 
-	clock := hlc.NewClock(hlc.UnixNano, 1)
-	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
 
-	nl := allErrorsFakeLiveness{}
+	// TODO(tbg): expose this registry via prometheus. See:
+	// https://github.com/cockroachdb/cockroach/issues/47905
+	registry := metric.NewRegistry()
 
-	ds := ts.DistSender()
+	var rpcTestingKnobs rpc.ContextTestingKnobs
+	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
+		rpcTestingKnobs = p.ContextTestingKnobs
+	}
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   sqlCfg.TenantID,
+		AmbientCtx: baseCfg.AmbientCtx,
+		Config:     baseCfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   st,
+		Knobs:      rpcTestingKnobs,
+	})
+
+	var dsKnobs kvcoord.ClientTestingKnobs
+	if dsKnobsP, ok := baseCfg.TestingKnobs.DistSQL.(*kvcoord.ClientTestingKnobs); ok {
+		dsKnobs = *dsKnobsP
+	}
+	rpcRetryOptions := base.DefaultRetryOptions()
+
+	tcCfg := kvtenant.ConnectorConfig{
+		AmbientCtx:        baseCfg.AmbientCtx,
+		RPCContext:        rpcContext,
+		RPCRetryOptions:   rpcRetryOptions,
+		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
+	}
+	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
+	if err != nil {
+		return sqlServerArgs{}, err
+	}
+	resolver := kvtenant.AddressResolver(tenantConnect)
+	nodeDialer := nodedialer.New(rpcContext, resolver)
+
+	dsCfg := kvcoord.DistSenderConfig{
+		AmbientCtx:        baseCfg.AmbientCtx,
+		Settings:          st,
+		Clock:             clock,
+		NodeDescs:         tenantConnect,
+		RPCRetryOptions:   &rpcRetryOptions,
+		RPCContext:        rpcContext,
+		NodeDialer:        nodeDialer,
+		RangeDescriptorDB: tenantConnect,
+		TestingKnobs:      dsKnobs,
+	}
+	ds := kvcoord.NewDistSender(dsCfg)
+
+	var clientKnobs kvcoord.ClientTestingKnobs
+	if p, ok := baseCfg.TestingKnobs.KVClient.(*kvcoord.ClientTestingKnobs); ok {
+		clientKnobs = *p
+	}
+
+	txnMetrics := kvcoord.MakeTxnMetrics(baseCfg.HistogramWindowInterval())
+	registry.AddMetricStruct(txnMetrics)
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:        baseCfg.AmbientCtx,
+			Settings:          st,
+			Clock:             clock,
+			Stopper:           stopper,
+			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
+			Linearizable:      false,
+			Metrics:           txnMetrics,
+			TestingKnobs:      clientKnobs,
+		},
+		ds,
+	)
+	db := kv.NewDB(baseCfg.AmbientCtx, tcsFactory, clock, stopper)
 
 	circularInternalExecutor := &sql.InternalExecutor{}
 	// Protected timestamps won't be available (at first) in multi-tenant
@@ -454,7 +540,7 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	var protectedTSProvider protectedts.Provider
 	{
 		pp, err := ptprovider.New(ptprovider.Config{
-			DB:               ts.DB(),
+			DB:               db,
 			InternalExecutor: circularInternalExecutor,
 			Settings:         st,
 		})
@@ -464,21 +550,8 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 		protectedTSProvider = dummyProtectedTSProvider{pp}
 	}
 
-	registry := metric.NewRegistry()
-
-	// If we used a dummy gossip, DistSQL and random other things won't work.
-	// Just use the test server's for now.
-	// g := gossip.NewTest(nodeID, nil, nil, stopper, registry, nil)
-	g := ts.Gossip()
-
-	nd := nodedialer.New(rpcContext, gossip.AddressResolver(ts.Gossip()))
-
 	dummyRecorder := &status.MetricsRecorder{}
 
-	// TODO(asubiotto): Jobs don't play well with a weird node ID in a multitenant
-	//  environment, so a node ID of 1 is used here to get tests to pass. Fixing
-	//  this is tracked in https://github.com/cockroachdb/cockroach/issues/47892.
-	const fakeNodeID = roachpb.NodeID(1)
 	var c base.NodeIDContainer
 	c.Set(context.Background(), fakeNodeID)
 	const sqlInstanceID = base.SQLInstanceID(10001)
@@ -487,47 +560,91 @@ func testSQLServerArgs(ts *TestServer) sqlServerArgs {
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
 	// writing): the blob service and DistSQL.
-	dummyRPCServer := rpc.NewServer(rpcContext)
-	noStatusServer := serverpb.MakeOptionalStatusServer(nil)
+	dummyRPCServer := grpc.NewServer()
 	return sqlServerArgs{
-		sqlServerOptionalArgs: sqlServerOptionalArgs{
-			rpcContext:   rpcContext,
-			distSender:   ds,
-			statusServer: noStatusServer,
-			nodeLiveness: nl,
-			gossip:       gossip.MakeUnexposedGossip(g),
-			nodeDialer:   nd,
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
+			statusServer: serverpb.MakeOptionalStatusServer(nil),
+			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
+			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,
-			isMeta1Leaseholder: func(timestamp hlc.Timestamp) (bool, error) {
-				return false, errors.New("fake isMeta1Leaseholder")
+			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
+				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
 			nodeIDContainer: idContainer,
 			externalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-				return nil, errors.New("fake external storage")
+				return nil, errors.New("external storage is not available to secondary tenants")
 			},
-			externalStorageFromURI: func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-				return nil, errors.New("fake external uri storage")
+			externalStorageFromURI: func(ctx context.Context,
+				uri, user string) (cloud.ExternalStorage, error) {
+				return nil, errors.New("external uri storage is not available to secondary tenants")
 			},
 		},
-		Config:                   &cfg,
+		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
+			tenantConnect: tenantConnect,
+		},
+		SQLConfig:                &sqlCfg,
+		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  status.NewRuntimeStatSampler(context.Background(), clock),
-		tenantID:                 roachpb.SystemTenantID,
-		db:                       ts.DB(),
+		rpcContext:               rpcContext,
+		nodeDescs:                tenantConnect,
+		systemConfigProvider:     tenantConnect,
+		nodeDialer:               nodeDialer,
+		distSender:               ds,
+		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
-		jobRegistry:              &jobs.Registry{},
+		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
-	}
+	}, nil
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
-func (ts *TestServer) StartTenant() (addr string, _ error) {
+func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ error) {
 	ctx := context.Background()
-	args := testSQLServerArgs(ts)
+
+	if !params.Existing {
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)", params.TenantID.ToUint64(), params.TenantInfo,
+		); err != nil {
+			return "", err
+		}
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	sqlCfg := makeTestSQLConfig(st, params.TenantID)
+	sqlCfg.TenantKVAddrs = []string{ts.ServingTenantAddr()}
+	sqlCfg.TenantIDCodecOverride = params.TenantIDCodecOverride
+	baseCfg := makeTestBaseConfig(st)
+	if params.AllowSettingClusterSettings {
+		baseCfg.TestingKnobs.TenantTestingKnobs = &sql.TenantTestingKnobs{
+			ClusterSettingsUpdater: st.MakeUpdater(),
+		}
+	}
+	return StartTenant(
+		ctx,
+		ts.Stopper(),
+		ts.Cfg.ClusterName,
+		baseCfg,
+		sqlCfg,
+	)
+}
+
+// StartTenant starts a stand-alone SQL server against a KV backend.
+func StartTenant(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+) (pgAddr string, _ error) {
+	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
+	if err != nil {
+		return "", err
+	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
 		return "", err
@@ -535,7 +652,9 @@ func (ts *TestServer) StartTenant() (addr string, _ error) {
 
 	// NB: this should no longer be necessary after #47902. Right now it keeps
 	// the tenant from crashing.
-	s.execCfg.DistSQLPlanner.SetNodeDesc(roachpb.NodeDescriptor{NodeID: -1})
+	//
+	// NB: this NodeID is actually used by the DistSQL planner.
+	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: fakeNodeID})
 
 	connManager := netutil.MakeServer(
 		args.stopper,
@@ -549,8 +668,8 @@ func (ts *TestServer) StartTenant() (addr string, _ error) {
 	if err != nil {
 		return "", err
 	}
-	ts.Stopper().RunWorker(ctx, func(ctx context.Context) {
-		<-ts.Stopper().ShouldQuiesce()
+	args.stopper.RunWorker(ctx, func(ctx context.Context) {
+		<-args.stopper.ShouldQuiesce()
 		// NB: we can't do this as a Closer because (*Server).ServeWith is
 		// running in a worker and usually sits on accept(pgL) which unblocks
 		// only when pgL closes. In other words, pgL needs to close when
@@ -565,7 +684,7 @@ func (ts *TestServer) StartTenant() (addr string, _ error) {
 
 	if err := s.start(ctx,
 		args.stopper,
-		args.Config.TestingKnobs,
+		args.TestingKnobs,
 		connManager,
 		pgL,
 		socketFile,
@@ -606,6 +725,9 @@ func ExpectedInitialRangeCount(
 			maxSystemDescriptorID = descID
 		}
 	}
+	if maxSystemDescriptorID < descpb.ID(keys.MaxPseudoTableID) {
+		maxSystemDescriptorID = descpb.ID(keys.MaxPseudoTableID)
+	}
 	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
 
 	// `n` splits create `n+1` ranges.
@@ -642,6 +764,12 @@ func (ts *TestServer) ServingSQLAddr() string {
 	return ts.cfg.SQLAdvertiseAddr
 }
 
+// ServingTenantAddr returns the server's Tenant address. Should be used by
+// tenant SQL processes.
+func (ts *TestServer) ServingTenantAddr() string {
+	return ts.cfg.TenantAdvertiseAddr
+}
+
 // HTTPAddr returns the server's HTTP address. Should be used by clients.
 func (ts *TestServer) HTTPAddr() string {
 	return ts.cfg.HTTPAddr
@@ -653,15 +781,21 @@ func (ts *TestServer) RPCAddr() string {
 	return ts.cfg.Addr
 }
 
-// DrainClients exports the drainClients() method for use by tests.
-func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx, nil /* reporter */)
-}
-
 // SQLAddr returns the server's listening SQL address.
 // Note: use ServingSQLAddr() instead unless there is a specific reason not to.
 func (ts *TestServer) SQLAddr() string {
 	return ts.cfg.SQLAddr
+}
+
+// TenantAddr returns the server's listening Tenant address.
+// Note: use ServingTenantAddr() instead unless there is a specific reason not to.
+func (ts *TestServer) TenantAddr() string {
+	return ts.cfg.TenantAddr
+}
+
+// DrainClients exports the drainClients() method for use by tests.
+func (ts *TestServer) DrainClients(ctx context.Context) error {
+	return ts.drainClients(ctx, nil /* reporter */)
 }
 
 // WriteSummaries implements TestServerInterface.
@@ -676,7 +810,7 @@ func (ts *TestServer) AdminURL() string {
 
 // GetHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetHTTPClient() (http.Client, error) {
-	return ts.Cfg.GetHTTPClient()
+	return ts.Server.rpcContext.GetHTTPClient()
 }
 
 const authenticatedUserName = "authentic_user"
@@ -737,7 +871,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.
-			authClient.httpClient, err = ts.Cfg.GetHTTPClient()
+			authClient.httpClient, err = ts.rpcContext.GetHTTPClient()
 			if err != nil {
 				return err
 			}
@@ -993,7 +1127,7 @@ func (ts *TestServer) SplitRange(
 		return nil
 	}); err != nil {
 		if len(wrappedMsg) > 0 {
-			return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, errors.Wrap(err, wrappedMsg)
+			err = errors.Wrapf(err, "%s", wrappedMsg)
 		}
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}

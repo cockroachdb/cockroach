@@ -99,11 +99,12 @@ SELECT * FROM xy WHERE x > abs(y)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      └── gt [type=bool, outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
            ├── variable: x:1 [type=int]
            └── function: abs [type=int]
                 └── variable: y:2 [type=int]
@@ -114,12 +115,13 @@ SELECT * FROM xy WHERE sin(x::float)::int < x
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── immutable
  ├── prune: (2)
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
  └── filters
-      └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+      └── gt [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]
            ├── variable: x:1 [type=int]
            └── cast: INT8 [type=int]
                 └── function: sin [type=float]

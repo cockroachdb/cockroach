@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -89,7 +88,7 @@ func (n *saveTableNode) issue(params runParams) error {
 			nil, /* txn */
 			stmt,
 		); err != nil {
-			return pgerror.Wrapf(err, "while running %s", stmt)
+			return errors.Wrapf(err, "while running %s", stmt)
 		}
 		v.Rows = nil
 	}

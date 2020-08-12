@@ -21,6 +21,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Intent;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Lease;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeInfo;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2ferrors_2eproto {
@@ -34,7 +35,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::prot
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RangeNotFoundError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaCorruptionError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaTooOldError;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_SendError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_StoreNotFoundError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_TransactionAbortedError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_TransactionRetryError;
@@ -46,14 +46,14 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::prot
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IndeterminateCommitError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_IntentMissingError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_LeaseRejectedError;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RangeKeyMismatchError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TransactionPushError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TransactionRetryWithProtoRefreshError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteIntentError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteTooOldError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_NotLeaseHolderError;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RangeKeyMismatchError;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReadWithinUncertaintyIntervalError;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<31> scc_info_AmbiguousResultError;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2ferrors_2eproto ::google::protobuf::internal::SCCInfo<30> scc_info_AmbiguousResultError;
 }  // namespace protobuf_roachpb_2ferrors_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
@@ -139,11 +139,6 @@ class LeaseRejectedErrorDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<LeaseRejectedError>
       _instance;
 } _LeaseRejectedError_default_instance_;
-class SendErrorDefaultTypeInternal {
- public:
-  ::google::protobuf::internal::ExplicitlyConstructed<SendError>
-      _instance;
-} _SendError_default_instance_;
 class AmbiguousResultErrorDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<AmbiguousResultError>
@@ -232,7 +227,6 @@ class ErrorDetailDefaultTypeInternal {
   const ::cockroach::roachpb::ConditionFailedError* condition_failed_;
   const ::cockroach::roachpb::LeaseRejectedError* lease_rejected_;
   const ::cockroach::roachpb::NodeUnavailableError* node_unavailable_;
-  const ::cockroach::roachpb::SendError* send_;
   const ::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted_;
   const ::cockroach::roachpb::ReplicaCorruptionError* replica_corruption_;
   const ::cockroach::roachpb::ReplicaTooOldError* replica_too_old_;
@@ -330,9 +324,10 @@ static void InitDefaultsRangeKeyMismatchError() {
   ::cockroach::roachpb::RangeKeyMismatchError::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_RangeKeyMismatchError =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsRangeKeyMismatchError}, {
-      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_RangeKeyMismatchError =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsRangeKeyMismatchError}, {
+      &protobuf_roachpb_2fmetadata_2eproto::scc_info_RangeDescriptor.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_RangeInfo.base,}};
 
 static void InitDefaultsReadWithinUncertaintyIntervalError() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -481,20 +476,6 @@ static void InitDefaultsLeaseRejectedError() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsLeaseRejectedError}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Lease.base,}};
 
-static void InitDefaultsSendError() {
-  GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-  {
-    void* ptr = &::cockroach::roachpb::_SendError_default_instance_;
-    new (ptr) ::cockroach::roachpb::SendError();
-    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
-  }
-  ::cockroach::roachpb::SendError::InitAsDefaultInstance();
-}
-
-::google::protobuf::internal::SCCInfo<0> scc_info_SendError =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsSendError}, {}};
-
 static void InitDefaultsAmbiguousResultError() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -518,8 +499,8 @@ static void InitDefaultsAmbiguousResultError() {
   ::cockroach::roachpb::Error::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<31> scc_info_AmbiguousResultError =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 31, InitDefaultsAmbiguousResultError}, {
+::google::protobuf::internal::SCCInfo<30> scc_info_AmbiguousResultError =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 30, InitDefaultsAmbiguousResultError}, {
       &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_ErrPosition.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
@@ -537,7 +518,6 @@ static void InitDefaultsAmbiguousResultError() {
       &protobuf_roachpb_2ferrors_2eproto::scc_info_ConditionFailedError.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_LeaseRejectedError.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_NodeUnavailableError.base,
-      &protobuf_roachpb_2ferrors_2eproto::scc_info_SendError.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_RaftGroupDeletedError.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_ReplicaCorruptionError.base,
       &protobuf_roachpb_2ferrors_2eproto::scc_info_ReplicaTooOldError.base,
@@ -769,7 +749,6 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_OpRequiresTxnError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ConditionFailedError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_LeaseRejectedError.base);
-  ::google::protobuf::internal::InitSCC(&scc_info_SendError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_AmbiguousResultError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RaftGroupDeletedError.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ReplicaCorruptionError.base);
@@ -1757,24 +1736,28 @@ void RangeNotFoundError::InternalSwap(RangeNotFoundError* other) {
 // ===================================================================
 
 void RangeKeyMismatchError::InitAsDefaultInstance() {
-  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->mismatched_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->deprecated_mismatched_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
-  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->suggested_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
+  ::cockroach::roachpb::_RangeKeyMismatchError_default_instance_._instance.get_mutable()->deprecated_suggested_range_ = const_cast< ::cockroach::roachpb::RangeDescriptor*>(
       ::cockroach::roachpb::RangeDescriptor::internal_default_instance());
 }
-void RangeKeyMismatchError::clear_mismatched_range() {
-  if (mismatched_range_ != NULL) mismatched_range_->Clear();
-  clear_has_mismatched_range();
+void RangeKeyMismatchError::clear_deprecated_mismatched_range() {
+  if (deprecated_mismatched_range_ != NULL) deprecated_mismatched_range_->Clear();
+  clear_has_deprecated_mismatched_range();
 }
-void RangeKeyMismatchError::clear_suggested_range() {
-  if (suggested_range_ != NULL) suggested_range_->Clear();
-  clear_has_suggested_range();
+void RangeKeyMismatchError::clear_deprecated_suggested_range() {
+  if (deprecated_suggested_range_ != NULL) deprecated_suggested_range_->Clear();
+  clear_has_deprecated_suggested_range();
+}
+void RangeKeyMismatchError::clear_ranges() {
+  ranges_.Clear();
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int RangeKeyMismatchError::kRequestStartKeyFieldNumber;
 const int RangeKeyMismatchError::kRequestEndKeyFieldNumber;
-const int RangeKeyMismatchError::kMismatchedRangeFieldNumber;
-const int RangeKeyMismatchError::kSuggestedRangeFieldNumber;
+const int RangeKeyMismatchError::kDeprecatedMismatchedRangeFieldNumber;
+const int RangeKeyMismatchError::kDeprecatedSuggestedRangeFieldNumber;
+const int RangeKeyMismatchError::kRangesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 RangeKeyMismatchError::RangeKeyMismatchError()
@@ -1787,7 +1770,8 @@ RangeKeyMismatchError::RangeKeyMismatchError()
 RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_) {
+      _has_bits_(from._has_bits_),
+      ranges_(from.ranges_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   request_start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.has_request_start_key()) {
@@ -1797,15 +1781,15 @@ RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
   if (from.has_request_end_key()) {
     request_end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_end_key_);
   }
-  if (from.has_mismatched_range()) {
-    mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.mismatched_range_);
+  if (from.has_deprecated_mismatched_range()) {
+    deprecated_mismatched_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.deprecated_mismatched_range_);
   } else {
-    mismatched_range_ = NULL;
+    deprecated_mismatched_range_ = NULL;
   }
-  if (from.has_suggested_range()) {
-    suggested_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.suggested_range_);
+  if (from.has_deprecated_suggested_range()) {
+    deprecated_suggested_range_ = new ::cockroach::roachpb::RangeDescriptor(*from.deprecated_suggested_range_);
   } else {
-    suggested_range_ = NULL;
+    deprecated_suggested_range_ = NULL;
   }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.RangeKeyMismatchError)
 }
@@ -1813,9 +1797,9 @@ RangeKeyMismatchError::RangeKeyMismatchError(const RangeKeyMismatchError& from)
 void RangeKeyMismatchError::SharedCtor() {
   request_start_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  ::memset(&mismatched_range_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&suggested_range_) -
-      reinterpret_cast<char*>(&mismatched_range_)) + sizeof(suggested_range_));
+  ::memset(&deprecated_mismatched_range_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&deprecated_suggested_range_) -
+      reinterpret_cast<char*>(&deprecated_mismatched_range_)) + sizeof(deprecated_suggested_range_));
 }
 
 RangeKeyMismatchError::~RangeKeyMismatchError() {
@@ -1826,8 +1810,8 @@ RangeKeyMismatchError::~RangeKeyMismatchError() {
 void RangeKeyMismatchError::SharedDtor() {
   request_start_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   request_end_key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (this != internal_default_instance()) delete mismatched_range_;
-  if (this != internal_default_instance()) delete suggested_range_;
+  if (this != internal_default_instance()) delete deprecated_mismatched_range_;
+  if (this != internal_default_instance()) delete deprecated_suggested_range_;
 }
 
 void RangeKeyMismatchError::SetCachedSize(int size) const {
@@ -1845,6 +1829,7 @@ void RangeKeyMismatchError::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  ranges_.Clear();
   cached_has_bits = _has_bits_[0];
   if (cached_has_bits & 15u) {
     if (cached_has_bits & 0x00000001u) {
@@ -1854,12 +1839,12 @@ void RangeKeyMismatchError::Clear() {
       request_end_key_.ClearNonDefaultToEmptyNoArena();
     }
     if (cached_has_bits & 0x00000004u) {
-      GOOGLE_DCHECK(mismatched_range_ != NULL);
-      mismatched_range_->Clear();
+      GOOGLE_DCHECK(deprecated_mismatched_range_ != NULL);
+      deprecated_mismatched_range_->Clear();
     }
     if (cached_has_bits & 0x00000008u) {
-      GOOGLE_DCHECK(suggested_range_ != NULL);
-      suggested_range_->Clear();
+      GOOGLE_DCHECK(deprecated_suggested_range_ != NULL);
+      deprecated_suggested_range_->Clear();
     }
   }
   _has_bits_.Clear();
@@ -1904,24 +1889,34 @@ bool RangeKeyMismatchError::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_mismatched_range()));
+               input, mutable_deprecated_mismatched_range()));
         } else {
           goto handle_unusual;
         }
         break;
       }
 
-      // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+      // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_suggested_range()));
+               input, mutable_deprecated_suggested_range()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_ranges()));
         } else {
           goto handle_unusual;
         }
@@ -1965,16 +1960,23 @@ void RangeKeyMismatchError::SerializeWithCachedSizes(
       2, this->request_end_key(), output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
   if (cached_has_bits & 0x00000004u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      3, this->_internal_mismatched_range(), output);
+      3, this->_internal_deprecated_mismatched_range(), output);
   }
 
-  // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
+  // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
   if (cached_has_bits & 0x00000008u) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      4, this->_internal_suggested_range(), output);
+      4, this->_internal_deprecated_suggested_range(), output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->ranges_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5,
+      this->ranges(static_cast<int>(i)),
+      output);
   }
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
@@ -1987,6 +1989,16 @@ size_t RangeKeyMismatchError::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += _internal_metadata_.unknown_fields().size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->ranges_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->ranges(static_cast<int>(i)));
+    }
+  }
 
   if (_has_bits_[0 / 32] & 15u) {
     if (has_request_start_key()) {
@@ -2001,18 +2013,17 @@ size_t RangeKeyMismatchError::ByteSizeLong() const {
           this->request_end_key());
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor mismatched_range = 3;
-    if (has_mismatched_range()) {
+    if (has_deprecated_mismatched_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          *mismatched_range_);
+          *deprecated_mismatched_range_);
     }
 
-    // optional .cockroach.roachpb.RangeDescriptor suggested_range = 4;
-    if (has_suggested_range()) {
+    // optional .cockroach.roachpb.RangeDescriptor deprecated_suggested_range = 4;
+    if (has_deprecated_suggested_range()) {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          *suggested_range_);
+          *deprecated_suggested_range_);
     }
 
   }
@@ -2033,6 +2044,7 @@ void RangeKeyMismatchError::MergeFrom(const RangeKeyMismatchError& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  ranges_.MergeFrom(from.ranges_);
   cached_has_bits = from._has_bits_[0];
   if (cached_has_bits & 15u) {
     if (cached_has_bits & 0x00000001u) {
@@ -2044,10 +2056,10 @@ void RangeKeyMismatchError::MergeFrom(const RangeKeyMismatchError& from) {
       request_end_key_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.request_end_key_);
     }
     if (cached_has_bits & 0x00000004u) {
-      mutable_mismatched_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.mismatched_range());
+      mutable_deprecated_mismatched_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.deprecated_mismatched_range());
     }
     if (cached_has_bits & 0x00000008u) {
-      mutable_suggested_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.suggested_range());
+      mutable_deprecated_suggested_range()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.deprecated_suggested_range());
     }
   }
 }
@@ -2069,12 +2081,13 @@ void RangeKeyMismatchError::Swap(RangeKeyMismatchError* other) {
 }
 void RangeKeyMismatchError::InternalSwap(RangeKeyMismatchError* other) {
   using std::swap;
+  CastToBase(&ranges_)->InternalSwap(CastToBase(&other->ranges_));
   request_start_key_.Swap(&other->request_start_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   request_end_key_.Swap(&other->request_end_key_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
-  swap(mismatched_range_, other->mismatched_range_);
-  swap(suggested_range_, other->suggested_range_);
+  swap(deprecated_mismatched_range_, other->deprecated_mismatched_range_);
+  swap(deprecated_suggested_range_, other->deprecated_suggested_range_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
@@ -4330,196 +4343,6 @@ void LeaseRejectedError::InternalSwap(LeaseRejectedError* other) {
 
 ::std::string LeaseRejectedError::GetTypeName() const {
   return "cockroach.roachpb.LeaseRejectedError";
-}
-
-
-// ===================================================================
-
-void SendError::InitAsDefaultInstance() {
-}
-#if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int SendError::kMessageFieldNumber;
-#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
-
-SendError::SendError()
-  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  ::google::protobuf::internal::InitSCC(
-      &protobuf_roachpb_2ferrors_2eproto::scc_info_SendError.base);
-  SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.SendError)
-}
-SendError::SendError(const SendError& from)
-  : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_) {
-  _internal_metadata_.MergeFrom(from._internal_metadata_);
-  message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  if (from.has_message()) {
-    message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
-  }
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.SendError)
-}
-
-void SendError::SharedCtor() {
-  message_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-
-SendError::~SendError() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.SendError)
-  SharedDtor();
-}
-
-void SendError::SharedDtor() {
-  message_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-
-void SendError::SetCachedSize(int size) const {
-  _cached_size_.Set(size);
-}
-const SendError& SendError::default_instance() {
-  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2ferrors_2eproto::scc_info_SendError.base);
-  return *internal_default_instance();
-}
-
-
-void SendError::Clear() {
-// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.SendError)
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    message_.ClearNonDefaultToEmptyNoArena();
-  }
-  _has_bits_.Clear();
-  _internal_metadata_.Clear();
-}
-
-bool SendError::MergePartialFromCodedStream(
-    ::google::protobuf::io::CodedInputStream* input) {
-#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
-  ::google::protobuf::uint32 tag;
-  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
-      &_internal_metadata_);
-  ::google::protobuf::io::StringOutputStream unknown_fields_output(
-      unknown_fields_setter.buffer());
-  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
-      &unknown_fields_output, false);
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.SendError)
-  for (;;) {
-    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
-    tag = p.first;
-    if (!p.second) goto handle_unusual;
-    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
-      case 1: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-                input, this->mutable_message()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      default: {
-      handle_unusual:
-        if (tag == 0) {
-          goto success;
-        }
-        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
-            input, tag, &unknown_fields_stream));
-        break;
-      }
-    }
-  }
-success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.SendError)
-  return true;
-failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.SendError)
-  return false;
-#undef DO_
-}
-
-void SendError::SerializeWithCachedSizes(
-    ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.SendError)
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
-      1, this->message(), output);
-  }
-
-  output->WriteRaw(_internal_metadata_.unknown_fields().data(),
-                   static_cast<int>(_internal_metadata_.unknown_fields().size()));
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.SendError)
-}
-
-size_t SendError::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.SendError)
-  size_t total_size = 0;
-
-  total_size += _internal_metadata_.unknown_fields().size();
-
-  if (has_message()) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::StringSize(
-        this->message());
-  }
-
-  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  SetCachedSize(cached_size);
-  return total_size;
-}
-
-void SendError::CheckTypeAndMergeFrom(
-    const ::google::protobuf::MessageLite& from) {
-  MergeFrom(*::google::protobuf::down_cast<const SendError*>(&from));
-}
-
-void SendError::MergeFrom(const SendError& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.SendError)
-  GOOGLE_DCHECK_NE(&from, this);
-  _internal_metadata_.MergeFrom(from._internal_metadata_);
-  ::google::protobuf::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  if (from.has_message()) {
-    set_has_message();
-    message_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.message_);
-  }
-}
-
-void SendError::CopyFrom(const SendError& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.SendError)
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool SendError::IsInitialized() const {
-  return true;
-}
-
-void SendError::Swap(SendError* other) {
-  if (other == this) return;
-  InternalSwap(other);
-}
-void SendError::InternalSwap(SendError* other) {
-  using std::swap;
-  message_.Swap(&other->message_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-    GetArenaNoVirtual());
-  swap(_has_bits_[0], other->_has_bits_[0]);
-  _internal_metadata_.Swap(&other->_internal_metadata_);
-}
-
-::std::string SendError::GetTypeName() const {
-  return "cockroach.roachpb.SendError";
 }
 
 
@@ -7643,20 +7466,6 @@ void ErrorDetail::set_allocated_node_unavailable(::cockroach::roachpb::NodeUnava
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.node_unavailable)
 }
-void ErrorDetail::set_allocated_send(::cockroach::roachpb::SendError* send) {
-  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
-  clear_value();
-  if (send) {
-    ::google::protobuf::Arena* submessage_arena = NULL;
-    if (message_arena != submessage_arena) {
-      send = ::google::protobuf::internal::GetOwnedMessage(
-          message_arena, send, submessage_arena);
-    }
-    set_has_send();
-    value_.send_ = send;
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ErrorDetail.send)
-}
 void ErrorDetail::set_allocated_raft_group_deleted(::cockroach::roachpb::RaftGroupDeletedError* raft_group_deleted) {
   ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
   clear_value();
@@ -7868,7 +7677,6 @@ const int ErrorDetail::kOpRequiresTxnFieldNumber;
 const int ErrorDetail::kConditionFailedFieldNumber;
 const int ErrorDetail::kLeaseRejectedFieldNumber;
 const int ErrorDetail::kNodeUnavailableFieldNumber;
-const int ErrorDetail::kSendFieldNumber;
 const int ErrorDetail::kRaftGroupDeletedFieldNumber;
 const int ErrorDetail::kReplicaCorruptionFieldNumber;
 const int ErrorDetail::kReplicaTooOldFieldNumber;
@@ -7953,10 +7761,6 @@ ErrorDetail::ErrorDetail(const ErrorDetail& from)
     }
     case kNodeUnavailable: {
       mutable_node_unavailable()->::cockroach::roachpb::NodeUnavailableError::MergeFrom(from.node_unavailable());
-      break;
-    }
-    case kSend: {
-      mutable_send()->::cockroach::roachpb::SendError::MergeFrom(from.send());
       break;
     }
     case kRaftGroupDeleted: {
@@ -8103,10 +7907,6 @@ void ErrorDetail::clear_value() {
     }
     case kNodeUnavailable: {
       delete value_.node_unavailable_;
-      break;
-    }
-    case kSend: {
-      delete value_.send_;
       break;
     }
     case kRaftGroupDeleted: {
@@ -8368,18 +8168,6 @@ bool ErrorDetail::MergePartialFromCodedStream(
         break;
       }
 
-      // optional .cockroach.roachpb.SendError send = 15;
-      case 15: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(122u /* 122 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-               input, mutable_send()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
       // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
       case 16: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
@@ -8631,10 +8419,6 @@ void ErrorDetail::SerializeWithCachedSizes(
       ::google::protobuf::internal::WireFormatLite::WriteMessage(
         14, this->_internal_node_unavailable(), output);
       break;
-    case kSend:
-      ::google::protobuf::internal::WireFormatLite::WriteMessage(
-        15, this->_internal_send(), output);
-      break;
     case kRaftGroupDeleted:
       ::google::protobuf::internal::WireFormatLite::WriteMessage(
         16, this->_internal_raft_group_deleted(), output);
@@ -8801,13 +8585,6 @@ size_t ErrorDetail::ByteSizeLong() const {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           *value_.node_unavailable_);
-      break;
-    }
-    // optional .cockroach.roachpb.SendError send = 15;
-    case kSend: {
-      total_size += 1 +
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          *value_.send_);
       break;
     }
     // optional .cockroach.roachpb.RaftGroupDeletedError raft_group_deleted = 16;
@@ -8984,10 +8761,6 @@ void ErrorDetail::MergeFrom(const ErrorDetail& from) {
     }
     case kNodeUnavailable: {
       mutable_node_unavailable()->::cockroach::roachpb::NodeUnavailableError::MergeFrom(from.node_unavailable());
-      break;
-    }
-    case kSend: {
-      mutable_send()->::cockroach::roachpb::SendError::MergeFrom(from.send());
       break;
     }
     case kRaftGroupDeleted: {
@@ -9753,9 +9526,6 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ConditionFai
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::LeaseRejectedError* Arena::CreateMaybeMessage< ::cockroach::roachpb::LeaseRejectedError >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::LeaseRejectedError >(arena);
-}
-template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::SendError* Arena::CreateMaybeMessage< ::cockroach::roachpb::SendError >(Arena* arena) {
-  return Arena::CreateInternal< ::cockroach::roachpb::SendError >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::AmbiguousResultError* Arena::CreateMaybeMessage< ::cockroach::roachpb::AmbiguousResultError >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::AmbiguousResultError >(arena);

@@ -11,6 +11,8 @@
 package physicalplan
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -237,8 +239,9 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 					Type: types.Float,
 				}
 			}
-			ctx := &tree.SemaContext{IVarContainer: h.Container()}
-			return expr.TypeCheck(ctx, types.Any)
+			semaCtx := tree.MakeSemaContext()
+			semaCtx.IVarContainer = h.Container()
+			return expr.TypeCheck(context.TODO(), &semaCtx, types.Any)
 		},
 	},
 

@@ -255,7 +255,7 @@ func (f *jobFeed) fetchJobError() error {
 		return err
 	}
 	if len(errorStr.String) > 0 {
-		f.jobErr = errors.New(errorStr.String)
+		f.jobErr = errors.Newf("%s", errorStr.String)
 	}
 	return nil
 }

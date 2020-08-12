@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-65 keys:
+67 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/2/2/1
@@ -30,6 +30,7 @@ initial-keys tenant=system
  /Table/3/1/34/2/1
  /Table/3/1/35/2/1
  /Table/3/1/36/2/1
+ /Table/3/1/37/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -56,6 +57,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"reports_meta"/4/1
  /NamespaceTable/30/1/1/29/"role_members"/4/1
  /NamespaceTable/30/1/1/29/"role_options"/4/1
+ /NamespaceTable/30/1/1/29/"scheduled_jobs"/4/1
  /NamespaceTable/30/1/1/29/"settings"/4/1
  /NamespaceTable/30/1/1/29/"statement_bundle_chunks"/4/1
  /NamespaceTable/30/1/1/29/"statement_diagnostics"/4/1
@@ -66,7 +68,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"users"/4/1
  /NamespaceTable/30/1/1/29/"web_sessions"/4/1
  /NamespaceTable/30/1/1/29/"zones"/4/1
-26 splits:
+28 splits:
  /Table/11
  /Table/12
  /Table/13
@@ -93,10 +95,12 @@ initial-keys tenant=system
  /Table/34
  /Table/35
  /Table/36
+ /Table/37
+ /Table/38
 
 initial-keys tenant=5
 ----
-56 keys:
+58 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/2/2/1
  /Tenant/5/Table/3/1/3/2/1
@@ -124,6 +128,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/34/2/1
  /Tenant/5/Table/3/1/35/2/1
  /Tenant/5/Table/3/1/36/2/1
+ /Tenant/5/Table/3/1/37/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/5/NamespaceTable/30/1/1/0/"public"/4/1
@@ -145,6 +150,7 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"reports_meta"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"role_members"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"role_options"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"scheduled_jobs"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"settings"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"statement_bundle_chunks"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"statement_diagnostics"/4/1
@@ -153,37 +159,12 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"web_sessions"/4/1
-26 splits:
- /Tenant/5/Table/11
- /Tenant/5/Table/12
- /Tenant/5/Table/13
- /Tenant/5/Table/14
- /Tenant/5/Table/15
- /Tenant/5/Table/16
- /Tenant/5/Table/17
- /Tenant/5/Table/18
- /Tenant/5/Table/19
- /Tenant/5/Table/20
- /Tenant/5/Table/21
- /Tenant/5/Table/22
- /Tenant/5/Table/23
- /Tenant/5/Table/24
- /Tenant/5/Table/25
- /Tenant/5/Table/26
- /Tenant/5/Table/27
- /Tenant/5/Table/28
- /Tenant/5/Table/29
- /Tenant/5/NamespaceTable/30
- /Tenant/5/NamespaceTable/Max
- /Tenant/5/Table/32
- /Tenant/5/Table/33
- /Tenant/5/Table/34
- /Tenant/5/Table/35
- /Tenant/5/Table/36
+1 splits:
+ /Tenant/5
 
 initial-keys tenant=999
 ----
-56 keys:
+58 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/2/2/1
  /Tenant/999/Table/3/1/3/2/1
@@ -211,6 +192,7 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/34/2/1
  /Tenant/999/Table/3/1/35/2/1
  /Tenant/999/Table/3/1/36/2/1
+ /Tenant/999/Table/3/1/37/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/NamespaceTable/30/1/0/0/"system"/4/1
  /Tenant/999/NamespaceTable/30/1/1/0/"public"/4/1
@@ -232,6 +214,7 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"reports_meta"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"role_members"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"role_options"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"scheduled_jobs"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"settings"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"statement_bundle_chunks"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"statement_diagnostics"/4/1
@@ -240,30 +223,5 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"ui"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"users"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"web_sessions"/4/1
-26 splits:
- /Tenant/999/Table/11
- /Tenant/999/Table/12
- /Tenant/999/Table/13
- /Tenant/999/Table/14
- /Tenant/999/Table/15
- /Tenant/999/Table/16
- /Tenant/999/Table/17
- /Tenant/999/Table/18
- /Tenant/999/Table/19
- /Tenant/999/Table/20
- /Tenant/999/Table/21
- /Tenant/999/Table/22
- /Tenant/999/Table/23
- /Tenant/999/Table/24
- /Tenant/999/Table/25
- /Tenant/999/Table/26
- /Tenant/999/Table/27
- /Tenant/999/Table/28
- /Tenant/999/Table/29
- /Tenant/999/NamespaceTable/30
- /Tenant/999/NamespaceTable/Max
- /Tenant/999/Table/32
- /Tenant/999/Table/33
- /Tenant/999/Table/34
- /Tenant/999/Table/35
- /Tenant/999/Table/36
+1 splits:
+ /Tenant/999

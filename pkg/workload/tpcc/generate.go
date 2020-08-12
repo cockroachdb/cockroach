@@ -81,7 +81,7 @@ func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc
 
 	iID := rowIdx + 1
 
-	cb.Reset(itemTypes, 1)
+	cb.Reset(itemTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(iID)
 	cb.ColVec(1).Int64()[0] = randInt(l.rng.Rand, 1, 10000)                             // im_id: "Image ID associated to Item"
 	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24))     // name
@@ -125,7 +125,7 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
-	cb.Reset(warehouseTypes, 1)
+	cb.Reset(warehouseTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(wID)
 	cb.ColVec(1).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 6, 10), 10)))  // name
 	cb.ColVec(2).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // street_1
@@ -183,7 +183,7 @@ func (w *tpcc) tpccStockInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
 
-	cb.Reset(stockTypes, 1)
+	cb.Reset(stockTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(sID)
 	cb.ColVec(1).Int64()[0] = int64(wID)
 	cb.ColVec(2).Int64()[0] = randInt(l.rng.Rand, 10, 100)                           // quantity
@@ -257,7 +257,7 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
 
-	cb.Reset(districtTypes, 1)
+	cb.Reset(districtTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(dID)
 	cb.ColVec(1).Int64()[0] = int64(wID)
 	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 6, 10))  // name
@@ -347,7 +347,7 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 		lastName = w.randCLast(l.rng.Rand, a)
 	}
 
-	cb.Reset(customerTypes, 1)
+	cb.Reset(customerTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(cID)
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
@@ -439,7 +439,7 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numCustomersPerWarehouse)
 
-	cb.Reset(historyTypes, 1)
+	cb.Reset(historyTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Bytes().Set(0, rowID)
 	cb.ColVec(1).Int64()[0] = int64(cID)
 	cb.ColVec(2).Int64()[0] = int64(dID)
@@ -520,7 +520,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 		carrierID = randInt(l.rng.Rand, 1, 10)
 	}
 
-	cb.Reset(orderTypes, 1)
+	cb.Reset(orderTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(oID)
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
@@ -570,7 +570,7 @@ func (w *tpcc) tpccNewOrderInitialRowBatch(
 	dID := ((rowIdx / numNewOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numNewOrdersPerWarehouse)
 
-	cb.Reset(newOrderTypes, 1)
+	cb.Reset(newOrderTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(oID)
 	cb.ColVec(1).Int64()[0] = int64(dID)
 	cb.ColVec(2).Int64()[0] = int64(wID)
@@ -615,7 +615,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	wID := (orderRowIdx / numOrdersPerWarehouse)
 
 	ao := aCharsOffset(l.rng.Intn(len(aCharsAlphabet)))
-	cb.Reset(orderLineTypes, numOrderLines)
+	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)
 	olOIDCol := cb.ColVec(0).Int64()
 	olDIDCol := cb.ColVec(1).Int64()
 	olWIDCol := cb.ColVec(2).Int64()

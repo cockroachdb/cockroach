@@ -14,7 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -29,7 +31,7 @@ import (
 // MembershipCache is a shared cache for role membership information.
 type MembershipCache struct {
 	syncutil.Mutex
-	tableVersion sqlbase.DescriptorVersion
+	tableVersion descpb.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[string]userRoleMembership
 }
@@ -41,11 +43,11 @@ type userRoleMembership map[string]bool
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
 	) error
 
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
-	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
+	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Descriptor) error
 
 	// HasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
@@ -69,7 +71,7 @@ var _ AuthorizationAccessor = &planner{}
 // CheckPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -85,40 +87,85 @@ func (p *planner) CheckPrivilege(
 	// permission check).
 	p.maybeAudit(descriptor, privilege)
 
-	user := p.SessionData().User
 	privs := descriptor.GetPrivileges()
 
-	// Check if 'user' itself has privileges.
-	if privs.CheckPrivilege(user, privilege) {
-		return nil
-	}
-
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(sqlbase.PublicRole, privilege) {
+	if privs.CheckPrivilege(security.PublicRole, privilege) {
 		return nil
 	}
 
-	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	user := p.SessionData().User
+
+	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
+		return isOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+	})
 	if err != nil {
 		return err
 	}
-
-	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
-	for role := range memberOf {
-		if privs.CheckPrivilege(role, privilege) {
-			return nil
-		}
+	if hasPriv {
+		return nil
 	}
-
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
+// TODO(richardjcai): Add checks for if the user owns the parent of the object.
+// Ie, being the owner of a database gives access to all tables in the db.
+// Issue #51931.
+// isOwner returns if the role has ownership privilege of the descriptor.
+func isOwner(desc sqlbase.Descriptor, role string) bool {
+	// Descriptors created prior to 20.2 do not have owners set.
+	owner := desc.GetPrivileges().Owner
+
+	if owner == "" {
+		// If the descriptor is ownerless and the descriptor is part of the system db,
+		// node is the owner.
+		if desc.GetID() == keys.SystemDatabaseID || desc.GetParentID() == keys.SystemDatabaseID {
+			owner = security.NodeUser
+		} else {
+			// This check is redundant in this case since admin already has privilege
+			// on all non-system objects.
+			owner = security.AdminRole
+		}
+	}
+
+	return role == owner
+}
+
+// HasOwnership returns if the role or any role the role is a member of
+// has ownership privilege of the desc.
+func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descriptor) (bool, error) {
+	user := p.SessionData().User
+
+	return p.checkRolePredicate(ctx, user, func(role string) bool {
+		return isOwner(descriptor, role)
+	})
+}
+
+// checkRolePredicate checks if the predicate is true for the user or
+// any roles the user is a member of.
+func (p *planner) checkRolePredicate(
+	ctx context.Context, user string, predicate func(role string) bool,
+) (bool, error) {
+	if ok := predicate(user); ok {
+		return ok, nil
+	}
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+	for role := range memberOf {
+		if ok := predicate(role); ok {
+			return ok, nil
+		}
+	}
+	return false, nil
+}
+
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
+func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Descriptor) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
@@ -135,7 +182,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(sqlbase.PublicRole) {
+	if privs.AnyPrivilege(security.PublicRole) {
 		return nil
 	}
 
@@ -185,7 +232,7 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[sqlbase.AdminRole]; ok {
+	if _, ok := memberOf[security.AdminRole]; ok {
 		return true, nil
 	}
 
@@ -235,8 +282,8 @@ func (p *planner) MemberOfWithAdminOption(
 	if err != nil {
 		return nil, err
 	}
-	tableDesc := objDesc.TableDesc()
-	tableVersion := tableDesc.Version
+	tableDesc := objDesc.(sqlbase.TableDescriptor)
+	tableVersion := tableDesc.GetVersion()
 
 	// We loop in case the table version changes while we're looking up memberships.
 	for {

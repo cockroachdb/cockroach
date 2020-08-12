@@ -80,6 +80,18 @@ var charts = []sectionDescription{
 				Aggregator:  DescribeAggregator_MAX,
 				Metrics:     []string{"security.certificate.expiration.ui-ca"},
 			},
+			{
+				Title:       "Tenant Client CA Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.ca-client-tenant"},
+			},
+			{
+				Title:       "Tenant Client Cert Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.client-tenant"},
+			},
 		},
 	},
 	{
@@ -263,6 +275,55 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"distsender.rpc.sent.local",
 					"distsender.rpc.sent",
+				},
+			},
+			{
+				Title: "Requests",
+				Metrics: []string{
+					"distsender.rpc.addsstable.sent",
+					"distsender.rpc.adminchangereplicas.sent",
+					"distsender.rpc.adminmerge.sent",
+					"distsender.rpc.adminrelocaterange.sent",
+					"distsender.rpc.adminscatter.sent",
+					"distsender.rpc.adminsplit.sent",
+					"distsender.rpc.admintransferlease.sent",
+					"distsender.rpc.adminunsplit.sent",
+					"distsender.rpc.adminverifyprotectedtimestamp.sent",
+					"distsender.rpc.checkconsistency.sent",
+					"distsender.rpc.clearrange.sent",
+					"distsender.rpc.computechecksum.sent",
+					"distsender.rpc.conditionalput.sent",
+					"distsender.rpc.delete.sent",
+					"distsender.rpc.deleterange.sent",
+					"distsender.rpc.endtxn.sent",
+					"distsender.rpc.export.sent",
+					"distsender.rpc.gc.sent",
+					"distsender.rpc.get.sent",
+					"distsender.rpc.heartbeattxn.sent",
+					"distsender.rpc.import.sent",
+					"distsender.rpc.increment.sent",
+					"distsender.rpc.initput.sent",
+					"distsender.rpc.leaseinfo.sent",
+					"distsender.rpc.merge.sent",
+					"distsender.rpc.pushtxn.sent",
+					"distsender.rpc.put.sent",
+					"distsender.rpc.queryintent.sent",
+					"distsender.rpc.querytxn.sent",
+					"distsender.rpc.rangestats.sent",
+					"distsender.rpc.recomputestats.sent",
+					"distsender.rpc.recovertxn.sent",
+					"distsender.rpc.refresh.sent",
+					"distsender.rpc.refreshrange.sent",
+					"distsender.rpc.requestlease.sent",
+					"distsender.rpc.resolveintent.sent",
+					"distsender.rpc.resolveintentrange.sent",
+					"distsender.rpc.reversescan.sent",
+					"distsender.rpc.revertrange.sent",
+					"distsender.rpc.scan.sent",
+					"distsender.rpc.subsume.sent",
+					"distsender.rpc.transferlease.sent",
+					"distsender.rpc.truncatelog.sent",
+					"distsender.rpc.writebatch.sent",
 				},
 			},
 		},
@@ -622,6 +683,36 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Tenant Rate Limiting"}},
+		Charts: []chartDescription{
+			{
+				Title:       "Requests Blocked on Tenant Rate Limiting",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.current_blocked"},
+			},
+			{
+				Title:       "Number of Tenants",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
+			},
+			{
+				Title:       "Requests Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.num_tenants"},
+			},
+			{
+				Title:       "Write Bytes Admitted by Rate Limiter",
+				Downsampler: DescribeAggregator_MAX,
+				Percentiles: false,
+				Metrics:     []string{"kv.tenant_rate_limit.requests_admitted"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
 			{KVTransactionLayer, "Requests", "Slow"},
 			{ReplicationLayer, "Requests", "Slow"},
 			{DistributionLayer, "Requests", "Slow"},
@@ -657,12 +748,6 @@ var charts = []sectionDescription{
 		Organization: [][]string{{KVTransactionLayer, "Storage"}},
 		Charts: []chartDescription{
 			{
-				Rate:        DescribeDerivative_DERIVATIVE,
-				Percentiles: false,
-				Title:       "Metric Update Frequency",
-				Metrics:     []string{"lastupdatenanos"},
-			},
-			{
 				Title:     "Counts",
 				AxisLabel: "MVCC Keys & Values",
 				Metrics: []string{
@@ -684,6 +769,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Size",
 				Metrics: []string{
+					"abortspanbytes",
 					"intentbytes",
 					"keybytes",
 					"livebytes",
@@ -995,6 +1081,10 @@ var charts = []sectionDescription{
 			{
 				Title:   "Epoch Increment Count",
 				Metrics: []string{"liveness.epochincrements"},
+			},
+			{
+				Title:   "Heartbeats In-Flight",
+				Metrics: []string{"liveness.heartbeatsinflight"},
 			},
 			{
 				Title:   "Heartbeat Latency",
@@ -1940,12 +2030,9 @@ var charts = []sectionDescription{
 				Metrics: []string{"intentage"},
 			},
 			{
-				Title:   "Metric Update Frequency",
-				Metrics: []string{"lastupdatenanos"},
-			},
-			{
 				Title: "Size",
 				Metrics: []string{
+					"abortspanbytes",
 					"intentbytes",
 					"keybytes",
 					"livebytes",

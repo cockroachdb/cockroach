@@ -35,12 +35,9 @@ import (
 type tableReader struct {
 	execinfra.ProcessorBase
 
-	spans     roachpb.Spans
-	limitHint int64
-
-	// maxResults is non-zero if there is a limit on the total number of rows
-	// that the tableReader will read.
-	maxResults uint64
+	spans       roachpb.Spans
+	limitHint   int64
+	parallelize bool
 
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
@@ -86,16 +83,30 @@ func newTableReader(
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
-	tr.maxResults = spec.MaxResults
+	// Parallelize shouldn't be set when there's a limit hint, but double-check
+	// just in case.
+	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	returnMutations := spec.Visibility == execinfrapb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
-	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	tableDesc := sqlbase.NewImmutableTableDescriptor(spec.Table)
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
+	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
+	// Add all requested system columns to the output.
+	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&spec.Table, spec.SystemColumns)
+	if err != nil {
+		return nil, err
+	}
+	resultTypes = append(resultTypes, sysColTypes...)
+	for i := range sysColDescs {
+		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+	}
+
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
 		tr,
 		post,
-		types,
+		resultTypes,
 		flowCtx,
 		processorID,
 		output,
@@ -115,10 +126,19 @@ func newTableReader(
 	neededColumns := tr.Out.NeededColumns()
 
 	var fetcher row.Fetcher
-	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		flowCtx, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility, spec.LockingStrength,
+		flowCtx,
+		&fetcher,
+		tableDesc,
+		int(spec.IndexIdx),
+		columnIdxMap,
+		spec.Reverse,
+		neededColumns,
+		spec.IsCheck,
+		&tr.alloc,
+		spec.Visibility,
+		spec.LockingStrength,
+		sysColDescs,
 	); err != nil {
 		return nil, err
 	}
@@ -157,7 +177,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
-	limitBatches := execinfra.ScanShouldLimitBatches(tr.maxResults, tr.limitHint, tr.FlowCtx)
+	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
@@ -278,7 +298,7 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, tr.fetcher.GetRangesInfo(), nodeID)
+			ranges := execinfra.MisplannedRanges(ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
@@ -307,5 +327,5 @@ func (tr *tableReader) ChildCount(bool) int {
 
 // Child is part of the execinfra.OpNode interface.
 func (tr *tableReader) Child(nth int, _ bool) execinfra.OpNode {
-	panic(fmt.Sprintf("invalid index %d", nth))
+	panic(errors.AssertionFailedf("invalid index %d", nth))
 }

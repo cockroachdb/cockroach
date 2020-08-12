@@ -86,6 +86,20 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
+// IsPrefixOf returns true if the columns in c are a prefix of the columns in
+// other.
+func (c *Columns) IsPrefixOf(other *Columns) bool {
+	if c.firstCol != other.firstCol || len(c.otherCols) > len(other.otherCols) {
+		return false
+	}
+	for i := range c.otherCols {
+		if c.otherCols[i] != other.otherCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // IsStrictSuffixOf returns true if the columns in c are a strict suffix of the
 // columns in other.
 func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
@@ -109,6 +123,19 @@ func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
 		}
 	}
 	return true
+}
+
+// RemapColumns returns a new Columns object with all ColumnIDs remapped to
+// ones that come from the 'to' table. The old ColumnIDs must come from the
+// 'from' table.
+func (c *Columns) RemapColumns(from, to opt.TableID) Columns {
+	var newColumns Columns
+	newColumns.firstCol = c.firstCol.RemapColumn(from, to)
+	newColumns.otherCols = make([]opt.OrderingColumn, len(c.otherCols))
+	for i := range c.otherCols {
+		newColumns.otherCols[i] = c.otherCols[i].RemapColumn(from, to)
+	}
+	return newColumns
 }
 
 // ColSet returns the columns as a ColSet.

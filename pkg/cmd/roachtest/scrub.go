@@ -52,8 +52,8 @@ func makeScrubTPCCTest(
 		Cluster: makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses,
-				Extra:      "--wait=false --tolerate-errors",
+				Warehouses:   warehouses,
+				ExtraRunArgs: "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
 					if !c.isLocal() {
 						// Wait until tpcc has been running for a few minutes to start SCRUB checks
@@ -81,7 +81,8 @@ func makeScrubTPCCTest(
 					}
 					return nil
 				},
-				Duration: length,
+				Duration:  length,
+				SetupType: usingFixture,
 			})
 		},
 		MinVersion: "v19.1.0",

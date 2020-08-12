@@ -12,7 +12,6 @@ package execinfrapb
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,7 +57,7 @@ func ConvertToMappedSpecOrdering(
 		if planToStreamColMap != nil {
 			colIdx = planToStreamColMap[c.ColIdx]
 			if colIdx == -1 {
-				panic(fmt.Sprintf("column %d in sort ordering not available", c.ColIdx))
+				panic(errors.AssertionFailedf("column %d in sort ordering not available", c.ColIdx))
 			}
 		}
 		specOrdering.Columns[i].ColIdx = uint32(colIdx)
@@ -80,7 +79,7 @@ func ExprFmtCtxBase(evalCtx *tree.EvalContext) *tree.FmtCtx {
 		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
-				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
+				panic(errors.AssertionFailedf("failed to serialize placeholder: %s", err))
 			}
 			d.Format(fmtCtx)
 		})
@@ -102,8 +101,9 @@ type Expression struct {
 	// (@1, @2, @3 ..) used for "input" variables.
 	Expr string
 
-	// LocalExpr is an unserialized field that's used to pass expressions to local
-	// flows without serializing/deserializing them.
+	// LocalExpr is an unserialized field that's used to pass expressions to
+	// the gateway node without serializing/deserializing them. It is always
+	// set in non-test setup.
 	LocalExpr tree.TypedExpr
 }
 
@@ -114,13 +114,13 @@ func (e *Expression) Empty() bool {
 
 // String implements the Stringer interface.
 func (e Expression) String() string {
+	if e.Expr != "" {
+		return e.Expr
+	}
 	if e.LocalExpr != nil {
 		ctx := tree.NewFmtCtx(tree.FmtCheckEquivalence)
 		ctx.FormatNode(e.LocalExpr)
 		return ctx.CloseAndGetString()
-	}
-	if e.Expr != "" {
-		return e.Expr
 	}
 	return "none"
 }
@@ -321,9 +321,23 @@ func LocalMetaToRemoteProducerMeta(
 type MetadataSource interface {
 	// DrainMeta returns all the metadata produced by the processor or operator.
 	// It will be called exactly once, usually, when the processor or operator
-	// has finished doing its computations.
+	// has finished doing its computations. This is a signal that the output
+	// requires no more rows to be returned.
 	// Implementers can choose what to do on subsequent calls (if such occur).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
 	DrainMeta(context.Context) []ProducerMetadata
+}
+
+// MetadataSources is a slice of MetadataSource.
+type MetadataSources []MetadataSource
+
+// DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
+// with all the accumulated metadata.
+func (s MetadataSources) DrainMeta(ctx context.Context) []ProducerMetadata {
+	var result []ProducerMetadata
+	for _, src := range s {
+		result = append(result, src.DrainMeta(ctx)...)
+	}
+	return result
 }

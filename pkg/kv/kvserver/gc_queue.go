@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -45,14 +45,14 @@ const (
 	gcIntentScoreThreshold = 10
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
-	probablyLargeAbortSpanSysBytesThreshold = 16 * (1 << 20) // 16mb
+	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
 )
 
-func probablyLargeAbortSpan(ms enginepb.MVCCStats) bool {
-	// If there is "a lot" of data in Sys{Bytes,Count}, then we are likely
-	// experiencing a large abort span. The abort span is not supposed to
-	// become that large, but it does happen and causes stability fallout,
-	// usually due to a combination of shortcomings:
+func largeAbortSpan(ms enginepb.MVCCStats) bool {
+	// Checks if the size of the abort span exceeds the given threshold.
+	// The abort span is not supposed to become that large, but it does
+	// happen and causes stability fallout, usually due to a combination of
+	// shortcomings:
 	//
 	// 1. there's no trigger for GC based on abort span size alone (before
 	//    this code block here was written)
@@ -64,11 +64,15 @@ func probablyLargeAbortSpan(ms enginepb.MVCCStats) bool {
 	//    (and we suspect this also happens in user apps occasionally)
 	// 4. large snapshots would never complete due to the queue time limits
 	//    (addressed in https://github.com/cockroachdb/cockroach/pull/44952).
-	//
-	// In an ideal world, we would factor in the abort span into this method
-	// directly, but until then the condition guarding this block will do.
-	return ms.SysCount >= probablyLargeAbortSpanSysCountThreshold &&
-		ms.SysBytes >= probablyLargeAbortSpanSysBytesThreshold
+
+	// New versions (20.2+) of Cockroach accurately track the size of the abort
+	// span (after a migration period of a few days, assuming default consistency
+	// checker intervals). For mixed-version 20.1/20.2 clusters, we also include
+	// a heuristic based on SysBytes (which always reflects the abort span). This
+	// heuristic can be removed in 21.1.
+	definitelyLargeAbortSpan := ms.AbortSpanBytes >= largeAbortSpanBytesThreshold
+	probablyLargeAbortSpan := ms.SysBytes >= largeAbortSpanBytesThreshold && ms.SysCount >= probablyLargeAbortSpanSysCountThreshold
+	return definitelyLargeAbortSpan || probablyLargeAbortSpan
 }
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -343,8 +347,8 @@ func makeGCQueueScoreImpl(
 	r.ShouldQueue = r.FuzzFactor*valScore > gcKeyScoreThreshold || r.FuzzFactor*r.IntentScore > gcIntentScoreThreshold
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
-	if probablyLargeAbortSpan(ms) && !r.ShouldQueue &&
-		(r.LikelyLastGC == 0 || r.LikelyLastGC > storagebase.TxnCleanupThreshold) {
+	if largeAbortSpan(ms) && !r.ShouldQueue &&
+		(r.LikelyLastGC == 0 || r.LikelyLastGC > kvserverbase.TxnCleanupThreshold) {
 		r.ShouldQueue = true
 		r.FinalScore++
 	}
@@ -430,7 +434,9 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
+func (gcq *gcQueue) process(
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
+) (processed bool, err error) {
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, zone := repl.DescAndZone()
 	// Consult the protected timestamp state to determine whether we can GC and
@@ -438,7 +444,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// threshold.
 	canGC, cacheTimestamp, gcTimestamp, newThreshold := repl.checkProtectedTimestampsForGC(ctx, *zone.GC)
 	if !canGC {
-		return nil
+		return false, nil
 	}
 	r := makeGCQueueScore(ctx, repl, gcTimestamp, *zone.GC)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
@@ -446,7 +452,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	// AdminVerifyProtectedTimestamp requests.
 	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {
 		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
-		return nil
+		return false, nil
 	}
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
@@ -479,13 +485,13 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 			return err
 		})
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
 	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), *zone.GC))
 	updateStoreMetricsWithGCInfo(gcq.store.metrics, info)
-	return nil
+	return true, nil
 }
 
 func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {

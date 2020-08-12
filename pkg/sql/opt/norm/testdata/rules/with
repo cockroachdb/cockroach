@@ -78,6 +78,7 @@ WITH foo AS (SELECT 1) SELECT * FROM foo CROSS JOIN (VALUES (2))
 inner-join (cross)
  ├── columns: "?column?":2(int!null) column1:3(int!null)
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── stats: [rows=1]
  ├── cost: 0.09
  ├── key: ()
@@ -111,6 +112,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar
 inner-join (cross)
  ├── columns: "?column?":3!null "?column?":4!null
  ├── cardinality: [1 - 1]
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: ()
  ├── fd: ()-->(3,4)
  ├── values
@@ -135,6 +137,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT *
 values
  ├── columns: "?column?":5
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(5)
  └── tuple
@@ -160,6 +163,7 @@ WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT (SELECT * FROM foo) + (SELECT *
 with &2 (bar)
  ├── columns: "?column?":6
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── values
@@ -171,6 +175,7 @@ with &2 (bar)
  └── values
       ├── columns: "?column?":6
       ├── cardinality: [1 - 1]
+      ├── immutable
       ├── key: ()
       ├── fd: ()-->(6)
       └── tuple
@@ -218,11 +223,13 @@ with &2 (bar)
  └── inner-join (cross)
       ├── columns: "?column?":3!null "?column?":4!null "?column?":5!null
       ├── cardinality: [1 - 1]
+      ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── key: ()
       ├── fd: ()-->(3-5)
       ├── inner-join (cross)
       │    ├── columns: "?column?":3!null "?column?":4!null
       │    ├── cardinality: [1 - 1]
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       │    ├── key: ()
       │    ├── fd: ()-->(3,4)
       │    ├── values
@@ -297,6 +304,7 @@ with &1 (foo)
       └── inner-join (cross)
            ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null) "?column?":6(int!null)
            ├── cardinality: [1 - 1]
+           ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            ├── stats: [rows=1]
            ├── cost: 0.19
            ├── key: ()
@@ -308,24 +316,24 @@ with &1 (foo)
            ├── inner-join (cross)
            │    ├── columns: "?column?":3(int!null) "?column?":4(int!null) "?column?":5(int!null)
            │    ├── cardinality: [1 - 1]
+           │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    ├── stats: [rows=1]
            │    ├── cost: 0.13
            │    ├── key: ()
            │    ├── fd: ()-->(3-5)
            │    ├── prune: (3-5)
-           │    ├── join-size: 3
            │    ├── cte-uses
            │    │    ├── &1: count=1 used-columns=(1)
            │    │    └── &2: count=2 used-columns=(2)
            │    ├── inner-join (cross)
            │    │    ├── columns: "?column?":3(int!null) "?column?":4(int!null)
            │    │    ├── cardinality: [1 - 1]
+           │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
            │    │    ├── stats: [rows=1]
            │    │    ├── cost: 0.07
            │    │    ├── key: ()
            │    │    ├── fd: ()-->(3,4)
            │    │    ├── prune: (3,4)
-           │    │    ├── join-size: 2
            │    │    ├── cte-uses
            │    │    │    ├── &1: count=1 used-columns=(1)
            │    │    │    └── &2: count=1 used-columns=(2)
@@ -398,81 +406,81 @@ anti-join-apply
  │    ├── key: (2)
  │    └── fd: (2)-->(3-6)
  ├── values
- │    ├── columns: column1:8
+ │    ├── columns: column1:9
  │    ├── outer: (2)
  │    ├── cardinality: [2 - 2]
  │    ├── (k:2,)
  │    └── tuple
  │         └── subquery
  │              └── values
- │                   ├── columns: column1:7!null
+ │                   ├── columns: column1:8!null
  │                   ├── cardinality: [1 - 1]
  │                   ├── key: ()
- │                   ├── fd: ()-->(7)
+ │                   ├── fd: ()-->(8)
  │                   └── (1,)
  └── filters
-      └── column1:8 = k:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      └── column1:9 = k:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 
 # Don't inline side-effecting expressions.
 norm
 WITH foo AS (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: k:11!null i:12 f:13 s:14 j:15
+ ├── columns: k:12!null i:13 f:14 s:15 j:16
  ├── cardinality: [1 - 1]
- ├── side-effects, mutations
+ ├── volatile, mutations
  ├── key: ()
- ├── fd: ()-->(11-15)
+ ├── fd: ()-->(12-16)
  ├── insert a
  │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
  │    ├── insert-mapping:
- │    │    ├── column1:6 => a.k:1
- │    │    ├── column7:7 => a.i:2
- │    │    ├── column8:8 => a.f:3
- │    │    ├── column9:9 => a.s:4
- │    │    └── column10:10 => a.j:5
+ │    │    ├── column1:7 => a.k:1
+ │    │    ├── column8:8 => a.i:2
+ │    │    ├── column9:9 => a.f:3
+ │    │    ├── column10:10 => a.s:4
+ │    │    └── column11:11 => a.j:5
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects, mutations
+ │    ├── volatile, mutations
  │    ├── key: ()
  │    ├── fd: ()-->(1-5)
  │    └── values
- │         ├── columns: column1:6!null column7:7 column8:8 column9:9 column10:10
+ │         ├── columns: column1:7!null column8:8 column9:9 column10:10 column11:11
  │         ├── cardinality: [1 - 1]
  │         ├── key: ()
- │         ├── fd: ()-->(6-10)
+ │         ├── fd: ()-->(7-11)
  │         └── (1, NULL, NULL, NULL, NULL)
  └── with-scan &1 (foo)
-      ├── columns: k:11!null i:12 f:13 s:14 j:15
+      ├── columns: k:12!null i:13 f:14 s:15 j:16
       ├── mapping:
-      │    ├──  a.k:1 => k:11
-      │    ├──  a.i:2 => i:12
-      │    ├──  a.f:3 => f:13
-      │    ├──  a.s:4 => s:14
-      │    └──  a.j:5 => j:15
+      │    ├──  a.k:1 => k:12
+      │    ├──  a.i:2 => i:13
+      │    ├──  a.f:3 => f:14
+      │    ├──  a.s:4 => s:15
+      │    └──  a.j:5 => j:16
       ├── cardinality: [1 - 1]
       ├── key: ()
-      └── fd: ()-->(11-15)
+      └── fd: ()-->(12-16)
 
 norm expect-not=InlineWith
-WITH foo AS (SELECT 1/0) SELECT * FROM foo
+WITH foo AS (SELECT crdb_internal.notice('foo')) SELECT * FROM foo
 ----
 with &1 (foo)
- ├── columns: "?column?":2
+ ├── columns: crdb_internal.notice:2
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(2)
  ├── values
- │    ├── columns: "?column?":1
+ │    ├── columns: crdb_internal.notice:1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects
+ │    ├── volatile
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── (1 / 0,)
+ │    └── (crdb_internal.notice('foo'),)
  └── with-scan &1 (foo)
-      ├── columns: "?column?":2
+      ├── columns: crdb_internal.notice:2
       ├── mapping:
-      │    └──  "?column?":1 => "?column?":2
+      │    └──  crdb_internal.notice:1 => crdb_internal.notice:2
       ├── cardinality: [1 - 1]
       ├── key: ()
       └── fd: ()-->(2)
@@ -520,23 +528,23 @@ norm
 WITH cte AS (SELECT * FROM a) (SELECT 1 FROM cte LIMIT 9) UNION (SELECT 1 FROM cte LIMIT 10)
 ----
 with &1 (cte)
- ├── columns: "?column?":18!null
+ ├── columns: "?column?":19!null
  ├── cardinality: [0 - 19]
- ├── key: (18)
+ ├── key: (19)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── union
-      ├── columns: "?column?":18!null
-      ├── left columns: "?column?":11
-      ├── right columns: "?column?":17
+      ├── columns: "?column?":19!null
+      ├── left columns: "?column?":12
+      ├── right columns: "?column?":18
       ├── cardinality: [0 - 19]
-      ├── key: (18)
+      ├── key: (19)
       ├── project
-      │    ├── columns: "?column?":11!null
+      │    ├── columns: "?column?":12!null
       │    ├── cardinality: [0 - 9]
-      │    ├── fd: ()-->(11)
+      │    ├── fd: ()-->(12)
       │    ├── limit
       │    │    ├── cardinality: [0 - 9]
       │    │    ├── with-scan &1 (cte)
@@ -544,11 +552,11 @@ with &1 (cte)
       │    │    │    └── limit hint: 9.00
       │    │    └── 9
       │    └── projections
-      │         └── 1 [as="?column?":11]
+      │         └── 1 [as="?column?":12]
       └── project
-           ├── columns: "?column?":17!null
+           ├── columns: "?column?":18!null
            ├── cardinality: [0 - 10]
-           ├── fd: ()-->(17)
+           ├── fd: ()-->(18)
            ├── limit
            │    ├── cardinality: [0 - 10]
            │    ├── with-scan &1 (cte)
@@ -556,7 +564,7 @@ with &1 (cte)
            │    │    └── limit hint: 10.00
            │    └── 10
            └── projections
-                └── 1 [as="?column?":17]
+                └── 1 [as="?column?":18]
 
 # Check cte-uses when used with mutations (for FK checks).
 exec-ddl
@@ -571,108 +579,111 @@ norm format=show-all
 WITH cte AS (INSERT INTO child VALUES (1, 1) RETURNING c) SELECT c FROM cte UNION SELECT c+1 FROM cte
 ----
 with &2 (cte)
- ├── columns: c:10(int!null)
+ ├── columns: c:12(int!null)
  ├── cardinality: [1 - 2]
- ├── side-effects, mutations
- ├── stats: [rows=2, distinct(10)=2, null(10)=0]
- ├── cost: 1037.7025
- ├── key: (10)
+ ├── volatile, mutations
+ ├── stats: [rows=2, distinct(12)=2, null(12)=0]
+ ├── cost: 1037.7125
+ ├── key: (12)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
  │    ├── insert-mapping:
- │    │    ├── column1:3 => t.public.child.c:1
- │    │    └── column2:4 => t.public.child.p:2
+ │    │    ├── column1:4 => t.public.child.c:1
+ │    │    └── column2:5 => t.public.child.p:2
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects, mutations
- │    ├── stats: [rows=1]
- │    ├── cost: 1037.5925
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    ├── cost: 1037.6025
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
- │    │    ├── columns: column1:3(int!null) column2:4(int!null)
+ │    │    ├── columns: column1:4(int!null) column2:5(int!null)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1]
+ │    │    ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0]
  │    │    ├── cost: 0.02
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(3,4)
- │    │    ├── prune: (3,4)
+ │    │    ├── fd: ()-->(4,5)
+ │    │    ├── prune: (4,5)
  │    │    └── tuple [type=tuple{int, int}]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 1 [type=int]
  │    └── f-k-checks
  │         └── f-k-checks-item: child(p) -> parent(p)
  │              └── anti-join (hash)
- │                   ├── columns: column2:5(int!null)
+ │                   ├── columns: column2:6(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
- │                   ├── cost: 1037.5625
+ │                   ├── cost: 1037.5725
  │                   ├── key: ()
- │                   ├── fd: ()-->(5)
+ │                   ├── fd: ()-->(6)
  │                   ├── cte-uses
- │                   │    └── &1: count=1 used-columns=(4)
+ │                   │    └── &1: count=1 used-columns=(5)
  │                   ├── with-scan &1
- │                   │    ├── columns: column2:5(int!null)
+ │                   │    ├── columns: column2:6(int!null)
  │                   │    ├── mapping:
- │                   │    │    └──  column2:4(int) => column2:5(int)
+ │                   │    │    └──  column2:5(int) => column2:6(int)
  │                   │    ├── cardinality: [1 - 1]
- │                   │    ├── stats: [rows=1, distinct(5)=1, null(5)=0]
+ │                   │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
  │                   │    ├── cost: 0.01
  │                   │    ├── key: ()
- │                   │    ├── fd: ()-->(5)
- │                   │    ├── prune: (5)
- │                   │    └── cte-uses
- │                   │         └── &1: count=1 used-columns=(4)
- │                   ├── scan t.public.parent
- │                   │    ├── columns: t.public.parent.p:6(int!null)
- │                   │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │                   │    ├── cost: 1020.02
- │                   │    ├── key: (6)
+ │                   │    ├── fd: ()-->(6)
  │                   │    ├── prune: (6)
- │                   │    └── interesting orderings: (+6)
+ │                   │    └── cte-uses
+ │                   │         └── &1: count=1 used-columns=(5)
+ │                   ├── scan t.public.parent
+ │                   │    ├── columns: t.public.parent.p:7(int!null)
+ │                   │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
+ │                   │    ├── cost: 1020.02
+ │                   │    ├── key: (7)
+ │                   │    ├── prune: (7)
+ │                   │    ├── interesting orderings: (+7)
+ │                   │    └── unfiltered-cols: (7,8)
  │                   └── filters
- │                        └── eq [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
- │                             ├── variable: column2:5 [type=int]
- │                             └── variable: t.public.parent.p:6 [type=int]
+ │                        └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │                             ├── variable: column2:6 [type=int]
+ │                             └── variable: t.public.parent.p:7 [type=int]
  └── union
-      ├── columns: c:10(int!null)
-      ├── left columns: c:7(int)
-      ├── right columns: "?column?":9(int)
+      ├── columns: c:12(int!null)
+      ├── left columns: c:9(int)
+      ├── right columns: "?column?":11(int)
       ├── cardinality: [1 - 2]
-      ├── stats: [rows=2, distinct(10)=2, null(10)=0]
+      ├── immutable
+      ├── stats: [rows=2, distinct(12)=2, null(12)=0]
       ├── cost: 0.1
-      ├── key: (10)
+      ├── key: (12)
       ├── with-scan &2 (cte)
-      │    ├── columns: c:7(int!null)
+      │    ├── columns: c:9(int!null)
       │    ├── mapping:
-      │    │    └──  t.public.child.c:1(int) => c:7(int)
+      │    │    └──  t.public.child.c:1(int) => c:9(int)
       │    ├── cardinality: [1 - 1]
-      │    ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+      │    ├── stats: [rows=1, distinct(9)=1, null(9)=0]
       │    ├── cost: 0.01
       │    ├── key: ()
-      │    ├── fd: ()-->(7)
-      │    └── prune: (7)
+      │    ├── fd: ()-->(9)
+      │    └── prune: (9)
       └── project
-           ├── columns: "?column?":9(int!null)
+           ├── columns: "?column?":11(int!null)
            ├── cardinality: [1 - 1]
-           ├── stats: [rows=1, distinct(9)=1, null(9)=0]
+           ├── immutable
+           ├── stats: [rows=1, distinct(11)=1, null(11)=0]
            ├── cost: 0.04
            ├── key: ()
-           ├── fd: ()-->(9)
-           ├── prune: (9)
+           ├── fd: ()-->(11)
+           ├── prune: (11)
            ├── with-scan &2 (cte)
-           │    ├── columns: c:8(int!null)
+           │    ├── columns: c:10(int!null)
            │    ├── mapping:
-           │    │    └──  t.public.child.c:1(int) => c:8(int)
+           │    │    └──  t.public.child.c:1(int) => c:10(int)
            │    ├── cardinality: [1 - 1]
-           │    ├── stats: [rows=1, distinct(8)=1, null(8)=0]
+           │    ├── stats: [rows=1, distinct(10)=1, null(10)=0]
            │    ├── cost: 0.01
            │    ├── key: ()
-           │    ├── fd: ()-->(8)
-           │    └── prune: (8)
+           │    ├── fd: ()-->(10)
+           │    └── prune: (10)
            └── projections
-                └── plus [as="?column?":9, type=int, outer=(8)]
-                     ├── variable: c:8 [type=int]
+                └── plus [as="?column?":11, type=int, outer=(10), immutable]
+                     ├── variable: c:10 [type=int]
                      └── const: 1 [type=int]
 
 # Original CTE is inlined, adding "NOT MATERIALIZED" should not change the behavior.
@@ -732,13 +743,13 @@ with &1 (foo)
  ├── columns: "?column?":2
  ├── materialized
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(2)
  ├── values
  │    ├── columns: "?column?":1
  │    ├── cardinality: [1 - 1]
- │    ├── side-effects
+ │    ├── immutable
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    └── (1 / 0,)
@@ -757,7 +768,7 @@ WITH foo AS NOT MATERIALIZED (SELECT 1/0) SELECT * FROM foo
 values
  ├── columns: "?column?":2
  ├── cardinality: [1 - 1]
- ├── side-effects
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(2)
  └── (1 / 0,)
@@ -792,6 +803,7 @@ with &2 (t)
  ├── columns: sum:6
  ├── materialized
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── recursive-c-t-e
@@ -800,6 +812,7 @@ with &2 (t)
  │    ├── initial columns: column1:1
  │    ├── recursive columns: "?column?":4
  │    ├── cardinality: [1 - ]
+ │    ├── immutable
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [1 - 1]
@@ -808,6 +821,7 @@ with &2 (t)
  │    │    └── (1,)
  │    └── project
  │         ├── columns: "?column?":4!null
+ │         ├── immutable
  │         ├── select
  │         │    ├── columns: n:3!null
  │         │    ├── with-scan &1 (t)
@@ -818,7 +832,7 @@ with &2 (t)
  │         │    └── filters
  │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │         └── projections
- │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ │              └── n:3 + 1 [as="?column?":4, outer=(3), immutable]
  └── scalar-group-by
       ├── columns: sum:6
       ├── cardinality: [1 - 1]
@@ -840,17 +854,20 @@ WITH RECURSIVE t(n) AS NOT MATERIALIZED (VALUES (1) UNION ALL SELECT n+1 FROM t 
 scalar-group-by
  ├── columns: sum:6
  ├── cardinality: [1 - 1]
+ ├── immutable
  ├── key: ()
  ├── fd: ()-->(6)
  ├── project
  │    ├── columns: n:5
  │    ├── cardinality: [1 - ]
+ │    ├── immutable
  │    ├── recursive-c-t-e
  │    │    ├── columns: n:2
  │    │    ├── working table binding: &1
  │    │    ├── initial columns: column1:1
  │    │    ├── recursive columns: "?column?":4
  │    │    ├── cardinality: [1 - ]
+ │    │    ├── immutable
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null
  │    │    │    ├── cardinality: [1 - 1]
@@ -859,6 +876,7 @@ scalar-group-by
  │    │    │    └── (1,)
  │    │    └── project
  │    │         ├── columns: "?column?":4!null
+ │    │         ├── immutable
  │    │         ├── select
  │    │         │    ├── columns: n:3!null
  │    │         │    ├── with-scan &1 (t)
@@ -869,7 +887,7 @@ scalar-group-by
  │    │         │    └── filters
  │    │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │    │         └── projections
- │    │              └── n:3 + 1 [as="?column?":4, outer=(3)]
+ │    │              └── n:3 + 1 [as="?column?":4, outer=(3), immutable]
  │    └── projections
  │         └── n:2 [as=n:5, outer=(2)]
  └── aggregations

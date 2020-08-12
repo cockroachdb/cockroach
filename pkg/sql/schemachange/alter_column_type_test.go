@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -93,10 +94,10 @@ func TestColumnConversions(t *testing.T) {
 
 		"STRING": {
 			"BIT":   ColumnConversionGeneral,
-			"BYTES": ColumnConversionTrivial,
+			"BYTES": ColumnConversionValidate,
 		},
 		"STRING(5)": {
-			"BYTES": ColumnConversionTrivial,
+			"BYTES": ColumnConversionValidate,
 		},
 
 		"TIME": {
@@ -177,7 +178,7 @@ func TestColumnConversions(t *testing.T) {
 	t.Run("columnConversionInfo sanity", func(t *testing.T) {
 		for from, mid := range columnConversionInfo {
 			for to, expected := range mid {
-				actual, err := ClassifyConversion(columnType(from), columnType(to))
+				actual, err := ClassifyConversion(context.Background(), columnType(from), columnType(to))
 
 				// Verify that we only return cannot-coerce errors.
 				if err != nil {
@@ -196,6 +197,7 @@ func TestColumnConversions(t *testing.T) {
 	})
 
 	t.Run("column conversion checks", func(t *testing.T) {
+		defer log.Scope(t).Close(t)
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(context.Background())
 		sqlDB := sqlutils.MakeSQLRunner(db)
@@ -362,7 +364,7 @@ func TestColumnConversions(t *testing.T) {
 						var a, expr string
 						lookFor := fmt.Sprintf("a %s NULL,", colType.SQLString())
 						sqlDB.QueryRow(t, "SHOW CREATE d.t").Scan(&a, &expr)
-						t.Log(lookFor, expr)
+						log.Infof(context.Background(), "TestColumnConversions: %s %s", lookFor, expr)
 						return strings.Contains(expr, lookFor)
 					}
 

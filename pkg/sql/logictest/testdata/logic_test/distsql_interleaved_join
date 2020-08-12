@@ -451,6 +451,33 @@ SELECT sum(parent1.pid1), sum(child1.cid1) FROM parent1 JOIN child1 USING(pid1) 
 ----
 2625 8745
 
+# Verify that we don't incorrectly use interleaved joins when there are limits.
+query IIII rowsort,colnames
+SELECT * FROM (SELECT * FROM parent1 ORDER BY pid1 LIMIT 2) AS parent1 INNER MERGE JOIN child1 USING(pid1)
+----
+pid1  pa1  cid1  ca1
+1     1    1     1
+1     1    121   55
+1     1    41    41
+1     1    81    15
+2     2    122   56
+2     2    2     2
+2     2    42    42
+2     2    82    16
+
+query IIII rowsort,colnames
+SELECT * FROM parent1 INNER MERGE JOIN (SELECT * FROM child1 ORDER BY pid1 LIMIT 10) AS child1 USING(pid1)
+----
+pid1  pa1  cid1  ca1
+1     1    1     1
+1     1    121   55
+1     1    41    41
+1     1    81    15
+2     2    122   56
+2     2    2     2
+2     2    42    42
+2     2    82    16
+
 ###############
 # Outer joins #
 ###############

@@ -13,10 +13,11 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -35,7 +36,7 @@ type renameColumnNode struct {
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, ResolveRequireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, tree.ResolveRequireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 	}
 
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
+		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // renameColumn will rename the column in tableDesc from oldName to newName.
@@ -105,8 +106,9 @@ func (p *planner) renameColumn(
 			}
 		}
 		if found {
-			return false, p.dependentViewRenameError(
-				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID)
+			return false, p.dependentViewError(
+				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
+			)
 		}
 	}
 	if *oldName == *newName {
@@ -123,11 +125,11 @@ func (p *planner) renameColumn(
 	_, columnNotFoundErr := tableDesc.FindActiveColumnByName(string(*newName))
 	if m := tableDesc.FindColumnMutationByName(*newName); m != nil {
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case descpb.DescriptorMutation_ADD:
 			return false, pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public",
 				col.Name)
-		case sqlbase.DescriptorMutation_DROP:
+		case descpb.DescriptorMutation_DROP:
 			return false, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q being dropped, try again later", col.Name)
 		default:
@@ -142,41 +144,11 @@ func (p *planner) renameColumn(
 		return false, sqlbase.NewColumnAlreadyExistsError(tree.ErrString(newName), tableDesc.Name)
 	}
 
-	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		if vBase, ok := expr.(tree.VarName); ok {
-			v, err := vBase.NormalizeVarName()
-			if err != nil {
-				return false, nil, err
-			}
-			if c, ok := v.(*tree.ColumnItem); ok {
-				if string(c.ColumnName) == string(*oldName) {
-					c.ColumnName = *newName
-				}
-			}
-			return false, v, nil
-		}
-		return true, expr, nil
-	}
-
-	renameIn := func(expression string) (string, error) {
-		parsed, err := parser.ParseExpr(expression)
-		if err != nil {
-			return "", err
-		}
-
-		renamed, err := tree.SimpleVisit(parsed, preFn)
-		if err != nil {
-			return "", err
-		}
-
-		return renamed.String(), nil
-	}
-
 	// Rename the column in CHECK constraints.
 	// Renaming columns that are being referenced by checks that are being added is not allowed.
 	for i := range tableDesc.Checks {
 		var err error
-		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
+		tableDesc.Checks[i].Expr, err = schemaexpr.RenameColumn(tableDesc.Checks[i].Expr, *oldName, *newName)
 		if err != nil {
 			return false, err
 		}
@@ -185,7 +157,7 @@ func (p *planner) renameColumn(
 	// Rename the column in computed columns.
 	for i := range tableDesc.Columns {
 		if otherCol := &tableDesc.Columns[i]; otherCol.IsComputed() {
-			newExpr, err := renameIn(*otherCol.ComputeExpr)
+			newExpr, err := schemaexpr.RenameColumn(*otherCol.ComputeExpr, *oldName, *newName)
 			if err != nil {
 				return false, err
 			}
@@ -193,10 +165,21 @@ func (p *planner) renameColumn(
 		}
 	}
 
+	// Rename the column in partial index predicates.
+	for i := range tableDesc.Indexes {
+		if index := &tableDesc.Indexes[i]; index.IsPartial() {
+			newExpr, err := schemaexpr.RenameColumn(index.Predicate, *oldName, *newName)
+			if err != nil {
+				return false, err
+			}
+			index.Predicate = newExpr
+		}
+	}
+
 	// Rename the column in hash-sharded index descriptors. Potentially rename the
 	// shard column too if we haven't already done it.
 	shardColumnsToRename := make(map[tree.Name]tree.Name) // map[oldShardColName]newShardColName
-	maybeUpdateShardedDesc := func(shardedDesc *sqlbase.ShardedDescriptor) {
+	maybeUpdateShardedDesc := func(shardedDesc *descpb.ShardedDescriptor) {
 		if !shardedDesc.IsSharded {
 			return
 		}

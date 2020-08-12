@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -62,7 +63,10 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	roleOptions, err := kvOptions.ToRoleOptions(p.TypeAsStringOrNull, opName)
+	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
+		return p.TypeAsStringOrNull(ctx, e, op)
+	}
+	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
 
 	// Using CREATE ROLE syntax enables NOLOGIN by default.
 	if isRole && !roleOptions.Contains(roleoption.LOGIN) &&
@@ -79,7 +83,7 @@ func (p *planner) CreateRoleNode(
 		return nil, err
 	}
 
-	ua, err := p.getUserAuthInfo(nameE, opName)
+	ua, err := p.getUserAuthInfo(ctx, nameE, opName)
 	if err != nil {
 		return nil, err
 	}
@@ -106,15 +110,18 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	// Reject the "public" role. It does not have an entry in the users table but is reserved.
+	if normalizedUsername == security.PublicRole {
+		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", security.PublicRole)
+	}
 
 	var hashedPassword []byte
 	if n.roleOptions.Contains(roleoption.PASSWORD) {
-		hashedPassword, err = n.roleOptions.GetHashedPassword()
+		isNull, password, err := n.roleOptions.GetPassword()
 		if err != nil {
 			return err
 		}
-
-		if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+		if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Config.Insecure {
 			// We disallow setting a non-empty password in insecure mode
 			// because insecure means an observer may have MITM'ed the change
 			// and learned the password.
@@ -125,18 +132,21 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			return pgerror.New(pgcode.InvalidPassword,
 				"setting or updating a password is not supported in insecure mode")
 		}
-	} else {
+
+		if !isNull {
+			if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+				return err
+			}
+		}
+	}
+
+	if hashedPassword == nil {
 		// v20.1 and below crash during authentication if they find a NULL value
 		// in system.users.hashedPassword. v20.2 and above handle this correctly,
 		// but we need to maintain mixed version compatibility for at least one
 		// release.
 		// TODO(nvanbenschoten): remove this for v21.1.
 		hashedPassword = []byte{}
-	}
-
-	// Reject the "public" role. It does not have an entry in the users table but is reserved.
-	if normalizedUsername == sqlbase.PublicRole {
-		return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", sqlbase.PublicRole)
 	}
 
 	// Check if the user/role exists.
@@ -232,7 +242,7 @@ const usernameHelp = "Usernames are case insensitive, must start with a letter, 
 
 var usernameRE = regexp.MustCompile(`^[\p{Ll}0-9_][---\p{Ll}0-9_.]*$`)
 
-var blacklistedUsernames = map[string]struct{}{
+var blocklistedUsernames = map[string]struct{}{
 	security.NodeUser: {},
 }
 
@@ -240,19 +250,19 @@ var blacklistedUsernames = map[string]struct{}{
 // it validates according to the usernameRE regular expression.
 // It rejects reserved user names.
 func NormalizeAndValidateUsername(username string) (string, error) {
-	username, err := NormalizeAndValidateUsernameNoBlacklist(username)
+	username, err := NormalizeAndValidateUsernameNoBlocklist(username)
 	if err != nil {
 		return "", err
 	}
-	if _, ok := blacklistedUsernames[username]; ok {
+	if _, ok := blocklistedUsernames[username]; ok {
 		return "", pgerror.Newf(pgcode.ReservedName, "username %q reserved", username)
 	}
 	return username, nil
 }
 
-// NormalizeAndValidateUsernameNoBlacklist case folds the specified username and verifies
+// NormalizeAndValidateUsernameNoBlocklist case folds the specified username and verifies
 // it validates according to the usernameRE regular expression.
-func NormalizeAndValidateUsernameNoBlacklist(username string) (string, error) {
+func NormalizeAndValidateUsernameNoBlocklist(username string) (string, error) {
 	username = tree.Name(username).Normalize()
 	if !usernameRE.MatchString(username) {
 		return "", errors.WithHint(pgerror.Newf(pgcode.InvalidName, "username %q invalid", username), usernameHelp)
@@ -269,8 +279,10 @@ type userNameInfo struct {
 	name func() (string, error)
 }
 
-func (p *planner) getUserAuthInfo(nameE tree.Expr, ctx string) (userNameInfo, error) {
-	name, err := p.TypeAsString(nameE, ctx)
+func (p *planner) getUserAuthInfo(
+	ctx context.Context, nameE tree.Expr, context string,
+) (userNameInfo, error) {
+	name, err := p.TypeAsString(ctx, nameE, context)
 	if err != nil {
 		return userNameInfo{}, err
 	}
@@ -293,4 +305,27 @@ func (ua *userNameInfo) resolveUsername() (string, error) {
 	}
 
 	return normalizedUsername, nil
+}
+
+func (p *planner) checkPasswordAndGetHash(
+	ctx context.Context, password string,
+) (hashedPassword []byte, err error) {
+	if password == "" {
+		return hashedPassword, security.ErrEmptyPassword
+	}
+
+	st := p.ExecCfg().Settings
+	if st.Version.IsActive(ctx, clusterversion.VersionMinPasswordLength) {
+		if minLength := security.MinPasswordLength.Get(&st.SV); minLength >= 1 && int64(len(password)) < minLength {
+			return hashedPassword, errors.WithHintf(security.ErrPasswordTooShort,
+				"Passwords must be %d characters or longer.", minLength)
+		}
+	}
+
+	hashedPassword, err = security.HashPassword(password)
+	if err != nil {
+		return hashedPassword, err
+	}
+
+	return hashedPassword, nil
 }

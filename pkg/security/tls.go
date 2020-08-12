@@ -35,6 +35,18 @@ const (
 	EmbeddedTestUserKey  = "client.testuser.key"
 )
 
+// EmbeddedTenantIDs lists the tenants we embed certs for.
+// See 'securitytest/test_certs/regenerate.sh'.
+var EmbeddedTenantIDs = func() []uint64 { return []uint64{10, 11, 20} }
+
+// Embedded certificates specific to multi-tenancy testing.
+const (
+	EmbeddedTenantClientCACert = "ca-client-tenant.crt"        // CA for client connections (auth broker)
+	EmbeddedTenantClientCAKey  = "ca-client-tenant.key"        // CA for client connections (auth broker)
+	EmbeddedTenantClientCert   = "client-tenant.123456789.crt" // tenant client cert (SQL server)
+	EmbeddedTenantClientKey    = "client-tenant.123456789.key" // tenant client key (SQL server)
+)
+
 // LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
 // The following paths must be passed:
 // - sslCA: path to the CA certificate

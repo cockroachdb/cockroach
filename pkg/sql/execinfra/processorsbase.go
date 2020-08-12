@@ -49,10 +49,10 @@ type ProcOutputHelper struct {
 	output   RowReceiver
 	RowAlloc sqlbase.EncDatumRowAlloc
 
-	filter *ExprHelper
+	filter *execinfrapb.ExprHelper
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
-	renderExprs []ExprHelper
+	renderExprs []execinfrapb.ExprHelper
 	// outputCols is non-nil if we have a projection. Only one of renderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
@@ -93,7 +93,11 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *execinfrapb.PostProcessSpec, typs []*types.T, evalCtx *tree.EvalContext, output RowReceiver,
+	post *execinfrapb.PostProcessSpec,
+	typs []*types.T,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -104,8 +108,8 @@ func (h *ProcOutputHelper) Init(
 	h.output = output
 	h.numInternalCols = len(typs)
 	if post.Filter != (execinfrapb.Expression{}) {
-		h.filter = &ExprHelper{}
-		if err := h.filter.Init(post.Filter, typs, evalCtx); err != nil {
+		h.filter = &execinfrapb.ExprHelper{}
+		if err := h.filter.Init(post.Filter, typs, semaCtx, evalCtx); err != nil {
 			return err
 		}
 	}
@@ -133,7 +137,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.renderExprs) >= nRenders {
 			h.renderExprs = h.renderExprs[:nRenders]
 		} else {
-			h.renderExprs = make([]ExprHelper, nRenders)
+			h.renderExprs = make([]execinfrapb.ExprHelper, nRenders)
 		}
 		if cap(h.OutputTypes) >= nRenders {
 			h.OutputTypes = h.OutputTypes[:nRenders]
@@ -141,8 +145,8 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			h.renderExprs[i] = ExprHelper{}
-			if err := h.renderExprs[i].Init(expr, typs, evalCtx); err != nil {
+			h.renderExprs[i] = execinfrapb.ExprHelper{}
+			if err := h.renderExprs[i].Init(expr, typs, semaCtx, evalCtx); err != nil {
 				return err
 			}
 			h.OutputTypes[i] = h.renderExprs[i].Expr.ResolvedType()
@@ -796,7 +800,16 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	pb.inputsToDrain = opts.InputsToDrain
-	return pb.Out.Init(post, types, pb.EvalCtx, output)
+
+	// Hydrate all types used in the processor.
+	resolver := flowCtx.TypeResolverFactory.NewTypeResolver(evalCtx.Txn)
+	if err := resolver.HydrateTypeSlice(evalCtx.Context, types); err != nil {
+		return err
+	}
+	semaCtx := tree.MakeSemaContext()
+	semaCtx.TypeResolver = resolver
+
+	return pb.Out.Init(post, types, &semaCtx, pb.EvalCtx, output)
 }
 
 // AddInputToDrain adds an input to drain when moving the processor to a
@@ -871,9 +884,9 @@ func (pb *ProcessorBase) ConsumerDone() {
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
 func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name string) *mon.BytesMonitor {
-	monitor := mon.MakeMonitorInheritWithLimit(name, 0 /* limit */, parent)
+	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent)
 	monitor.Start(ctx, parent, mon.BoundAccount{})
-	return &monitor
+	return monitor
 }
 
 // NewLimitedMonitor is a utility function used by processors to create a new
@@ -888,9 +901,9 @@ func NewLimitedMonitor(
 	if config.TestingKnobs.ForceDiskSpill {
 		limit = 1
 	}
-	limitedMon := mon.MakeMonitorInheritWithLimit(name, limit, parent)
+	limitedMon := mon.NewMonitorInheritWithLimit(name, limit, parent)
 	limitedMon.Start(ctx, parent, mon.BoundAccount{})
-	return &limitedMon
+	return limitedMon
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with
@@ -899,7 +912,7 @@ func NewLimitedMonitor(
 type LocalProcessor interface {
 	RowSourcedProcessor
 	// InitWithOutput initializes this processor.
-	InitWithOutput(post *execinfrapb.PostProcessSpec, output RowReceiver) error
+	InitWithOutput(flowCtx *FlowCtx, post *execinfrapb.PostProcessSpec, output RowReceiver) error
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.

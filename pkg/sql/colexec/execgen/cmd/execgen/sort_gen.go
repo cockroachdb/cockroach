@@ -34,25 +34,21 @@ var sortOverloads []*sortDirNullsOverload
 
 const sortOpsTmpl = "pkg/sql/colexec/sort_tmpl.go"
 
-func genSortOps(wr io.Writer) error {
-	d, err := ioutil.ReadFile(sortOpsTmpl)
-	if err != nil {
-		return err
-	}
+func genSortOps(inputFileContents string, wr io.Writer) error {
+	r := strings.NewReplacer(
+		"_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}",
+		"_TYPE_WIDTH", typeWidthReplacement,
+		"_GOTYPESLICE", "{{.GoTypeSliceName}}",
+		"_GOTYPE", "{{.GoType}}",
+		"_TYPE", "{{.VecMethod}}",
+		"TemplateType", "{{.VecMethod}}",
 
-	s := string(d)
-
-	s = strings.ReplaceAll(s, "_CANONICAL_TYPE_FAMILY", "{{.CanonicalTypeFamilyStr}}")
-	s = strings.ReplaceAll(s, "_TYPE_WIDTH", typeWidthReplacement)
-	s = strings.ReplaceAll(s, "_GOTYPESLICE", "{{.GoTypeSliceName}}")
-	s = strings.ReplaceAll(s, "_GOTYPE", "{{.GoType}}")
-	s = strings.ReplaceAll(s, "_TYPE", "{{.VecMethod}}")
-	s = strings.ReplaceAll(s, "TemplateType", "{{.VecMethod}}")
-
-	s = strings.ReplaceAll(s, "_DIR_ENUM", "{{.Dir}}")
-	s = strings.ReplaceAll(s, "_DIR", "{{$dir}}")
-	s = strings.ReplaceAll(s, "_ISNULL", "{{$nulls}}")
-	s = strings.ReplaceAll(s, "_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}")
+		"_DIR_ENUM", "{{.Dir}}",
+		"_DIR", "{{$dir}}",
+		"_ISNULL", "{{$nulls}}",
+		"_HANDLES_NULLS", "{{if $nulls}}WithNulls{{else}}{{end}}",
+	)
+	s := r.Replace(inputFileContents)
 
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 6)
 	s = assignLtRe.ReplaceAllString(s, makeTemplateFunctionCall("Assign", 6))
@@ -70,7 +66,7 @@ func genSortOps(wr io.Writer) error {
 
 const quickSortTmpl = "pkg/sql/colexec/quicksort_tmpl.go"
 
-func genQuickSortOps(wr io.Writer) error {
+func genQuickSortOps(inputFileContents string, wr io.Writer) error {
 	d, err := ioutil.ReadFile(quickSortTmpl)
 	if err != nil {
 		return err

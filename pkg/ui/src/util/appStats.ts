@@ -91,6 +91,7 @@ export interface ExecutionStatistics {
   statement: string;
   app: string;
   distSQL: boolean;
+  vec: boolean;
   opt: boolean;
   implicit_txn: boolean;
   failed: boolean;
@@ -103,6 +104,7 @@ export function flattenStatementStats(statementStats: CollectedStatementStatisti
     statement:    stmt.key.key_data.query,
     app:          stmt.key.key_data.app,
     distSQL:      stmt.key.key_data.distSQL,
+    vec:          stmt.key.key_data.vec,
     opt:          stmt.key.key_data.opt,
     implicit_txn: stmt.key.key_data.implicit_txn,
     failed:       stmt.key.key_data.failed,

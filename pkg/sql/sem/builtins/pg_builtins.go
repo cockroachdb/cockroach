@@ -16,16 +16,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -121,6 +120,10 @@ func initPGBuiltins() {
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		builtins[name] = builtin
 	}
+	// Make enum type i/o builtins.
+	for name, builtin := range makeTypeIOBuiltins("enum_", types.AnyEnum) {
+		builtins[name] = builtin
+	}
 
 	// Make crdb_internal.create_regfoo builtins.
 	for _, typ := range []*types.T{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
@@ -135,9 +138,6 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 	return builtinDefinition{
 		props: tree.FunctionProperties{
 			Category: categoryCompatibility,
-			// Ignore validity checks for typeio builtins.
-			// We don't implement these anyway, and they are very hard to special case.
-			IgnoreVolatilityCheck: true,
 		},
 		overloads: []tree.Overload{
 			{
@@ -148,6 +148,10 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefin
 				},
 				Info:       notUsableInfo,
 				Volatility: tree.VolatilityVolatile,
+				// Ignore validity checks for typeio builtins. We don't
+				// implement these anyway, and they are very hard to special
+				// case.
+				IgnoreVolatilityCheck: true,
 			},
 		},
 	}
@@ -353,18 +357,20 @@ func makePGPrivilegeInquiryDef(
 				var user string
 				if withUser {
 					var err error
-					user, err = getNameForArg(ctx, args[0], "pg_roles", "rolname")
+
+					arg := tree.UnwrapDatum(ctx, args[0])
+					user, err = getNameForArg(ctx, arg, "pg_roles", "rolname")
 					if err != nil {
 						return nil, err
 					}
 					if user == "" {
-						if _, ok := args[0].(*tree.DOid); ok {
+						if _, ok := arg.(*tree.DOid); ok {
 							// Postgres returns falseifn no matching user is
 							// found when given an OID.
 							return tree.DBoolFalse, nil
 						}
 						return nil, pgerror.Newf(pgcode.UndefinedObject,
-							"role %s does not exist", args[0])
+							"role %s does not exist", arg)
 					}
 
 					// Remove the first argument.
@@ -384,7 +390,7 @@ func makePGPrivilegeInquiryDef(
 	}
 	return builtinDefinition{
 		props: tree.FunctionProperties{
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		overloads: variants,
 	}
@@ -401,7 +407,7 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 	case *tree.DOid:
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
 	default:
-		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+		return "", errors.AssertionFailedf("unexpected arg type %T", t)
 	}
 	r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "get-name-for-arg", ctx.Txn, query, arg)
 	if err != nil || r == nil {
@@ -445,9 +451,8 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		tn := tree.MakeTableNameWithSchema(db, schema, table)
 		return &tn, nil
 	default:
-		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+		return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 	}
-	return nil, nil
 }
 
 // TODO(nvanbenschoten): give this a comment.
@@ -550,7 +555,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info:       notUsableInfo,
-			Volatility: tree.VolatilityVolatile,
+			Volatility: tree.VolatilityImmutable,
 		},
 	)
 }
@@ -641,7 +646,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// pg_get_constraintdef functions like SHOW CREATE CONSTRAINT would if we
 	// supported that statement.
-	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_constraintdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetConstraintDef(tree.ArgTypes{
 			{"constraint_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 		makePGGetConstraintDef(tree.ArgTypes{{"constraint_oid", types.Oid}}),
@@ -722,14 +727,14 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
-	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}}),
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}, {"column_no", types.Int}, {"pretty_bool", types.Bool}}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
-	"pg_get_viewdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_viewdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}}),
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	),
@@ -762,7 +767,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_get_userbyid": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		tree.Overload{
 			Types: tree.ArgTypes{
 				{"role_oid", types.Oid},
@@ -787,7 +792,7 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"pg_sequence_parameters": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
+	"pg_sequence_parameters": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
 		// pg_sequence_parameters is an undocumented Postgres builtin that returns
 		// information about a sequence given its OID. It's nevertheless used by
 		// at least one UI tool, so we provide an implementation for compatibility.
@@ -1079,11 +1084,7 @@ SELECT description
 	),
 
 	"pg_sleep": makeBuiltin(
-		tree.FunctionProperties{
-			// pg_sleep is marked as impure so it doesn't get executed during
-			// normalization.
-			Impure: true,
-		},
+		tree.FunctionProperties{},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1215,7 +1216,7 @@ SELECT description
 					// When colArg is an integer, it specifies the attribute number.
 					colPred = "attnum = $1"
 				default:
-					log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
+					return nil, errors.AssertionFailedf("unexpected arg type %T", t)
 				}
 
 				if r, err := ctx.InternalExecutor.QueryRow(
@@ -1713,7 +1714,7 @@ SELECT description
 	"current_setting": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}},
@@ -1739,8 +1740,7 @@ SELECT description
 	"set_config": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         categorySystemInfo,
-			DistsqlBlacklist: true,
-			Impure:           true,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"setting_name", types.String}, {"new_value", types.String}, {"is_local", types.Bool}},
@@ -1849,9 +1849,9 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 	switch catalogName {
 	case "pg_class":
-		return sqlbase.PgCatalogClassTableID, true
+		return catconstants.PgCatalogClassTableID, true
 	case "pg_database":
-		return sqlbase.PgCatalogDatabaseTableID, true
+		return catconstants.PgCatalogDatabaseTableID, true
 	default:
 		// We currently only support comments on pg_class objects
 		// (columns, tables) in this context.

@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // StableID permanently and uniquely identifies a catalog object (table, view,
@@ -113,6 +115,9 @@ type Catalog interface {
 	ResolveDataSourceByID(
 		ctx context.Context, flags Flags, id StableID,
 	) (_ DataSource, isAdding bool, _ error)
+
+	// ResolveTypeByOID is used to look up a user defined type by ID.
+	ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error)
 
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.

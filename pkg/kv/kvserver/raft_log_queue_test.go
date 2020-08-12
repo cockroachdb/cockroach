@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -38,6 +40,7 @@ import (
 
 func TestShouldTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
 		truncatableIndexes uint64
@@ -66,6 +69,7 @@ func TestShouldTruncate(t *testing.T) {
 
 func TestComputeTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	const targetSize = 1000
@@ -224,6 +228,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 // the log out from under it.
 func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// NB: most tests here have a truncateDecisions which starts with "should
 	// truncate: false", because these tests don't simulate enough data to be over
@@ -292,6 +297,7 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 
 func TestTruncateDecisionZeroValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var decision truncateDecision
 	assert.False(t, decision.ShouldTruncate())
@@ -302,6 +308,7 @@ func TestTruncateDecisionZeroValue(t *testing.T) {
 
 func TestTruncateDecisionNumSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	status := raft.Status{
 		Progress: map[uint64]tracker.Progress{
@@ -341,6 +348,7 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 
 func TestUpdateRaftStatusActivity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	type testCase struct {
 		prs        []tracker.Progress
@@ -409,8 +417,9 @@ func TestUpdateRaftStatusActivity(t *testing.T) {
 
 func TestNewTruncateDecisionMaxSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	cfg := TestStoreConfig(hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond))
 	const exp = 1881
@@ -439,11 +448,12 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 // removed.
 func TestNewTruncateDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/38584")
+	skip.WithIssue(t, 38584)
 
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	store, _ := createTestStore(t,
 		testStoreOpts{
 			// This test was written before test stores could start with more than one
@@ -557,6 +567,7 @@ func TestNewTruncateDecision(t *testing.T) {
 // log even when replica scanning is disabled.
 func TestProactiveRaftLogTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -624,6 +635,7 @@ func TestProactiveRaftLogTruncate(t *testing.T) {
 
 func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	r := &Replica{}
@@ -690,11 +702,12 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 // inaccessible via Entries()).
 func TestTruncateLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tc := testContext{}
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	// Populate the log with 10 entries. Save the LastIndex after each write.
@@ -795,6 +808,7 @@ func TestTruncateLog(t *testing.T) {
 
 func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var rlq *raftLogQueue
@@ -841,6 +855,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 // truncation.
 func TestTruncateLogRecompute(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
@@ -860,7 +875,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.DisableRaftLogQueue = true
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	key := roachpb.Key("a")

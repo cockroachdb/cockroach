@@ -17,15 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
-
-func strToValue(s string) *roachpb.Value {
-	v := roachpb.MakeValueFromBytes([]byte(s))
-	return &v
-}
 
 func setup(t *testing.T) (serverutils.TestServerInterface, *kv.DB) {
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -74,10 +70,11 @@ func checkLen(t *testing.T, expected, count int) {
 
 func TestDB_Get(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
-	result, err := db.Get(context.TODO(), "aa")
+	result, err := db.Get(context.Background(), "aa")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,11 +83,12 @@ func TestDB_Get(t *testing.T) {
 
 func TestDB_Put(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
-	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
+	if err := db.Put(context.Background(), "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -102,14 +100,15 @@ func TestDB_Put(t *testing.T) {
 
 func TestDB_CPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	if err := db.Put(ctx, "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CPut(ctx, "aa", "2", strToValue("1")); err != nil {
+	if err := db.CPut(ctx, "aa", "2", kvclientutils.StrToCPutExistingValue("1")); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")
@@ -118,7 +117,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut(ctx, "aa", "3", strToValue("1")); err == nil {
+	if err = db.CPut(ctx, "aa", "3", kvclientutils.StrToCPutExistingValue("1")); err == nil {
 		t.Fatal("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "aa")
@@ -127,7 +126,7 @@ func TestDB_CPut(t *testing.T) {
 	}
 	checkResult(t, []byte("2"), result.ValueBytes())
 
-	if err = db.CPut(ctx, "bb", "4", strToValue("1")); err == nil {
+	if err = db.CPut(ctx, "bb", "4", kvclientutils.StrToCPutExistingValue("1")); err == nil {
 		t.Fatal("expected error from conditional put")
 	}
 	result, err = db.Get(ctx, "bb")
@@ -148,9 +147,10 @@ func TestDB_CPut(t *testing.T) {
 
 func TestDB_InitPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
 		t.Fatal(err)
@@ -179,9 +179,10 @@ func TestDB_InitPut(t *testing.T) {
 
 func TestDB_Inc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
 	if _, err := db.Inc(ctx, "aa", 100); err != nil {
 		t.Fatal(err)
@@ -195,13 +196,14 @@ func TestDB_Inc(t *testing.T) {
 
 func TestBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Get("aa")
 	b.Put("bb", "2")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 
@@ -214,17 +216,18 @@ func TestBatch(t *testing.T) {
 
 func TestDB_Scan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Scan(context.TODO(), "a", "b", 100)
+	rows, err := db.Scan(context.Background(), "a", "b", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,17 +242,18 @@ func TestDB_Scan(t *testing.T) {
 
 func TestDB_ScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.ScanForUpdate(context.TODO(), "a", "b", 100)
+	rows, err := db.ScanForUpdate(context.Background(), "a", "b", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,17 +268,18 @@ func TestDB_ScanForUpdate(t *testing.T) {
 
 func TestDB_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.ReverseScan(context.TODO(), "ab", "c", 100)
+	rows, err := db.ReverseScan(context.Background(), "ab", "c", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,17 +294,18 @@ func TestDB_ReverseScan(t *testing.T) {
 
 func TestDB_ReverseScanForUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.ReverseScanForUpdate(context.TODO(), "ab", "c", 100)
+	rows, err := db.ReverseScanForUpdate(context.Background(), "ab", "c", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,14 +320,15 @@ func TestDB_ReverseScanForUpdate(t *testing.T) {
 
 func TestDB_TxnIterate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("bb", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 
@@ -332,10 +339,10 @@ func TestDB_TxnIterate(t *testing.T) {
 	var rows []kv.KeyValue = nil
 	var p int
 	for _, c := range tc {
-		if err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+		if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			p = 0
 			rows = make([]kv.KeyValue, 0)
-			return txn.Iterate(context.TODO(), "a", "b", c.pageSize,
+			return txn.Iterate(context.Background(), "a", "b", c.pageSize,
 				func(rs []kv.KeyValue) error {
 					p++
 					rows = append(rows, rs...)
@@ -359,20 +366,21 @@ func TestDB_TxnIterate(t *testing.T) {
 
 func TestDB_Del(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
 	b.Put("ab", "2")
 	b.Put("ac", "3")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.TODO(), "ab"); err != nil {
+	if err := db.Del(context.Background(), "ab"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Scan(context.TODO(), "a", "b", 100)
+	rows, err := db.Scan(context.Background(), "a", "b", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,10 +394,11 @@ func TestDB_Del(t *testing.T) {
 
 func TestTxn_Commit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db := setup(t)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *kv.Txn) error {
+	err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
 		b.Put("aa", "1")
 		b.Put("ab", "2")
@@ -402,7 +411,7 @@ func TestTxn_Commit(t *testing.T) {
 	b := &kv.Batch{}
 	b.Get("aa")
 	b.Get("ab")
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 	expected := map[string][]byte{
@@ -414,11 +423,12 @@ func TestTxn_Commit(t *testing.T) {
 
 func TestDB_Put_insecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
-	defer s.Stopper().Stop(context.TODO())
-	ctx := context.TODO()
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
 
-	if err := db.Put(context.TODO(), "aa", "1"); err != nil {
+	if err := db.Put(context.Background(), "aa", "1"); err != nil {
 		t.Fatal(err)
 	}
 	result, err := db.Get(ctx, "aa")

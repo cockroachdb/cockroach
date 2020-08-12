@@ -15,7 +15,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -49,6 +49,9 @@ func marshalValue(v interface{}) (roachpb.Value, error) {
 	// Handle a few common types via a type switch.
 	switch t := v.(type) {
 	case *roachpb.Value:
+		if err := t.VerifyHeader(); err != nil {
+			panic(err)
+		}
 		return *t, nil
 
 	case nil:

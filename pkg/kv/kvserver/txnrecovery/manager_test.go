@@ -34,7 +34,7 @@ func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return (*s).Send(ctx, ba)
-	}), clock)
+	}), clock, stopper)
 	return NewManager(ac, clock, db, stopper), clock, stopper
 }
 

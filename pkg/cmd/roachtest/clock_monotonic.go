@@ -48,7 +48,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	// Wait for Cockroach to process the above cluster setting
 	time.Sleep(10 * time.Second)
 
-	if !isAlive(db) {
+	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 
@@ -59,7 +59,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	// Recover from the injected clock offset after validation completes.
 	defer func() {
-		if !isAlive(db) {
+		if !isAlive(db, c.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
@@ -70,7 +70,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		offsetInjector.recover(ctx, c.spec.NodeCount)
 
 		c.Start(ctx, t, c.Node(c.spec.NodeCount))
-		if !isAlive(db) {
+		if !isAlive(db, c.l) {
 			t.Fatal("Node unexpectedly crashed")
 		}
 	}()
@@ -83,7 +83,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	t.Status("starting cockroach post offset")
 	c.Start(ctx, t, c.Node(c.spec.NodeCount))
 
-	if !isAlive(db) {
+	if !isAlive(db, c.l) {
 		t.Fatal("Node unexpectedly crashed")
 	}
 

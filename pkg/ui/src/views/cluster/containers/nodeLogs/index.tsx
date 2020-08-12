@@ -16,7 +16,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import * as protos from "src/js/protos";
 import { INodeStatus } from "src/util/proto";
-import { nodeIDAttr, REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
+import { nodeIDAttr } from "src/util/constants";
 import { LogEntriesResponseMessage } from "src/util/api";
 import { LongToMoment } from "src/util/convert";
 import { SortableTable } from "src/views/shared/components/sortabletable";
@@ -61,7 +61,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         title: "Message",
         cell: (index: number) => (
           <pre className="sort-table__unbounded-column logs-table__message">
-              { logEntries[index].message }
+              { (logEntries[index].tags ? "[" + logEntries[index].tags + "] " : "") + logEntries[index].message }
             </pre>
         ),
       },
@@ -87,23 +87,6 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
     const title = this.props.currentNode
       ? `Logs | ${getDisplayName(this.props.currentNode)} | Nodes`
       : `Logs | Node ${nodeId} | Nodes`;
-
-    // TODO(couchand): This is a really myopic way to check for this particular
-    // case, but making major changes to the CachedDataReducer or util.api seems
-    // fraught at this point.  We should revisit this soon.
-    if (this.props.logs.lastError && this.props.logs.lastError.message === "Forbidden") {
-      return (
-        <div>
-          <Helmet title={ title } />
-          <div className="section section--heading">
-            <h2 className="base-heading">Logs Node { nodeId } / { nodeAddress }</h2>
-          </div>
-          <section className="section">
-            { REMOTE_DEBUGGING_ERROR_TEXT }
-          </section>
-        </div>
-      );
-    }
 
     return (
       <div>

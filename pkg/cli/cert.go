@@ -29,12 +29,22 @@ const defaultKeySize = 2048
 const defaultCALifetime = 10 * 366 * 24 * time.Hour  // ten years
 const defaultCertLifetime = 5 * 366 * 24 * time.Hour // five years
 
+// Options settable via command-line flags. See below for defaults.
 var keySize int
 var caCertificateLifetime time.Duration
 var certificateLifetime time.Duration
 var allowCAKeyReuse bool
 var overwriteFiles bool
 var generatePKCS8Key bool
+
+func initPreFlagsCertDefaults() {
+	keySize = defaultKeySize
+	caCertificateLifetime = defaultCALifetime
+	certificateLifetime = defaultCertLifetime
+	allowCAKeyReuse = false
+	overwriteFiles = false
+	generatePKCS8Key = false
+}
 
 // A createCACert command generates a CA certificate and stores it
 // in the cert directory.
@@ -173,7 +183,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 	var err error
 	var username string
 	// We intentionally allow the `node` user to have a cert.
-	if username, err = sql.NormalizeAndValidateUsernameNoBlacklist(args[0]); err != nil {
+	if username, err = sql.NormalizeAndValidateUsernameNoBlocklist(args[0]); err != nil {
 		return errors.Wrap(err, "failed to generate client certificate and key")
 	}
 

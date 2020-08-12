@@ -12,10 +12,16 @@ package sql
 
 import (
 	"context"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // pgExtension is virtual schema which contains virtual tables and/or views
@@ -24,12 +30,76 @@ import (
 // our own defined virtual table / schema.
 var pgExtension = virtualSchema{
 	name: sessiondata.PgExtensionSchemaName,
-	tableDefs: map[sqlbase.ID]virtualSchemaDef{
-		sqlbase.PgExtensionGeographyColumnsTableID: pgExtensionGeographyColumnsTable,
-		sqlbase.PgExtensionGeometryColumnsTableID:  pgExtensionGeometryColumnsTable,
-		sqlbase.PgExtensionSpatialRefSysTableID:    pgExtensionSpatialRefSysTable,
+	tableDefs: map[descpb.ID]virtualSchemaDef{
+		catconstants.PgExtensionGeographyColumnsTableID: pgExtensionGeographyColumnsTable,
+		catconstants.PgExtensionGeometryColumnsTableID:  pgExtensionGeometryColumnsTable,
+		catconstants.PgExtensionSpatialRefSysTableID:    pgExtensionSpatialRefSysTable,
 	},
 	validWithNoDatabaseContext: false,
+}
+
+func postgisColumnsTablePopulator(
+	matchingFamily types.Family,
+) func(context.Context, *planner, *sqlbase.ImmutableDatabaseDescriptor, func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(
+			ctx,
+			p,
+			dbContext,
+			hideVirtual,
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table *sqlbase.ImmutableTableDescriptor) error {
+				if !table.IsPhysicalTable() {
+					return nil
+				}
+				if p.CheckAnyPrivilege(ctx, table) != nil {
+					return nil
+				}
+				for _, colDesc := range table.Columns {
+					if colDesc.Type.Family() != matchingFamily {
+						continue
+					}
+					m, err := colDesc.Type.GeoMetadata()
+					if err != nil {
+						return err
+					}
+
+					var datumNDims tree.Datum
+					switch m.ShapeType {
+					case geopb.ShapeType_Point, geopb.ShapeType_LineString, geopb.ShapeType_Polygon,
+						geopb.ShapeType_MultiPoint, geopb.ShapeType_MultiLineString, geopb.ShapeType_MultiPolygon,
+						geopb.ShapeType_GeometryCollection:
+						datumNDims = tree.NewDInt(2)
+					case geopb.ShapeType_Geometry, geopb.ShapeType_Unset:
+						// For geometry_columns, the query in PostGIS COALESCES the value to 2.
+						// Otherwise, the value is NULL.
+						if matchingFamily == types.GeometryFamily {
+							datumNDims = tree.NewDInt(2)
+						} else {
+							datumNDims = tree.DNull
+						}
+					}
+
+					shapeName := m.ShapeType.String()
+					if m.ShapeType == geopb.ShapeType_Unset {
+						shapeName = geopb.ShapeType_Geometry.String()
+					}
+
+					if err := addRow(
+						tree.NewDString(db.GetName()),
+						tree.NewDString(scName),
+						tree.NewDString(table.GetName()),
+						tree.NewDString(colDesc.Name),
+						datumNDims,
+						tree.NewDInt(tree.DInt(m.SRID)),
+						tree.NewDString(strings.ToUpper(shapeName)),
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		)
+	}
 }
 
 var pgExtensionGeographyColumnsTable = virtualSchemaTable{
@@ -44,9 +114,7 @@ CREATE TABLE pg_extension.geography_columns (
 	srid integer,
 	type text
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
-	},
+	populate: postgisColumnsTablePopulator(types.GeographyFamily),
 }
 
 var pgExtensionGeometryColumnsTable = virtualSchemaTable{
@@ -61,9 +129,7 @@ CREATE TABLE pg_extension.geometry_columns (
 	srid integer,
 	type text
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
-	},
+	populate: postgisColumnsTablePopulator(types.GeometryFamily),
 }
 
 var pgExtensionSpatialRefSysTable = virtualSchemaTable{
@@ -76,7 +142,18 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	srtext varchar(2048),
 	proj4text varchar(2048)
 )`,
-	generator: func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error) {
-		return nil, func() {}, errors.Newf("not yet implemented")
+	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for _, projection := range geoprojbase.Projections {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(projection.SRID)),
+				tree.NewDString(projection.AuthName),
+				tree.NewDInt(tree.DInt(projection.AuthSRID)),
+				tree.NewDString(projection.SRText),
+				tree.NewDString(projection.Proj4Text.String()),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }

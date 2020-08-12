@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -158,7 +159,7 @@ func retrieveUserAndPassword(
 					// representation of a TimestampTZ which has the same underlying
 					// representation in the table as a Timestamp (UTC time).
 					timeCtx := tree.NewParseTimeContext(timeutil.Now())
-					validUntil, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
+					validUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 					if err != nil {
 						return errors.Wrap(err,
 							"error trying to parse timestamp while retrieving password valid until value")
@@ -208,12 +209,12 @@ var roleMembersTableName = tree.MakeTableName("system", "role_members")
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, ResolveAnyDescType)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &roleMembersTableName, true, tree.ResolveAnyTableKind)
 	if err != nil {
 		return err
 	}
 
 	return p.writeSchemaChange(
-		ctx, tableDesc, sqlbase.InvalidMutationID, "updating version for role membership table",
+		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
 	)
 }

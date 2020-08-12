@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -116,21 +117,22 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
+func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
 	index := "primary"
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name
 	}
-	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
+	return fmt.Sprintf("%s@%s", desc.Name, index)
 }
 
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
-	details := indexDetails(tr.IndexIdx, &tr.Table)
+	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
 
 	if len(tr.Spans) > 0 {
+		tbl := sqlbase.NewImmutableTableDescriptor(tr.Table)
 		// only show the first span
-		idx, _, _ := tr.Table.FindIndexByIndexIdx(int(tr.IndexIdx))
+		idx, _, _ := tbl.FindIndexByIndexIdx(int(tr.IndexIdx))
 		valDirs := sqlbase.IndexKeyValDirs(idx)
 
 		var spanStr strings.Builder
@@ -153,15 +155,11 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
-	index := "primary"
-	if jr.IndexIdx > 0 {
-		index = jr.Table.Indexes[jr.IndexIdx-1].Name
-	}
 	details := make([]string, 0, 4)
-	if jr.Type != sqlbase.InnerJoin {
+	if jr.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(jr.Type))
 	}
-	details = append(details, fmt.Sprintf("%s@%s", index, jr.Table.Name))
+	details = append(details, indexDetail(&jr.Table, jr.IndexIdx))
 	if jr.LookupColumns != nil {
 		details = append(details, fmt.Sprintf("Lookup join on: %s", colListStr(jr.LookupColumns)))
 	}
@@ -171,9 +169,9 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
-func joinTypeDetail(joinType sqlbase.JoinType) string {
+func joinTypeDetail(joinType descpb.JoinType) string {
 	typeStr := strings.Replace(joinType.String(), "_", " ", -1)
-	if joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin {
+	if joinType == descpb.IntersectAllJoin || joinType == descpb.ExceptAllJoin {
 		return fmt.Sprintf("Type: %s", typeStr)
 	}
 	return fmt.Sprintf("Type: %s JOIN", typeStr)
@@ -188,7 +186,7 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 
 	details := make([]string, 0, 4)
 
-	if hj.Type != sqlbase.InnerJoin {
+	if hj.Type != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(hj.Type))
 	}
 	if len(hj.LeftEqColumns) > 0 {
@@ -207,12 +205,29 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return name, details
 }
 
+// summary implements the diagramCellType interface.
+func (ifs *InvertedFiltererSpec) summary() (string, []string) {
+	name := "InvertedFilterer"
+	var b strings.Builder
+	for i := range ifs.InvertedExpr.SpansToRead {
+		if i > 0 {
+			fmt.Fprintf(&b, " and %d others", len(ifs.InvertedExpr.SpansToRead)-1)
+			break
+		} else {
+			fmt.Fprintf(&b, "%s", ifs.InvertedExpr.SpansToRead[i].String())
+		}
+	}
+	details := append([]string(nil), fmt.Sprintf(
+		"InvertedExpr on @%d: spans %s", ifs.InvertedColIdx, b.String()))
+	return name, details
+}
+
 func orderedJoinDetails(
-	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
+	joinType descpb.JoinType, left, right Ordering, onExpr Expression,
 ) []string {
 	details := make([]string, 0, 3)
 
-	if joinType != sqlbase.InnerJoin {
+	if joinType != descpb.InnerJoin {
 		details = append(details, joinTypeDetail(joinType))
 	}
 	details = append(details, fmt.Sprintf(
@@ -251,7 +266,7 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 		}
 		details = append(details, tableLabel)
 		// table@index name
-		details = append(details, indexDetails(table.IndexIdx, &table.Desc)...)
+		details = append(details, indexDetail(&table.Desc, table.IndexIdx))
 		// Post process (filters, projections, renderExprs, limits/offsets)
 		details = append(details, table.Post.summaryWithPrefix(fmt.Sprintf("%s ", tableLabel))...)
 	}
@@ -269,13 +284,27 @@ func (zj *ZigzagJoinerSpec) summary() (string, []string) {
 	details := make([]string, 0, len(tables)+1)
 	for i, table := range tables {
 		details = append(details, fmt.Sprintf(
-			"Side %d: %s", i, indexDetails(zj.IndexOrdinals[i], &table)[0],
+			"Side %d: %s", i, indexDetail(&table, zj.IndexOrdinals[i]),
 		))
 	}
 	if !zj.OnExpr.Empty() {
 		details = append(details, fmt.Sprintf("ON %s", zj.OnExpr))
 	}
 	return name, details
+}
+
+// summary implements the diagramCellType interface.
+func (ij *InvertedJoinerSpec) summary() (string, []string) {
+	details := make([]string, 0, 4)
+	if ij.Type != descpb.InnerJoin {
+		details = append(details, joinTypeDetail(ij.Type))
+	}
+	details = append(details, indexDetail(&ij.Table, ij.IndexIdx))
+	details = append(details, fmt.Sprintf("InvertedExpr %s", ij.InvertedExpr))
+	if !ij.OnExpr.Empty() {
+		details = append(details, fmt.Sprintf("ON %s", ij.OnExpr))
+	}
+	return "InvertedJoiner", details
 }
 
 // summary implements the diagramCellType interface.

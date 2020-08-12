@@ -8,20 +8,20 @@ INSERT 1
 dump t f --dump-mode=both
 ----
 ----
-CREATE TABLE f (
+CREATE TABLE public.f (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 ----
 ----
 
 dump t f --dump-mode=schema
 ----
-CREATE TABLE f (
+CREATE TABLE public.f (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
@@ -32,7 +32,7 @@ noroundtrip
 ----
 ----
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 ----
 ----

@@ -833,7 +833,17 @@ define Variance {
 }
 
 [Scalar, Aggregate]
+define VarPop {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define StdDev {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define StdDevPop {
     Input ScalarExpr
 }
 
@@ -850,6 +860,18 @@ define JsonAgg {
 [Scalar, Aggregate]
 define JsonbAgg {
     Input ScalarExpr
+}
+
+[Scalar, Aggregate]
+define JsonObjectAgg {
+    Key ScalarExpr
+    Value ScalarExpr
+}
+
+[Scalar, Aggregate]
+define JsonbObjectAgg {
+    Key ScalarExpr
+    Value ScalarExpr
 }
 
 [Scalar, Aggregate]

@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,10 +66,11 @@ func trivialQuery(pgURL url.URL) error {
 // new connections and allows sessions with ongoing transactions to finish.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
@@ -135,9 +136,10 @@ func TestPGWireDrainClient(t *testing.T) {
 // canceled when they go on for too long.
 func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	host, port, err := net.SplitHostPort(s.ServingSQLAddr())
 	if err != nil {
@@ -237,9 +239,10 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 // pq.Error.
 func TestPGUnwrapError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -264,9 +267,10 @@ func TestPGUnwrapError(t *testing.T) {
 
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -315,9 +319,10 @@ func TestPGPrepareFail(t *testing.T) {
 // transaction.
 func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -427,6 +432,7 @@ func (p preparedQueryTest) PreparedError(err string) preparedQueryTest {
 
 func TestPGPreparedQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var baseTest preparedQueryTest
 
 	queryTests := []struct {
@@ -522,9 +528,6 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SHOW DATABASE", []preparedQueryTest{
 			baseTest.Results("defaultdb"),
 		}},
-		{"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1", []preparedQueryTest{
-			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
-		}},
 		{"SHOW COLUMNS FROM system.users", []preparedQueryTest{
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary}", false).
@@ -535,11 +538,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", sqlbase.AdminRole, "DELETE").
-				Results("system", "public", "users", sqlbase.AdminRole, "GRANT").
-				Results("system", "public", "users", sqlbase.AdminRole, "INSERT").
-				Results("system", "public", "users", sqlbase.AdminRole, "SELECT").
-				Results("system", "public", "users", sqlbase.AdminRole, "UPDATE").
+			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE").
+				Results("system", "public", "users", security.AdminRole, "GRANT").
+				Results("system", "public", "users", security.AdminRole, "INSERT").
+				Results("system", "public", "users", security.AdminRole, "SELECT").
+				Results("system", "public", "users", security.AdminRole, "UPDATE").
 				Results("system", "public", "users", security.RootUser, "DELETE").
 				Results("system", "public", "users", security.RootUser, "GRANT").
 				Results("system", "public", "users", security.RootUser, "INSERT").
@@ -550,7 +553,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table").Others(26),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}).Others(27),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal").Others(4),
@@ -727,7 +730,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		// #14238
 		{"EXPLAIN SELECT 1", []preparedQueryTest{
 			baseTest.SetArgs().
-				Results("", "distributed", "false").
+				Results("", "distribution", "local").
 				Results("", "vectorized", "false").
 				Results("values", "", "").
 				Results("", "size", "1 column, 1 row"),
@@ -814,7 +817,7 @@ func TestPGPreparedQuery(t *testing.T) {
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -986,8 +989,9 @@ func (p preparedExecTest) RowsAffectedErr(err string) preparedExecTest {
 // Verify that bound dates are evaluated using session timezone.
 func TestPGPrepareDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec("CREATE TABLE test (t TIMESTAMPTZ)"); err != nil {
 		t.Fatal(err)
@@ -1024,6 +1028,7 @@ func TestPGPrepareDate(t *testing.T) {
 
 func TestPGPreparedExec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	var baseTest preparedExecTest
 	execTests := []struct {
 		query string
@@ -1230,7 +1235,7 @@ func TestPGPreparedExec(t *testing.T) {
 	}
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	runTests := func(
 		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
@@ -1290,8 +1295,9 @@ func TestPGPreparedExec(t *testing.T) {
 // was given in the connection string.
 func TestPGPrepareNameQual(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -1341,8 +1347,9 @@ func TestPGPrepareNameQual(t *testing.T) {
 // of a prepared query.
 func TestPGPrepareInvalidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -1406,8 +1413,9 @@ func TestPGPrepareInvalidate(t *testing.T) {
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
@@ -1450,8 +1458,9 @@ func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 // the methods where it depends on their values (Begin, Commit, RowsAffected for INSERTs).
 func TestPGCommandTags(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -1570,9 +1579,10 @@ func checkSQLNetworkMetrics(
 
 func TestSQLNetworkMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// Setup pgwire client.
 	pgURL, cleanupFn := sqlutils.PGUrl(
@@ -1639,9 +1649,10 @@ func TestSQLNetworkMetrics(t *testing.T) {
 
 func TestPGWireOverUnixSocket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	if runtime.GOOS == "windows" {
-		t.Skip("unix sockets not support on windows")
+		skip.IgnoreLint(t, "unix sockets not support on windows")
 	}
 
 	// We need a temp directory in which we'll create the unix socket.
@@ -1666,7 +1677,7 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 		SocketFile: socketFile,
 	}
 	s, _, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	// We can't pass socket paths as url.Host to libpq, use ?host=/... instead.
 	options := url.Values{
@@ -1685,8 +1696,9 @@ func TestPGWireOverUnixSocket(t *testing.T) {
 
 func TestPGWireResultChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()
@@ -1748,11 +1760,12 @@ func TestPGWireResultChange(t *testing.T) {
 
 func TestSessionParameters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
 	host, ports, _ := net.SplitHostPort(s.ServingSQLAddr())
@@ -1858,7 +1871,7 @@ func TestSessionParameters(t *testing.T) {
 type pgxTestLogger struct{}
 
 func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Infof(context.TODO(), "pgx log [%s] %s - %s", level, msg, data)
+	log.Infof(context.Background(), "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -1866,12 +1879,13 @@ var _ pgx.Logger = pgxTestLogger{}
 
 func TestCancelRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		params := base.TestServerArgs{Insecure: insecure}
 		s, _, _ := serverutils.StartServer(t, params)
 
-		ctx := context.TODO()
+		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
 
 		var d net.Dialer
@@ -1906,9 +1920,10 @@ func TestCancelRequest(t *testing.T) {
 
 func TestFailPrepareFailsTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 
 	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanupFn()

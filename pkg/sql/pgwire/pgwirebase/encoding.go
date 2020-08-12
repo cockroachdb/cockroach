@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -276,31 +277,31 @@ func DecodeOidDatum(
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			d, err := tree.ParseDDate(ctx, string(b))
+			d, _, err := tree.ParseDDate(ctx, string(b))
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as date", b)
 			}
 			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(nil, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTime(nil, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as time", b)
 			}
 			return d, nil
 		case oid.T_timetz:
-			d, err := tree.ParseDTimeTZ(ctx, string(b), time.Microsecond)
+			d, _, err := tree.ParseDTimeTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, pgerror.Newf(pgcode.Syntax, "could not parse string %q as timetz", b)
 			}
@@ -671,11 +672,18 @@ func DecodeOidDatum(
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar:
+	case oid.T_text, oid.T_varchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
 		return tree.NewDString(string(b)), nil
+	case oid.T_bpchar:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		// Trim the trailing spaces
+		sv := strings.TrimRight(string(b), " ")
+		return tree.NewDString(sv), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err

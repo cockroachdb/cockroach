@@ -18,9 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -62,11 +63,11 @@ import (
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version execinfrapb.DistSQLVersion = 29
+const Version execinfrapb.DistSQLVersion = 31
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 29
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 30
 
 // SettingWorkMemBytes is a cluster setting that determines the maximum amount
 // of RAM that a processor can use.
@@ -125,7 +126,7 @@ type ServerConfig struct {
 	VecFDSemaphore semaphore.Semaphore
 
 	// BulkAdder is used by some processors to bulk-ingest data as SSTs.
-	BulkAdder storagebase.BulkAdderFactory
+	BulkAdder kvserverbase.BulkAdderFactory
 
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
@@ -143,7 +144,7 @@ type ServerConfig struct {
 
 	// A handle to gossip used to broadcast the node's DistSQL version and
 	// draining state.
-	Gossip gossip.DeprecatedGossip
+	Gossip gossip.OptionalGossip
 
 	NodeDialer *nodedialer.Dialer
 
@@ -159,6 +160,12 @@ type ServerConfig struct {
 	// subsystem. It is queried during the GC process and in the handling of
 	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampProvider protectedts.Provider
+
+	// RangeCache is used by processors that were supposed to have been planned on
+	// the leaseholders of the data ranges that they're consuming. These
+	// processors query the cache to see if they should communicate updates to the
+	// gateway.
+	RangeCache *kvcoord.RangeDescriptorCache
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
@@ -211,8 +218,15 @@ type TestingKnobs struct {
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
 
+	// CheckVectorizedFlowIsClosedCorrectly checks that all components in a flow
+	// were closed explicitly in flow.Cleanup.
+	CheckVectorizedFlowIsClosedCorrectly bool
+
 	// Changefeed contains testing knobs specific to the changefeed system.
 	Changefeed base.ModuleTestingKnobs
+
+	// Flowinfra contains testing knobs specific to the flowinfra system
+	Flowinfra base.ModuleTestingKnobs
 
 	// EnableVectorizedInvariantsChecker, if enabled, will allow for planning
 	// the invariant checkers between all columnar operators.
@@ -220,6 +234,9 @@ type TestingKnobs struct {
 
 	// Forces bulk adder flush every time a KV batch is processed.
 	BulkAdderFlushesEveryBatch bool
+
+	// JobsTestingKnobs is jobs infra specific testing knobs.
+	JobsTestingKnobs base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

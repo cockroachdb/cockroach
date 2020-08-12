@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -57,8 +58,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -78,10 +81,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	raven "github.com/getsentry/raven-go"
+	"github.com/cockroachdb/sentry-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -139,7 +143,9 @@ type Server struct {
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc         *grpcServer
+	grpc *grpcServer
+	// The optional tenant gRPC used by SQL tenants.
+	tenantGRPC   *grpcServer
 	gossip       *gossip.Gossip
 	nodeDialer   *nodedialer.Dialer
 	nodeLiveness *kvserver.NodeLiveness
@@ -168,10 +174,61 @@ type Server struct {
 
 	sqlServer *sqlServer
 
+	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
+	externalStorageBuilder *externalStorageBuilder
+
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 
 	startTime time.Time
 	engines   Engines
+}
+
+// externalStorageBuilder is a wrapper around the ExternalStorage factory
+// methods. It allows us to separate the creation and initialization of the
+// builder between NewServer() and Start() respectively.
+// TODO(adityamaru): Consider moving this to pkg/storage/cloudimpl at a future
+// stage of the ongoing refactor.
+type externalStorageBuilder struct {
+	conf              base.ExternalIODirConfig
+	settings          *cluster.Settings
+	blobClientFactory blobs.BlobClientFactory
+	initCalled        bool
+	ie                *sql.InternalExecutor
+	db                *kv.DB
+}
+
+func (e *externalStorageBuilder) init(
+	conf base.ExternalIODirConfig,
+	settings *cluster.Settings,
+	blobClientFactory blobs.BlobClientFactory,
+	ie *sql.InternalExecutor,
+	db *kv.DB,
+) {
+	e.conf = conf
+	e.settings = settings
+	e.blobClientFactory = blobClientFactory
+	e.initCalled = true
+	e.ie = ie
+	e.db = db
+}
+
+func (e *externalStorageBuilder) makeExternalStorage(
+	ctx context.Context, dest roachpb.ExternalStorage,
+) (cloud.ExternalStorage, error) {
+	if !e.initCalled {
+		return nil, errors.New("cannot create external storage before init")
+	}
+	return cloudimpl.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
+		e.db)
+}
+
+func (e *externalStorageBuilder) makeExternalStorageFromURI(
+	ctx context.Context, uri string, user string,
+) (cloud.ExternalStorage, error) {
+	if !e.initCalled {
+		return nil, errors.New("cannot create external storage before init")
+	}
+	return cloudimpl.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
 }
 
 // NewServer creates a Server from a server.Config.
@@ -202,27 +259,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper.AddCloser(tr)
 	}
 
-	// Attempt to load TLS configs right away, failures are permanent.
-	if !cfg.Insecure {
-		// TODO(peter): Call methods on CertificateManager directly. Need to call
-		// base.wrapError or similar on the resulting error.
-		if _, err := cfg.GetServerTLSConfig(); err != nil {
-			return nil, err
-		}
-		if _, err := cfg.GetUIServerTLSConfig(); err != nil {
-			return nil, err
-		}
-		if _, err := cfg.GetClientTLSConfig(); err != nil {
-			return nil, err
-		}
-		cm, err := cfg.GetCertificateManager()
-		if err != nil {
-			return nil, err
-		}
-		cm.RegisterSignalHandler(stopper)
-		registry.AddMetricStruct(cm.Metrics())
-	}
-
 	// Add a dynamic log tag value for the node ID.
 	//
 	// We need to pass an ambient context to the various server components, but we
@@ -242,24 +278,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	ctx := cfg.AmbientCtx.AnnotateCtx(context.Background())
 
-	// Check the compatibility between the configured addresses and that
-	// provided in certificates. This also logs the certificate
-	// addresses in all cases to aid troubleshooting.
-	// This must be called after the certificate manager was initialized
-	// and after ValidateAddrs().
-	cfg.CheckCertificateAddrs(ctx)
-
-	var rpcContext *rpc.Context
+	rpcCtxOpts := rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		AmbientCtx: cfg.AmbientCtx,
+		Config:     cfg.Config,
+		Clock:      clock,
+		Stopper:    stopper,
+		Settings:   cfg.Settings,
+	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
-		rpcContext = rpc.NewContextWithTestingKnobs(
-			cfg.AmbientCtx, cfg.Config, clock, stopper, cfg.Settings,
-			serverKnobs.ContextTestingKnobs,
-		)
-	} else {
-		rpcContext = rpc.NewContext(cfg.AmbientCtx, cfg.Config, clock, stopper,
-			cfg.Settings)
+		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
 	}
+	rpcContext := rpc.NewContext(rpcCtxOpts)
+
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
 			log.Fatalf(ctx, "%v", err)
@@ -267,14 +299,47 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	registry.AddMetricStruct(rpcContext.Metrics())
 
-	grpcServer := newGRPCServer(rpcContext)
+	// Attempt to load TLS configs right away, failures are permanent.
+	if !cfg.Insecure {
+		// TODO(peter): Call methods on CertificateManager directly. Need to call
+		// base.wrapError or similar on the resulting error.
+		if _, err := rpcContext.GetServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := rpcContext.GetUIServerTLSConfig(); err != nil {
+			return nil, err
+		}
+		if _, err := rpcContext.GetClientTLSConfig(); err != nil {
+			return nil, err
+		}
+		cm, err := rpcContext.GetCertificateManager()
+		if err != nil {
+			return nil, err
+		}
+		cm.RegisterSignalHandler(stopper)
+		registry.AddMetricStruct(cm.Metrics())
+	}
+
+	// Check the compatibility between the configured addresses and that
+	// provided in certificates. This also logs the certificate
+	// addresses in all cases to aid troubleshooting.
+	// This must be called after the certificate manager was initialized
+	// and after ValidateAddrs().
+	rpcContext.CheckCertificateAddrs(ctx)
+
+	grpc := newGRPCServer(rpcContext)
+
+	var tenantGRPC *grpcServer
+	if cfg.SplitListenTenant {
+		tenantGRPC = newGRPCServer(rpcContext, rpc.ForTenant)
+	}
 
 	g := gossip.New(
 		cfg.AmbientCtx,
 		&rpcContext.ClusterID,
 		nodeIDContainer,
 		rpcContext,
-		grpcServer.Server,
+		grpc.Server,
 		stopper,
 		registry,
 		cfg.Locality,
@@ -306,15 +371,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	retryOpts.Closer = stopper.ShouldQuiesce()
 	distSenderCfg := kvcoord.DistSenderConfig{
-		AmbientCtx:      cfg.AmbientCtx,
-		Settings:        st,
-		Clock:           clock,
-		RPCContext:      rpcContext,
-		RPCRetryOptions: &retryOpts,
-		TestingKnobs:    clientTestingKnobs,
-		NodeDialer:      nodeDialer,
+		AmbientCtx:         cfg.AmbientCtx,
+		Settings:           st,
+		Clock:              clock,
+		NodeDescs:          g,
+		RPCContext:         rpcContext,
+		RPCRetryOptions:    &retryOpts,
+		NodeDialer:         nodeDialer,
+		FirstRangeProvider: g,
+		TestingKnobs:       clientTestingKnobs,
 	}
-	distSender := kvcoord.NewDistSender(distSenderCfg, g)
+	distSender := kvcoord.NewDistSender(distSenderCfg)
 	registry.AddMetricStruct(distSender.Metrics())
 
 	txnMetrics := kvcoord.MakeTxnMetrics(cfg.HistogramWindowInterval())
@@ -330,7 +397,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	dbCtx := kv.DefaultDBContext()
+	dbCtx := kv.DefaultDBContext(stopper)
 	dbCtx.NodeID = idContainer
 	dbCtx.Stopper = stopper
 	db := kv.NewDBWithContext(cfg.AmbientCtx, tcsFactory, clock, dbCtx)
@@ -360,7 +427,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	raftTransport := kvserver.NewRaftTransport(
-		cfg.AmbientCtx, st, nodeDialer, grpcServer.Server, stopper,
+		cfg.AmbientCtx, st, nodeDialer, grpc.Server, stopper,
 	)
 
 	tsDB := ts.NewDB(db, cfg.Settings)
@@ -378,26 +445,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
 
-	// This function defines how ExternalStorage objects are created.
-	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-		return cloud.MakeExternalStorage(
-			ctx, dest, cfg.ExternalIOConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
+	// Create an ExternalStorageBuilder. This is only usable after Start() where
+	// we initialize all the configuration params.
+	externalStorageBuilder := &externalStorageBuilder{}
+	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
+		ExternalStorage, error) {
+		return externalStorageBuilder.makeExternalStorage(ctx, dest)
 	}
-	externalStorageFromURI := func(ctx context.Context, uri string) (cloud.ExternalStorage, error) {
-		return cloud.ExternalStorageFromURI(
-			ctx, uri, cfg.ExternalIOConfig, st,
-			blobs.NewBlobClientFactory(
-				nodeIDContainer.Get(),
-				nodeDialer,
-				st.ExternalIODir,
-			),
-		)
+	externalStorageFromURI := func(ctx context.Context, uri string,
+		user string) (cloud.ExternalStorage, error) {
+		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
 	}
 
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
@@ -428,7 +485,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanInterval:            cfg.ScanInterval,
 		ScanMinIdleTime:         cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:         cfg.ScanMaxIdleTime,
-		TimestampCachePageSize:  cfg.TimestampCachePageSize,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		StorePool:               storePool,
 		SQLExecutor:             internalExecutor,
@@ -473,9 +529,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg, recorder, registry, stopper,
 		txnMetrics, nil /* execCfg */, &rpcContext.ClusterID)
 	lateBoundNode = node
-	roachpb.RegisterInternalServer(grpcServer.Server, node)
-	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
-	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer.Server)
+	roachpb.RegisterInternalServer(grpc.Server, node)
+	if tenantGRPC != nil {
+		roachpb.RegisterInternalServer(tenantGRPC.Server, node)
+	}
+	kvserver.RegisterPerReplicaServer(grpc.Server, node.perReplicaServer)
+	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpc.Server)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
 
@@ -518,34 +577,45 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
 		}
-		gw.RegisterService(grpcServer.Server)
+		gw.RegisterService(grpc.Server)
+	}
+
+	var jobAdoptionStopFile string
+	for _, spec := range cfg.Stores.Specs {
+		if !spec.InMemory && spec.Path != "" {
+			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
+			break
+		}
 	}
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
-		sqlServerOptionalArgs: sqlServerOptionalArgs{
-			rpcContext:             rpcContext,
-			distSender:             distSender,
+		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer:           serverpb.MakeOptionalStatusServer(sStatus),
-			nodeLiveness:           nodeLiveness,
-			gossip:                 gossip.MakeExposedGossip(g),
-			nodeDialer:             nodeDialer,
-			grpcServer:             grpcServer.Server,
+			nodeLiveness:           sqlbase.MakeOptionalNodeLiveness(nodeLiveness),
+			gossip:                 gossip.MakeOptionalGossip(g),
+			grpcServer:             grpc.Server,
 			recorder:               recorder,
 			nodeIDContainer:        idContainer,
 			externalStorage:        externalStorage,
 			externalStorageFromURI: externalStorageFromURI,
 			isMeta1Leaseholder:     node.stores.IsMeta1Leaseholder,
 		},
-		Config:                   &cfg, // NB: s.cfg has a populated AmbientContext.
+		SQLConfig:                &cfg.SQLConfig,
+		BaseConfig:               &cfg.BaseConfig,
 		stopper:                  stopper,
 		clock:                    clock,
 		runtime:                  runtimeSampler,
-		tenantID:                 roachpb.SystemTenantID,
+		rpcContext:               rpcContext,
+		nodeDescs:                g,
+		systemConfigProvider:     g,
+		nodeDialer:               nodeDialer,
+		distSender:               distSender,
 		db:                       db,
 		registry:                 registry,
 		sessionRegistry:          sessionRegistry,
 		circularInternalExecutor: internalExecutor,
-		jobRegistry:              jobRegistry,
+		circularJobRegistry:      jobRegistry,
+		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
 	})
 	if err != nil {
@@ -556,35 +626,37 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
-		nodeIDContainer:       nodeIDContainer,
-		cfg:                   cfg,
-		st:                    st,
-		clock:                 clock,
-		rpcContext:            rpcContext,
-		grpc:                  grpcServer,
-		gossip:                g,
-		nodeDialer:            nodeDialer,
-		nodeLiveness:          nodeLiveness,
-		storePool:             storePool,
-		tcsFactory:            tcsFactory,
-		distSender:            distSender,
-		db:                    db,
-		node:                  node,
-		registry:              registry,
-		recorder:              recorder,
-		runtime:               runtimeSampler,
-		admin:                 sAdmin,
-		status:                sStatus,
-		authentication:        sAuth,
-		tsDB:                  tsDB,
-		tsServer:              &sTS,
-		raftTransport:         raftTransport,
-		stopper:               stopper,
-		debug:                 debugServer,
-		replicationReporter:   replicationReporter,
-		protectedtsProvider:   protectedtsProvider,
-		protectedtsReconciler: protectedtsReconciler,
-		sqlServer:             sqlServer,
+		nodeIDContainer:        nodeIDContainer,
+		cfg:                    cfg,
+		st:                     st,
+		clock:                  clock,
+		rpcContext:             rpcContext,
+		grpc:                   grpc,
+		tenantGRPC:             tenantGRPC,
+		gossip:                 g,
+		nodeDialer:             nodeDialer,
+		nodeLiveness:           nodeLiveness,
+		storePool:              storePool,
+		tcsFactory:             tcsFactory,
+		distSender:             distSender,
+		db:                     db,
+		node:                   node,
+		registry:               registry,
+		recorder:               recorder,
+		runtime:                runtimeSampler,
+		admin:                  sAdmin,
+		status:                 sStatus,
+		authentication:         sAuth,
+		tsDB:                   tsDB,
+		tsServer:               &sTS,
+		raftTransport:          raftTransport,
+		stopper:                stopper,
+		debug:                  debugServer,
+		replicationReporter:    replicationReporter,
+		protectedtsProvider:    protectedtsProvider,
+		protectedtsReconciler:  protectedtsReconciler,
+		sqlServer:              sqlServer,
+		externalStorageBuilder: externalStorageBuilder,
 	}
 	return lateBoundServer, err
 }
@@ -699,21 +771,25 @@ func inspectEngines(
 // file", these are written once the listeners are available, before the server
 // is necessarily ready to serve.
 type listenerInfo struct {
-	listenRPC    string // the (RPC) listen address, rewritten after name resolution and port allocation
-	advertiseRPC string // contains the original addr part of --listen/--advertise, with actual port number after port allocation if original was 0
-	listenHTTP   string // the HTTP endpoint
-	listenSQL    string // the SQL endpoint, rewritten after name resolution and port allocation
-	advertiseSQL string // contains the original addr part of --sql-addr, with actual port number after port allocation if original was 0
+	listenRPC       string // the (RPC) listen address, rewritten after name resolution and port allocation
+	advertiseRPC    string // contains the original addr part of --listen/--advertise, with actual port number after port allocation if original was 0
+	listenSQL       string // the SQL endpoint, rewritten after name resolution and port allocation
+	advertiseSQL    string // contains the original addr part of --sql-addr, with actual port number after port allocation if original was 0
+	listenTenant    string // the tenant KV endpoint, rewritten after name resolution and port allocation
+	advertiseTenant string // contains the original addr part of --tenant-addr, with actual port number after port allocation if original was 0
+	listenHTTP      string // the HTTP endpoint
 }
 
 // Iter returns a mapping of file names to desired contents.
 func (li listenerInfo) Iter() map[string]string {
 	return map[string]string{
-		"cockroach.advertise-addr":     li.advertiseRPC,
-		"cockroach.http-addr":          li.listenHTTP,
-		"cockroach.listen-addr":        li.listenRPC,
-		"cockroach.sql-addr":           li.listenSQL,
-		"cockroach.advertise-sql-addr": li.advertiseSQL,
+		"cockroach.listen-addr":           li.listenRPC,
+		"cockroach.advertise-addr":        li.advertiseRPC,
+		"cockroach.sql-addr":              li.listenSQL,
+		"cockroach.advertise-sql-addr":    li.advertiseSQL,
+		"cockroach.tenant-addr":           li.listenTenant,
+		"cockroach.advertise-tenant-addr": li.advertiseTenant,
+		"cockroach.http-addr":             li.listenHTTP,
 	}
 }
 
@@ -955,7 +1031,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.rpcContext.SetLocalInternalServer(s.node)
 
 	// Load the TLS configuration for the HTTP server.
-	uiTLSConfig, err := s.cfg.GetUIServerTLSConfig()
+	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
 		return err
 	}
@@ -985,6 +1061,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create engines")
 	}
 	s.stopper.AddCloser(&s.engines)
+
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
+	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
+		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
+			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)
 
 	bootstrapVersion := s.cfg.Settings.Version.BinaryVersion()
 	if knobs := s.cfg.TestingKnobs.Server; knobs != nil {
@@ -1109,13 +1193,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// Enable the debug endpoints first to provide an earlier window into what's
-	// going on with the node in advance of exporting node functionality.
-	//
-	// TODO(marc): when cookie-based authentication exists, apply it to all web
-	// endpoints.
-	s.mux.Handle(debug.Endpoint, s.debug)
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1184,11 +1261,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
-		listenRPC:    s.cfg.Addr,
-		advertiseRPC: s.cfg.AdvertiseAddr,
-		listenSQL:    s.cfg.SQLAddr,
-		advertiseSQL: s.cfg.SQLAdvertiseAddr,
-		listenHTTP:   s.cfg.HTTPAdvertiseAddr,
+		listenRPC:       s.cfg.Addr,
+		advertiseRPC:    s.cfg.AdvertiseAddr,
+		listenSQL:       s.cfg.SQLAddr,
+		advertiseSQL:    s.cfg.SQLAdvertiseAddr,
+		listenTenant:    s.cfg.TenantAddr,
+		advertiseTenant: s.cfg.TenantAdvertiseAddr,
+		listenHTTP:      s.cfg.HTTPAdvertiseAddr,
 	}.Iter()
 
 	for _, storeSpec := range s.cfg.Stores.Specs {
@@ -1209,6 +1288,7 @@ func (s *Server) Start(ctx context.Context) error {
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
+	advTenantAddrU := util.NewUnresolvedAddr("tcp", s.cfg.TenantAdvertiseAddr)
 	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, listenAddrU, advAddrU)
 
 	s.gossip.Start(advAddrU, filtered)
@@ -1218,27 +1298,23 @@ func (s *Server) Start(ctx context.Context) error {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
 
-	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
-	// determines when `./cockroach [...] --background` returns. For any initialized
-	// nodes (i.e. already part of a cluster) this is when this method returns
-	// (assuming there's no error). For nodes that need to join a cluster, we
-	// return once the initServer is ready to accept requests.
-	var onSuccessfulReturnFn, onInitServerReady func()
-	selfBootstrap := initServer.NeedsInit() && len(s.cfg.GossipBootstrapResolvers) == 0
+	// We self bootstrap for when we're configured to do so, which should only
+	// happen during tests and for `cockroach start-single-node`.
+	selfBootstrap := s.cfg.AutoInitializeCluster && initServer.NeedsInit()
 	if selfBootstrap {
-		// If a new node is started without join flags, self-bootstrap.
-		//
-		// Note: this is behavior slated for removal, see:
-		// https://github.com/cockroachdb/cockroach/pull/44112
-		_, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{})
-		switch {
-		case err == nil:
-			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
-		case errors.Is(err, ErrClusterInitialized):
-		default:
-			// Process is shutting down.
+		if _, err := initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+			return err
 		}
+	} else {
+		log.Info(ctx, "awaiting init command or join with an already initialized node.")
 	}
+
+	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
+	// determines when `./cockroach [...] --background` returns. For any
+	// initialized nodes (i.e. already part of a cluster) this is when this
+	// method returns (assuming there's no error). For nodes that need to join a
+	// cluster, we return once the initServer is ready to accept requests.
+	var onSuccessfulReturnFn, onInitServerReady func()
 	{
 		readyFn := func(bool) {}
 		if s.cfg.ReadyFn != nil {
@@ -1254,7 +1330,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	// This opens the main listener. When the listener is open, we can call
-	// initServerReadyFn since any request initated to the initServer at that
+	// initServerReadyFn since any request initiated to the initServer at that
 	// point will reach it once ServeAndWait starts handling the queue of incoming
 	// connections.
 	startRPCServer(workersCtx)
@@ -1355,13 +1431,15 @@ func (s *Server) Start(ctx context.Context) error {
 	// we're joining an existing cluster for the first time.
 	if err := s.node.start(
 		ctx,
-		advAddrU, advSQLAddrU,
+		advAddrU,
+		advSQLAddrU,
+		advTenantAddrU,
 		*state,
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.sqlServer.execCfg.DistSQLPlanner.SetNodeDesc,
+		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
 	); err != nil {
 		return err
 	}
@@ -1381,24 +1459,34 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.refreshSettings()
 
-	raven.SetTagsContext(map[string]string{
-		"cluster":     s.ClusterID().String(),
-		"node":        s.NodeID().String(),
-		"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
-		"engine_type": s.cfg.StorageEngine.String(),
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTags(map[string]string{
+			"cluster":     s.ClusterID().String(),
+			"node":        s.NodeID().String(),
+			"server_id":   fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+			"engine_type": s.cfg.StorageEngine.String(),
+		})
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAdvertiseAddr, s.cfg.SQLAdvertiseAddr)
+	s.recorder.AddNode(
+		s.registry,
+		s.node.Descriptor,
+		s.node.startedAt,
+		s.cfg.AdvertiseAddr,
+		s.cfg.HTTPAdvertiseAddr,
+		s.cfg.SQLAdvertiseAddr,
+		s.cfg.TenantAdvertiseAddr,
+	)
 
 	// Begin recording runtime statistics.
-	if err := s.startSampleEnvironment(ctx, DefaultMetricsSampleInterval); err != nil {
+	if err := s.startSampleEnvironment(ctx, base.DefaultMetricsSampleInterval); err != nil {
 		return err
 	}
 
 	// Begin recording time series data collected by the status monitor.
 	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
 	var graphiteOnce sync.Once
@@ -1411,6 +1499,9 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	s.grpc.setMode(modeOperational)
+	if s.tenantGRPC != nil {
+		s.tenantGRPC.setMode(modeOperational)
+	}
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
@@ -1456,7 +1547,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	// Begin recording status summaries.
-	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
+	s.node.startWriteNodeStatus(base.DefaultMetricsSampleInterval)
 
 	// Start the protected timestamp subsystem.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
@@ -1511,8 +1602,35 @@ func (s *Server) Start(ctx context.Context) error {
 	// The /login endpoint is, by definition, available pre-authentication.
 	s.mux.Handle(loginPath, gwMux)
 	s.mux.Handle(logoutPath, authHandler)
+
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+
+	// Register debugging endpoints.
+	var debugHandler http.Handler = s.debug
+	if s.cfg.RequireWebSession() {
+		// TODO(bdarnell): Refactor our authentication stack.
+		// authenticationMux guarantees that we have a non-empty user
+		// session, but our machinery for verifying the roles of a user
+		// lives on adminServer and is tied to GRPC metadata.
+		debugHandler = newAuthenticationMux(s.authentication, http.HandlerFunc(
+			func(w http.ResponseWriter, req *http.Request) {
+				md := forwardAuthenticationMetadata(req.Context(), req)
+				authCtx := metadata.NewIncomingContext(req.Context(), md)
+				_, err := s.admin.requireAdminUser(authCtx)
+				if errors.Is(err, errInsufficientPrivilege) {
+					http.Error(w, "admin privilege required", http.StatusUnauthorized)
+					return
+				} else if err != nil {
+					log.Infof(authCtx, "web session error: %s", err)
+					http.Error(w, "error checking authentication", http.StatusInternalServerError)
+					return
+				}
+				s.debug.ServeHTTP(w, req)
+			}))
+	}
+	s.mux.Handle(debug.Endpoint, debugHandler)
+
 	log.Event(ctx, "added http endpoints")
 
 	// Attempt to upgrade cluster version.
@@ -1619,8 +1737,8 @@ func (s *Server) startListenRPCAndSQL(
 			return pgwire.Match(r)
 		})
 		// Also if the pg port is not split, the actual listen
-		// and advertise address for SQL become equal to that of RPC,
-		// regardless of what was configured.
+		// and advertise addresses for SQL become equal to that
+		// of RPC, regardless of what was configured.
 		s.cfg.SQLAddr = s.cfg.Addr
 		s.cfg.SQLAdvertiseAddr = s.cfg.AdvertiseAddr
 	}
@@ -1662,6 +1780,40 @@ func (s *Server) startListenRPCAndSQL(
 				netutil.FatalIfUnexpected(m.Serve())
 			})
 		})
+	}
+
+	if s.cfg.SplitListenTenant {
+		tenantL, err := listen(ctx, &s.cfg.TenantAddr, &s.cfg.TenantAdvertiseAddr, "tenant")
+		if err != nil {
+			return nil, nil, err
+		}
+		log.Eventf(ctx, "listening on tenant port %s", s.cfg.TenantAddr)
+
+		// The shutdown worker.
+		s.stopper.RunWorker(workersCtx, func(context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			netutil.FatalIfUnexpected(tenantL.Close())
+			<-s.stopper.ShouldStop()
+			s.tenantGRPC.Stop()
+		})
+
+		// Compose startup functions.
+		startPrimaryRPCServer := startRPCServer
+		startTenantRPCServer := func(ctx context.Context) {
+			s.stopper.RunWorker(workersCtx, func(context.Context) {
+				netutil.FatalIfUnexpected(s.tenantGRPC.Serve(tenantL))
+			})
+		}
+		startRPCServer = func(ctx context.Context) {
+			startPrimaryRPCServer(ctx)
+			startTenantRPCServer(ctx)
+		}
+	} else {
+		// If the tenant port is not split, the actual listen and advertise
+		// addresses for tenant KV become equal to that of RPC, regardless
+		// of what was configured.
+		s.cfg.TenantAddr = s.cfg.Addr
+		s.cfg.TenantAdvertiseAddr = s.cfg.AdvertiseAddr
 	}
 
 	return pgL, startRPCServer, nil
@@ -1782,20 +1934,40 @@ func (s *sqlServer) startServeSQL(
 }
 
 // Decommission idempotently sets the decommissioning flag for specified nodes.
-func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb.NodeID) error {
-	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
-	eventType := sql.EventLogNodeDecommissioned
-	if !setTo {
-		eventType = sql.EventLogNodeRecommissioned
-	}
-	for _, nodeID := range nodeIDs {
-		changeCommitted, err := s.nodeLiveness.SetDecommissioning(ctx, nodeID, setTo)
-		if err != nil {
-			return errors.Wrapf(err, "during liveness update %d -> %t", nodeID, setTo)
+func (s *Server) Decommission(
+	ctx context.Context, targetStatus kvserverpb.MembershipStatus, nodeIDs []roachpb.NodeID,
+) error {
+	if !s.st.Version.IsActive(ctx, clusterversion.VersionNodeMembershipStatus) {
+		if targetStatus.Decommissioned() {
+			// In mixed-version cluster settings, we need to ensure that we're
+			// on-the-wire compatible with nodes only familiar with the boolean
+			// representation of membership state. We do the simple thing and
+			// simply disallow the setting of the fully decommissioned state until
+			// we're guaranteed to be on v20.2.
+			targetStatus = kvserverpb.MembershipStatus_DECOMMISSIONING
 		}
-		if changeCommitted {
+	}
+
+	eventLogger := sql.MakeEventLogger(s.sqlServer.execCfg)
+	var eventType sql.EventLogType
+	if targetStatus.Decommissioning() {
+		eventType = sql.EventLogNodeDecommissioning
+	} else if targetStatus.Decommissioned() {
+		eventType = sql.EventLogNodeDecommissioned
+	} else if targetStatus.Active() {
+		eventType = sql.EventLogNodeRecommissioned
+	} else {
+		panic("unexpected target membership status")
+	}
+
+	for _, nodeID := range nodeIDs {
+		statusChanged, err := s.nodeLiveness.SetMembershipStatus(ctx, nodeID, targetStatus)
+		if err != nil {
+			return err
+		}
+		if statusChanged {
 			// If we die right now or if this transaction fails to commit, the
-			// commissioning event will not be recorded to the event log. While we
+			// membership event will not be recorded to the event log. While we
 			// could insert the event record in the same transaction as the liveness
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort

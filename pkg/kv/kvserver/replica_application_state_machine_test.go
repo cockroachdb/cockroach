@@ -15,10 +15,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -30,6 +31,7 @@ import (
 // ChangeReplicas triggers.
 func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	testutils.RunTrueAndFalse(t, "add replica", func(t *testing.T, add bool) {
 		testutils.RunTrueAndFalse(t, "deprecated", func(t *testing.T, deprecated bool) {
 			tc := testContext{}
@@ -115,12 +117,12 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				},
 				decodedRaftEntry: decodedRaftEntry{
 					idKey: makeIDKey(),
-					raftCmd: storagepb.RaftCommand{
+					raftCmd: kvserverpb.RaftCommand{
 						ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 						MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
-						ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
-							State:          &storagepb.ReplicaState{Desc: &newDesc},
-							ChangeReplicas: &storagepb.ChangeReplicas{ChangeReplicasTrigger: trigger},
+						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+							State:          &kvserverpb.ReplicaState{Desc: &newDesc},
+							ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
 							Timestamp:      r.mu.state.GCThreshold.Add(1, 0),
 						},
 					},

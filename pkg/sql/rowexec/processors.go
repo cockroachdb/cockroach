@@ -142,10 +142,10 @@ func NewProcessor(
 			return nil, err
 		}
 		if len(core.JoinReader.LookupColumns) == 0 {
-			return newIndexJoiner(
-				flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
+			return newJoinReader(
+				flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0], indexJoinReaderType)
 		}
-		return newJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
+		return newJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0], lookupJoinReaderType)
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -204,15 +204,22 @@ func NewProcessor(
 			outputs[0], false, /* disableTempStorage */
 		)
 	}
+	if core.InvertedJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newInvertedJoiner(
+			flowCtx, processorID, core.InvertedJoiner, nil, inputs[0], post, outputs[0])
+	}
 	if core.Backfiller != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		switch core.Backfiller.Type {
 		case execinfrapb.BackfillerSpec_Index:
-			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		case execinfrapb.BackfillerSpec_Column:
-			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
+			return newColumnBackfiller(ctx, flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.Sampler != nil {
@@ -235,6 +242,33 @@ func NewProcessor(
 			return nil, errors.New("ReadImportData processor unimplemented")
 		}
 		return NewReadImportDataProcessor(flowCtx, processorID, *core.ReadImport, outputs[0])
+	}
+	if core.BackupData != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewBackupDataProcessor == nil {
+			return nil, errors.New("BackupData processor unimplemented")
+		}
+		return NewBackupDataProcessor(flowCtx, processorID, *core.BackupData, outputs[0])
+	}
+	if core.SplitAndScatter != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewSplitAndScatterProcessor == nil {
+			return nil, errors.New("SplitAndScatter processor unimplemented")
+		}
+		return NewSplitAndScatterProcessor(flowCtx, processorID, *core.SplitAndScatter, outputs[0])
+	}
+	if core.RestoreData != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		if NewRestoreDataProcessor == nil {
+			return nil, errors.New("RestoreData processor unimplemented")
+		}
+		return NewRestoreDataProcessor(flowCtx, processorID, *core.RestoreData, inputs[0], outputs[0])
 	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -286,7 +320,7 @@ func NewProcessor(
 			return nil, err
 		}
 		processor := localProcessors[*core.LocalPlanNode.RowSourceIdx]
-		if err := processor.InitWithOutput(post, outputs[0]); err != nil {
+		if err := processor.InitWithOutput(flowCtx, post, outputs[0]); err != nil {
 			return nil, err
 		}
 		if numInputs == 1 {
@@ -305,7 +339,7 @@ func NewProcessor(
 		if NewChangeAggregatorProcessor == nil {
 			return nil, errors.New("ChangeAggregator processor unimplemented")
 		}
-		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, outputs[0])
+		return NewChangeAggregatorProcessor(flowCtx, processorID, *core.ChangeAggregator, post, outputs[0])
 	}
 	if core.ChangeFrontier != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -314,20 +348,34 @@ func NewProcessor(
 		if NewChangeFrontierProcessor == nil {
 			return nil, errors.New("ChangeFrontier processor unimplemented")
 		}
-		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], outputs[0])
+		return NewChangeFrontierProcessor(flowCtx, processorID, *core.ChangeFrontier, inputs[0], post, outputs[0])
+	}
+	if core.InvertedFilterer != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newInvertedFilterer(flowCtx, processorID, core.InvertedFilterer, inputs[0], post, outputs[0])
 	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
-// NewReadImportDataProcessor is externally implemented and registered by
-// ccl/sqlccl/csv.go.
+// NewReadImportDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewReadImportDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ReadImportDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewCSVWriterProcessor is externally implemented.
+// NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewBackupDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewSplitAndScatterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.SplitAndScatterSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewRestoreDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewRestoreDataProcessor func(*execinfra.FlowCtx, int32, execinfrapb.RestoreDataSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewCSVWriterProcessor func(*execinfra.FlowCtx, int32, execinfrapb.CSVWriterSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewChangeAggregatorProcessor is externally implemented.
-var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+// NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewChangeAggregatorProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)
 
-// NewChangeFrontierProcessor is externally implemented.
-var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, execinfra.RowReceiver) (execinfra.Processor, error)
+// NewChangeFrontierProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewChangeFrontierProcessor func(*execinfra.FlowCtx, int32, execinfrapb.ChangeFrontierSpec, execinfra.RowSource, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

@@ -11,16 +11,16 @@
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cockroachdb/redact"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -32,6 +32,9 @@ type NodeID int32
 func (n NodeID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (n NodeID) SafeValue() {}
 
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
@@ -49,6 +52,9 @@ func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (n StoreID) SafeValue() {}
+
 // A RangeID is a unique ID associated to a Raft consensus group.
 type RangeID int64
 
@@ -56,6 +62,9 @@ type RangeID int64
 func (r RangeID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r RangeID) SafeValue() {}
 
 // RangeIDSlice implements sort.Interface.
 type RangeIDSlice []RangeID
@@ -71,6 +80,9 @@ type ReplicaID int32
 func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r ReplicaID) SafeValue() {}
 
 // Equals returns whether the Attributes lists are equivalent. Attributes lists
 // are treated as sets, meaning that ordering and duplicates are ignored.
@@ -99,6 +111,21 @@ func (a Attributes) Equals(b Attributes) bool {
 func (a Attributes) String() string {
 	return strings.Join(a.Attrs, ",")
 }
+
+// RangeGeneration is a custom type for a range generation. Range generation
+// counters are incremented on every split, merge, and every replica change,
+// i.e., whenever the span of the range or replica set changes.
+//
+// See the comment on RangeDescriptor.Generation for more.
+type RangeGeneration int64
+
+// String implements the fmt.Stringer interface.
+func (g RangeGeneration) String() string {
+	return strconv.FormatInt(int64(g), 10)
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (g RangeGeneration) SafeValue() {}
 
 // NewRangeDescriptor returns a RangeDescriptor populated from the input.
 func NewRangeDescriptor(
@@ -238,28 +265,10 @@ func (r *RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
 }
 
-// GetGeneration returns the generation of this RangeDescriptor.
-func (r *RangeDescriptor) GetGeneration() int64 {
-	if r.Generation != nil {
-		return *r.Generation
-	}
-	return 0
-}
-
 // IncrementGeneration increments the generation of this RangeDescriptor.
+// This method mutates the receiver; do not call it with shared RangeDescriptors.
 func (r *RangeDescriptor) IncrementGeneration() {
-	// Create a new *int64 for the new generation. We permit shallow copies of
-	// RangeDescriptors, so we need to be careful not to mutate the
-	// potentially-shared generation counter.
-	r.Generation = proto.Int64(r.GetGeneration() + 1)
-}
-
-// GetGenerationComparable returns if the generation of this RangeDescriptor is comparable.
-func (r *RangeDescriptor) GetGenerationComparable() bool {
-	if r.GenerationComparable == nil {
-		return false
-	}
-	return *r.GenerationComparable
+	r.Generation++
 }
 
 // GetStickyBit returns the sticky bit of this RangeDescriptor.
@@ -300,54 +309,60 @@ func (r *RangeDescriptor) Validate() error {
 }
 
 func (r RangeDescriptor) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "r%d:", r.RangeID)
+	return redact.StringWithoutMarkers(r)
+}
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r RangeDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%d:", r.RangeID)
 	if !r.IsInitialized() {
-		buf.WriteString("{-}")
+		w.SafeString("{-}")
 	} else {
-		buf.WriteString(r.RSpan().String())
+		w.Print(r.RSpan())
 	}
-	buf.WriteString(" [")
+	w.SafeString(" [")
 
 	if allReplicas := r.Replicas().All(); len(allReplicas) > 0 {
 		for i, rep := range allReplicas {
 			if i > 0 {
-				buf.WriteString(", ")
+				w.SafeString(", ")
 			}
-			buf.WriteString(rep.String())
+			w.Print(rep)
 		}
 	} else {
-		buf.WriteString("<no replicas>")
+		w.SafeString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d, gen=%d", r.NextReplicaID, r.GetGeneration())
-	if !r.GetGenerationComparable() {
-		buf.WriteString("?")
-	}
+	w.Printf(", next=%d, gen=%d", r.NextReplicaID, r.Generation)
 	if s := r.GetStickyBit(); !s.IsEmpty() {
-		fmt.Fprintf(&buf, ", sticky=%s", s)
+		w.Printf(", sticky=%s", s)
 	}
-	buf.WriteString("]")
-
-	return buf.String()
+	w.SafeString("]")
 }
 
 func (r ReplicationTarget) String() string {
-	return fmt.Sprintf("n%d,s%d", r.NodeID, r.StoreID)
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r ReplicationTarget) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("n%d,s%d", r.NodeID, r.StoreID)
 }
 
 func (r ReplicaDescriptor) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "(n%d,s%d):", r.NodeID, r.StoreID)
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r ReplicaDescriptor) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(n%d,s%d):", r.NodeID, r.StoreID)
 	if r.ReplicaID == 0 {
-		buf.WriteString("?")
+		w.SafeRune('?')
 	} else {
-		fmt.Fprintf(&buf, "%d", r.ReplicaID)
+		w.Print(r.ReplicaID)
 	}
 	if typ := r.GetType(); typ != VOTER_FULL {
-		buf.WriteString(typ.String())
+		w.Print(typ)
 	}
-	return buf.String()
 }
 
 // Validate performs some basic validation of the contents of a replica descriptor.
@@ -371,6 +386,9 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 	}
 	return *r.Type
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (r ReplicaType) SafeValue() {}
 
 // PercentilesFromData derives percentiles from a slice of data points.
 // Sorts the input data if it isn't already sorted.
@@ -404,13 +422,23 @@ func percentileFromSortedData(data []float64, percent float64) float64 {
 
 // String returns a string representation of the Percentiles.
 func (p Percentiles) String() string {
-	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
+	return redact.StringWithoutMarkers(p)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (p Percentiles) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
 		p.P10, p.P25, p.P50, p.P75, p.P90, p.PMax)
 }
 
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
-	return fmt.Sprintf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
+	return redact.StringWithoutMarkers(sc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
 		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
@@ -435,6 +463,46 @@ func (sc StoreCapacity) FractionUsed() float64 {
 		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
 	}
 	return float64(sc.Used) / float64(sc.Available+sc.Used)
+}
+
+// AddressForLocality returns the network address that nodes in the specified
+// locality should use when connecting to the node described by the descriptor.
+func (n *NodeDescriptor) AddressForLocality(loc Locality) *util.UnresolvedAddr {
+	// If the provided locality has any tiers that are an exact exact match (key
+	// and value) with a tier in the node descriptor's custom LocalityAddress
+	// list, return the corresponding address. Otherwise, return the default
+	// address.
+	//
+	// O(n^2), but we expect very few locality tiers in practice.
+	for i := range n.LocalityAddress {
+		nLoc := &n.LocalityAddress[i]
+		for _, loc := range loc.Tiers {
+			if loc == nLoc.LocalityTier {
+				return &nLoc.Address
+			}
+		}
+	}
+	return &n.Address
+}
+
+// CheckedSQLAddress returns the value of SQLAddress if set. If not, either
+// because the receiver is a pre-19.2 node, or because it is using the same
+// address for both SQL and RPC, the Address is returned.
+func (n *NodeDescriptor) CheckedSQLAddress() *util.UnresolvedAddr {
+	if n.SQLAddress.IsEmpty() {
+		return &n.Address
+	}
+	return &n.SQLAddress
+}
+
+// CheckedTenantAddress returns the value of TenantAddress if set. If not,
+// either because the receiver is a pre-20.2 node, or because it is using the
+// same address for both Tenant KV and RPC, the Address is returned.
+func (n *NodeDescriptor) CheckedTenantAddress() *util.UnresolvedAddr {
+	if n.TenantAddress.IsEmpty() {
+		return &n.Address
+	}
+	return &n.TenantAddress
 }
 
 // String returns a string representation of the Tier.

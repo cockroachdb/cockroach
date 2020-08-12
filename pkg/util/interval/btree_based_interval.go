@@ -15,7 +15,6 @@ package interval
 import (
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -100,7 +99,9 @@ func newBTreeWithDegree(overlapper Overlapper, minimumDegree int) *btree {
 
 func isValidInterface(a Interface) error {
 	if a == nil {
-		return log.Safe(errors.New("nil interface"))
+		// Note: Newf instead of New so that the error message is revealed
+		// in redact calls.
+		return errors.Newf("nil interface")
 	}
 	r := a.Range()
 	return rangeError(r)

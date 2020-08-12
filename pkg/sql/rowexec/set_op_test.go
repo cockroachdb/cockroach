@@ -11,6 +11,7 @@
 package rowexec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -19,19 +20,27 @@ import (
 )
 
 type setOpTestCase struct {
-	setOpType   sqlbase.JoinType
+	setOpType   descpb.JoinType
 	columnTypes []*types.T
+	ordering    sqlbase.ColumnOrdering
 	leftInput   sqlbase.EncDatumRows
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows
 }
 
 func setOpTestCaseToMergeJoinerTestCase(tc setOpTestCase) mergeJoinerTestCase {
-	spec := execinfrapb.MergeJoinerSpec{Type: tc.setOpType}
-	ordering := make(sqlbase.ColumnOrdering, 0, len(tc.columnTypes))
+	spec := execinfrapb.MergeJoinerSpec{Type: tc.setOpType, NullEquality: true}
+	var ordering sqlbase.ColumnOrdering
+	if tc.ordering != nil {
+		ordering = tc.ordering
+	} else {
+		ordering = make(sqlbase.ColumnOrdering, 0, len(tc.columnTypes))
+		for i := range tc.columnTypes {
+			ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
+		}
+	}
 	outCols := make([]uint32, 0, len(tc.columnTypes))
 	for i := range tc.columnTypes {
-		ordering = append(ordering, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: encoding.Ascending})
 		outCols = append(outCols, uint32(i))
 	}
 	spec.LeftOrdering = execinfrapb.ConvertToSpecOrdering(ordering)
@@ -69,6 +78,7 @@ func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
 }
 
 func intersectAllTestCases() []setOpTestCase {
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
@@ -78,27 +88,44 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL only returns rows that are in both the left
 			// and right side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[0], v[3]},
+				{v[1], null},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[2]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
@@ -106,9 +133,14 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -118,6 +150,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -125,6 +159,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -135,9 +171,11 @@ func intersectAllTestCases() []setOpTestCase {
 		{
 			// Check that INTERSECT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
-			setOpType:   sqlbase.IntersectAllJoin,
+			setOpType:   descpb.IntersectAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -146,6 +184,11 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -155,6 +198,8 @@ func intersectAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -166,6 +211,7 @@ func intersectAllTestCases() []setOpTestCase {
 }
 
 func exceptAllTestCases() []setOpTestCase {
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
@@ -175,33 +221,54 @@ func exceptAllTestCases() []setOpTestCase {
 		{
 			// Check that EXCEPT ALL only returns rows that are on the left side
 			// but not the right side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[1]},
+				{null, v[1]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[0], v[3]},
+				{v[1], null},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[1]},
+				{null, v[2]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
+				{v[1], null},
 				{v[5], v[0]},
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[3]},
+				{v[1], null},
 			},
 		},
 		{
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the left side contains more duplicates of a row than the right side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -211,6 +278,8 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -218,6 +287,9 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			expected: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[3]},
 			},
@@ -225,9 +297,11 @@ func exceptAllTestCases() []setOpTestCase {
 		{
 			// Check that EXCEPT ALL returns the correct number of duplicates when
 			// the right side contains more duplicates of a row than the left side.
-			setOpType:   sqlbase.ExceptAllJoin,
+			setOpType:   descpb.ExceptAllJoin,
 			columnTypes: sqlbase.TwoIntCols,
 			leftInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -236,6 +310,11 @@ func exceptAllTestCases() []setOpTestCase {
 				{v[5], v[1]},
 			},
 			rightInput: sqlbase.EncDatumRows{
+				{null, null},
+				{null, null},
+				{null, v[0]},
+				{null, v[0]},
+				{null, v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -246,6 +325,48 @@ func exceptAllTestCases() []setOpTestCase {
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[0], v[3]},
+			},
+		},
+		{
+			// Check that EXCEPT ALL handles mixed ordering correctly.
+			setOpType:   descpb.ExceptAllJoin,
+			columnTypes: sqlbase.TwoIntCols,
+			ordering: sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Descending},
+				{ColIdx: 1, Direction: encoding.Ascending},
+			},
+			leftInput: sqlbase.EncDatumRows{
+				{v[4], null},
+				{v[4], v[1]},
+				{v[1], null},
+				{v[1], v[2]},
+				{v[0], v[2]},
+				{v[0], v[3]},
+				{null, v[1]},
+				{null, v[2]},
+				{null, v[2]},
+				{null, v[3]},
+			},
+			rightInput: sqlbase.EncDatumRows{
+				{v[3], v[2]},
+				{v[2], v[1]},
+				{v[2], v[2]},
+				{v[2], v[3]},
+				{v[1], null},
+				{v[1], v[1]},
+				{v[1], v[1]},
+				{v[0], v[1]},
+				{v[0], v[2]},
+				{null, v[2]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[4], null},
+				{v[4], v[1]},
+				{v[1], v[2]},
+				{v[0], v[3]},
+				{null, v[1]},
+				{null, v[2]},
+				{null, v[3]},
 			},
 		},
 	}

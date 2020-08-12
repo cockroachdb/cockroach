@@ -11,14 +11,15 @@
 package testcat
 
 import (
+	"context"
 	gojson "encoding/json"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // AlterTable is a partial implementation of the ALTER TABLE statement.
@@ -44,21 +45,22 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 				tc.resolveFK(tab, d)
 
 			default:
-				panic(fmt.Sprintf("unsupported constraint type %v", d))
+				panic(errors.AssertionFailedf("unsupported constraint type %v", d))
 			}
 
 		default:
-			panic(fmt.Sprintf("unsupported ALTER TABLE command %T", t))
+			panic(errors.AssertionFailedf("unsupported ALTER TABLE command %T", t))
 		}
 	}
 }
 
 // injectTableStats sets the table statistics as specified by a JSON object.
 func injectTableStats(tt *Table, statsExpr tree.Expr) {
+	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
-		statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
+		ctx, statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
 	)
 	if err != nil {
 		panic(err)

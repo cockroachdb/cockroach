@@ -11,21 +11,19 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -44,42 +42,37 @@ type explainPlanNode struct {
 
 	plan planComponents
 
-	stmtType tree.StatementType
-
 	run explainPlanRun
 }
 
 // makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
-	ctx context.Context, opts *tree.ExplainOptions, plan *planComponents, stmtType tree.StatementType,
+	ctx context.Context, opts *tree.ExplainOptions, plan planComponents,
 ) (planNode, error) {
-	flags := explainFlags{
-		symbolicVars: opts.Flags[tree.ExplainFlagSymVars],
-	}
-	if opts.Flags[tree.ExplainFlagVerbose] {
-		flags.showMetadata = true
-		flags.qualifyNames = true
-	}
-	if opts.Flags[tree.ExplainFlagTypes] {
-		flags.showMetadata = true
-		flags.showTypes = true
-	}
+	flags := explain.MakeFlags(opts)
 
 	columns := sqlbase.ExplainPlanColumns
-	if flags.showMetadata {
+	if flags.Verbose {
 		columns = sqlbase.ExplainPlanVerboseColumns
 	}
 	// Make a copy (to allow changes through planMutableColumns).
 	columns = append(sqlbase.ResultColumns(nil), columns...)
 
-	e := explainer{explainFlags: flags}
+	node := &explainPlanNode{
+		plan: plan,
+		run: explainPlanRun{
+			results: p.newContainerValuesNode(columns, 0),
+		},
+	}
+
+	node.explainer.init(flags, !p.ExecCfg().Codec.ForSystemTenant())
 
 	noPlaceholderFlags := tree.FmtExpr(
-		tree.FmtSymbolicSubqueries, flags.showTypes, flags.symbolicVars, flags.qualifyNames,
+		tree.FmtSymbolicSubqueries, flags.ShowTypes, false /* symbolicVars */, flags.Verbose,
 	)
-	e.fmtFlags = noPlaceholderFlags
-	e.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
+	node.explainer.fmtFlags = noPlaceholderFlags
+	node.explainer.showPlaceholderValues = func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
 		d, err := placeholder.Eval(p.EvalContext())
 		if err != nil {
 			// Disable the placeholder formatter so that
@@ -95,15 +88,6 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 		}
 		ctx.FormatNode(d)
 	}
-
-	node := &explainPlanNode{
-		explainer: e,
-		plan:      *plan,
-		stmtType:  stmtType,
-		run: explainPlanRun{
-			results: p.newContainerValuesNode(columns, 0),
-		},
-	}
 	return node, nil
 }
 
@@ -114,7 +98,7 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	return populateExplain(params, &e.explainer, e.run.results, &e.plan, e.stmtType)
+	return populateExplain(params, &e.explainer, e.run.results, &e.plan)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -131,38 +115,9 @@ func (e *explainPlanNode) Close(ctx context.Context) {
 	e.run.results.Close(ctx)
 }
 
-// explainEntry is a representation of the info that makes it into an output row
-// of an EXPLAIN statement.
-type explainEntry struct {
-	isNode                bool
-	level                 int
-	node, field, fieldVal string
-	plan                  planNode
-}
-
-// explainFlags contains parameters for the EXPLAIN logic.
-type explainFlags struct {
-	// showMetadata indicates whether the output has separate columns for the
-	// schema signature and ordering information of the intermediate
-	// nodes.
-	showMetadata bool
-
-	// qualifyNames determines whether column names in expressions
-	// should be fully qualified during pretty-printing.
-	qualifyNames bool
-
-	// symbolicVars determines whether ordinal column references
-	// should be printed numerically.
-	symbolicVars bool
-
-	// showTypes indicates whether to print the type of embedded
-	// expressions and result columns.
-	showTypes bool
-}
-
 // explainFlags represents the run-time state of the EXPLAIN logic.
 type explainer struct {
-	explainFlags
+	flags explain.Flags
 
 	// fmtFlags is the formatter to use for pretty-printing expressions.
 	// This can change during the execution of EXPLAIN.
@@ -173,109 +128,59 @@ type explainer struct {
 	// Meant for use with FmtCtx.WithPlaceholderFormat().
 	showPlaceholderValues func(ctx *tree.FmtCtx, placeholder *tree.Placeholder)
 
-	// level is the current depth in the tree of planNodes.
-	level int
+	ob *explain.OutputBuilder
 
-	// explainEntry accumulates entries (nodes or attributes).
-	entries []explainEntry
+	// fieldsToSkipInSpans is how many fields to skip when pretty-printing spans.
+	// Usually 2, but can be 4 when running EXPLAIN from a tenant since there will
+	// be an extra tenant prefix and ID. For example:
+	//  - /51/1/1 is a key read as a system tenant where the first two values are
+	//    the table ID and the index ID.
+	//  - /Tenant/10/51/1/1 is a key read as a non-system tenant where the first
+	//    four values are the special tenant prefix byte and tenant ID, followed
+	//    by the table ID and the index ID.
+	fieldsToSkipInSpans int
+}
+
+// init initializes an explainer with the given explain.Flags. Additionally,
+// isTenantPlan specifies whether the plan that will be explained is executed on
+// behalf of a tenant. This lets the explainer know that the tenant prefix
+// should be stripped when printing spans.
+func (e *explainer) init(flags explain.Flags, isTenantPlan bool) {
+	*e = explainer{
+		flags: flags,
+		// fieldsToSkipInSpans is 2 by default because the explainer will skip the
+		// table and index ID.
+		fieldsToSkipInSpans: 2,
+	}
+	if isTenantPlan {
+		e.fieldsToSkipInSpans = 4
+	}
+	e.ob = explain.NewOutputBuilder(flags)
 }
 
 // populateExplain walks the plan and generates rows in a valuesNode.
 // The subquery plans, if any are known to the planner, are printed
 // at the bottom.
-func populateExplain(
-	params runParams, e *explainer, v *valuesNode, plan *planComponents, stmtType tree.StatementType,
-) error {
-	// Determine the "distributed" and "vectorized" values, which we will emit as
+func populateExplain(params runParams, e *explainer, v *valuesNode, plan *planComponents) error {
+	// Determine the "distributed" and "vectorized" values and emit them as
 	// special rows.
-	var willDistribute, willVectorize bool
-	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	willDistribute = willDistributePlanForExplainPurposes(
-		params.ctx, params.extendedEvalCtx.ExecCfg.NodeID,
-		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
-	)
-	outerSubqueries := params.p.curPlan.subqueryPlans
-	planCtx := makeExplainPlanningCtx(distSQLPlanner, params, stmtType, plan.subqueryPlans, willDistribute)
-	defer func() {
-		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
-	}()
-	physicalPlan, err := makePhysicalPlan(planCtx, distSQLPlanner, plan.main)
-	if err == nil {
-		// There might be an issue making the physical plan, but that should not
-		// cause an error or panic, so swallow the error. See #40677 for example.
-		distSQLPlanner.FinalizePlan(planCtx, &physicalPlan)
-		nodeID, err := params.extendedEvalCtx.NodeID.OptionalNodeIDErr(distsql.MultiTenancyIssueNo)
-		if err != nil {
+	distribution, willVectorize := explainGetDistributedAndVectorized(params, plan)
+	e.ob.AddField("distribution", distribution.String())
+	e.ob.AddField("vectorized", fmt.Sprintf("%t", willVectorize))
+
+	e.populate(params.ctx, plan, explainSubqueryFmtFlags)
+	rows := e.ob.BuildExplainRows()
+	for _, r := range rows {
+		if _, err := v.rows.AddRow(params.ctx, r); err != nil {
 			return err
 		}
-		flows := physicalPlan.GenerateFlowSpecs(nodeID)
-		flowCtx := makeFlowCtx(planCtx, physicalPlan, params)
-		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
-
-		ctxSessionData := flowCtx.EvalCtx.SessionData
-		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
-		willVectorize = true
-		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
-			willVectorize = false
-		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
-			willVectorize = false
-		} else {
-			thisNodeID := distSQLPlanner.nodeDesc.NodeID
-			for nodeID, flow := range flows {
-				fuseOpt := flowinfra.FuseNormally
-				if nodeID == thisNodeID && !willDistribute {
-					fuseOpt = flowinfra.FuseAggressively
-				}
-				_, err := colflow.SupportsVectorized(params.ctx, flowCtx, flow.Processors, fuseOpt, nil /* output */)
-				willVectorize = willVectorize && (err == nil)
-				if !willVectorize {
-					break
-				}
-			}
-		}
 	}
-
-	emitRow := func(
-		treeStr string, level int, node, field, fieldVal, columns, ordering string,
-	) error {
-		var row tree.Datums
-		if !e.showMetadata {
-			row = tree.Datums{
-				tree.NewDString(treeStr),  // Tree
-				tree.NewDString(field),    // Field
-				tree.NewDString(fieldVal), // Description
-			}
-		} else {
-			row = tree.Datums{
-				tree.NewDString(treeStr),       // Tree
-				tree.NewDInt(tree.DInt(level)), // Level
-				tree.NewDString(node),          // Type
-				tree.NewDString(field),         // Field
-				tree.NewDString(fieldVal),      // Description
-				tree.NewDString(columns),       // Columns
-				tree.NewDString(ordering),      // Ordering
-			}
-		}
-		_, err := v.rows.AddRow(params.ctx, row)
-		return err
-	}
-
-	// First, emit the "distributed" and "vectorized" information rows.
-	if err := emitRow("", 0, "", "distributed", fmt.Sprintf("%t", willDistribute), "", ""); err != nil {
-		return err
-	}
-	if err := emitRow("", 0, "", "vectorized", fmt.Sprintf("%t", willVectorize), "", ""); err != nil {
-		return err
-	}
-
-	e.populateEntries(params.ctx, plan, explainSubqueryFmtFlags)
-	return e.emitRows(emitRow)
+	return nil
 }
 
-func (e *explainer) populateEntries(
+func (e *explainer) populate(
 	ctx context.Context, plan *planComponents, subqueryFmtFlags tree.FmtFlags,
 ) {
-	e.entries = nil
 	observer := planObserver{
 		enterNode: e.enterNode,
 		expr:      e.expr,
@@ -296,16 +201,21 @@ func observePlan(
 	returnError bool,
 	subqueryFmtFlags tree.FmtFlags,
 ) error {
+	if plan.main.isPhysicalPlan() {
+		return errors.AssertionFailedf(
+			"EXPLAIN of a query with opt-driven DistSQL planning is not supported",
+		)
+	}
 	// If there are any subqueries, cascades, or checks in the plan, we
 	// enclose everything as children of a virtual "root" node.
 	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
-		if _, err := observer.enterNode(ctx, "root", plan.main); err != nil && returnError {
+		if _, err := observer.enterNode(ctx, "root", plan.main.planNode); err != nil && returnError {
 			return err
 		}
 	}
 
 	// Explain the main plan.
-	if err := walkPlan(ctx, plan.main, observer); err != nil && returnError {
+	if err := walkPlan(ctx, plan.main.planNode, observer); err != nil && returnError {
 		return err
 	}
 
@@ -324,8 +234,8 @@ func observePlan(
 			tree.AsStringWithFlags(s.subquery, subqueryFmtFlags),
 		)
 		observer.attr("subquery", "exec mode", rowexec.SubqueryExecModeNames[s.execMode])
-		if s.plan != nil {
-			if err := walkPlan(ctx, s.plan, observer); err != nil && returnError {
+		if s.plan.planNode != nil {
+			if err := walkPlan(ctx, s.plan.planNode, observer); err != nil && returnError {
 				return err
 			}
 		} else if s.started {
@@ -353,8 +263,8 @@ func observePlan(
 		if _, err := observer.enterNode(ctx, "fk-check", nil /* plan */); err != nil && returnError {
 			return err
 		}
-		if plan.checkPlans[i].plan != nil {
-			if err := walkPlan(ctx, plan.checkPlans[i].plan, observer); err != nil && returnError {
+		if plan.checkPlans[i].plan.planNode != nil {
+			if err := walkPlan(ctx, plan.checkPlans[i].plan.planNode, observer); err != nil && returnError {
 				return err
 			}
 		}
@@ -364,83 +274,23 @@ func observePlan(
 	}
 
 	if len(plan.subqueryPlans) > 0 || len(plan.cascades) > 0 || len(plan.checkPlans) > 0 {
-		if err := observer.leaveNode("root", plan.main); err != nil && returnError {
+		if err := observer.leaveNode("root", plan.main.planNode); err != nil && returnError {
 			return err
 		}
 	}
 
-	return nil
-}
-
-// emitExplainRowFn is used to emit an EXPLAIN row.
-type emitExplainRowFn func(treeStr string, level int, node, field, fieldVal, columns, ordering string) error
-
-// emitRows calls the given function for each populated entry.
-func (e *explainer) emitRows(emitRow emitExplainRowFn) error {
-	tp := treeprinter.New()
-	// n keeps track of the current node on each level.
-	n := []treeprinter.Node{tp}
-
-	for _, entry := range e.entries {
-		if entry.isNode {
-			n = append(n[:entry.level+1], n[entry.level].Child(entry.node))
-		} else {
-			tp.AddEmptyLine()
-		}
-	}
-
-	treeRows := tp.FormattedRows()
-
-	for i, entry := range e.entries {
-		var columns, ordering string
-		if e.showMetadata && entry.plan != nil {
-			cols := planColumns(entry.plan)
-			columns = formatColumns(cols, e.showTypes)
-			ordering = formatOrdering(planReqOrdering(entry.plan), cols)
-		}
-		if err := emitRow(
-			treeRows[i], entry.level, entry.node, entry.field, entry.fieldVal, columns, ordering,
-		); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
 // planToString builds a string representation of a plan using the EXPLAIN
 // infrastructure.
 func planToString(ctx context.Context, p *planTop) string {
-	e := explainer{
-		explainFlags: explainFlags{
-			showMetadata: true,
-			showTypes:    true,
-		},
-		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
-	}
+	var e explainer
+	e.init(explain.Flags{Verbose: true, ShowTypes: true}, p.flags.IsSet(planFlagTenant))
+	e.fmtFlags = tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true)
 
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-
-	emitRow := func(
-		treeStr string, level int, node, field, fieldVal, columns, ordering string,
-	) error {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", treeStr, field, fieldVal, columns, ordering)
-		return nil
-	}
-
-	e.populateEntries(ctx, &p.planComponents, explainSubqueryFmtFlags)
-
-	// Our emitRow function never returns errors, so neither will emitRows().
-	_ = e.emitRows(emitRow)
-	_ = tw.Flush()
-
-	// Remove trailing whitespace from each line.
-	result := strings.TrimRight(buf.String(), "\n")
-	buf.Reset()
-	for _, line := range strings.Split(result, "\n") {
-		fmt.Fprintf(&buf, "%s\n", strings.TrimRight(line, " "))
-	}
-	return buf.String()
+	e.populate(ctx, &p.planComponents, explainSubqueryFmtFlags)
+	return e.ob.BuildString()
 }
 
 func getAttrForSpansAll(hardLimitSet bool) string {
@@ -453,11 +303,11 @@ func getAttrForSpansAll(hardLimitSet bool) string {
 // spans implements the planObserver interface.
 func (e *explainer) spans(
 	nodeName, fieldName string,
-	index *sqlbase.IndexDescriptor,
+	index *descpb.IndexDescriptor,
 	spans []roachpb.Span,
 	hardLimitSet bool,
 ) {
-	spanss := sqlbase.PrettySpans(index, spans, 2)
+	spanss := sqlbase.PrettySpans(index, spans, e.fieldsToSkipInSpans)
 	if spanss != "" {
 		if spanss == "-" {
 			spanss = getAttrForSpansAll(hardLimitSet)
@@ -469,7 +319,7 @@ func (e *explainer) spans(
 // expr implements the planObserver interface.
 func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr) {
 	if expr != nil {
-		if !e.showMetadata && v == observeMetadata {
+		if !e.flags.Verbose && v == observeMetadata {
 			return
 		}
 		if nodeName == "join" {
@@ -490,68 +340,71 @@ func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, 
 
 // enterNode implements the planObserver interface.
 func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
-	e.entries = append(e.entries, explainEntry{
-		isNode: true,
-		level:  e.level,
-		node:   name,
-		plan:   plan,
-	})
-
-	e.level++
+	if plan == nil {
+		e.ob.EnterMetaNode(name)
+	} else {
+		e.ob.EnterNode(name, planColumns(plan), planReqOrdering(plan))
+	}
 	return true, nil
 }
 
 // attr implements the planObserver interface.
 func (e *explainer) attr(nodeName, fieldName, attr string) {
-	e.entries = append(e.entries, explainEntry{
-		isNode:   false,
-		level:    e.level - 1,
-		field:    fieldName,
-		fieldVal: attr,
-	})
+	e.ob.AddField(fieldName, attr)
 }
 
 // leaveNode implements the planObserver interface.
 func (e *explainer) leaveNode(name string, _ planNode) error {
-	e.level--
+	e.ob.LeaveNode()
 	return nil
 }
 
-// formatColumns converts a column signature for a data source /
-// planNode to a string. The column types are printed iff the 2nd
-// argument specifies so.
-func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
-	f := tree.NewFmtCtx(tree.FmtSimple)
-	f.WriteByte('(')
-	for i := range cols {
-		rCol := &cols[i]
-		if i > 0 {
-			f.WriteString(", ")
-		}
-		f.FormatNameP(&rCol.Name)
-		// Output extra properties like [hidden,omitted].
-		hasProps := false
-		outputProp := func(prop string) {
-			if hasProps {
-				f.WriteByte(',')
-			} else {
-				f.WriteByte('[')
-			}
-			hasProps = true
-			f.WriteString(prop)
-		}
-		if rCol.Hidden {
-			outputProp("hidden")
-		}
-		if hasProps {
-			f.WriteByte(']')
-		}
+// explainGetDistributedAndVectorized determines the "distributed" and
+// "vectorized" properties for EXPLAIN.
+func explainGetDistributedAndVectorized(
+	params runParams, plan *planComponents,
+) (distribution physicalplan.PlanDistribution, willVectorize bool) {
+	// Determine the "distributed" and "vectorized" values, which we will emit as
+	// special rows.
+	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+	distribution = getPlanDistributionForExplainPurposes(
+		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeID,
+		params.extendedEvalCtx.SessionData.DistSQLMode, plan.main,
+	)
+	willDistribute := distribution.WillDistribute()
+	outerSubqueries := params.p.curPlan.subqueryPlans
+	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	physicalPlan, err := newPhysPlanForExplainPurposes(planCtx, distSQLPlanner, plan.main)
+	if err == nil {
+		// There might be an issue making the physical plan, but that should not
+		// cause an error or panic, so swallow the error. See #40677 for example.
+		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
+		flows := physicalPlan.GenerateFlowSpecs()
+		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
+		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
 
-		if printTypes {
-			f.WriteByte(' ')
-			f.WriteString(rCol.Typ.String())
+		ctxSessionData := flowCtx.EvalCtx.SessionData
+		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
+		if ctxSessionData.VectorizeMode == sessiondata.VectorizeOff {
+			willVectorize = false
+		} else if !vectorizedThresholdMet && (ctxSessionData.VectorizeMode == sessiondata.Vectorize201Auto || ctxSessionData.VectorizeMode == sessiondata.VectorizeOn) {
+			willVectorize = false
+		} else {
+			willVectorize = true
+			thisNodeID, _ := params.extendedEvalCtx.NodeID.OptionalNodeID()
+			for scheduledOnNodeID, flow := range flows {
+				scheduledOnRemoteNode := scheduledOnNodeID != thisNodeID
+				if _, err := colflow.SupportsVectorized(
+					params.ctx, flowCtx, flow.Processors, !willDistribute, nil /* output */, scheduledOnRemoteNode,
+				); err != nil {
+					willVectorize = false
+					break
+				}
+			}
 		}
 	}
-	f.WriteByte(')')
-	return f.CloseAndGetString()
+	return distribution, willVectorize
 }

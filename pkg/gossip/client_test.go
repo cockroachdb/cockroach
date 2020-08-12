@@ -58,7 +58,7 @@ func startGossipAtAddr(
 ) *Gossip {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(clock, stopper, clusterID)
-	rpcContext.NodeID.Set(context.TODO(), nodeID)
+	rpcContext.NodeID.Set(context.Background(), nodeID)
 
 	server := rpc.NewServer(rpcContext)
 	g := NewTest(nodeID, rpcContext, server, stopper, registry, zonepb.DefaultZoneConfigRef())
@@ -188,7 +188,7 @@ func TestClientGossip(t *testing.T) {
 	c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, remote.GetNodeAddr(), makeMetrics())
 
 	defer func() {
-		stopper.Stop(context.TODO())
+		stopper.Stop(context.Background())
 		if c != <-disconnected {
 			t.Errorf("expected client disconnect after remote close")
 		}
@@ -218,7 +218,7 @@ func TestClientGossip(t *testing.T) {
 func TestClientGossipMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -298,7 +298,7 @@ func TestClientNodeID(t *testing.T) {
 	disconnected <- c
 
 	defer func() {
-		stopper.Stop(context.TODO())
+		stopper.Stop(context.Background())
 		if c != <-disconnected {
 			t.Errorf("expected client disconnect after remote close")
 		}
@@ -336,7 +336,7 @@ func verifyServerMaps(g *Gossip, expCount int) bool {
 func TestClientDisconnectLoopback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	local := startGossip(uuid.Nil, 1, stopper, t, metric.NewRegistry())
 	local.mu.Lock()
 	lAddr := local.mu.is.NodeAddr
@@ -358,7 +358,7 @@ func TestClientDisconnectLoopback(t *testing.T) {
 func TestClientDisconnectRedundant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -417,7 +417,7 @@ func TestClientDisconnectRedundant(t *testing.T) {
 func TestClientDisallowMultipleConns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -459,7 +459,7 @@ func TestClientDisallowMultipleConns(t *testing.T) {
 func TestClientRegisterWithInitNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
@@ -537,7 +537,7 @@ func (tr *testResolver) GetAddress() (net.Addr, error) {
 func TestClientRetryBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).
@@ -568,7 +568,7 @@ func TestClientRetryBootstrap(t *testing.T) {
 func TestClientForwardUnresolved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(context.Background())
 	const nodeID = 1
 	local := startGossip(uuid.Nil, nodeID, stopper, t, metric.NewRegistry())
 	addr := local.GetNodeAddr()
@@ -589,7 +589,7 @@ func TestClientForwardUnresolved(t *testing.T) {
 	local.outgoing.addPlaceholder() // so that the resolvePlaceholder in handleResponse doesn't fail
 	local.mu.Unlock()
 	if err := client.handleResponse(
-		context.TODO(), local, reply,
+		context.Background(), local, reply,
 	); !testutils.IsError(err, "received forward") {
 		t.Fatal(err)
 	}

@@ -333,18 +333,18 @@ func isExpectedRelocateError(err error) bool {
 	// https://github.com/cockroachdb/cockroach/issues/33708
 	// https://github.cm/cockroachdb/cockroach/issues/34012
 	// https://github.com/cockroachdb/cockroach/issues/33683#issuecomment-454889149
-	// for more failure modes not caught here. We decided to avoid adding
-	// to this catchall and to fix the root causes instead.
-	// We've also seen "breaker open" errors here.
-	whitelist := []string{
+	// for more failure modes not caught here.
+	allowlist := []string{
 		"descriptor changed",
 		"unable to remove replica .* which is not present",
 		"unable to add replica .* which is already present",
 		"received invalid ChangeReplicasTrigger .* to remove self",
 		"failed to apply snapshot: raft group deleted",
 		"snapshot failed:",
+		"breaker open",
+		"unable to select removal target", // https://github.com/cockroachdb/cockroach/issues/49513
 	}
-	pattern := "(" + strings.Join(whitelist, "|") + ")"
+	pattern := "(" + strings.Join(allowlist, "|") + ")"
 	return testutils.IsError(err, pattern)
 }
 

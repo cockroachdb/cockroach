@@ -1,8 +1,6 @@
-# 3node-tenant fails due to:
-# https://github.com/cockroachdb/cockroach/issues/48375
-# Specifically, a status server is unavailable when attempting to set a zone
-# config.
-# LogicTest: !3node-tenant
+# LogicTest: !3node-tenant(49854)
+# TODO(asubiotto): Possibly split out the test that attempts to set a zone
+# config in order to run the other ones.
 
 statement ok
 CREATE TABLE foo (a int)
@@ -71,7 +69,7 @@ SELECT
  quote_literal('2018-06-11 12:13:14'::timestamp), quote_nullable('2018-06-11 12:13:14'::timestamp),
  quote_literal('2018-06-11'::date), quote_nullable('2018-06-11'::date)
 ----
-'1 day'  '1 day'  '2018-06-11 12:13:14+00:00'  '2018-06-11 12:13:14+00:00'  '2018-06-11'  '2018-06-11'
+'1 day'  '1 day'  '2018-06-11 12:13:14'  '2018-06-11 12:13:14'  '2018-06-11'  '2018-06-11'
 
 query TTBB
 SELECT
@@ -877,10 +875,10 @@ SELECT mod(5.0::float, 2.0), mod(1.0::float, 0.0), mod(5, 2), mod(19.3::decimal,
 # mod returns the same results as PostgreSQL 9.4.4
 # in tests below (except for the error message).
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5, 0)
 
-query error mod\(\): zero modulus
+query error mod\(\): division by zero
 SELECT mod(5::decimal, 0::decimal)
 
 query II
@@ -1344,6 +1342,22 @@ SELECT regexp_replace('ReRe','R(e)','1\\1','g');
 ----
 1\11\1
 
+# Regression test for #51289.
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\))?.*', '\2')
+----
+·
+
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\)).*', '\2')
+----
+6
+
+query T
+SELECT regexp_replace('TIMESTAMP(6)', '.*(\((\d+)\)?).*', '\2')
+----
+6
+
 query B
 SELECT unique_rowid() < unique_rowid()
 ----
@@ -1565,7 +1579,7 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT current_schemas(true)
 ----
-{pg_catalog,public}
+{pg_catalog,pg_extension,public}
 
 query T
 SELECT current_schemas(false)
@@ -1577,7 +1591,7 @@ SELECT current_schemas(false)
 query T
 SELECT current_schemas(x) FROM (VALUES (true), (false)) AS t(x);
 ----
-{pg_catalog,public}
+{pg_catalog,pg_extension,public}
 {public}
 
 statement ok
@@ -2149,9 +2163,9 @@ SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
-FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
-CHECK ((c > a))
 UNIQUE (b ASC)
+FOREIGN KEY (a) REFERENCES public.pg_indexdef_test(a) ON DELETE CASCADE
+CHECK ((c > a))
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
@@ -2357,7 +2371,7 @@ SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
 query ITT
 SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
 ----
-1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SysBytes: SysCount:}
+1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SysBytes: SysCount: AbortSpanBytes:}
 
 # Without explicit keys, scans all ranges (we don't test this too precisely to
 # avoid flaking the test when the range count changes, just want to know that
@@ -2743,3 +2757,66 @@ SELECT set_bit(b'', 0, 1)
 
 query error set_bit\(\): new bit must be 0 or 1.
 SELECT set_bit(b'\145\x6C\l', 0, 2)
+
+subtest num_nulls_test
+
+statement ok
+CREATE TABLE nulls_test(a INT, b STRING)
+
+statement ok
+INSERT INTO nulls_test VALUES(1, 'foo'), (1, NULL), (NULL, 'foo'), (NULL, NULL)
+
+query II rowsort
+SELECT num_nulls(a, b), num_nonnulls(a, b) FROM nulls_test
+----
+0  2
+1  1
+1  1
+2  0
+
+subtest pb_to_json
+
+query T
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
+----
+system
+
+
+query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
+
+query B
+SELECT (SELECT * FROM [SHOW crdb_version]) = version()
+----
+true
+
+query B
+select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
+----
+true
+
+subtest regexp_split
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+')
+----
+3
+0AA
+1
+
+query T
+SELECT regexp_split_to_table('3aa0AAa1', 'a+', 'i')
+----
+3
+0
+1
+
+query T
+SELECT regexp_split_to_array('3aa0AAa1', 'a+')
+----
+{3,0AA,1}
+
+query T
+SELECT regexp_split_to_array('3aaa0AAa1', 'a+', 'i')
+----
+{3,0,1}

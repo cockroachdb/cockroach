@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,7 @@ import (
 // prevented.
 func TestRecoverTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	k, k2 := roachpb.Key("a"), roachpb.Key("b")
@@ -96,6 +98,7 @@ func TestRecoverTxn(t *testing.T) {
 // active transaction coordinator or due to a concurrent recovery.
 func TestRecoverTxnRecordChanged(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	k := roachpb.Key("a")

@@ -1,0 +1,173 @@
+# LogicTest: 5node
+
+# This test file makes sure that experimental DistSQL planning actually plans
+# processors and other components correctly. In order to make the output
+# deterministic we place the data manually.
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
+INSERT INTO kv SELECT i, i FROM generate_series(1,5) AS g(i);
+CREATE TABLE kw (k INT PRIMARY KEY, w INT, FAMILY (k, w));
+INSERT INTO kw SELECT i, i FROM generate_series(1,5) AS g(i)
+
+# Split into 5 parts, each row from each table goes to one node.
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
+ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kv]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE kw]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {5}       5
+/1         /2       {1}       1
+/2         /3       {2}       2
+/3         /4       {3}       3
+/4         /5       {4}       4
+/5         NULL     {5}       5
+
+statement ok
+SET experimental_distsql_planning = always
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM kv]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyk0s9q4zAQBvD7PoX5TruLjP_vwactbQqGNEnjHArBB9cagoljuZIdWoLfvUQupAlpqzZHSfPpNwOzg3qqECMdjUfXC6uTlXU7n95Zy9HDbHyVTKzfN0m6SO_Hf6y3kr9DwXqbgaEWnCb5hhTiJTww-GAIwBCCIULG0EhRkFJC7kt2OpDwZ8QuQ1k3Xbu_zhgKIQnxDm3ZVoQYi_yxojnlnKTjgoFTm5eVZtbb_40sN7l8AUPa5LWKLdvxkfUMomsPf6o2XxFir2cfuAeuq4XkJIkfUVl_prOJsEXjRCeF52n_iPbMR_a-HtnxbScwHNo3l30DObCd0FAOzOXAQA5tJzKUQ3M5NJAj-wcLdsadk2pErchof9z9AhJf0bCtSnSyoJkUhWaG41Tn9AUn1Q6v3nBIav2kG3wf9j4N_zsKu6dh_xI5uCQcXhKOvhXO-l-vAQAA__-hwaj8
+
+# Note that we want to test DistSQL physical planning and the obvious choice
+# would be to use EXPLAIN (DISTSQL). However, this explain variant doesn't have
+# a textual mode which is easier to verify, so we use EXPLAIN (VEC) instead.
+# TODO(yuzefovich): consider adding textual mode to EXPLAIN (DISTSQL) and
+# using it here.
+# TODO(yuzefovich): figure out how we would display plans that have distributed
+# stages followed by local ones followed by distributed stages.
+
+# An example of partially distributed plan (due to DOid type that is not
+# supported by DistSQL).
+
+query T
+EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
+----
+│
+├ Node 1
+│ └ *colexec.isNullSelOp
+│   └ *colexec.castInt64Int64Op
+│     └ *colexec.ParallelUnorderedSynchronizer
+│       ├ *colfetcher.ColBatchScan
+│       ├ *colrpc.Inbox
+│       ├ *colrpc.Inbox
+│       ├ *colrpc.Inbox
+│       └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+├ Node 3
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+├ Node 4
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+└ Node 5
+  └ *colrpc.Outbox
+    └ *colfetcher.ColBatchScan
+
+# Check that the plan is local when experimental DistSQL planning is disabled.
+statement ok
+SET experimental_distsql_planning = off
+
+query T
+EXPLAIN (VEC) SELECT * FROM kv WHERE k::REGCLASS IS NOT NULL
+----
+│
+└ Node 1
+  └ *colexec.isNullSelOp
+    └ *colexec.castInt64Int64Op
+      └ *colfetcher.ColBatchScan
+
+statement ok
+SET experimental_distsql_planning = always
+
+# Check that plan is partially distributed (due to DOid type in a render
+# expression which is not supported by DistSQL).
+query T
+EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
+----
+│
+├ Node 1
+│ └ *colexec.castInt64Int64Op
+│   └ *colexec.ParallelUnorderedSynchronizer
+│     ├ *colfetcher.ColBatchScan
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     ├ *colrpc.Inbox
+│     └ *colrpc.Inbox
+├ Node 2
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+├ Node 3
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+├ Node 4
+│ └ *colrpc.Outbox
+│   └ *colfetcher.ColBatchScan
+└ Node 5
+  └ *colrpc.Outbox
+    └ *colfetcher.ColBatchScan
+
+# Check that hash join is supported by the new factory.
+query II rowsort
+SELECT kv.k, v FROM kv, kw WHERE v = w
+----
+1  1
+2  2
+3  3
+4  4
+5  5
+
+# Check that merge join is supported by the new factory.
+query I
+SELECT kv.k FROM kv, kw WHERE kv.k = kw.k ORDER BY 1
+----
+1
+2
+3
+4
+5
+
+# Disable the partially distributed plans and check that a local plan is
+# produced instead.
+statement ok
+SET disable_partially_distributed_plans = true
+
+query T
+EXPLAIN (VEC) SELECT k::REGCLASS FROM kv
+----
+│
+└ Node 1
+  └ *colexec.castInt64Int64Op
+    └ *colfetcher.ColBatchScan
+
+statement ok
+SET disable_partially_distributed_plans = false
+
+# Ensure that the new factory can materialize system columns.
+# TODO (rohany): The factory can't plan lookup joins yet. Add a test when it can.
+query B
+SELECT crdb_internal_mvcc_timestamp IS NOT NULL FROM kv LIMIT 1
+----
+true

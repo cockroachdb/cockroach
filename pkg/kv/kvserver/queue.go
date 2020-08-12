@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,12 +65,13 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 	return queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 }
 
-// The queues which send snapshots while processing should have a timeout which
+// The queues which traverse through the data in the range (i.e. send a snapshot
+// or calculate a range checksum) while processing should have a timeout which
 // is a function of the size of the range and the maximum allowed rate of data
 // transfer that adheres to a minimum timeout specified in a cluster setting.
 //
 // The parameter controls which rate to use.
-func makeQueueSnapshotTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 		// NB: In production code this will type assertion will always succeed.
@@ -84,7 +85,7 @@ func makeQueueSnapshotTimeoutFunc(rateSetting *settings.ByteSizeSetting) queuePr
 		stats := repl.GetMVCCStats()
 		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
 		estimatedDuration := time.Duration(totalBytes/snapshotRate) * time.Second
-		timeout := estimatedDuration * permittedSnapshotSlowdown
+		timeout := estimatedDuration * permittedRangeScanSlowdown
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
 		}
@@ -92,10 +93,10 @@ func makeQueueSnapshotTimeoutFunc(rateSetting *settings.ByteSizeSetting) queuePr
 	}
 }
 
-// permittedSnapshotSlowdown is the factor of the above the estimated duration
-// for a snapshot given the configured snapshot rate which we use to configure
-// the snapshot's timeout.
-const permittedSnapshotSlowdown = 10
+// permittedRangeScanSlowdown is the factor of the above the estimated duration
+// for a range scan given the configured rate which we use to configure
+// the operations's timeout.
+const permittedRangeScanSlowdown = 10
 
 // a purgatoryError indicates a replica processing failure which indicates
 // the replica can be placed into purgatory for faster retries when the
@@ -240,8 +241,8 @@ type replicaInQueue interface {
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
 	maybeInitializeRaftGroup(context.Context)
-	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
-	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
+	redirectOnOrAcquireLease(context.Context) (kvserverpb.LeaseStatus, *roachpb.Error)
+	IsLeaseValid(context.Context, roachpb.Lease, hlc.Timestamp) bool
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }
 
@@ -255,7 +256,9 @@ type queueImpl interface {
 
 	// process accepts a replica, and the system config and executes
 	// queue-specific work on it. The Replica is guaranteed to be initialized.
-	process(context.Context, *Replica, *config.SystemConfig) error
+	// We return a boolean to indicate if the Replica was processed successfully
+	// (vs. it being being a no-op or an error).
+	process(context.Context, *Replica, *config.SystemConfig) (processed bool, err error)
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -628,7 +631,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 		repl.maybeInitializeRaftGroup(ctx)
 	}
 
-	if cfg != nil && bq.requiresSplit(cfg, repl) {
+	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -640,7 +643,7 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if bq.needsLease {
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
-		if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) &&
+		if lease, _ := repl.GetLease(); repl.IsLeaseValid(ctx, lease, now) &&
 			!lease.OwnedBy(repl.StoreID()) {
 			if log.V(1) {
 				log.Infof(ctx, "needs lease; not adding: %+v", lease)
@@ -661,12 +664,14 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue) bool {
+func (bq *baseQueue) requiresSplit(
+	ctx context.Context, cfg *config.SystemConfig, repl replicaInQueue,
+) bool {
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
 	desc := repl.Desc()
-	return cfg.NeedsSplit(desc.StartKey, desc.EndKey)
+	return cfg.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
 }
 
 // addInternal adds the replica the queue with specified priority. If
@@ -900,7 +905,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 		}
 	}
 
-	if cfg != nil && bq.requiresSplit(cfg, repl) {
+	if cfg != nil && bq.requiresSplit(ctx, cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		log.VEventf(ctx, 3, "split needed; skipping")
@@ -950,11 +955,14 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) er
 			// it may not be and shouldQueue will be passed a nil realRepl. These tests
 			// know what they're getting into so that's fine.
 			realRepl, _ := repl.(*Replica)
-			if err := bq.impl.process(ctx, realRepl, cfg); err != nil {
+			processed, err := bq.impl.process(ctx, realRepl, cfg)
+			if err != nil {
 				return err
 			}
-			log.VEventf(ctx, 3, "processing... done")
-			bq.successes.Inc(1)
+			if processed {
+				log.VEventf(ctx, 3, "processing... done")
+				bq.successes.Inc(1)
+			}
 			return nil
 		})
 }

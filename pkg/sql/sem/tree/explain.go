@@ -87,23 +87,21 @@ type ExplainFlag uint8
 // Explain flags.
 const (
 	ExplainFlagVerbose ExplainFlag = 1 + iota
-	ExplainFlagSymVars
 	ExplainFlagTypes
-	ExplainFlagNoNormalize
 	ExplainFlagAnalyze
 	ExplainFlagEnv
 	ExplainFlagCatalog
+	ExplainFlagDebug
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose:     "VERBOSE",
-	ExplainFlagSymVars:     "SYMVARS",
-	ExplainFlagTypes:       "TYPES",
-	ExplainFlagNoNormalize: "NONORMALIZE",
-	ExplainFlagAnalyze:     "ANALYZE",
-	ExplainFlagEnv:         "ENV",
-	ExplainFlagCatalog:     "CATALOG",
+	ExplainFlagVerbose: "VERBOSE",
+	ExplainFlagTypes:   "TYPES",
+	ExplainFlagAnalyze: "ANALYZE",
+	ExplainFlagEnv:     "ENV",
+	ExplainFlagCatalog: "CATALOG",
+	ExplainFlagDebug:   "DEBUG",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -124,13 +122,15 @@ func (f ExplainFlag) String() string {
 // Format implements the NodeFormatter interface.
 func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
+	showMode := node.Mode != ExplainPlan
 	// ANALYZE is a special case because it is a statement implemented as an
 	// option to EXPLAIN.
 	if node.Flags[ExplainFlagAnalyze] {
 		ctx.WriteString("ANALYZE ")
+		showMode = true
 	}
 	wroteFlag := false
-	if node.Mode != ExplainPlan {
+	if showMode {
 		fmt.Fprintf(ctx, "(%s", node.Mode)
 		wroteFlag = true
 	}
@@ -171,26 +171,6 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	for i := range options {
 		options[i] = strings.ToUpper(options[i])
 	}
-	find := func(o string) bool {
-		for i := range options {
-			if options[i] == o {
-				return true
-			}
-		}
-		return false
-	}
-
-	if find("DEBUG") {
-		if !find("ANALYZE") {
-			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
-		}
-		if len(options) != 2 {
-			return nil, pgerror.Newf(
-				pgcode.Syntax, "EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags")
-		}
-		return &ExplainAnalyzeDebug{Statement: stmt}, nil
-	}
-
 	var opts ExplainOptions
 	for _, opt := range options {
 		opt = strings.ToUpper(opt)
@@ -207,10 +187,31 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 		opts.Flags[flag] = true
 	}
+	analyze := opts.Flags[ExplainFlagAnalyze]
 	if opts.Mode == 0 {
-		// Default mode is ExplainPlan.
-		opts.Mode = ExplainPlan
+		if analyze {
+			// ANALYZE implies DISTSQL.
+			opts.Mode = ExplainDistSQL
+		} else {
+			// Default mode is ExplainPlan.
+			opts.Mode = ExplainPlan
+		}
+	} else if analyze && opts.Mode != ExplainDistSQL {
+		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE cannot be used with %s", opts.Mode)
 	}
+
+	if opts.Flags[ExplainFlagDebug] {
+		if !analyze {
+			return nil, pgerror.Newf(pgcode.Syntax, "DEBUG flag can only be used with EXPLAIN ANALYZE")
+		}
+		if len(options) != 2 {
+			return nil, pgerror.Newf(pgcode.Syntax,
+				"EXPLAIN ANALYZE (DEBUG) cannot be used in conjunction with other flags",
+			)
+		}
+		return &ExplainAnalyzeDebug{Statement: stmt}, nil
+	}
+
 	return &Explain{
 		ExplainOptions: opts,
 		Statement:      stmt,

@@ -90,7 +90,7 @@ func (decimalCustomizer) getHashAssignFunc() assignFunc {
 		return fmt.Sprintf(`
 			// In order for equal decimals to hash to the same value we need to
 			// remove the trailing zeroes if there are any.
-			tmpDec := &decimalScratch.tmpDec1
+			tmpDec := &_overloadHelper.tmpDec1
 			tmpDec.Reduce(&%[1]s)
 			b := []byte(tmpDec.String())`, vElem) +
 			fmt.Sprintf(hashByteSliceString, targetElem, "b")
@@ -140,5 +140,15 @@ func (c intervalCustomizer) getHashAssignFunc() assignFunc {
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&days)), %[1]s)
 		  %[1]s = memhash64(noescape(unsafe.Pointer(&nanos)), %[1]s)
 		`, targetElem, vElem)
+	}
+}
+
+func (c datumCustomizer) getHashAssignFunc() assignFunc {
+	return func(op *lastArgWidthOverload, targetElem, vElem, _, _, _, _ string) string {
+		// Note that this overload assumes that there exists
+		//   var datumAlloc *sqlbase.DatumAlloc.
+		// in the scope.
+		return fmt.Sprintf(`b := %s.(*coldataext.Datum).Hash(datumAlloc)`, vElem) +
+			fmt.Sprintf(hashByteSliceString, targetElem, "b")
 	}
 }

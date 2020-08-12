@@ -10,22 +10,22 @@ INSERT 1
 dump t f g
 ----
 ----
-CREATE TABLE f (
+CREATE TABLE public.f (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
-CREATE TABLE g (
+CREATE TABLE public.g (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 
-INSERT INTO g (x, y) VALUES
+INSERT INTO public.g (x, y) VALUES
 	(3, 4);
 ----
 ----
@@ -33,22 +33,22 @@ INSERT INTO g (x, y) VALUES
 dump t 
 ----
 ----
-CREATE TABLE f (
+CREATE TABLE public.f (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
-CREATE TABLE g (
+CREATE TABLE public.g (
 	x INT8 NULL,
 	y INT8 NULL,
 	FAMILY "primary" (x, y, rowid)
 );
 
-INSERT INTO f (x, y) VALUES
+INSERT INTO public.f (x, y) VALUES
 	(42, 69);
 
-INSERT INTO g (x, y) VALUES
+INSERT INTO public.g (x, y) VALUES
 	(3, 4);
 ----
 ----

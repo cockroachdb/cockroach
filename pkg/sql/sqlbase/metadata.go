@@ -12,7 +12,6 @@ package sqlbase
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -20,14 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
-
-var _ DescriptorProto = &DatabaseDescriptor{}
-var _ DescriptorProto = &TableDescriptor{}
-var _ DescriptorProto = &TypeDescriptor{}
-var _ DescriptorProto = &SchemaDescriptor{}
 
 // DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
@@ -37,35 +33,27 @@ type DescriptorKey interface {
 	Name() string
 }
 
-// DescriptorProto is the interface implemented by all Descriptors.
-// TODO(marc): this is getting rather large.
-type DescriptorProto interface {
-	protoutil.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	SetID(ID)
-	TypeName() string
-	GetName() string
-	SetName(string)
-	GetAuditMode() TableDescriptor_AuditMode
-}
-
-// WrapDescriptor fills in a Descriptor.
-func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
-	desc := &Descriptor{}
+// wrapDescriptor fills in a Descriptor from a given member of its union.
+//
+// TODO(ajwerner): Replace this with the relevant type-specific DescriptorProto
+// methods.
+func wrapDescriptor(descriptor protoutil.Message) *descpb.Descriptor {
+	desc := &descpb.Descriptor{}
 	switch t := descriptor.(type) {
 	case *MutableTableDescriptor:
-		desc.Union = &Descriptor_Table{Table: &t.TableDescriptor}
-	case *TableDescriptor:
-		desc.Union = &Descriptor_Table{Table: t}
-	case *DatabaseDescriptor:
-		desc.Union = &Descriptor_Database{Database: t}
-	case *TypeDescriptor:
-		desc.Union = &Descriptor_Type{Type: t}
-	case *SchemaDescriptor:
-		desc.Union = &Descriptor_Schema{Schema: t}
+		desc.Union = &descpb.Descriptor_Table{Table: &t.TableDescriptor}
+	case *descpb.TableDescriptor:
+		desc.Union = &descpb.Descriptor_Table{Table: t}
+	case *descpb.DatabaseDescriptor:
+		desc.Union = &descpb.Descriptor_Database{Database: t}
+	case *MutableTypeDescriptor:
+		desc.Union = &descpb.Descriptor_Type{Type: &t.TypeDescriptor}
+	case *descpb.TypeDescriptor:
+		desc.Union = &descpb.Descriptor_Type{Type: t}
+	case *descpb.SchemaDescriptor:
+		desc.Union = &descpb.Descriptor_Schema{Schema: t}
 	default:
-		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
+		panic(errors.AssertionFailedf("unknown descriptor type: %T", descriptor))
 	}
 	return desc
 }
@@ -82,8 +70,8 @@ type MetadataSchema struct {
 }
 
 type metadataDescriptor struct {
-	parentID ID
-	desc     DescriptorProto
+	parentID descpb.ID
+	desc     Descriptor
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -101,9 +89,9 @@ func MakeMetadataSchema(
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID descpb.ID, desc Descriptor) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
-		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
+		panic(errors.AssertionFailedf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
 	for _, d := range ms.descs {
 		if d.desc.GetID() == desc.GetID() {
@@ -148,7 +136,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc DescriptorProto) {
+	addDescriptor := func(parentID descpb.ID, desc Descriptor) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -176,8 +164,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 		// Create descriptor metadata key.
 		value = roachpb.Value{}
-		wrappedDesc := WrapDescriptor(desc)
-		if err := value.SetProto(wrappedDesc); err != nil {
+		descDesc := desc.DescriptorProto()
+		if err := value.SetProto(descDesc); err != nil {
 			log.Fatalf(context.TODO(), "could not marshal %v", desc)
 		}
 		ret = append(ret, roachpb.KeyValue{
@@ -195,8 +183,24 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		addDescriptor(sysObj.parentID, sysObj.desc)
 	}
 
-	for _, id := range ms.otherSplitIDs {
-		splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+	// The splits slice currently has a split point for each of the object
+	// descriptors in ms.descs. If we're fetching the initial values for the
+	// system tenant, add any additional split point, which correspond to
+	// "pseudo" tables that don't have real descriptors.
+	//
+	// If we're fetching the initial values for a secondary tenant, things are
+	// different. Secondary tenants do not enforce split points at table
+	// boundaries. In fact, if we tried to split at table boundaries, those
+	// splits would quickly be merged away. The only enforced split points are
+	// between secondary tenants (e.g. between /tenant/<id> and /tenant/<id+1>).
+	// So we drop all descriptor split points and replace it with a single split
+	// point at the beginning of this tenant's keyspace.
+	if ms.codec.ForSystemTenant() {
+		for _, id := range ms.otherSplitIDs {
+			splits = append(splits, roachpb.RKey(ms.codec.TablePrefix(id)))
+		}
+	} else {
+		splits = []roachpb.RKey{roachpb.RKey(ms.codec.TenantPrefix())}
 	}
 
 	// Other key/value generation that doesn't fit into databases and
@@ -215,8 +219,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in
 // sorted order.
-func (ms MetadataSchema) DescriptorIDs() IDs {
-	descriptorIDs := IDs{}
+func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
+	descriptorIDs := descpb.IDs{}
 	for _, md := range ms.descs {
 		descriptorIDs = append(descriptorIDs, md.desc.GetID())
 	}
@@ -228,9 +232,9 @@ func (ms MetadataSchema) DescriptorIDs() IDs {
 // It relies on the fact that table IDs under MaxReservedDescID are fixed.
 //
 // Mapping: [systemTenant][tableName] => tableID
-var systemTableIDCache = func() [2]map[string]ID {
-	cacheForTenant := func(systemTenant bool) map[string]ID {
-		cache := make(map[string]ID)
+var systemTableIDCache = func() [2]map[string]descpb.ID {
+	cacheForTenant := func(systemTenant bool) map[string]descpb.ID {
+		cache := make(map[string]descpb.ID)
 
 		codec := keys.SystemSQLCodec
 		if !systemTenant {
@@ -240,13 +244,13 @@ var systemTableIDCache = func() [2]map[string]ID {
 		ms := MetadataSchema{codec: codec}
 		addSystemDescriptorsToSchema(&ms)
 		for _, d := range ms.descs {
-			t, ok := d.desc.(*TableDescriptor)
-			if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+			t, ok := d.desc.(TableDescriptor)
+			if !ok || t.GetParentID() != keys.SystemDatabaseID || t.GetID() > keys.MaxReservedDescID {
 				// We only cache table descriptors under 'system' with a
 				// reserved table ID.
 				continue
 			}
-			cache[t.Name] = t.ID
+			cache[t.GetName()] = t.GetID()
 		}
 
 		// This special case exists so that we resolve "namespace" to the new
@@ -265,7 +269,7 @@ var systemTableIDCache = func() [2]map[string]ID {
 		return cache
 	}
 
-	var cache [2]map[string]ID
+	var cache [2]map[string]descpb.ID
 	for _, b := range []bool{false, true} {
 		cache[boolToInt(b)] = cacheForTenant(b)
 	}
@@ -282,10 +286,14 @@ func boolToInt(b bool) int {
 // LookupSystemTableDescriptorID uses the lookup cache above
 // to bypass a KV lookup when resolving the name of system tables.
 func LookupSystemTableDescriptorID(
-	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, dbID ID, tableName string,
-) ID {
-	if dbID != SystemDB.ID {
-		return InvalidID
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	tableName string,
+) descpb.ID {
+	if dbID != SystemDB.GetID() {
+		return descpb.InvalidID
 	}
 
 	if settings != nil &&
@@ -296,7 +304,7 @@ func LookupSystemTableDescriptorID(
 	systemTenant := boolToInt(codec.ForSystemTenant())
 	dbID, ok := systemTableIDCache[systemTenant][tableName]
 	if !ok {
-		return InvalidID
+		return descpb.InvalidID
 	}
 	return dbID
 }

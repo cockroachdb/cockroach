@@ -133,10 +133,6 @@ func NewPebbleTempEngine(
 	return newPebbleTempEngine(ctx, tempStorage, storeSpec)
 }
 
-var pebbleTempEngineTablePropertyCollectors = []func() pebble.TablePropertyCollector{
-	func() pebble.TablePropertyCollector { return &pebbleDeleteRangeCollector{} },
-}
-
 func newPebbleTempEngine(
 	ctx context.Context, tempStorage base.TempStorageConfig, storeSpec base.StoreSpec,
 ) (*pebbleTempEngine, fs.FS, error) {
@@ -153,7 +149,7 @@ func newPebbleTempEngine(
 	// Use the default bytes.Compare-like comparer.
 	opts.Comparer = pebble.DefaultComparer
 	opts.DisableWAL = true
-	opts.TablePropertyCollectors = pebbleTempEngineTablePropertyCollectors
+	opts.TablePropertyCollectors = nil
 
 	storageConfig := storageConfigFromTempStorageConfigAndStoreSpec(tempStorage, storeSpec)
 	if tempStorage.InMemory {

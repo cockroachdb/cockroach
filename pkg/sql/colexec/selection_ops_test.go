@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
@@ -32,6 +33,7 @@ const (
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tups := tuples{{0}, {1}, {2}, {nil}}
 	runTests(t, []tuples{tups}, tuples{{0}, {1}}, orderedVerifier, func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 		return &selLTInt64Int64ConstOp{
@@ -46,6 +48,7 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 
 func TestSelLTInt64Int64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	tups := tuples{
 		{0, 0},
 		{0, 1},
@@ -68,12 +71,13 @@ func TestSelLTInt64Int64(t *testing.T) {
 
 func TestGetSelectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cmpOp := tree.LT
 	var input colexecbase.Operator
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
-	op, err := GetSelectionConstOperator(types.Date, types.Date, cmpOp, input, colIdx, constArg)
+	op, err := GetSelectionConstOperator(types.Date, types.Date, cmpOp, input, colIdx, constArg, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -91,12 +95,13 @@ func TestGetSelectionConstOperator(t *testing.T) {
 
 func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	cmpOp := tree.LT
 	var input colexecbase.Operator
 	colIdx := 3
 	constVal := int16(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
-	op, err := GetSelectionConstOperator(types.Int, types.Int2, cmpOp, input, colIdx, constArg)
+	op, err := GetSelectionConstOperator(types.Int, types.Int2, cmpOp, input, colIdx, constArg, nil)
 	if err != nil {
 		t.Error(err)
 	}
@@ -114,12 +119,13 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 
 func TestGetSelectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ct := types.Int2
 	cmpOp := tree.GE
 	var input colexecbase.Operator
 	col1Idx := 5
 	col2Idx := 7
-	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx)
+	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx, nil)
 	if err != nil {
 		t.Error(err)
 	}

@@ -18,7 +18,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,37 +38,27 @@ func initAggregateBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 
-		if !v.props.Impure {
-			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
-		}
 		if v.props.Class != tree.AggregateClass {
-			panic(fmt.Sprintf("%s: aggregate functions should be marked with the tree.AggregateClass "+
+			panic(errors.AssertionFailedf("%s: aggregate functions should be marked with the tree.AggregateClass "+
 				"function class, found %v", k, v))
 		}
 		for _, a := range v.overloads {
 			if a.AggregateFunc == nil {
-				panic(fmt.Sprintf("%s: aggregate functions should have tree.AggregateFunc constructors, "+
+				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.AggregateFunc constructors, "+
 					"found %v", k, a))
 			}
 			if a.WindowFunc == nil {
-				panic(fmt.Sprintf("%s: aggregate functions should have tree.WindowFunc constructors, "+
+				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.WindowFunc constructors, "+
 					"found %v", k, a))
 			}
 		}
-
-		// The aggregate functions are considered "row dependent". This is
-		// because each aggregate function application receives the set of
-		// grouped rows as implicit parameter. It may have a different
-		// value in every group, so it cannot be considered constant in
-		// the context of a data source.
-		v.props.NeedsRepeatedEvaluation = true
 
 		builtins[k] = v
 	}
 }
 
 func aggProps() tree.FunctionProperties {
-	return tree.FunctionProperties{Class: tree.AggregateClass, Impure: true}
+	return tree.FunctionProperties{Class: tree.AggregateClass}
 }
 
 func aggPropsNullableArgs() tree.FunctionProperties {
@@ -76,6 +66,13 @@ func aggPropsNullableArgs() tree.FunctionProperties {
 	f.NullableArgs = true
 	return f
 }
+
+// allMaxMinAggregateTypes contains extra types that aren't in
+// types.Scalar that the max/min aggregate functions are defined on.
+var allMaxMinAggregateTypes = append(
+	[]*types.T{types.AnyCollatedString, types.AnyEnum},
+	types.Scalar...,
+)
 
 // aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
@@ -204,16 +201,32 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the boolean value of `AND`ing all selected values.", tree.VolatilityImmutable),
 	),
 
-	"max": collectOverloads(aggProps(), types.Scalar,
+	"max": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
-				"Identifies the maximum selected value.", tree.VolatilityImmutable)
+			info := "Identifies the maximum selected value."
+			vol := tree.VolatilityImmutable
+			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
+			// does not have a fixed return type.
+			if t.IsAmbiguous() {
+				return makeAggOverloadWithReturnType(
+					[]*types.T{t}, tree.FirstNonNullReturnType(), newMaxAggregate, info, vol,
+				)
+			}
+			return makeAggOverload([]*types.T{t}, t, newMaxAggregate, info, vol)
 		}),
 
-	"min": collectOverloads(aggProps(), types.Scalar,
+	"min": collectOverloads(aggProps(), allMaxMinAggregateTypes,
 		func(t *types.T) tree.Overload {
-			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
-				"Identifies the minimum selected value.", tree.VolatilityImmutable)
+			info := "Identifies the minimum selected value."
+			vol := tree.VolatilityImmutable
+			// If t is an ambiguous type (like AnyCollatedString), then our aggregate
+			// does not have a fixed return type.
+			if t.IsAmbiguous() {
+				return makeAggOverloadWithReturnType(
+					[]*types.T{t}, tree.FirstNonNullReturnType(), newMinAggregate, info, vol,
+				)
+			}
+			return makeAggOverload([]*types.T{t}, t, newMinAggregate, info, vol)
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),
@@ -278,8 +291,7 @@ var aggregates = map[string]builtinDefinition{
 
 	"final_stddev": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload(
-			[]*types.T{types.Decimal,
-				types.Decimal, types.Int},
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
@@ -294,18 +306,29 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
-	"variance": makeBuiltin(aggProps(),
-		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
-		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
-			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+	// variance is a historical alias for var_samp.
+	"variance": makeVarianceBuiltin(),
+	"var_samp": makeVarianceBuiltin(),
+	"var_pop": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarPopAggregate,
+			"Calculates the population variance of the selected values.", tree.VolatilityImmutable),
 	),
 
 	// stddev is a historical alias for stddev_samp.
 	"stddev":      makeStdDevBuiltin(),
 	"stddev_samp": makeStdDevBuiltin(),
+	"stddev_pop": makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevPopAggregate,
+			"Calculates the population standard deviation of the selected values.", tree.VolatilityImmutable),
+	),
 
 	"xor_agg": makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
@@ -324,8 +347,14 @@ var aggregates = map[string]builtinDefinition{
 			"Aggregates values as a JSON or JSONB array.", tree.VolatilityStable),
 	),
 
-	"json_object_agg":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
-	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 33285, Class: tree.AggregateClass, Impure: true}),
+	"json_object_agg": makeBuiltin(aggPropsNullableArgs(),
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
+			"Aggregates values as a JSON or JSONB object.", tree.VolatilityStable),
+	),
+	"jsonb_object_agg": makeBuiltin(aggPropsNullableArgs(),
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
+			"Aggregates values as a JSON or JSONB object.", tree.VolatilityStable),
+	),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
@@ -517,6 +546,17 @@ func makeStdDevBuiltin() builtinDefinition {
 	)
 }
 
+func makeVarianceBuiltin() builtinDefinition {
+	return makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
+			"Calculates the variance of the selected values.", tree.VolatilityImmutable),
+	)
+}
+
 // builtinMustNotRun panics and indicates that a builtin cannot be run.
 func builtinMustNotRun(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	panic(fmt.Sprint("builtin must be overridden and cannot be run directly"))
@@ -576,6 +616,8 @@ const sizeOfFloatSumSqrDiffsAggregate = int64(unsafe.Sizeof(floatSumSqrDiffsAggr
 const sizeOfDecimalSumSqrDiffsAggregate = int64(unsafe.Sizeof(decimalSumSqrDiffsAggregate{}))
 const sizeOfFloatVarianceAggregate = int64(unsafe.Sizeof(floatVarianceAggregate{}))
 const sizeOfDecimalVarianceAggregate = int64(unsafe.Sizeof(decimalVarianceAggregate{}))
+const sizeOfFloatVarPopAggregate = int64(unsafe.Sizeof(floatVarPopAggregate{}))
+const sizeOfDecimalVarPopAggregate = int64(unsafe.Sizeof(decimalVarPopAggregate{}))
 const sizeOfFloatStdDevAggregate = int64(unsafe.Sizeof(floatStdDevAggregate{}))
 const sizeOfDecimalStdDevAggregate = int64(unsafe.Sizeof(decimalStdDevAggregate{}))
 const sizeOfAnyNotNullAggregate = int64(unsafe.Sizeof(anyNotNullAggregate{}))
@@ -585,6 +627,7 @@ const sizeOfBoolOrAggregate = int64(unsafe.Sizeof(boolOrAggregate{}))
 const sizeOfBytesXorAggregate = int64(unsafe.Sizeof(bytesXorAggregate{}))
 const sizeOfIntXorAggregate = int64(unsafe.Sizeof(intXorAggregate{}))
 const sizeOfJSONAggregate = int64(unsafe.Sizeof(jsonAggregate{}))
+const sizeOfJSONObjectAggregate = int64(unsafe.Sizeof(jsonObjectAggregate{}))
 const sizeOfIntBitAndAggregate = int64(unsafe.Sizeof(intBitAndAggregate{}))
 const sizeOfBitBitAndAggregate = int64(unsafe.Sizeof(bitBitAndAggregate{}))
 const sizeOfIntBitOrAggregate = int64(unsafe.Sizeof(intBitOrAggregate{}))
@@ -894,7 +937,7 @@ func newBytesConcatAggregate(
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDBytes(arguments[0]))
 	} else if len(arguments) > 1 {
-		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
+		panic(errors.AssertionFailedf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
 	return concatAgg
 }
@@ -908,7 +951,7 @@ func newStringConcatAggregate(
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
 	} else if len(arguments) > 1 {
-		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
+		panic(errors.AssertionFailedf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
 	return concatAgg
 }
@@ -930,7 +973,7 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 				delimiter = string(tree.MustBeDString(others[0]))
 			}
 		} else if len(others) > 1 {
-			panic(fmt.Sprintf("too many other datums passed in, expected < 2, got %d", len(others)))
+			panic(errors.AssertionFailedf("too many other datums passed in, expected < 2, got %d", len(others)))
 		}
 		if len(delimiter) > 0 {
 			a.result.WriteString(delimiter)
@@ -1695,12 +1738,12 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 				// And overflow was detected; go to large integers, but keep the
 				// sum computed so far.
 				a.large = true
-				a.decSum.SetFinite(a.intSum, 0)
+				a.decSum.SetInt64(a.intSum)
 			}
 		}
 
 		if a.large {
-			a.tmpDec.SetFinite(t, 0)
+			a.tmpDec.SetInt64(t)
 			_, err := tree.ExactCtx.Add(&a.decSum, &a.decSum, &a.tmpDec)
 			if err != nil {
 				return err
@@ -1723,7 +1766,7 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 	if a.large {
 		dd.Set(&a.decSum)
 	} else {
-		dd.SetFinite(a.intSum, 0)
+		dd.SetInt64(a.intSum)
 	}
 	return dd, nil
 }
@@ -1793,7 +1836,7 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Reset(ctx context.Context) {
-	a.sum.SetFinite(0, 0)
+	a.sum.SetInt64(0)
 	a.sawNonNull = false
 	a.reset(ctx)
 }
@@ -1929,7 +1972,7 @@ func (a *intSqrDiffAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return nil
 	}
 
-	a.tmpDec.SetFinite(int64(tree.MustBeDInt(datum)), 0)
+	a.tmpDec.SetInt64(int64(tree.MustBeDInt(datum)))
 	return a.agg.Add(ctx, &a.tmpDec)
 }
 
@@ -2099,9 +2142,9 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Reset(ctx context.Context) {
-	a.count.SetFinite(0, 0)
-	a.mean.SetFinite(0, 0)
-	a.sqrDiff.SetFinite(0, 0)
+	a.count.SetInt64(0)
+	a.mean.SetInt64(0)
+	a.sqrDiff.SetInt64(0)
 	a.reset(ctx)
 }
 
@@ -2295,9 +2338,9 @@ func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 
 // Reset implements tree.AggregateFunc interface.
 func (a *decimalSumSqrDiffsAggregate) Reset(ctx context.Context) {
-	a.count.SetFinite(0, 0)
-	a.mean.SetFinite(0, 0)
-	a.sqrDiff.SetFinite(0, 0)
+	a.count.SetInt64(0)
+	a.mean.SetInt64(0)
+	a.sqrDiff.SetInt64(0)
 	a.reset(ctx)
 }
 
@@ -2450,6 +2493,109 @@ func (a *decimalVarianceAggregate) Size() int64 {
 	return sizeOfDecimalVarianceAggregate
 }
 
+type floatVarPopAggregate struct {
+	agg floatSqrDiff
+}
+
+type decimalVarPopAggregate struct {
+	agg decimalSqrDiff
+}
+
+func newIntVarPopAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newIntSqrDiff(evalCtx)}
+}
+
+func newFloatVarPopAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &floatVarPopAggregate{agg: newFloatSqrDiff()}
+}
+
+func newDecimalVarPopAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &decimalVarPopAggregate{agg: newDecimalSqrDiff(evalCtx)}
+}
+
+// Add is part of the tree.AggregateFunc interface.
+//  Population Variance: VALUE(float)
+func (a *floatVarPopAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Add is part of the tree.AggregateFunc interface.
+//  Population Variance: VALUE(int|decimal)
+func (a *decimalVarPopAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	return a.agg.Add(ctx, firstArg, otherArgs...)
+}
+
+// Result calculates the population variance from the member square difference aggregator.
+func (a *floatVarPopAggregate) Result() (tree.Datum, error) {
+	if a.agg.Count() < 1 {
+		return tree.DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDFloat(tree.DFloat(float64(*sqrDiff.(*tree.DFloat)) / (float64(a.agg.Count())))), nil
+}
+
+// Result calculates the population variance from the member square difference aggregator.
+func (a *decimalVarPopAggregate) Result() (tree.Datum, error) {
+	if a.agg.Count().Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	sqrDiff, err := a.agg.Result()
+	if err != nil {
+		return nil, err
+	}
+	dd := &tree.DDecimal{}
+	if _, err = tree.DecimalCtx.Quo(&dd.Decimal, &sqrDiff.(*tree.DDecimal).Decimal, a.agg.Count()); err != nil {
+		return nil, err
+	}
+	// Remove trailing zeros. Depending on the order in which the input is
+	// processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of
+	// order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Close(ctx context.Context) {
+	a.agg.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *floatVarPopAggregate) Size() int64 {
+	return sizeOfFloatVarPopAggregate
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Reset(ctx context.Context) {
+	a.agg.Reset(ctx)
+}
+
+// Close is part of the tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Close(ctx context.Context) {
+	a.agg.Close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *decimalVarPopAggregate) Size() int64 {
+	return sizeOfDecimalVarPopAggregate
+}
+
 type floatStdDevAggregate struct {
 	agg tree.AggregateFunc
 }
@@ -2492,6 +2638,24 @@ func newDecimalFinalStdDevAggregate(
 	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx, arguments)}
+}
+
+func newIntStdDevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &decimalStdDevAggregate{agg: newIntVarPopAggregate(params, evalCtx, arguments)}
+}
+
+func newFloatStdDevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &floatStdDevAggregate{agg: newFloatVarPopAggregate(params, evalCtx, arguments)}
+}
+
+func newDecimalStdDevPopAggregate(
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+) tree.AggregateFunc {
+	return &decimalStdDevAggregate{agg: newDecimalVarPopAggregate(params, evalCtx, arguments)}
 }
 
 // Add implements the tree.AggregateFunc interface.
@@ -2768,7 +2932,7 @@ func validateInputFractions(datum tree.Datum) ([]float64, bool, error) {
 			fractions = append(fractions, fraction)
 		}
 	} else {
-		panic(fmt.Sprintf("unexpected input type, %s", datum.ResolvedType()))
+		panic(errors.AssertionFailedf("unexpected input type, %s", datum.ResolvedType()))
 	}
 	return fractions, singleInput, nil
 }
@@ -2813,7 +2977,7 @@ func (a *percentileDiscAggregate) Add(
 		}
 		return a.arr.Append(others[0])
 	} else if len(others) != 1 {
-		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+		panic(errors.AssertionFailedf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
 	}
 	return nil
 }
@@ -2911,7 +3075,7 @@ func (a *percentileContAggregate) Add(
 		}
 		return a.arr.Append(others[0])
 	} else if len(others) != 1 {
-		panic(fmt.Sprintf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
+		panic(errors.AssertionFailedf("unexpected number of other datums passed in, expected 1, got %d", len(others)))
 	}
 	return nil
 }
@@ -2970,7 +3134,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 					return nil, err
 				}
 			} else {
-				panic(fmt.Sprintf("argument type must be float or interval, got %s", a.arr.ParamTyp.String()))
+				panic(errors.AssertionFailedf("argument type must be float or interval, got %s", a.arr.ParamTyp.String()))
 			}
 		}
 		if a.singleInput {
@@ -2998,4 +3162,79 @@ func (a *percentileContAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *percentileContAggregate) Size() int64 {
 	return sizeOfPercentileContAggregate
+}
+
+type jsonObjectAggregate struct {
+	singleDatumAggregateBase
+
+	loc        *time.Location
+	builder    *json.ObjectBuilderWithCounter
+	sawNonNull bool
+}
+
+func newJSONObjectAggregate(
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &jsonObjectAggregate{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		loc:                      evalCtx.GetLocation(),
+		builder:                  json.NewObjectBuilderWithCounter(),
+		sawNonNull:               false,
+	}
+}
+
+// Add accumulates the transformed json into the JSON object.
+func (a *jsonObjectAggregate) Add(
+	ctx context.Context, datum tree.Datum, others ...tree.Datum,
+) error {
+	if len(others) != 1 {
+		return errors.Errorf("wrong number of arguments, expected key/value pair")
+	}
+
+	// If the key datum is NULL, return an error.
+	if datum == tree.DNull {
+		return pgerror.New(pgcode.InvalidParameterValue,
+			"field name must not be null")
+	}
+
+	key, err := asJSONBuildObjectKey(datum, a.loc)
+	if err != nil {
+		return err
+	}
+	val, err := tree.AsJSON(others[0], a.loc)
+	if err != nil {
+		return err
+	}
+	a.builder.Add(key, val)
+	if err = a.updateMemoryUsage(ctx, int64(a.builder.Size())); err != nil {
+		return err
+	}
+	a.sawNonNull = true
+	return nil
+}
+
+// Result returns a DJSON from the array of JSON.
+func (a *jsonObjectAggregate) Result() (tree.Datum, error) {
+	if a.sawNonNull {
+		return tree.NewDJSON(a.builder.Build()), nil
+	}
+	return tree.DNull, nil
+}
+
+// Reset implements tree.AggregateFunc interface.
+func (a *jsonObjectAggregate) Reset(ctx context.Context) {
+	a.builder = json.NewObjectBuilderWithCounter()
+	a.sawNonNull = false
+	a.reset(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *jsonObjectAggregate) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the tree.AggregateFunc interface.
+func (a *jsonObjectAggregate) Size() int64 {
+	return sizeOfJSONObjectAggregate
 }

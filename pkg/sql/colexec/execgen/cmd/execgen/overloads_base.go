@@ -123,7 +123,12 @@ func (b *overloadBase) String() string {
 }
 
 func toString(family types.Family) string {
-	return "types." + family.String()
+	switch family {
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return "typeconv.DatumVecCanonicalTypeFamily"
+	default:
+		return "types." + family.String()
+	}
 }
 
 type argTypeOverloadBase struct {
@@ -267,12 +272,13 @@ type lastArgWidthOverload struct {
 func newLastArgWidthOverload(
 	typeOverload *lastArgTypeOverload, width int32, retType *types.T,
 ) *lastArgWidthOverload {
+	retCanonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(retType.Family())
 	lawo := &lastArgWidthOverload{
 		lastArgTypeOverload:  typeOverload,
 		argWidthOverloadBase: newArgWidthOverloadBase(typeOverload.argTypeOverloadBase, width),
 		RetType:              retType,
-		RetVecMethod:         toVecMethod(retType.Family(), retType.Width()),
-		RetGoType:            toPhysicalRepresentation(retType.Family(), retType.Width()),
+		RetVecMethod:         toVecMethod(retCanonicalTypeFamily, retType.Width()),
+		RetGoType:            toPhysicalRepresentation(retCanonicalTypeFamily, retType.Width()),
 	}
 	typeOverload.WidthOverloads = append(typeOverload.WidthOverloads, lawo)
 	return lawo
@@ -338,7 +344,7 @@ type twoArgsResolvedOverloadRightWidthInfo struct {
 
 type assignFunc func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string
 type compareFunc func(targetElem, leftElem, rightElem, leftCol, rightCol string) string
-type castFunc func(to, from string) string
+type castFunc func(to, from, fromCol string) string
 
 // Assign produces a Go source string that assigns the "targetElem" variable to
 // the result of applying the overload to the two inputs, "leftElem" and
@@ -386,9 +392,9 @@ func (o *lastArgWidthOverload) Compare(
 		leftElem, rightElem, targetElem, leftElem, rightElem, targetElem, targetElem)
 }
 
-func (o *lastArgWidthOverload) Cast(to, from string) string {
+func (o *lastArgWidthOverload) Cast(to, from, fromCol string) string {
 	if o.CastFunc != nil {
-		if ret := o.CastFunc(to, from); ret != "" {
+		if ret := o.CastFunc(to, from, fromCol); ret != "" {
 			return ret
 		}
 	}
@@ -406,49 +412,46 @@ func (o *lastArgWidthOverload) UnaryAssign(targetElem, vElem, targetCol, vVec st
 	return fmt.Sprintf("%s = %s(%s)", targetElem, o.overloadBase.OpStr, vElem)
 }
 
-func (b *argWidthOverloadBase) GoTypeSliceName() string {
-	switch b.CanonicalTypeFamily {
+func goTypeSliceName(canonicalTypeFamily types.Family, width int32) string {
+	switch canonicalTypeFamily {
+	case types.BoolFamily:
+		return "coldata.Bools"
 	case types.BytesFamily:
 		return "*coldata.Bytes"
+	case types.DecimalFamily:
+		return "coldata.Decimals"
 	case types.IntFamily:
-		switch b.Width {
+		switch width {
 		case 16:
-			return "[]int16"
+			return "coldata.Int16s"
 		case 32:
-			return "[]int32"
+			return "coldata.Int32s"
 		case 64, anyWidth:
-			return "[]int64"
+			return "coldata.Int64s"
 		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", b.Width))
+			colexecerror.InternalError(fmt.Sprintf("unexpected int width %d", width))
 			// This code is unreachable, but the compiler cannot infer that.
 			return ""
 		}
-	default:
-		return "[]" + toPhysicalRepresentation(b.CanonicalTypeFamily, b.Width)
+	case types.IntervalFamily:
+		return "coldata.Durations"
+	case types.FloatFamily:
+		return "coldata.Float64s"
+	case types.TimestampTZFamily:
+		return "coldata.Times"
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return "coldata.DatumVec"
 	}
+	colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
+	return ""
 }
 
-func get(family types.Family, target, i string) string {
-	switch family {
-	case types.BytesFamily:
-		return fmt.Sprintf("%s.Get(%s)", target, i)
-	}
-	return fmt.Sprintf("%s[%s]", target, i)
+func (b *argWidthOverloadBase) GoTypeSliceName() string {
+	return goTypeSliceName(b.CanonicalTypeFamily, b.Width)
 }
 
-// Get is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Get(target, i string) string {
-	return get(b.CanonicalTypeFamily, target, i)
-}
-
-// ReturnGet is a function that should only be used in templates.
-func (o *lastArgWidthOverload) ReturnGet(target, i string) string {
-	return get(typeconv.TypeFamilyToCanonicalTypeFamily(o.RetType.Family()), target, i)
-}
-
-// CopyVal is a function that should only be used in templates.
-func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
-	switch b.CanonicalTypeFamily {
+func copyVal(canonicalTypeFamily types.Family, dest, src string) string {
+	switch canonicalTypeFamily {
 	case types.BytesFamily:
 		return fmt.Sprintf("%[1]s = append(%[1]s[:0], %[2]s...)", dest, src)
 	case types.DecimalFamily:
@@ -457,15 +460,24 @@ func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
 	return fmt.Sprintf("%s = %s", dest, src)
 }
 
-// Set is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Set(target, i, new string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
+// CopyVal is a function that should only be used in templates.
+func (b *argWidthOverloadBase) CopyVal(dest, src string) string {
+	return copyVal(b.CanonicalTypeFamily, dest, src)
+}
+
+func set(canonicalTypeFamily types.Family, target, i, new string) string {
+	switch canonicalTypeFamily {
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.Set(%s, %s)", target, i, new)
 	case types.DecimalFamily:
 		return fmt.Sprintf("%s[%s].Set(&%s)", target, i, new)
 	}
 	return fmt.Sprintf("%s[%s] = %s", target, i, new)
+}
+
+// Set is a function that should only be used in templates.
+func (b *argWidthOverloadBase) Set(target, i, new string) string {
+	return set(b.CanonicalTypeFamily, target, i, new)
 }
 
 // Slice is a function that should only be used in templates.
@@ -477,6 +489,8 @@ func (b *argWidthOverloadBase) Slice(target, start, end string) string {
 		return fmt.Sprintf(`%s
 _ = %s
 _ = %s`, target, start, end)
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return fmt.Sprintf(`%s.Slice(%s, %s)`, target, start, end)
 	}
 	return fmt.Sprintf("%s[%s:%s]", target, start, end)
 }
@@ -487,7 +501,7 @@ func (b *argWidthOverloadBase) CopySlice(
 ) string {
 	var tmpl string
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		tmpl = `{{.Tgt}}.CopySlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
 	case types.DecimalFamily:
 		tmpl = `{
@@ -520,7 +534,7 @@ func (b *argWidthOverloadBase) AppendSlice(
 ) string {
 	var tmpl string
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		tmpl = `{{.Tgt}}.AppendSlice({{.Src}}, {{.TgtIdx}}, {{.SrcStart}}, {{.SrcEnd}})`
 	case types.DecimalFamily:
 		tmpl = `{
@@ -563,7 +577,7 @@ func (b *argWidthOverloadBase) AppendSlice(
 // AppendVal is a function that should only be used in templates.
 func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
+	case types.BytesFamily, typeconv.DatumVecCanonicalTypeFamily:
 		return fmt.Sprintf("%s.AppendVal(%s)", target, v)
 	case types.DecimalFamily:
 		return fmt.Sprintf(`%[1]s = append(%[1]s, apd.Decimal{})
@@ -572,33 +586,13 @@ func (b *argWidthOverloadBase) AppendVal(target, v string) string {
 	return fmt.Sprintf("%[1]s = append(%[1]s, %[2]s)", target, v)
 }
 
-// Len is a function that should only be used in templates.
-// WARNING: combination of Slice and Len might not work correctly for Bytes
-// type.
-func (b *argWidthOverloadBase) Len(target string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
-		return fmt.Sprintf("%s.Len()", target)
-	}
-	return fmt.Sprintf("len(%s)", target)
-}
-
-// Range is a function that should only be used in templates.
-func (b *argWidthOverloadBase) Range(loopVariableIdent, target, start, end string) string {
-	switch b.CanonicalTypeFamily {
-	case types.BytesFamily:
-		return fmt.Sprintf("%[1]s := %[2]s; %[1]s < %[3]s; %[1]s++", loopVariableIdent, start, end)
-	}
-	return fmt.Sprintf("%[1]s := range %[2]s", loopVariableIdent, target)
-}
-
 // Window is a function that should only be used in templates.
 func (b *argWidthOverloadBase) Window(target, start, end string) string {
 	switch b.CanonicalTypeFamily {
 	case types.BytesFamily:
 		return fmt.Sprintf(`%s.Window(%s, %s)`, target, start, end)
 	}
-	return fmt.Sprintf("%s[%s:%s]", target, start, end)
+	return b.Slice(target, start, end)
 }
 
 // Remove unused warnings.
@@ -608,19 +602,15 @@ var (
 	_    = lawo.Compare
 	_    = lawo.Cast
 	_    = lawo.UnaryAssign
-	_    = lawo.ReturnGet
 
 	awob = &argWidthOverloadBase{}
 	_    = awob.GoTypeSliceName
-	_    = awob.Get
 	_    = awob.CopyVal
 	_    = awob.Set
 	_    = awob.Slice
 	_    = awob.CopySlice
 	_    = awob.AppendSlice
 	_    = awob.AppendVal
-	_    = awob.Len
-	_    = awob.Range
 	_    = awob.Window
 )
 
@@ -739,6 +729,21 @@ type intervalDecimalCustomizer struct{}
 // left-hand side and an interval right-hand side.
 type decimalIntervalCustomizer struct{}
 
+// datumCustomizer supports overloads on tree.Datums.
+type datumCustomizer struct{}
+
+// datumNonDatumCustomizer supports overloads of mixed type binary expressions
+// with a datum left-hand side and non-datum right-hand side.
+type datumNonDatumCustomizer struct{}
+
+// nonDatumDatumCustomizer supports overloads of mixed type binary expressions
+// with a non-datum left-hand side and datum right-hand side.
+type nonDatumDatumCustomizer struct {
+	leftCanonicalTypeFamily types.Family
+}
+
+// TODO(yuzefovich): add support for datums on both sides and non-datum result.
+
 func registerTypeCustomizers() {
 	typeCustomizers = make(map[typePair]typeCustomizer)
 	registerTypeCustomizer(typePair{types.BoolFamily, anyWidth, types.BoolFamily, anyWidth}, boolCustomizer{})
@@ -747,6 +752,7 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}, floatCustomizer{})
 	registerTypeCustomizer(typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}, timestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}, intervalCustomizer{})
+	registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, datumCustomizer{})
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			registerTypeCustomizer(typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}, intCustomizer{width: anyWidth})
@@ -775,6 +781,15 @@ func registerTypeCustomizers() {
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}, intervalTimestampCustomizer{})
 	registerTypeCustomizer(typePair{types.IntervalFamily, anyWidth, types.DecimalFamily, anyWidth}, intervalDecimalCustomizer{})
 	registerTypeCustomizer(typePair{types.DecimalFamily, anyWidth, types.IntervalFamily, anyWidth}, decimalIntervalCustomizer{})
+
+	for _, compatibleFamily := range compatibleCanonicalTypeFamilies[typeconv.DatumVecCanonicalTypeFamily] {
+		if compatibleFamily != typeconv.DatumVecCanonicalTypeFamily {
+			for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
+				registerTypeCustomizer(typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}, datumNonDatumCustomizer{})
+				registerTypeCustomizer(typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}, nonDatumDatumCustomizer{compatibleFamily})
+			}
+		}
+	}
 }
 
 var supportedCanonicalTypeFamilies = []types.Family{
@@ -785,6 +800,7 @@ var supportedCanonicalTypeFamilies = []types.Family{
 	types.FloatFamily,
 	types.TimestampTZFamily,
 	types.IntervalFamily,
+	typeconv.DatumVecCanonicalTypeFamily,
 }
 
 // anyWidth is special "value" of width of a type that will be used to generate
@@ -798,18 +814,17 @@ var typeWidthReplacement = fmt.Sprintf("{{.Width}}{{if eq .Width %d}}: default{{
 // family to all widths that are supported by that family. Make sure that
 // anyWidth value is the last one in every slice.
 var supportedWidthsByCanonicalTypeFamily = map[types.Family][]int32{
-	types.BoolFamily:        {anyWidth},
-	types.BytesFamily:       {anyWidth},
-	types.DecimalFamily:     {anyWidth},
-	types.IntFamily:         {16, 32, anyWidth},
-	types.FloatFamily:       {anyWidth},
-	types.TimestampTZFamily: {anyWidth},
-	types.IntervalFamily:    {anyWidth},
+	types.BoolFamily:                     {anyWidth},
+	types.BytesFamily:                    {anyWidth},
+	types.DecimalFamily:                  {anyWidth},
+	types.IntFamily:                      {16, 32, anyWidth},
+	types.FloatFamily:                    {anyWidth},
+	types.TimestampTZFamily:              {anyWidth},
+	types.IntervalFamily:                 {anyWidth},
+	typeconv.DatumVecCanonicalTypeFamily: {anyWidth},
 }
 
 var numericCanonicalTypeFamilies = []types.Family{types.IntFamily, types.FloatFamily, types.DecimalFamily}
-
-var timeCanonicalTypeFamilies = []types.Family{types.TimestampTZFamily, types.IntervalFamily}
 
 // toVecMethod returns the method name from coldata.Vec interface that can be
 // used to get the well-typed underlying memory from a vector.
@@ -838,6 +853,8 @@ func toVecMethod(canonicalTypeFamily types.Family, width int32) string {
 		return "Timestamp"
 	case types.IntervalFamily:
 		return "Interval"
+	case typeconv.DatumVecCanonicalTypeFamily:
+		return "Datum"
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
 	}
@@ -873,6 +890,11 @@ func toPhysicalRepresentation(canonicalTypeFamily types.Family, width int32) str
 		return "time.Time"
 	case types.IntervalFamily:
 		return "duration.Duration"
+	case typeconv.DatumVecCanonicalTypeFamily:
+		// This is somewhat unfortunate, but we can neither use coldata.Datum
+		// nor tree.Datum because we have generated files living in two
+		// different packages (sql/colexec and col/coldata).
+		return "interface{}"
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unsupported canonical type family %s", canonicalTypeFamily))
 	}

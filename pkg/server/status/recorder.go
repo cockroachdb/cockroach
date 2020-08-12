@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -56,6 +57,7 @@ const (
 	advertiseAddrLabelKey = "advertise-addr"
 	httpAddrLabelKey      = "http-addr"
 	sqlAddrLabelKey       = "sql-addr"
+	tenantAddrLabelKey    = "tenant-addr"
 )
 
 type quantile struct {
@@ -79,9 +81,13 @@ var recordHistogramQuantiles = []quantile{
 // directly in order to simplify testing.
 type storeMetrics interface {
 	StoreID() roachpb.StoreID
-	Descriptor(bool) (*roachpb.StoreDescriptor, error)
+	Descriptor(context.Context, bool) (*roachpb.StoreDescriptor, error)
 	Registry() *metric.Registry
 }
+
+var childMetricsEnabled = settings.RegisterBoolSetting("server.child_metrics.enabled",
+	"enables the exporting of child metrics, additional prometheus time series with extra labels",
+	false)
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -167,7 +173,7 @@ func (mr *MetricsRecorder) AddNode(
 	reg *metric.Registry,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
-	advertiseAddr, httpAddr, sqlAddr string,
+	advertiseAddr, httpAddr, sqlAddr, tenantAddr string,
 ) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -186,6 +192,7 @@ func (mr *MetricsRecorder) AddNode(
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
 	metadata.AddLabel(sqlAddrLabelKey, sqlAddr)
+	metadata.AddLabel(tenantAddrLabelKey, tenantAddr)
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)
@@ -247,10 +254,10 @@ func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
 	}
-
-	pm.ScrapeRegistry(mr.mu.nodeRegistry)
+	includeChildMetrics := childMetricsEnabled.Get(&mr.settings.SV)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg)
+		pm.ScrapeRegistry(reg, includeChildMetrics)
 	}
 }
 
@@ -457,7 +464,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		})
 
 		// Gather descriptor from store.
-		descriptor, err := mr.mu.stores[storeID].Descriptor(false /* useCached */)
+		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
 		if err != nil {
 			log.Errorf(ctx, "Could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
@@ -517,19 +524,22 @@ type registryRecorder struct {
 }
 
 func extractValue(mtr interface{}) (float64, error) {
-	// TODO(tschottdorf|mrtracy): consider moving this switch to an interface
-	// implemented by the individual metric types.
+	// TODO(tschottdorf,ajwerner): consider moving this switch to a single
+	// interface implemented by the individual metric types.
+	type (
+		float64Valuer interface{ Value() float64 }
+		int64Valuer   interface{ Value() int64 }
+		int64Counter  interface{ Count() int64 }
+	)
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.Counter:
-		return float64(mtr.Count()), nil
-	case *metric.Gauge:
+	case float64Valuer:
+		return mtr.Value(), nil
+	case int64Valuer:
 		return float64(mtr.Value()), nil
-	case *metric.Rate:
-		return mtr.Value(), nil
-	case *metric.GaugeFloat64:
-		return mtr.Value(), nil
+	case int64Counter:
+		return float64(mtr.Count()), nil
 	default:
 		return 0, errors.Errorf("cannot extract value for type %T", mtr)
 	}

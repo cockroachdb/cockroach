@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -27,6 +28,7 @@ import (
 
 func TestRangeIDChunk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var c rangeIDChunk
 	if c.Len() != 0 {
@@ -82,6 +84,7 @@ func TestRangeIDChunk(t *testing.T) {
 
 func TestRangeIDQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var q rangeIDQueue
 	if q.Len() != 0 {
@@ -188,11 +191,12 @@ func (p *testProcessor) String() string {
 // during development.
 func TestSchedulerLoop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	p := newTestProcessor()
 	s := newRaftScheduler(nil, p, 1)
 	stopper := stop.NewStopper()
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
 	s.EnqueueRaftTick(1, 2, 3)
@@ -210,11 +214,12 @@ func TestSchedulerLoop(t *testing.T) {
 // reason, it is only processed once.
 func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	p := newTestProcessor()
 	s := newRaftScheduler(nil, p, 1)
 	stopper := stop.NewStopper()
-	ctx := context.TODO()
+	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	s.Start(ctx, stopper)
 

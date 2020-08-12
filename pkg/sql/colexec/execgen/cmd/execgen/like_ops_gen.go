@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,15 +40,16 @@ import (
 {{end}}
 `
 
-func genLikeOps(wr io.Writer) error {
-	tmpl, err := getSelectionOpsTmpl()
+func genLikeOps(inputFileContents string, wr io.Writer) error {
+	tmpl, err := getSelectionOpsTmpl(inputFileContents)
 	if err != nil {
 		return err
 	}
-	projTemplate, err := getProjConstOpTmplString(false /* isConstLeft */)
+	projConstFile, err := ioutil.ReadFile(projConstOpsTmpl)
 	if err != nil {
 		return err
 	}
+	projTemplate := replaceProjConstTmplVariables(string(projConstFile), false /* isConstLeft */)
 	tmpl, err = tmpl.Funcs(template.FuncMap{"buildDict": buildDict}).Parse(projTemplate)
 	if err != nil {
 		return err
@@ -108,6 +110,9 @@ func genLikeOps(wr io.Writer) error {
 		makeOverload("Suffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
 		}),
+		makeOverload("Contains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
+		}),
 		makeOverload("Regexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = %s.Match(%s)", targetElem, rightElem, leftElem)
 		}),
@@ -116,6 +121,9 @@ func genLikeOps(wr io.Writer) error {
 		}),
 		makeOverload("NotSuffix", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", targetElem, leftElem, rightElem)
+		}),
+		makeOverload("NotContains", bytesRepresentation, func(targetElem, leftElem, rightElem string) string {
+			return fmt.Sprintf("%s = !bytes.Contains(%s, %s)", targetElem, leftElem, rightElem)
 		}),
 		makeOverload("NotRegexp", "*regexp.Regexp", func(targetElem, leftElem, rightElem string) string {
 			return fmt.Sprintf("%s = !%s.Match(%s)", targetElem, rightElem, leftElem)

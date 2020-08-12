@@ -16,6 +16,7 @@ TABLE xyz
  ├── x int not null
  ├── y int
  ├── z int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    └── x int not null
  └── INDEX foo
@@ -44,11 +45,12 @@ TABLE abcdef
  ├── a int not null
  ├── b int
  ├── c int default (10:::INT8)
- ├── d int as ((b + c) + 1) stored
+ ├── d int as ((b + c) + 1:::INT8) stored
  ├── e int as (a) stored
  ├── f int not null
  ├── rowid int not null default (unique_rowid()) [hidden]
- ├── CHECK (f > 2)
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── CHECK (f > 2:::INT8)
  └── INDEX primary
       └── rowid int not null default (unique_rowid()) [hidden]
 scan abcdef
@@ -82,6 +84,7 @@ TABLE uvwxy
  ├── w int
  ├── x int
  ├── y int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_u_v_w (u, v, w)
  ├── FAMILY fam_1_x (x)
  ├── FAMILY fam_2_y (y)
@@ -111,12 +114,8 @@ TABLE child
  ├── p int
  ├── q int
  ├── r int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
- │    └── c int not null
- ├── INDEX child_auto_index_fk
- │    ├── p int
- │    ├── q int
- │    ├── r int
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child (p, q, r) REFERENCES parent (p, q, r)
 scan child
@@ -129,6 +128,7 @@ TABLE parent
  ├── q int not null
  ├── r int not null
  ├── other int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -154,12 +154,8 @@ TABLE child2
  ├── p int
  ├── q int
  ├── r int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
- │    └── c int not null
- ├── INDEX child2_auto_index_fk
- │    ├── p int
- │    ├── q int
- │    ├── r int
  │    └── c int not null
  └── CONSTRAINT fk FOREIGN KEY child2 (p, q, r) REFERENCES parent (p, q, r) MATCH FULL ON DELETE SET NULL
 scan child2
@@ -172,6 +168,7 @@ TABLE parent
  ├── q int not null
  ├── r int not null
  ├── other int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── INDEX primary
  │    ├── p int not null
  │    ├── q int not null
@@ -206,6 +203,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM a
 TABLE a
  ├── a int not null
  ├── other int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_a_other (a, other)
  └── INDEX primary
       ├── a int not null
@@ -219,6 +217,7 @@ EXPLAIN (OPT, CATALOG) SELECT * FROM ab
 TABLE ab
  ├── a int not null
  ├── b int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_a_b (a, b)
  └── INDEX primary
       ├── a int not null
@@ -238,6 +237,7 @@ TABLE abc
  ├── a int
  ├── b int
  ├── c int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_a_b_c_k (a, b, c, k)
  ├── INDEX primary
  │    └── k int not null
@@ -258,6 +258,7 @@ TABLE abx
  ├── a int not null
  ├── b int not null
  ├── x int not null
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_a_b_x (a, b, x)
  └── INDEX primary
       ├── a int not null
@@ -267,3 +268,9 @@ TABLE abx
            ├── table=59 index=1 (1 key column)
            └── table=60 index=1 (1 key column)
 scan abx
+
+query T
+EXPLAIN (OPT) select * from pg_type where oid = 1000
+----
+  scan pg_type@pg_type_oid_idx
+   └── constraint: /2: [/1000 - /1000]

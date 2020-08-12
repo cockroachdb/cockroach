@@ -17,15 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -96,6 +95,12 @@ type mjBuilderCrossProductState struct {
 	groupsIdx      int
 	curSrcStartIdx int
 	numRepeatsIdx  int
+	// setOpLeftSrcIdx tracks the next tuple's index from the left buffered
+	// group for set operation joins. INTERSECT ALL and EXCEPT ALL joins are
+	// special because they need to emit the buffered group partially (namely,
+	// exactly group.rowEndIdx number of rows which could span multiple batches
+	// from the buffered group).
+	setOpLeftSrcIdx int
 }
 
 // mjBufferedGroup is a helper struct that stores information about the tuples
@@ -202,7 +207,7 @@ type mergeJoinInput struct {
 	// The distincter is used in the finishGroup phase, and is used only to
 	// determine where the current group ends, in the case that the group ended
 	// with a batch.
-	distincterInput *feedOperator
+	distincterInput *FeedOperator
 	distincter      colexecbase.Operator
 	distinctOutput  []bool
 
@@ -225,16 +230,16 @@ type mergeJoinInput struct {
 // expanding the groups (leftGroups and rightGroups) when a group spans
 // multiple batches.
 
-// newMergeJoinOp returns a new merge join operator with the given spec that
+// NewMergeJoinOp returns a new merge join operator with the given spec that
 // implements sort-merge join. It performs a merge on the left and right input
 // sources, based on the equality columns, assuming both inputs are in sorted
 // order.
-func newMergeJoinOp(
+func NewMergeJoinOp(
 	unlimitedAllocator *colmem.Allocator,
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
 	leftTypes []*types.T,
@@ -242,27 +247,135 @@ func newMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
-) (resettableOperator, error) {
+) (ResettableOperator, error) {
+	// Merge joiner only supports the case when the physical types in the
+	// equality columns in both inputs are the same. We, however, also need to
+	// support joining on numeric columns of different types or widths. If we
+	// encounter such mismatch, we need to cast one of the vectors to another
+	// and use the cast vector for equality check.
+
+	// Make a copy of types and orderings to be sure that we don't modify
+	// anything unwillingly.
+	actualLeftTypes, actualRightTypes := append([]*types.T{}, leftTypes...), append([]*types.T{}, rightTypes...)
+	actualLeftOrdering := make([]execinfrapb.Ordering_Column, len(leftOrdering))
+	actualRightOrdering := make([]execinfrapb.Ordering_Column, len(rightOrdering))
+	copy(actualLeftOrdering, leftOrdering)
+	copy(actualRightOrdering, rightOrdering)
+	isNumeric := func(t *types.T) bool {
+		switch t.Family() {
+		case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+			return true
+		default:
+			return false
+		}
+	}
+	// Iterate over each equality column and check whether a cast is needed. If
+	// it is needed for some column, then a cast operator is planned on top of
+	// the input from the corresponding side and the types and ordering are
+	// adjusted accordingly. We will also need to project out that temporary
+	// column, so a simple project will be planned below.
+	var needProjection bool
+	var err error
+	for i := range leftOrdering {
+		leftColIdx := leftOrdering[i].ColIdx
+		rightColIdx := rightOrdering[i].ColIdx
+		leftType := leftTypes[leftColIdx]
+		rightType := rightTypes[rightColIdx]
+		if !leftType.Identical(rightType) && isNumeric(leftType) && isNumeric(rightType) {
+			// The types are different and both are numeric, so we need to plan
+			// a cast. There is a hierarchy of valid casts:
+			//   INT2 -> INT4 -> INT8 -> FLOAT -> DECIMAL
+			// and the cast is valid if 'fromType' is mentioned before 'toType'
+			// in this chain.
+			castLeftToRight := false
+			switch leftType.Family() {
+			case types.IntFamily:
+				switch leftType.Width() {
+				case 16:
+					castLeftToRight = true
+				case 32:
+					castLeftToRight = !rightType.Identical(types.Int2)
+				default:
+					castLeftToRight = rightType.Family() != types.IntFamily
+				}
+			case types.FloatFamily:
+				castLeftToRight = rightType.Family() == types.DecimalFamily
+			}
+			if castLeftToRight {
+				castColumnIdx := len(actualLeftTypes)
+				left, err = GetCastOperator(unlimitedAllocator, left, int(leftColIdx), castColumnIdx, leftType, rightType)
+				if err != nil {
+					return nil, err
+				}
+				actualLeftTypes = append(actualLeftTypes, rightType)
+				actualLeftOrdering[i].ColIdx = uint32(castColumnIdx)
+			} else {
+				castColumnIdx := len(actualRightTypes)
+				right, err = GetCastOperator(unlimitedAllocator, right, int(rightColIdx), castColumnIdx, rightType, leftType)
+				if err != nil {
+					return nil, err
+				}
+				actualRightTypes = append(actualRightTypes, leftType)
+				actualRightOrdering[i].ColIdx = uint32(castColumnIdx)
+			}
+			needProjection = true
+		}
+	}
 	base, err := newMergeJoinBase(
-		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType,
-		left, right, leftTypes, rightTypes, leftOrdering, rightOrdering, diskAcc,
+		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType, left, right,
+		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc,
 	)
+	if err != nil {
+		return nil, err
+	}
+	var mergeJoinerOp ResettableOperator
 	switch joinType {
-	case sqlbase.JoinType_INNER:
-		return &mergeJoinInnerOp{base}, err
-	case sqlbase.JoinType_LEFT_OUTER:
-		return &mergeJoinLeftOuterOp{base}, err
-	case sqlbase.JoinType_RIGHT_OUTER:
-		return &mergeJoinRightOuterOp{base}, err
-	case sqlbase.JoinType_FULL_OUTER:
-		return &mergeJoinFullOuterOp{base}, err
-	case sqlbase.JoinType_LEFT_SEMI:
-		return &mergeJoinLeftSemiOp{base}, err
-	case sqlbase.JoinType_LEFT_ANTI:
-		return &mergeJoinLeftAntiOp{base}, err
+	case descpb.InnerJoin:
+		mergeJoinerOp = &mergeJoinInnerOp{base}
+	case descpb.LeftOuterJoin:
+		mergeJoinerOp = &mergeJoinLeftOuterOp{base}
+	case descpb.RightOuterJoin:
+		mergeJoinerOp = &mergeJoinRightOuterOp{base}
+	case descpb.FullOuterJoin:
+		mergeJoinerOp = &mergeJoinFullOuterOp{base}
+	case descpb.LeftSemiJoin:
+		mergeJoinerOp = &mergeJoinLeftSemiOp{base}
+	case descpb.LeftAntiJoin:
+		mergeJoinerOp = &mergeJoinLeftAntiOp{base}
+	case descpb.IntersectAllJoin:
+		mergeJoinerOp = &mergeJoinIntersectAllOp{base}
+	case descpb.ExceptAllJoin:
+		mergeJoinerOp = &mergeJoinExceptAllOp{base}
 	default:
 		return nil, errors.AssertionFailedf("merge join of type %s not supported", joinType)
 	}
+	if !needProjection {
+		// We didn't add any cast operators, so we can just return the operator
+		// right away.
+		return mergeJoinerOp, nil
+	}
+	// We need to add a projection to remove all the cast columns we have added
+	// above. Note that all extra columns were appended to the corresponding
+	// types slices, so we simply need to include first len(leftTypes) from the
+	// left and first len(rightTypes) from the right (the latter are included
+	// depending on the join type).
+	numRightTypes := len(rightTypes)
+	if !joinType.ShouldIncludeRightColsInOutput() {
+		numRightTypes = 0
+	}
+	projection := make([]uint32, 0, len(leftTypes)+numRightTypes)
+	for i := range leftTypes {
+		projection = append(projection, uint32(i))
+	}
+	for i := 0; i < numRightTypes; i++ {
+		// Merge joiner outputs all columns from both sides, and the columns
+		// from the right have indices in [len(actualLeftTypes),
+		// len(actualLeftTypes) + len(actualRightColumns)) range.
+		projection = append(projection, uint32(len(actualLeftTypes)+i))
+	}
+	return NewSimpleProjectOp(
+		mergeJoinerOp, len(actualLeftTypes)+len(actualRightTypes), projection,
+	).(ResettableOperator), nil
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -290,6 +403,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 	s.groupsIdx = target.groupsIdx
 	s.curSrcStartIdx = target.curSrcStartIdx
 	s.numRepeatsIdx = target.numRepeatsIdx
+	s.setOpLeftSrcIdx = target.setOpLeftSrcIdx
 }
 
 func newMergeJoinBase(
@@ -297,7 +411,7 @@ func newMergeJoinBase(
 	memoryLimit int64,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
-	joinType sqlbase.JoinType,
+	joinType descpb.JoinType,
 	left colexecbase.Operator,
 	right colexecbase.Operator,
 	leftTypes []*types.T,
@@ -346,13 +460,13 @@ func newMergeJoinBase(
 		diskAcc: diskAcc,
 	}
 	var err error
-	base.left.distincterInput = &feedOperator{}
+	base.left.distincterInput = &FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return base, err
 	}
-	base.right.distincterInput = &feedOperator{}
+	base.right.distincterInput = &FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		base.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
@@ -366,17 +480,11 @@ type mergeJoinBase struct {
 	twoInputNode
 	closerHelper
 
-	// mu is used to protect against concurrent IdempotentClose and Next calls,
-	// which are currently allowed.
-	// TODO(asubiotto): Explore calling IdempotentClose from the same goroutine as
-	//  Next, which will simplify this model.
-	mu syncutil.Mutex
-
 	unlimitedAllocator *colmem.Allocator
 	memoryLimit        int64
 	diskQueueCfg       colcontainer.DiskQueueCfg
 	fdSemaphore        semaphore.Semaphore
-	joinType           sqlbase.JoinType
+	joinType           descpb.JoinType
 	left               mergeJoinInput
 	right              mergeJoinInput
 
@@ -393,26 +501,12 @@ type mergeJoinBase struct {
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
-	scratch      struct {
-		// tempVecs are temporary vectors that can be used during a cast
-		// operation in the probing phase. These vectors should *not* be
-		// exposed outside of the merge joiner.
-		tempVecs []coldata.Vec
-		// lBufferedGroupBatch and rBufferedGroupBatch are scratch batches that are
-		// used to select out the tuples that belong to the buffered batch before
-		// enqueueing them into corresponding mjBufferedGroups. These are lazily
-		// instantiated.
-		// TODO(yuzefovich): uncomment when spillingQueue actually copies the
-		// enqueued batches when those are kept in memory.
-		//lBufferedGroupBatch coldata.Batch
-		//rBufferedGroupBatch coldata.Batch
-	}
 
 	diskAcc *mon.BoundAccount
 }
 
 var _ resetter = &mergeJoinBase{}
-var _ IdempotentCloser = &mergeJoinBase{}
+var _ Closer = &mergeJoinBase{}
 
 func (o *mergeJoinBase) reset(ctx context.Context) {
 	if r, ok := o.left.source.(resetter); ok {
@@ -443,7 +537,7 @@ func (o *mergeJoinBase) Init() {
 
 func (o *mergeJoinBase) initWithOutputBatchSize(outBatchSize int) {
 	outputTypes := append([]*types.T{}, o.left.sourceTypes...)
-	if o.joinType != sqlbase.LeftSemiJoin && o.joinType != sqlbase.LeftAntiJoin {
+	if o.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, o.right.sourceTypes...)
 	}
 	o.output = o.unlimitedAllocator.NewMemBatchWithSize(outputTypes, outBatchSize)
@@ -703,16 +797,14 @@ func (o *mergeJoinBase) finishProbe(ctx context.Context) {
 	)
 }
 
-func (o *mergeJoinBase) IdempotentClose(ctx context.Context) error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+func (o *mergeJoinBase) Close(ctx context.Context) error {
 	if !o.close() {
 		return nil
 	}
 	var lastErr error
 	for _, op := range []colexecbase.Operator{o.left.source, o.right.source} {
-		if c, ok := op.(IdempotentCloser); ok {
-			if err := c.IdempotentClose(ctx); err != nil {
+		if c, ok := op.(Closer); ok {
+			if err := c.Close(ctx); err != nil {
 				lastErr = err
 			}
 		}

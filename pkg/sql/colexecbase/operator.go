@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // Operator is a column vector operator that produces a Batch as output.
@@ -46,6 +47,13 @@ type Operator interface {
 	execinfra.OpNode
 }
 
+// DrainableOperator is an operator that also implements DrainMeta. Next and
+// DrainMeta may not be called concurrently.
+type DrainableOperator interface {
+	Operator
+	execinfrapb.MetadataSource
+}
+
 // ZeroInputNode is an execinfra.OpNode with no inputs.
 type ZeroInputNode struct{}
 
@@ -59,4 +67,21 @@ func (ZeroInputNode) Child(nth int, verbose bool) execinfra.OpNode {
 	colexecerror.InternalError(fmt.Sprintf("invalid index %d", nth))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
+}
+
+// BufferingInMemoryOperator is an Operator that buffers up intermediate tuples
+// in memory and knows how to export them once the memory limit has been
+// reached.
+type BufferingInMemoryOperator interface {
+	Operator
+
+	// ExportBuffered returns all the batches that have been buffered up from the
+	// input and have not yet been processed by the operator. It needs to be
+	// called once the memory limit has been reached in order to "dump" the
+	// buffered tuples into a disk-backed operator. It will return a zero-length
+	// batch once the buffer has been emptied.
+	//
+	// Calling ExportBuffered may invalidate the contents of the last batch
+	// returned by ExportBuffered.
+	ExportBuffered(input Operator) coldata.Batch
 }

@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -110,16 +111,26 @@ func (e sqlEncoder) IndexPrefix(tableID, indexID uint32) roachpb.Key {
 	return encoding.EncodeUvarintAscending(k, uint64(indexID))
 }
 
-// DescMetadataPrefix returns the key prefix for all descriptors.
+// DescMetadataPrefix returns the key prefix for all descriptors in the
+// system.descriptor table.
 func (e sqlEncoder) DescMetadataPrefix() roachpb.Key {
 	return e.IndexPrefix(DescriptorTableID, DescriptorTablePrimaryKeyIndexID)
 }
 
-// DescMetadataKey returns the key for the descriptor.
+// DescMetadataKey returns the key for the descriptor in the system.descriptor
+// table.
 func (e sqlEncoder) DescMetadataKey(descID uint32) roachpb.Key {
 	k := e.DescMetadataPrefix()
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
 	return MakeFamilyKey(k, DescriptorTableDescriptorColFamID)
+}
+
+// TenantMetadataKey returns the key for the tenant metadata in the
+// system.tenants table.
+func (e sqlEncoder) TenantMetadataKey(tenID roachpb.TenantID) roachpb.Key {
+	k := e.IndexPrefix(TenantsTableID, TenantsTablePrimaryKeyIndexID)
+	k = encoding.EncodeUvarintAscending(k, tenID.ToUint64())
+	return MakeFamilyKey(k, 0)
 }
 
 // SequenceKey returns the key used to store the value of a sequence.
@@ -217,7 +228,7 @@ func (d sqlDecoder) DecodeIndexPrefix(key roachpb.Key) ([]byte, uint32, uint32, 
 }
 
 // DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
-func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
+func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint32, error) {
 	// Extract table and index ID from key.
 	remaining, tableID, _, err := d.DecodeIndexPrefix(key)
 	if err != nil {
@@ -231,5 +242,26 @@ func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return id, nil
+	if id > math.MaxUint32 {
+		return 0, errors.Errorf("descriptor ID %d exceeds uint32 bounds", id)
+	}
+	return uint32(id), nil
+}
+
+// DecodeTenantMetadataID decodes a tenant ID from a tenant metadata key.
+func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, error) {
+	// Extract table and index ID from key.
+	remaining, tableID, _, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	if tableID != TenantsTableID {
+		return roachpb.TenantID{}, errors.Errorf("key is not a tenant table entry: %v", key)
+	}
+	// Extract the tenant ID.
+	_, id, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	return roachpb.MakeTenantID(id), nil
 }

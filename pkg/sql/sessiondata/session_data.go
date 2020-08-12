@@ -41,12 +41,20 @@ type SessionData struct {
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
-	// OptimizerFKChecks indicates whether we should use the new paths to plan foreign
-	// key checks in the optimizer.
-	OptimizerFKChecks bool
-	// OptimizerFKCascades indicates whether we should use the new paths to plan foreign
-	// key cascades in the optimizer.
-	OptimizerFKCascades bool
+	// EnumsEnabled indicates whether use of ENUM types are allowed.
+	EnumsEnabled bool
+	// UserDefinedSchemasEnabled indicates whether use of user defined schemas
+	// are allowed.
+	UserDefinedSchemasEnabled bool
+	// ExperimentalDistSQLPlanningMode indicates whether the experimental
+	// DistSQL planning driven by the optimizer is enabled.
+	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode
+	// PartiallyDistributedPlansDisabled indicates whether the partially
+	// distributed plans produced by distSQLSpecExecFactory are disabled. It
+	// should be set to 'true' only in tests that verify that the old and the
+	// new factories return exactly the same physical plans.
+	// TODO(yuzefovich): remove it when deleting old sql.execFactory.
+	PartiallyDistributedPlansDisabled bool
 	// OptimizerFKCascadesLimit is the maximum number of cascading operations that
 	// are run for a single query.
 	OptimizerFKCascadesLimit int
@@ -56,6 +64,9 @@ type SessionData struct {
 	// OptimizerUseMultiColStats indicates whether we should use multi-column
 	// statistics for cardinality estimation in the optimizer.
 	OptimizerUseMultiColStats bool
+	// PartialIndexes indicates whether creation of partial indexes are allowed.
+	// TODO(mgartner): remove this once partial indexes are fully supported.
+	PartialIndexes bool
 	// SerialNormalizationMode indicates how to handle the SERIAL pseudo-type.
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
@@ -63,6 +74,9 @@ type SessionData struct {
 	// StmtTimeout is the duration a query is permitted to run before it is
 	// canceled by the session. If set to 0, there is no timeout.
 	StmtTimeout time.Duration
+	// IdleInSessionTimeout is the duration a session is permitted to idle before
+	// the session is canceled. If set to 0, there is no timeout.
+	IdleInSessionTimeout time.Duration
 	// User is the name of the user logged into the session.
 	User string
 	// SafeUpdates causes errors when the client
@@ -119,9 +133,19 @@ type SessionData struct {
 	// InsertFastPath is true if the fast path for insert (with VALUES input) may
 	// be used.
 	InsertFastPath bool
+	// InterleavedJoins is true if interleaved joins may be used.
+	InterleavedJoins bool
 	// NoticeDisplaySeverity indicates the level of Severity to send notices for the given
 	// session.
 	NoticeDisplaySeverity pgnotice.DisplaySeverity
+	// AlterColumnTypeGeneralEnabled is true if ALTER TABLE ... ALTER COLUMN ...
+	// TYPE x may be used for general conversions requiring online schema change/
+	AlterColumnTypeGeneralEnabled bool
+
+	// SynchronousCommit is a dummy setting for the synchronous_commit var.
+	SynchronousCommit bool
+	// EnableSeqScan is a dummy setting for the enable_seqscan var.
+	EnableSeqScan bool
 }
 
 // DataConversionConfig contains the parameters that influence
@@ -174,16 +198,52 @@ func (c *DataConversionConfig) GetFloatPrec() int {
 	return nDigits
 }
 
-// Equals returns true if the two DataConversionConfigs are identical.
-func (c *DataConversionConfig) Equals(other *DataConversionConfig) bool {
-	if c.BytesEncodeFormat != other.BytesEncodeFormat ||
-		c.ExtraFloatDigits != other.ExtraFloatDigits {
-		return false
+// ExperimentalDistSQLPlanningMode controls if and when the opt-driven DistSQL
+// planning is used to create physical plans.
+type ExperimentalDistSQLPlanningMode int64
+
+const (
+	// ExperimentalDistSQLPlanningOff means that we always use the old path of
+	// going from opt.Expr to planNodes and then to processor specs.
+	ExperimentalDistSQLPlanningOff ExperimentalDistSQLPlanningMode = iota
+	// ExperimentalDistSQLPlanningOn means that we will attempt to use the new
+	// path for performing DistSQL planning in the optimizer, and if that
+	// doesn't succeed for some reason, we will fallback to the old path.
+	ExperimentalDistSQLPlanningOn
+	// ExperimentalDistSQLPlanningAlways means that we will only use the new path,
+	// and if it fails for any reason, the query will fail as well.
+	ExperimentalDistSQLPlanningAlways
+)
+
+func (m ExperimentalDistSQLPlanningMode) String() string {
+	switch m {
+	case ExperimentalDistSQLPlanningOff:
+		return "off"
+	case ExperimentalDistSQLPlanningOn:
+		return "on"
+	case ExperimentalDistSQLPlanningAlways:
+		return "always"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
 	}
-	if c.Location != other.Location && c.Location.String() != other.Location.String() {
-		return false
+}
+
+// ExperimentalDistSQLPlanningModeFromString converts a string into a
+// ExperimentalDistSQLPlanningMode. False is returned if the conversion was
+// unsuccessful.
+func ExperimentalDistSQLPlanningModeFromString(val string) (ExperimentalDistSQLPlanningMode, bool) {
+	var m ExperimentalDistSQLPlanningMode
+	switch strings.ToUpper(val) {
+	case "OFF":
+		m = ExperimentalDistSQLPlanningOff
+	case "ON":
+		m = ExperimentalDistSQLPlanningOn
+	case "ALWAYS":
+		m = ExperimentalDistSQLPlanningAlways
+	default:
+		return 0, false
 	}
-	return true
+	return m, true
 }
 
 // DistSQLExecMode controls if and when the Executor distributes queries.

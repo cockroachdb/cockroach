@@ -15,7 +15,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
+
+// BoolOrUnknownToSelOp plans an infrastructure necessary to convert a column
+// of either Bool or Unknown type into a selection vector on the input batches.
+func BoolOrUnknownToSelOp(
+	input colexecbase.Operator, typs []*types.T, vecIdx int,
+) (colexecbase.Operator, error) {
+	switch typs[vecIdx].Family() {
+	case types.BoolFamily:
+		return newBoolVecToSelOp(input, vecIdx), nil
+	case types.UnknownFamily:
+		// If the column is of an Unknown type, then all values in that column
+		// must be NULLs, so the selection vector will always be empty, and we
+		// can simply plan a zero operator.
+		return NewZeroOp(input), nil
+	default:
+		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
+	}
+}
 
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
@@ -62,10 +82,11 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := range outputCol[:n] {
+			col := outputCol[:n]
+			for i := range col {
 				var inc int
 				// Ditto above: replace a conditional with a data dependency.
-				if outputCol[i] {
+				if col[i] {
 					inc = 1
 				}
 				sel[idx] = i
@@ -96,13 +117,16 @@ func boolVecToSel64(vec []bool, sel []int) []int {
 	return sel
 }
 
-// NewBoolVecToSelOp is the operator form of boolVecToSelOp. It filters its
+// newBoolVecToSelOp is the operator form of boolVecToSelOp. It filters its
 // input batch by the boolean column specified by colIdx.
 //
 // For internal use cases that just need a way to create a selection vector
 // based on a boolean column that *isn't* in a batch, just create a
 // boolVecToSelOp directly with the desired boolean slice.
-func NewBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
+//
+// NOTE: if the column can be of a type other than boolean,
+// BoolOrUnknownToSelOp *must* be used instead.
+func newBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Operator {
 	d := selBoolOp{OneInputNode: NewOneInputNode(input), colIdx: colIdx}
 	ret := &boolVecToSelOp{OneInputNode: NewOneInputNode(&d)}
 	d.boolVecToSelOp = ret
@@ -110,7 +134,7 @@ func NewBoolVecToSelOp(input colexecbase.Operator, colIdx int) colexecbase.Opera
 }
 
 // selBoolOp is a small helper operator that transforms a boolVecToSelOp into
-// an operator that can see the inside of its input batch for NewBoolVecToSelOp.
+// an operator that can see the inside of its input batch for newBoolVecToSelOp.
 type selBoolOp struct {
 	OneInputNode
 	NonExplainable

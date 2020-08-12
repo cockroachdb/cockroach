@@ -230,6 +230,22 @@ func (n *FiltersExpr) Deduplicate() {
 	*n = dedup
 }
 
+// RemoveFiltersItem returns a new list that is a copy of the given list, except
+// that it does not contain the given FiltersItem. If the list contains the item
+// multiple times, then only the first instance is removed. If the list does not
+// contain the item, then the method panics.
+func (n FiltersExpr) RemoveFiltersItem(search *FiltersItem) FiltersExpr {
+	newFilters := make(FiltersExpr, len(n)-1)
+	for i := range n {
+		if search == &n[i] {
+			copy(newFilters, n[:i])
+			copy(newFilters[i:], n[i+1:])
+			return newFilters
+		}
+	}
+	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
+}
+
 // RemoveCommonFilters removes the filters found in other from n.
 func (n *FiltersExpr) RemoveCommonFilters(other FiltersExpr) {
 	// TODO(ridwanmsharif): Faster intersection using a map
@@ -421,17 +437,78 @@ func (jf JoinFlags) String() string {
 	return b.String()
 }
 
+func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(ij)
+}
+
+func (lj *LeftJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(lj)
+}
+
+func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(fj)
+}
+
+func (sj *SemiJoinExpr) initUnexportedFields(mem *Memo) {
+	initJoinMultiplicity(sj)
+}
+
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 
-func (gj *GeoLookupJoinExpr) initUnexportedFields(mem *Memo) {
+func (gj *InvertedJoinExpr) initUnexportedFields(mem *Memo) {
 	// lookupProps are initialized as necessary by the logical props builder.
 }
 
 func (zj *ZigzagJoinExpr) initUnexportedFields(mem *Memo) {
 	// leftProps and rightProps are initialized as necessary by the logical props
 	// builder.
+}
+
+// joinWithMultiplicity allows join operators for which JoinMultiplicity is
+// supported (currently InnerJoin, LeftJoin, and FullJoin) to be treated
+// polymorphically.
+type joinWithMultiplicity interface {
+	setMultiplicity(props.JoinMultiplicity)
+	getMultiplicity() props.JoinMultiplicity
+}
+
+var _ joinWithMultiplicity = &InnerJoinExpr{}
+var _ joinWithMultiplicity = &LeftJoinExpr{}
+var _ joinWithMultiplicity = &FullJoinExpr{}
+var _ joinWithMultiplicity = &SemiJoinExpr{}
+
+func (ij *InnerJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	ij.multiplicity = multiplicity
+}
+
+func (ij *InnerJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return ij.multiplicity
+}
+
+func (lj *LeftJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	lj.multiplicity = multiplicity
+}
+
+func (lj *LeftJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return lj.multiplicity
+}
+
+func (fj *FullJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	fj.multiplicity = multiplicity
+}
+
+func (fj *FullJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return fj.multiplicity
+}
+
+func (sj *SemiJoinExpr) setMultiplicity(multiplicity props.JoinMultiplicity) {
+	sj.multiplicity = multiplicity
+}
+
+func (sj *SemiJoinExpr) getMultiplicity() props.JoinMultiplicity {
+	return sj.multiplicity
 }
 
 // WindowFrame denotes the definition of a window frame for an individual
@@ -488,12 +565,37 @@ func (s *ScanPrivate) IsCanonical() bool {
 		s.HardLimit == 0
 }
 
+// IsUnfiltered returns true if the ScanPrivate will produce all rows in the
+// table.
+func (s *ScanPrivate) IsUnfiltered(md *opt.Metadata) bool {
+	return (s.Constraint == nil || s.Constraint.IsUnconstrained()) &&
+		s.InvertedConstraint == nil &&
+		s.HardLimit == 0 &&
+		!s.UsesPartialIndex(md)
+}
+
 // IsLocking returns true if the ScanPrivate is configured to use a row-level
 // locking mode. This can be the case either because the Scan is in the scope of
 // a SELECT .. FOR [KEY] UPDATE/SHARE clause or because the Scan was configured
 // as part of the row retrieval of a DELETE or UPDATE statement.
 func (s *ScanPrivate) IsLocking() bool {
 	return s.Locking != nil
+}
+
+// UsesPartialIndex returns true if the ScanPrivate indicates a scan over a
+// partial index.
+func (s *ScanPrivate) UsesPartialIndex(md *opt.Metadata) bool {
+	_, isPartialIndex := md.Table(s.Table).Index(s.Index).Predicate()
+	return isPartialIndex
+}
+
+// PartialIndexPredicate returns the FiltersExpr representing the predicate of
+// the partial index that the scan uses. If the scan does not use a partial
+// index, this function panics. UsesPartialIndex should be called first to
+// determine if the scan operates over a partial index.
+func (s *ScanPrivate) PartialIndexPredicate(md *opt.Metadata) FiltersExpr {
+	tabMeta := md.TableMeta(s.Table)
+	return PartialIndexPredicate(tabMeta, s.Index)
 }
 
 // NeedResults returns true if the mutation operator can return the rows that
@@ -538,13 +640,23 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 // AddEquivTableCols adds an FD to the given set that declares an equivalence
 // between each table column and its corresponding input column.
 func (m *MutationPrivate) AddEquivTableCols(md *opt.Metadata, fdset *props.FuncDepSet) {
-	for i, n := 0, md.Table(m.Table).DeletableColumnCount(); i < n; i++ {
+	for i, n := 0, md.Table(m.Table).ColumnCount(); i < n; i++ {
 		t := m.Table.ColumnID(i)
 		id := m.MapToInputID(t)
 		if id != 0 {
 			fdset.AddEquivalency(t, id)
 		}
 	}
+}
+
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (m *MutationPrivate) WithBindingID() opt.WithID {
+	return m.WithID
+}
+
+// WithBindingID is used by factory.Replace as a uniform way to get the with ID.
+func (w *WithExpr) WithBindingID() opt.WithID {
+	return w.ID
 }
 
 // initUnexportedFields is called when a project expression is created.
@@ -573,7 +685,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			continue
 		}
 
-		if !item.scalar.CanHaveSideEffects {
+		if !item.scalar.VolatilitySet.HasVolatile() {
 			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
 
 			// We want to set up the FD: from --> colID.
@@ -583,12 +695,12 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			//
 			// We only add the FD if composite types are not involved.
 			//
-			// TODO(radu): add a whitelist of expressions/operators that are ok, like
+			// TODO(radu): add an allowlist of expressions/operators that are ok, like
 			// arithmetic.
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
 				typ := mem.Metadata().ColumnMeta(i).Type
-				if sqlbase.DatumTypeHasCompositeKeyEncoding(typ) {
+				if sqlbase.HasCompositeKeyEncoding(typ) {
 					composite = true
 					break
 				}
@@ -727,6 +839,18 @@ func OutputColumnIsAlwaysNull(e RelExpr, col opt.ColumnID) bool {
 	}
 
 	return false
+}
+
+// PartialIndexPredicate returns the FiltersExpr representing the partial index
+// predicate at the given index ordinal. If the index at the ordinal is not a
+// partial index, this function panics. cat.Index.Predicate should be used first
+// to determine if the index is a partial index.
+//
+// Note that TableMeta.PartialIndexPredicates is not initialized for mutation
+// queries. This function will panic in the context of a mutation.
+func PartialIndexPredicate(tabMeta *opt.TableMeta, ord cat.IndexOrdinal) FiltersExpr {
+	p := tabMeta.PartialIndexPredicates[ord]
+	return *p.(*FiltersExpr)
 }
 
 // FKCascades stores metadata necessary for building cascading queries.

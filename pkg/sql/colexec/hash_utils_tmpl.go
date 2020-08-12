@@ -22,29 +22,14 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math"
-	"reflect"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
-
 // {{/*
-
-// Dummy import to pull in "unsafe" package
-var _ unsafe.Pointer
-
-// Dummy import to pull in "reflect" package
-var _ reflect.SliceHeader
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
 
 // _GOTYPESLICE is a template Go type slice variable.
 type _GOTYPESLICE interface{}
@@ -80,11 +65,10 @@ func _REHASH_BODY(
 	// {{if .HasSel}}
 	_ = sel[nKeys-1]
 	// {{else}}
-	_ = execgen.UNSAFEGET(keys, nKeys-1)
+	_ = keys.Get(nKeys - 1)
 	// {{end}}
 	var selIdx int
 	for i := 0; i < nKeys; i++ {
-		cancelChecker.check(ctx)
 		// {{if .HasSel}}
 		selIdx = sel[i]
 		// {{else}}
@@ -95,11 +79,12 @@ func _REHASH_BODY(
 			continue
 		}
 		// {{end}}
-		v := execgen.UNSAFEGET(keys, selIdx)
+		v := keys.Get(selIdx)
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v, _, keys)
 		buckets[i] = uint64(p)
 	}
+	cancelChecker.checkEveryCall(ctx)
 	// {{end}}
 
 	// {{/*
@@ -117,8 +102,12 @@ func rehash(
 	nKeys int,
 	sel []int,
 	cancelChecker CancelChecker,
-	decimalScratch decimalOverloadScratch,
+	overloadHelper overloadHelper,
+	datumAlloc *sqlbase.DatumAlloc,
 ) {
+	// In order to inline the templated code of overloads, we need to have a
+	// "_overloadHelper" local variable of type "overloadHelper".
+	_overloadHelper := overloadHelper
 	switch col.CanonicalTypeFamily() {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:

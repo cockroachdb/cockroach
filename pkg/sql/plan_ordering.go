@@ -38,8 +38,6 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		if n.run.rowsNeeded {
 			return planReqOrdering(n.source)
 		}
-	case *projectSetNode:
-		return n.reqOrdering
 
 	case *filterNode:
 		return n.reqOrdering
@@ -57,6 +55,8 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.
 	case *joinNode:
+		return n.reqOrdering
+	case *interleavedJoinNode:
 		return n.reqOrdering
 	case *unionNode:
 		// TODO(knz): this can be ordered if the source is ordered already.

@@ -11,11 +11,12 @@
 package tree
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -27,14 +28,18 @@ import (
 // FollowerReadTimestampFunctionName is the name of the function which can be
 // used with AOST clauses to generate a timestamp likely to be safe for follower
 // reads.
-const FollowerReadTimestampFunctionName = "experimental_follower_read_timestamp"
+const FollowerReadTimestampFunctionName = "follower_read_timestamp"
+
+// FollowerReadTimestampExperimentalFunctionName is the name of the old
+// "experimental_" function, which we keep for backwards compatibility.
+const FollowerReadTimestampExperimentalFunctionName = "experimental_follower_read_timestamp"
 
 var errInvalidExprForAsOf = errors.Errorf("AS OF SYSTEM TIME: only constant expressions or " +
 	FollowerReadTimestampFunctionName + " are allowed")
 
 // EvalAsOfTimestamp evaluates the timestamp argument to an AS OF SYSTEM TIME query.
 func EvalAsOfTimestamp(
-	asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
+	ctx context.Context, asOf AsOfClause, semaCtx *SemaContext, evalCtx *EvalContext,
 ) (tsss hlc.Timestamp, err error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -54,15 +59,16 @@ func EvalAsOfTimestamp(
 		if err != nil {
 			return hlc.Timestamp{}, errInvalidExprForAsOf
 		}
-		if def.Name != FollowerReadTimestampFunctionName {
+		if def.Name != FollowerReadTimestampFunctionName &&
+			def.Name != FollowerReadTimestampExperimentalFunctionName {
 			return hlc.Timestamp{}, errInvalidExprForAsOf
 		}
-		if te, err = fe.TypeCheck(semaCtx, types.TimestampTZ); err != nil {
+		if te, err = fe.TypeCheck(ctx, semaCtx, types.TimestampTZ); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	} else {
 		var err error
-		te, err = asOf.Expr.TypeCheck(semaCtx, types.String)
+		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.String)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -89,7 +95,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 	case *DString:
 		s := string(*d)
 		// Attempt to parse as timestamp.
-		if dt, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
+		if dt, _, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			break
 		}

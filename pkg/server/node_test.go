@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,7 @@ func (s keySlice) Less(i, j int) bool { return bytes.Compare(s[i], s[j]) < 0 }
 // cluster. Uses an in memory engine.
 func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	e := storage.NewDefaultInMem()
 	defer e.Close()
@@ -115,6 +117,7 @@ func TestBootstrapCluster(t *testing.T) {
 // stores and verifies both stores are added and started.
 func TestBootstrapNewStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	path, cleanup := testutils.TempDir(t)
@@ -164,6 +167,7 @@ func TestBootstrapNewStore(t *testing.T) {
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	// For kicks, start both nodes in the cluster with two initially empty
@@ -228,6 +232,7 @@ func TestNodeJoin(t *testing.T) {
 // store's cluster ID is empty.
 func TestCorruptedClusterID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	e := storage.NewDefaultInMem()
@@ -274,7 +279,7 @@ func compareNodeStatus(
 	// ========================================
 	nodeStatusKey := keys.NodeStatusKey(ts.node.Descriptor.NodeID)
 	nodeStatus := &statuspb.NodeStatus{}
-	if err := ts.db.GetProto(context.TODO(), nodeStatusKey, nodeStatus); err != nil {
+	if err := ts.db.GetProto(context.Background(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
 
@@ -381,6 +386,7 @@ func compareNodeStatus(
 // both the Node and stores within the node.
 func TestNodeStatusWritten(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// ========================================
 	// Start test server and wait for full initialization.
@@ -388,9 +394,9 @@ func TestNodeStatusWritten(t *testing.T) {
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
 	})
-	defer srv.Stopper().Stop(context.TODO())
+	defer srv.Stopper().Stop(context.Background())
 	ts := srv.(*TestServer)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Retrieve the first store from the Node.
 	s, err := ts.node.stores.GetStore(roachpb.StoreID(1))
@@ -404,7 +410,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	leftKey := "a"
 
 	// Scan over all keys to "wake up" all replicas (force a lease holder election).
-	if _, err := kvDB.Scan(context.TODO(), keys.MetaMax, keys.MaxKey, 0); err != nil {
+	if _, err := kvDB.Scan(context.Background(), keys.MetaMax, keys.MaxKey, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -438,7 +444,7 @@ func TestNodeStatusWritten(t *testing.T) {
 
 	expectedStoreStatuses := make(map[roachpb.StoreID]statuspb.StoreStatus)
 	if err := ts.node.stores.VisitStores(func(s *kvserver.Store) error {
-		desc, err := s.Descriptor(false /* useCached */)
+		desc, err := s.Descriptor(ctx, false /* useCached */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -526,7 +532,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.TODO(), splitKey, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := ts.db.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -560,6 +566,7 @@ func TestNodeStatusWritten(t *testing.T) {
 // collection of different localities.
 func TestStartNodeWithLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	testLocalityWithNewNode := func(locality roachpb.Locality) {
@@ -578,7 +585,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		}
 
 		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			desc, err := store.Descriptor(false /* useCached */)
+			desc, err := store.Descriptor(ctx, false /* useCached */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -614,6 +621,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 
 func TestNodeSendUnknownBatchRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ba := roachpb.BatchRequest{
 		Requests: make([]roachpb.RequestUnion, 1),

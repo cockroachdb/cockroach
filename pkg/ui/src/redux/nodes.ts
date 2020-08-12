@@ -24,6 +24,8 @@ import { nullOfReturnType } from "src/util/types";
  * keyword.
  */
 export import LivenessStatus = protos.cockroach.kv.kvserver.storagepb.NodeLivenessStatus;
+import { cockroach } from "src/js/protos";
+import MembershipStatus = cockroach.kv.kvserver.storagepb.MembershipStatus;
 
 /**
  * livenessNomenclature resolves a mismatch between the terms used for liveness
@@ -33,13 +35,13 @@ export import LivenessStatus = protos.cockroach.kv.kvserver.storagepb.NodeLivene
  */
 export function livenessNomenclature(liveness: LivenessStatus) {
   switch (liveness) {
-    case LivenessStatus.LIVE:
+    case LivenessStatus.NODE_STATUS_LIVE:
       return "healthy";
-    case LivenessStatus.UNAVAILABLE:
+    case LivenessStatus.NODE_STATUS_UNAVAILABLE:
       return "suspect";
-    case LivenessStatus.DECOMMISSIONING:
+    case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
       return "decommissioning";
-    case LivenessStatus.DECOMMISSIONED:
+    case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
       return "decommissioned";
     default:
       return "dead";
@@ -115,7 +117,7 @@ export const selectCommissionedNodeStatuses = createSelector(
     return _.filter(nodeStatuses, (node) => {
       const livenessStatus = livenessStatuses[`${node.desc.node_id}`];
 
-      return _.isNil(livenessStatus) || livenessStatus !== LivenessStatus.DECOMMISSIONED;
+      return _.isNil(livenessStatus) || livenessStatus !== LivenessStatus.NODE_STATUS_DECOMMISSIONED;
     });
   },
 );
@@ -180,26 +182,26 @@ export function sumNodeStats(
   if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
     nodeStatuses.forEach((n) => {
       const status = livenessStatusByNodeID[n.desc.node_id];
-      if (status !== LivenessStatus.DECOMMISSIONED) {
+      if (status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED) {
         result.nodeCounts.total += 1;
       }
       switch (status) {
-        case LivenessStatus.LIVE:
+        case LivenessStatus.NODE_STATUS_LIVE:
           result.nodeCounts.healthy++;
           break;
-        case LivenessStatus.UNAVAILABLE:
-        case LivenessStatus.DECOMMISSIONING:
+        case LivenessStatus.NODE_STATUS_UNAVAILABLE:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
           result.nodeCounts.suspect++;
           break;
-        case LivenessStatus.DECOMMISSIONED:
+        case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
           result.nodeCounts.decommissioned++;
           break;
-        case LivenessStatus.DEAD:
+        case LivenessStatus.NODE_STATUS_DEAD:
         default:
           result.nodeCounts.dead++;
           break;
       }
-      if (status !== LivenessStatus.DEAD && status !== LivenessStatus.DECOMMISSIONED) {
+      if (status !== LivenessStatus.NODE_STATUS_DEAD && status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED) {
         const { available, used, usable } = nodeCapacityStats(n);
 
         result.capacityUsed += used;
@@ -234,16 +236,16 @@ export function nodeCapacityStats(n: INodeStatus): CapacityStats {
   };
 }
 
-export function getDisplayName(node: INodeStatus | NoConnection, livenessStatus = LivenessStatus.LIVE) {
-  const decommissionedString = livenessStatus === LivenessStatus.DECOMMISSIONED
+export function getDisplayName(node: INodeStatus | NoConnection, livenessStatus = LivenessStatus.NODE_STATUS_LIVE) {
+  const decommissionedString = livenessStatus === LivenessStatus.NODE_STATUS_DECOMMISSIONED
     ? "[decommissioned] "
     : "";
 
   if (isNoConnection(node)) {
-    return `${decommissionedString} (n${node.from.nodeID})`;
+    return `${decommissionedString}(n${node.from.nodeID})`;
   }
   // as the only other type possible right now is INodeStatus we don't have a type guard for that
-  return `${decommissionedString}${node.desc.address.address_field} (n${node.desc.node_id})`;
+  return `${decommissionedString}(n${node.desc.node_id}) ${node.desc.address.address_field}`;
 }
 
 function isNoConnection(node: INodeStatus | NoConnection): node is NoConnection {
@@ -333,7 +335,7 @@ export const clusterNameSelector = createSelector(
       return undefined;
     }
     const liveNodesOnCluster = nodeStatuses.filter(
-      nodeStatus => livenessStatusByNodeID[nodeStatus.desc.node_id] === LivenessStatus.LIVE);
+      nodeStatus => livenessStatusByNodeID[nodeStatus.desc.node_id] === LivenessStatus.NODE_STATUS_LIVE);
 
     const nodesWithUniqClusterNames = _.chain(liveNodesOnCluster)
       .filter(node => !_.isEmpty(node.desc.cluster_name))
@@ -357,7 +359,8 @@ export const versionsSelector = createSelector(
       // Exclude this node if it's known to be decommissioning.
       .filter((status) => !status.desc ||
         !livenessStatusByNodeID[status.desc.node_id] ||
-        !livenessStatusByNodeID[status.desc.node_id].decommissioning)
+        !livenessStatusByNodeID[status.desc.node_id].membership ||
+        !(livenessStatusByNodeID[status.desc.node_id].membership !== MembershipStatus.ACTIVE))
       // Collect the surviving nodes' build tags.
       .map((status) => status.build_info.tag)
       .uniq()
@@ -386,12 +389,12 @@ export const partitionedStatuses = createSelector(
       summary.nodeStatuses,
       (ns) => {
         switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
-          case LivenessStatus.LIVE:
-          case LivenessStatus.UNAVAILABLE:
-          case LivenessStatus.DEAD:
-          case LivenessStatus.DECOMMISSIONING:
+          case LivenessStatus.NODE_STATUS_LIVE:
+          case LivenessStatus.NODE_STATUS_UNAVAILABLE:
+          case LivenessStatus.NODE_STATUS_DEAD:
+          case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
             return "live";
-          case LivenessStatus.DECOMMISSIONED:
+          case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
             return "decommissioned";
           default:
             // TODO (koorosh): "live" has to be renamed to some partition which
@@ -401,4 +404,9 @@ export const partitionedStatuses = createSelector(
       },
     );
   },
+);
+
+export const isSingleNodeCluster = createSelector(
+  nodeStatusesSelector,
+  nodeStatuses => nodeStatuses && nodeStatuses.length === 1,
 );

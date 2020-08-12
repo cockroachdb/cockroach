@@ -12,6 +12,7 @@ package log
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	stdLog "log"
 	"strconv"
@@ -54,23 +55,26 @@ func init() {
 // Write parses the standard logging line and passes its components to the
 // logger for Severity(lb).
 func (lb logBridge) Write(b []byte) (n int, err error) {
-	var (
-		file = "???"
-		line = 1
-		text string
-	)
+	entry := MakeEntry(context.Background(),
+		Severity(lb), &mainLog.logCounter, 0, /* depth */
+		// Note: because the caller is using the stdLog interface, they are
+		// bypassing all the log marker logic. This means that the entire
+		// log message should be assumed to contain confidential
+		// information—it is thus not redactable.
+		false /* redactable */, "")
+
 	// Split "d.go:23: message" into "d.go", "23", and "message".
 	if parts := bytes.SplitN(b, []byte{':'}, 3); len(parts) != 3 || len(parts[0]) < 1 || len(parts[2]) < 1 {
-		text = fmt.Sprintf("bad log format: %s", b)
+		entry.Message = fmt.Sprintf("bad log format: %s", b)
 	} else {
-		file = string(parts[0])
-		text = string(parts[2][1 : len(parts[2])-1]) // skip leading space and trailing newline
-		line, err = strconv.Atoi(string(parts[1]))
+		entry.File = string(parts[0])
+		entry.Message = string(parts[2][1 : len(parts[2])-1]) // skip leading space and trailing newline
+		entry.Line, err = strconv.ParseInt(string(parts[1]), 10, 64)
 		if err != nil {
-			text = fmt.Sprintf("bad line number: %s", b)
-			line = 1
+			entry.Message = fmt.Sprintf("bad line number: %s", b)
+			entry.Line = 1
 		}
 	}
-	mainLog.outputLogEntry(Severity(lb), file, line, text)
+	mainLog.outputLogEntry(entry)
 	return len(b), nil
 }

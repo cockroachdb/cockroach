@@ -21,8 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -78,6 +80,7 @@ import (
 //
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
@@ -136,7 +139,7 @@ func TestMVCCHistories(t *testing.T) {
 					switch d.Cmd {
 					case "skip":
 						if len(d.CmdArgs) == 0 || d.CmdArgs[0].Key == engineImpl.name {
-							e.t.Skip("skipped")
+							skip.IgnoreLint(e.t, "skipped")
 						}
 						return d.Expected
 					case "run":
@@ -225,7 +228,7 @@ func TestMVCCHistories(t *testing.T) {
 
 							// Trace the execution in testing.T, to clarify where we
 							// are in case an error occurs.
-							e.t.Logf("%s: %s", d.Pos, line)
+							log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
 
 							// Decompose the current script line.
 							var err error
@@ -549,10 +552,10 @@ func cmdCPut(e *evalCtx) error {
 	key := e.getKey()
 	val := e.getVal()
 	// Condition val is optional.
-	var expVal *roachpb.Value
+	var expVal []byte
 	if e.hasArg("cond") {
 		rexpVal := e.getValInternal("cond")
-		expVal = &rexpVal
+		expVal = rexpVal.TagAndDataBytes()
 	}
 	behavior := CPutFailIfMissing
 	if e.hasArg("allow_missing") {
@@ -930,10 +933,9 @@ func (e *evalCtx) newTxn(
 			WriteTimestamp: ts,
 			Sequence:       0,
 		},
-		Name:                    txnName,
-		DeprecatedOrigTimestamp: ts,
-		ReadTimestamp:           ts,
-		Status:                  roachpb.PENDING,
+		Name:          txnName,
+		ReadTimestamp: ts,
+		Status:        roachpb.PENDING,
 	}
 	e.txnCounter = e.txnCounter.Add(1)
 	e.txns[txnName] = txn

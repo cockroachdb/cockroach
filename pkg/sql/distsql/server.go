@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -61,7 +63,7 @@ type ServerImpl struct {
 	execinfra.ServerConfig
 	flowRegistry  *flowinfra.FlowRegistry
 	flowScheduler *flowinfra.FlowScheduler
-	memMonitor    mon.BytesMonitor
+	memMonitor    *mon.BytesMonitor
 	regexpCache   *tree.RegexpCache
 }
 
@@ -74,7 +76,7 @@ func NewServer(ctx context.Context, cfg execinfra.ServerConfig) *ServerImpl {
 		regexpCache:   tree.NewRegexpCache(512),
 		flowRegistry:  flowinfra.NewFlowRegistry(cfg.NodeID.SQLInstanceID()),
 		flowScheduler: flowinfra.NewFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Settings, cfg.Metrics),
-		memMonitor: mon.MakeMonitor(
+		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
 			cfg.Metrics.CurBytesCount,
@@ -218,7 +220,7 @@ func (ds *ServerImpl) setupFlow(
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor opened here is closed in Flow.Cleanup().
-	monitor := mon.MakeMonitor(
+	monitor := mon.NewMonitor(
 		"flow",
 		mon.MemoryResource,
 		ds.Metrics.CurBytesCount,
@@ -249,7 +251,7 @@ func (ds *ServerImpl) setupFlow(
 	var leafTxn *kv.Txn
 	if localState.EvalContext != nil {
 		evalCtx = localState.EvalContext
-		evalCtx.Mon = &monitor
+		evalCtx.Mon = monitor
 	} else {
 		if localState.IsLocal {
 			return nil, nil, errors.AssertionFailedf(
@@ -311,7 +313,7 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:      ds.ServerConfig.NodeID,
 			Codec:       ds.ServerConfig.Codec,
 			ReCache:     ds.regexpCache,
-			Mon:         &monitor,
+			Mon:         monitor,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:            ctx,
@@ -337,16 +339,9 @@ func (ds *ServerImpl) setupFlow(
 		}
 	}
 
-	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := execinfra.FlowCtx{
-		AmbientContext: ds.AmbientContext,
-		Cfg:            &ds.ServerConfig,
-		ID:             req.Flow.FlowID,
-		EvalCtx:        evalCtx,
-		NodeID:         ds.ServerConfig.NodeID,
-		TraceKV:        req.TraceKV,
-		Local:          localState.IsLocal,
-	}
+	// Create the FlowCtx for the flow.
+	flowCtx := ds.NewFlowContext(req.Flow.FlowID, evalCtx, req.TraceKV, localState)
+
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
 	// itself when the vectorize mode needs to be changed because we would need
@@ -411,6 +406,45 @@ func (ds *ServerImpl) setupFlow(
 	return ctx, f, nil
 }
 
+// NewFlowContext creates a new FlowCtx that can be used during execution of
+// a flow.
+func (ds *ServerImpl) NewFlowContext(
+	id execinfrapb.FlowID, evalCtx *tree.EvalContext, traceKV bool, localState LocalState,
+) execinfra.FlowCtx {
+	// TODO(radu): we should sanity check some of these fields.
+	flowCtx := execinfra.FlowCtx{
+		AmbientContext: ds.AmbientContext,
+		Cfg:            &ds.ServerConfig,
+		ID:             id,
+		EvalCtx:        evalCtx,
+		NodeID:         ds.ServerConfig.NodeID,
+		TraceKV:        traceKV,
+		Local:          localState.IsLocal,
+	}
+
+	if localState.IsLocal && localState.Collection != nil {
+		// If we were passed a descs.Collection to use, then take it. In this case,
+		// the caller will handle releasing the used descriptors, so we don't need
+		// to cleanup the descriptors when cleaning up the flow.
+		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+			Descriptors: localState.Collection,
+			CleanupFunc: func(ctx context.Context) {},
+		}
+	} else {
+		// If we weren't passed a descs.Collection, then make a new one. We are
+		// responsible for cleaning it up and releasing any accessed descriptors
+		// on flow cleanup.
+		collection := descs.NewCollection(ds.ServerConfig.LeaseManager.(*lease.Manager), ds.ServerConfig.Settings)
+		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
+			Descriptors: collection,
+			CleanupFunc: func(ctx context.Context) {
+				collection.ReleaseAll(ctx)
+			},
+		}
+	}
+	return flowCtx
+}
+
 func newFlow(
 	flowCtx execinfra.FlowCtx,
 	flowReg *flowinfra.FlowRegistry,
@@ -436,8 +470,9 @@ func (ds *ServerImpl) SetupSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor,
-		req, output, LocalState{})
+	ctx, f, err := ds.setupFlow(
+		ds.AnnotateCtx(ctx), opentracing.SpanFromContext(ctx), parentMonitor, req, output, LocalState{},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -449,6 +484,11 @@ func (ds *ServerImpl) SetupSyncFlow(
 type LocalState struct {
 	EvalContext *tree.EvalContext
 
+	// Collection is set if this flow is running on the gateway as part of user
+	// SQL session. It is the current descs.Collection of the planner executing
+	// the flow.
+	Collection *descs.Collection
+
 	// IsLocal is set if the flow is running on the gateway and there are no
 	// remote flows.
 	IsLocal bool
@@ -457,10 +497,6 @@ type LocalState struct {
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
 	// If there is concurrency, a LeafTxn will be created.
 	Txn *kv.Txn
-
-	/////////////////////////////////////////////
-	// Fields below are empty if IsLocal == false
-	/////////////////////////////////////////////
 
 	// LocalProcs is an array of planNodeToRowSource processors. It's in order and
 	// will be indexed into by the RowSourceIdx field in LocalPlanNodeSpec.
@@ -477,8 +513,9 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output,
-		localState)
+	ctx, f, err := ds.setupFlow(
+		ctx, opentracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -498,7 +535,7 @@ func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) 
 		return errors.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
-	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
+	ctx, f, err := ds.SetupSyncFlow(stream.Context(), ds.memMonitor, req, mbox)
 	if err != nil {
 		return err
 	}
@@ -531,7 +568,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, &ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}

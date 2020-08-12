@@ -12,6 +12,7 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,6 +52,11 @@ func NewNonNullViolationError(columnName string) error {
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {
 	return pgerror.WithCandidateCode(err, pgcode.InvalidSchemaDefinition)
+}
+
+// NewUndefinedSchemaError creates an error for an undefined schema.
+func NewUndefinedSchemaError(name string) error {
+	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
 }
 
 // NewUnsupportedSchemaUsageError creates an error for an invalid
@@ -129,6 +135,31 @@ func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
 }
 
+// WrapErrorWhileConstructingObjectAlreadyExistsErr is used to wrap an error
+// when an error occurs while trying to get the colliding object for an
+// ObjectAlreadyExistsErr.
+func WrapErrorWhileConstructingObjectAlreadyExistsErr(err error) error {
+	return pgerror.WithCandidateCode(errors.Wrap(err, "object already exists"), pgcode.DuplicateObject)
+}
+
+// MakeObjectAlreadyExistsError creates an error for a namespace collision
+// with an arbitrary descriptor type.
+func MakeObjectAlreadyExistsError(collidingObject *descpb.Descriptor, name string) error {
+	switch collidingObject.Union.(type) {
+	case *descpb.Descriptor_Table:
+		return NewRelationAlreadyExistsError(name)
+	case *descpb.Descriptor_Type:
+		return NewTypeAlreadyExistsError(name)
+	case *descpb.Descriptor_Database:
+		return NewDatabaseAlreadyExistsError(name)
+	case *descpb.Descriptor_Schema:
+		// TODO(ajwerner): Add a case for an existing schema object.
+		return errors.AssertionFailedf("schema exists with name %v", name)
+	default:
+		return errors.AssertionFailedf("unknown type %T exists with name %v", collidingObject.Union, name)
+	}
+}
+
 // NewRelationAlreadyExistsError creates an error for a preexisting relation.
 func NewRelationAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateRelation, "relation %q already exists", name)
@@ -161,14 +192,12 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
-func NewRangeUnavailableError(
-	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
-) error {
+func NewRangeUnavailableError(rangeID roachpb.RangeID, origErr error) error {
 	// TODO(knz): This could should really use errors.Wrap or
 	// errors.WithSecondaryError.
 	return pgerror.Newf(pgcode.RangeUnavailable,
-		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
-		rangeID, nodeIDs, origErr)
+		"key range id:%d is unavailable. Original error: %v",
+		rangeID, origErr)
 }
 
 // NewWindowInAggError creates an error for the case when a window function is
@@ -207,7 +236,7 @@ func IsUndefinedRelationError(err error) bool {
 	return errHasCode(err, pgcode.UndefinedTable)
 }
 
-func errHasCode(err error, code ...string) bool {
+func errHasCode(err error, code ...pgcode.Code) bool {
 	pgCode := pgerror.GetPGCode(err)
 	for _, c := range code {
 		if pgCode == c {

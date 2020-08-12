@@ -21,10 +21,12 @@ option go_package = "execinfrapb";
 
 import "jobs/jobspb/jobs.proto";
 import "roachpb/io-formats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catalog/descpb/structured.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "roachpb/api.proto";
 
 // BackfillerSpec is the specification for a "schema change backfiller".
 // The created backfill processor runs a backfill for the first mutations in
@@ -56,13 +58,10 @@ message BackfillerSpec {
   // of entries backfilled per chunk.
   optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
 
-  // Any other (leased) table descriptors necessary for the
-  // backfiller to do its job, such as the descriptors for tables with fk
-  // relationships to the table being modified.
-  repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
-
   // The timestamp to perform index backfill historical scans at.
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+
+  reserved 6;
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -129,7 +128,59 @@ message ReadImportDataSpec {
   // If set, specifies reader parallelism; 0 implies "use default".
   optional int32 readerParallelism = 13 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14
+  // User who initiated the import. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 15 [(gogoproto.nullable) = false];
+
+  // NEXTID: 16
+}
+
+message BackupDataSpec {
+  repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
+  optional string default_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "DefaultURI"];
+  map<string, string> uris_by_locality_kv = 4 [(gogoproto.customname) = "URIsByLocalityKV"];
+  optional roachpb.MVCCFilter mvcc_filter = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCFilter"];
+  optional roachpb.FileEncryptionOptions encryption = 6;
+  optional util.hlc.Timestamp backup_start_time = 7 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp backup_end_time = 8 [(gogoproto.nullable) = false];
+
+  // PKIDs is used to convert result from an ExportRequest into row count
+  // information passed back to track progress in the backup job.
+  map<uint64, bool> pk_ids = 9 [(gogoproto.customname) = "PKIDs"];
+
+  // User who initiated the backup. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 10 [(gogoproto.nullable) = false];
+}
+
+// RestoreDataEntry will be specified at planning time to the SplitAndScatter
+// processors, then those processors will stream these, encoded as bytes in rows
+// to the RestoreDataProcessors.
+// This field has a subset of the importEntry struct defined in restore.
+message RestoreSpanEntry {
+  optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.ImportRequest.File files = 2 [(gogoproto.nullable) = false];
+  optional int64 progressIdx = 3 [(gogoproto.nullable) = false];
+}
+
+message RestoreDataSpec {
+  optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
+  optional roachpb.FileEncryptionOptions encryption = 2;
+  repeated roachpb.ImportRequest.TableRekey rekeys = 3 [(gogoproto.nullable) = false];
+
+  // PKIDs is used to convert result from an ExportRequest into row count
+  // information passed back to track progress in the backup job.
+  map<uint64, bool> pk_ids = 4 [(gogoproto.customname) = "PKIDs"];
+}
+
+message SplitAndScatterSpec {
+  message RestoreEntryChunk {
+    repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
+  }
+
+  repeated RestoreEntryChunk chunks = 1 [(gogoproto.nullable) = false];
+  repeated roachpb.ImportRequest.TableRekey rekeys = 2 [(gogoproto.nullable) = false];
 }
 
 // FileCompression list of the compression codecs which are currently
@@ -153,6 +204,10 @@ message CSVWriterSpec {
 
   // compression_codec specifies compression used for exported file.
   optional FileCompression compression_codec = 5 [(gogoproto.nullable) = false];
+
+  // User who initiated the export. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user = 6 [(gogoproto.nullable) = false];
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

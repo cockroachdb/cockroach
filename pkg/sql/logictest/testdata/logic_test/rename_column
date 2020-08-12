@@ -1,7 +1,3 @@
-# This and all the rename_* variants fail due to
-# https://github.com/cockroachdb/cockroach/issues/47900. Specifically, being
-# unable to access a node ID during EXPLAIN.
-# LogicTest: !3node-tenant
 statement ok
 CREATE TABLE users (
   uid    INT PRIMARY KEY,
@@ -124,9 +120,9 @@ species
 query TTT
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
-·            distributed  false
-·            vectorized   false
-alter table  ·            ·
+·            distribution  local
+·            vectorized    false
+alter table  ·             ·
 
 # Verify that EXPLAIN did not actually rename the column
 query T

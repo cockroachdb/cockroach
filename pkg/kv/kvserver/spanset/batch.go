@@ -206,6 +206,11 @@ func (i *Iterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
 }
 
+// SupportsPrev is part of the engine.Iterator interface.
+func (i *Iterator) SupportsPrev() bool {
+	return i.i.SupportsPrev()
+}
+
 // MVCCOpsSpecialized is part of the engine.MVCCIterator interface.
 func (i *Iterator) MVCCOpsSpecialized() bool {
 	if mvccIt, ok := i.i.(storage.MVCCIterator); ok {

@@ -44,13 +44,13 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	input colexecbase.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexec.IdempotentCloser,
+	toClose []colexec.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
 
 func (c callbackRemoteComponentCreator) newInbox(
-	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }
@@ -202,7 +202,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
-			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
+			inbox, err := colrpc.NewInbox(context.Background(), allocator, typs, streamID)
 			inboxToNumInputTypes[inbox] = typs
 			return inbox, err
 		},
@@ -214,7 +214,10 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	f := &flowinfra.FlowBase{FlowCtx: execinfra.FlowCtx{EvalCtx: &evalCtx, NodeID: base.TestingIDContainer}}
 	var wg sync.WaitGroup
-	vfc := newVectorizedFlowCreator(&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil)
+	vfc := newVectorizedFlowCreator(
+		&vectorizedFlowCreatorHelper{f: f}, componentCreator, false, &wg, &execinfra.RowChannel{},
+		nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{}, nil, colexec.DefaultExprDeserialization,
+	)
 
 	_, err := vfc.setupFlow(ctx, &f.FlowCtx, procs, flowinfra.FuseNormally)
 	defer func() {
@@ -264,12 +267,12 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		).(*vectorizedFlow)
 	}
 
-	dirs, err := ngn.ListDir(tempPath)
+	dirs, err := ngn.List(tempPath)
 	require.NoError(t, err)
 	numDirsTheTestStartedWith := len(dirs)
 	checkDirs := func(t *testing.T, numExtraDirs int) {
 		t.Helper()
-		dirs, err := ngn.ListDir(tempPath)
+		dirs, err := ngn.List(tempPath)
 		require.NoError(t, err)
 		expectedNumDirs := numDirsTheTestStartedWith + numExtraDirs
 		require.Equal(t, expectedNumDirs, len(dirs), "expected %d directories but found %d: %s", expectedNumDirs, len(dirs), dirs)
@@ -366,12 +369,12 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 		errCh := make(chan error)
 		go func() {
 			createTempDir()
-			errCh <- ngn.CreateDir(filepath.Join(vf.tempStorage.path, "async"))
+			errCh <- ngn.MkdirAll(filepath.Join(vf.tempStorage.path, "async"))
 		}()
 		createTempDir()
 		// Both goroutines should be able to create their subdirectories within the
 		// flow's temporary directory.
-		require.NoError(t, ngn.CreateDir(filepath.Join(vf.tempStorage.path, "main_goroutine")))
+		require.NoError(t, ngn.MkdirAll(filepath.Join(vf.tempStorage.path, "main_goroutine")))
 		require.NoError(t, <-errCh)
 		vf.Cleanup(ctx)
 		checkDirs(t, 0)

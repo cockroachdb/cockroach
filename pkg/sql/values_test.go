@@ -18,15 +18,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -54,6 +55,7 @@ func makeTestPlanner() *planner {
 
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	p := makeTestPlanner()
 
@@ -132,7 +134,7 @@ func TestValues(t *testing.T) {
 		},
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			plan, err := func() (_ planNode, err error) {
@@ -141,7 +143,7 @@ func TestValues(t *testing.T) {
 						err = errors.Errorf("%v", r)
 					}
 				}()
-				return p.Values(context.TODO(), tc.stmt, nil)
+				return p.Values(context.Background(), tc.stmt, nil)
 			}()
 			if plan != nil {
 				defer plan.Close(ctx)
@@ -177,6 +179,7 @@ type stringAlias string
 
 func TestGolangQueryArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Each test case pairs an arbitrary value and tree.Datum which has the same
 	// type
@@ -222,7 +225,7 @@ func TestGolangQueryArgs(t *testing.T) {
 
 		// Primitive type aliases.
 		{roachpb.NodeID(1), types.Int},
-		{sqlbase.ID(1), types.Int},
+		{descpb.ID(1), types.Int},
 		{floatAlias(1), types.Float},
 		{boolAlias(true), types.Bool},
 		{stringAlias("string"), types.String},

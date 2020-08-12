@@ -85,10 +85,16 @@ type Factory struct {
 	// catalog is the opt catalog, used to resolve names during constant folding
 	// of special metadata queries like 'table_name'::regclass.
 	catalog cat.Catalog
+
+	// See FoldingControl.
+	foldingControl FoldingControl
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
+//
+// By default, a factory only constant-folds immutable operators; this can be
+// changed using FoldingControl().AllowStableFolds().
 func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	if f.mem == nil {
@@ -101,6 +107,12 @@ func (f *Factory) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
+	f.foldingControl.DisallowStableFolds()
+}
+
+// FoldingControl returns the FoldingControl instance for this factory.
+func (f *Factory) FoldingControl() *FoldingControl {
+	return &f.foldingControl
 }
 
 // DetachMemo extracts the memo from the optimizer, and then re-initializes the
@@ -258,7 +270,10 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 	// the logical properties of the group in question.
 	if rel.Op() != opt.ValuesOp {
 		relational := rel.Relational()
-		if relational.Cardinality.IsZero() && !relational.CanHaveSideEffects {
+		// We can do this if we only contain leak-proof operators. As an example of
+		// an immutable operator that should not be folded: a Limit on top of an
+		// empty input has to error out if the limit turns out to be negative.
+		if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakProof() {
 			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
 				values := f.funcs.ConstructEmptyValues(relational.OutputCols)
 				if f.appliedRule != nil {
@@ -277,6 +292,42 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 // replacement code can be run.
 func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 	return scalar
+}
+
+// NormalizePartialIndexPredicate performs specific normalization functions to
+// normalize a partial index predicate. The goal is to mimic the normalizations
+// performed on filters with Selects as closely as possible. If a partial index
+// predicate and query filter are normalized differently, proving implication
+// can be difficult or impossible.
+func (f *Factory) NormalizePartialIndexPredicate(pred memo.FiltersExpr) memo.FiltersExpr {
+	// Run SimplifyFilters so that adjacent top-level AND expressions are
+	// flattened into individual FiltersItems, like they would be during
+	// normalization of a SELECT query. See the SimplifySelectFilters
+	// normalization rule.
+	//
+	// NOTE: We currently do not recursively simplify the filters like
+	// SimplifySelectFilters rule does. This could cause a false-negative when
+	// partialidx.Implicator tries to prove that a filter implies a partial
+	// index predicate. This trade-off avoids complexity until we find a
+	// real-world example that motivates the recursive normalization.
+	if !f.CustomFuncs().IsFilterFalse(pred) {
+		pred = f.CustomFuncs().SimplifyFilters(pred)
+	}
+
+	// Run ConsolidateFilters so that adjacent top-level FiltersItems that
+	// constrain a single variable are combined into a RangeExpr. See the
+	// ConsolidateSelectFilters normalization rule.
+	if f.CustomFuncs().CanConsolidateFilters(pred) {
+		pred = f.CustomFuncs().ConsolidateFilters(pred)
+	}
+
+	// Run InlineConstVar so that constant variables are inlined. See the
+	// InlineConstVar normalization rule.
+	if f.CustomFuncs().CanInlineConstVar(pred) {
+		pred = f.CustomFuncs().InlineConstVar(pred)
+	}
+
+	return pred
 }
 
 // ----------------------------------------------------------------------

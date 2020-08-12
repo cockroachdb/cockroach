@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -38,7 +36,7 @@ func TrackRaftProtos() func() []reflect.Type {
 	applyRaftEntryFunc := funcName((*apply.Task).ApplyCommittedEntries)
 	// We only need to track protos that could cause replica divergence
 	// by being written to disk downstream of raft.
-	whitelist := []string{
+	allowlist := []string{
 		// Some raft operations trigger gossip, but we don't require
 		// strict consistency there.
 		funcName((*gossip.Gossip).AddInfoProto),
@@ -60,14 +58,6 @@ func TrackRaftProtos() func() []reflect.Type {
 	}{
 		inner: make(map[reflect.Type]struct{}),
 	}
-
-	// Hard-coded protos for which we don't want to change the encoding. These
-	// are not "below raft" in the normal sense, but instead are used as part of
-	// conditional put operations.
-	belowRaftProtos.Lock()
-	belowRaftProtos.inner[reflect.TypeOf(&roachpb.RangeDescriptor{})] = struct{}{}
-	belowRaftProtos.inner[reflect.TypeOf(&storagepb.Liveness{})] = struct{}{}
-	belowRaftProtos.Unlock()
 
 	protoutil.Interceptor = func(pb protoutil.Message) {
 		t := reflect.TypeOf(pb)
@@ -94,14 +84,14 @@ func TrackRaftProtos() func() []reflect.Type {
 		for {
 			f, more := frames.Next()
 
-			whitelisted := false
-			for _, s := range whitelist {
+			allowlisted := false
+			for _, s := range allowlist {
 				if strings.Contains(f.Function, s) {
-					whitelisted = true
+					allowlisted = true
 					break
 				}
 			}
-			if whitelisted {
+			if allowlisted {
 				break
 			}
 

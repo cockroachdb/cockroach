@@ -16,12 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/kr/pretty"
 )
@@ -31,13 +32,13 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *roachpb.BatchRequest, st storagepb.LeaseStatus, g *concurrency.Guard,
+	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus, g *concurrency.Guard,
 ) (br *roachpb.BatchResponse, _ *concurrency.Guard, pErr *roachpb.Error) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 
 	// Verify that the batch can be executed.
-	if err := r.checkExecutionCanProceed(ba, g, &st); err != nil {
+	if err := r.checkExecutionCanProceed(ctx, ba, g, &st); err != nil {
 		return nil, g, roachpb.NewError(err)
 	}
 
@@ -126,8 +127,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		if retries > 0 {
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
-		br, res, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
-
+		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, true /* readOnly */)
 		// If we can retry, set a higher batch timestamp and continue.
 		// Allow one retry only.
 		if pErr == nil || retries > 0 || !canDoServersideRetry(ctx, pErr, ba, br, latchSpans, nil /* deadline */) {
@@ -137,7 +137,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 
 	if pErr != nil {
 		// Failed read-only batches can't have any Result except for what's
-		// whitelisted here.
+		// allowlisted here.
 		res.Local = result.LocalResult{
 			EncounteredIntents: res.Local.DetachEncounteredIntents(),
 			Metrics:            res.Local.Metrics,
@@ -159,20 +159,21 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 
 	if lResult.AcquiredLocks != nil {
 		// These will all be unreplicated locks.
+		log.Eventf(ctx, "acquiring %d unreplicated locks", len(lResult.AcquiredLocks))
 		for i := range lResult.AcquiredLocks {
 			r.concMgr.OnLockAcquired(ctx, &lResult.AcquiredLocks[i])
 		}
 		lResult.AcquiredLocks = nil
 	}
 
-	if lResult.MaybeWatchForMerge {
-		// A merge is (likely) about to be carried out, and this replica needs
-		// to block all traffic until the merge either commits or aborts. See
+	if !lResult.FreezeStart.IsEmpty() {
+		// A merge is (likely) about to be carried out, and this replica needs to
+		// block all non-read traffic until the merge either commits or aborts. See
 		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx); err != nil {
+		if err := r.maybeWatchForMerge(ctx, lResult.FreezeStart); err != nil {
 			return roachpb.NewError(err)
 		}
-		lResult.MaybeWatchForMerge = false
+		lResult.FreezeStart = hlc.Timestamp{}
 	}
 
 	if !lResult.IsZero() {

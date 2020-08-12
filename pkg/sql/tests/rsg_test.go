@@ -37,8 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -137,7 +139,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr := (*pq.Error)(nil); errors.As(err, &pqerr) {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgcode.CrashShutdown {
+				if pgcode.MakeCode(string(pqerr.Code)) == pgcode.CrashShutdown {
 					return &crasher{
 						sql:    sql,
 						err:    err,
@@ -191,6 +193,7 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 
 func TestRandomSyntaxGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "stmt"
 
@@ -227,6 +230,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 func TestRandomSyntaxSelect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "target_list"
 
@@ -254,6 +258,7 @@ type namedBuiltin struct {
 
 func TestRandomSyntaxFunctions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	done := make(chan struct{})
 	defer close(done)
@@ -288,7 +293,14 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		switch ft := nb.builtin.Types.(type) {
 		case tree.ArgTypes:
 			for _, arg := range ft {
-				args = append(args, r.GenerateRandomArg(arg.Typ))
+				// CollatedString's default has no Locale, and so GenerateRandomArg will panic
+				// on RandDatumWithNilChance. Copy the typ and fake a locale.
+				typ := *arg.Typ
+				if typ.Locale() == "" && typ.Family() == types.CollatedStringFamily {
+					locale := "en_US"
+					typ.InternalType.Locale = &locale
+				}
+				args = append(args, r.GenerateRandomArg(&typ))
 			}
 		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
@@ -313,7 +325,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				args = append(args, r.GenerateRandomArg(ft.VarType))
 			}
 		default:
-			panic(fmt.Sprintf("unknown fn.Types: %T", ft))
+			panic(errors.AssertionFailedf("unknown fn.Types: %T", ft))
 		}
 		var limit string
 		switch strings.ToLower(nb.name) {
@@ -327,6 +339,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 
 func TestRandomSyntaxFuncCommon(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const rootStmt = "func_expr_common_subexpr"
 
@@ -339,6 +352,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"create_database_stmt",
@@ -362,6 +376,7 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 
 func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	roots := []string{
 		"alter_table_cmd",
@@ -419,7 +434,6 @@ var ignoredErrorPatterns = []string{
 	"overflow",
 	"requested length too large",
 	"division by zero",
-	"zero modulus",
 	"is out of range",
 
 	// Type checking
@@ -506,6 +520,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
 	var smither *sqlsmith.Smither
@@ -560,8 +575,8 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 
 func TestRandomDatumRoundtrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	sema := tree.MakeSemaContext()
 	eval := tree.MakeTestingEvalContext(nil)
 
 	var smither *sqlsmith.Smither
@@ -599,6 +614,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		}
 		serializedGen := tree.Serialize(generated)
 
+		sema := tree.MakeSemaContext()
 		// We don't care about errors below because they are often
 		// caused by sqlsmith generating bogus queries. We're just
 		// looking for datums that don't match.
@@ -606,7 +622,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		typed1, err := parsed1.TypeCheck(&sema, typ)
+		typed1, err := parsed1.TypeCheck(ctx, &sema, typ)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -620,7 +636,7 @@ func TestRandomDatumRoundtrip(t *testing.T) {
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
-		typed2, err := parsed2.TypeCheck(&sema, typ)
+		typed2, err := parsed2.TypeCheck(ctx, &sema, typ)
 		if err != nil {
 			return nil //nolint:returnerrcheck
 		}
@@ -653,7 +669,7 @@ func testRandomSyntax(
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
 	if *flagRSGTime == 0 {
-		t.Skip("enable with '-rsg <duration>'")
+		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
 	defer utilccl.TestingEnableEnterprise()()

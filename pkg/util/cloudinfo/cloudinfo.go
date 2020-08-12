@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"regexp"
 	"time"
 
@@ -165,7 +166,7 @@ func (cli *client) getAzureInstanceMetadata(
 func (cli *client) getInstanceMetadata(
 	ctx context.Context, url string, headers []metadataReqHeader,
 ) ([]byte, error) {
-	req, err := httputil.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}

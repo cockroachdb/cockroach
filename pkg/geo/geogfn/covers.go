@@ -48,12 +48,22 @@ func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // covers is the internal calculation for Covers.
 func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
-	aRegions, err := a.AsS2()
+	// Rect "contains" is a version of covers.
+	if !a.BoundingRect().Contains(b.BoundingRect()) {
+		return false, nil
+	}
+
+	// Ignore EMPTY regions in a.
+	aRegions, err := a.AsS2(geo.EmptyBehaviorOmit)
 	if err != nil {
 		return false, err
 	}
-	bRegions, err := b.AsS2()
+	// If any of b is empty, we cannot cover it. Error and catch to return false.
+	bRegions, err := b.AsS2(geo.EmptyBehaviorError)
 	if err != nil {
+		if geo.IsEmptyGeometryError(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -148,8 +158,7 @@ func polylineCoversPointWithIdx(a *s2.Polyline, b s2.Point) (bool, int) {
 
 // polygonCoversPoints returns whether a polygon covers a given point.
 func polygonCoversPoint(a *s2.Polygon, b s2.Point) bool {
-	// Account for the case where b is on the edge of the polygon.
-	return a.ContainsPoint(b) || a.IntersectsCell(s2.CellFromPoint(b))
+	return a.IntersectsCell(s2.CellFromPoint(b))
 }
 
 // edgeCoversPoint determines whether a given edge contains a point.

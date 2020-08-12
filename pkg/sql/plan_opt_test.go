@@ -16,12 +16,14 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -67,7 +69,7 @@ func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper
 }
 
 func (h *queryCacheTestHelper) Stop() {
-	h.srv.Stopper().Stop(context.TODO())
+	h.srv.Stopper().Stop(context.Background())
 }
 
 func (h *queryCacheTestHelper) GetStats() (numHits, numMisses int) {
@@ -88,8 +90,23 @@ func (h *queryCacheTestHelper) AssertStats(tb *testing.T, expHits, expMisses int
 	assert.Equal(tb, expMisses, misses, "misses")
 }
 
+// CheckStats is similar to AssertStats, but returns an error instead of
+// failing the test if the actual stats don't match the expected stats.
+func (h *queryCacheTestHelper) CheckStats(tb *testing.T, expHits, expMisses int) error {
+	tb.Helper()
+	hits, misses := h.GetStats()
+	if expHits != hits {
+		return errors.Errorf("expected %d hits but found %d", expHits, hits)
+	}
+	if expMisses != misses {
+		return errors.Errorf("expected %d misses but found %d", expMisses, misses)
+	}
+	return nil
+}
+
 func TestQueryCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Grouping the parallel subtests into a non-parallel subtest allows the defer
 	// call above to work as expected.
@@ -164,6 +181,22 @@ func TestQueryCache(t *testing.T) {
 						[][]string{{"21", "201"}},
 					)
 				}
+			}
+		})
+
+		// Verify that using a relative timestamp literal interacts correctly with
+		// the query cache (#48717).
+		t.Run("relative-timestamp", func(t *testing.T) {
+			t.Parallel() // SAFE FOR TESTING
+			h := makeQueryCacheTestHelper(t, 1 /* numConns */)
+			defer h.Stop()
+
+			r := h.runners[0]
+			res := r.QueryStr(t, "SELECT 'now'::TIMESTAMP")
+			time.Sleep(time.Millisecond)
+			res2 := r.QueryStr(t, "SELECT 'now'::TIMESTAMP")
+			if reflect.DeepEqual(res, res2) {
+				t.Error("expected different result")
 			}
 		})
 
@@ -328,8 +361,17 @@ SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
 			h.AssertStats(t, 1 /* hits */, 1 /* misses */)
 			r0.Exec(t, "CREATE STATISTICS s FROM t")
 			h.AssertStats(t, 1 /* hits */, 1 /* misses */)
-			r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
-			h.AssertStats(t, 1 /* hits */, 2 /* misses */)
+			hits := 1
+			testutils.SucceedsSoon(t, func() error {
+				// The stats cache is updated asynchronously, so we may get some hits
+				// before we get a miss.
+				r1.CheckQueryResults(t, "SELECT * FROM t", [][]string{{"1", "1"}})
+				if err := h.CheckStats(t, hits, 2 /* misses */); err != nil {
+					hits++
+					return err
+				}
+				return nil
+			})
 		})
 
 		// Test that a schema change triggers cache invalidation.
@@ -509,6 +551,7 @@ SELECT cte.x, cte.y FROM cte LEFT JOIN cte as cte2 on cte.y = cte2.x`, j)
 // package.
 func BenchmarkQueryCache(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	workloads := []string{"small", "large"}
 	methods := []string{"simple", "prepare-once", "prepare-each"}

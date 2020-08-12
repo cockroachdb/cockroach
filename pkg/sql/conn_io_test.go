@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func assertStmt(t *testing.T, cmd Command, exp string) {
@@ -51,8 +52,9 @@ func mustPush(ctx context.Context, t *testing.T, buf *StmtBuf, cmd Command) {
 
 func TestStmtBuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -139,8 +141,9 @@ func TestStmtBuf(t *testing.T) {
 // statement arrives.
 func TestStmtBufSignal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -163,8 +166,9 @@ func TestStmtBufSignal(t *testing.T) {
 
 func TestStmtBufLtrim(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	for i := 0; i < 5; i++ {
 		stmt, err := parser.ParseOne(
@@ -191,8 +195,9 @@ func TestStmtBufLtrim(t *testing.T) {
 // there were commands queued up.
 func TestStmtBufClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	buf := NewStmtBuf()
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -210,6 +215,7 @@ func TestStmtBufClose(t *testing.T) {
 // Test that a call to Close() unblocks a CurCmd() call.
 func TestStmtBufCloseUnblocksReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
 
@@ -227,9 +233,10 @@ func TestStmtBufCloseUnblocksReader(t *testing.T) {
 // with ExecStmt.
 func TestStmtBufPreparedStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {
@@ -270,9 +277,10 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 
 func TestStmtBufBatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	buf := NewStmtBuf()
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	s1, err := parser.ParseOne("SELECT 1")
 	if err != nil {

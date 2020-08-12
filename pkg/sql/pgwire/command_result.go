@@ -12,7 +12,6 @@ package pgwire
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -75,9 +75,9 @@ type commandResult struct {
 	// to have an entry for every column.
 	formatCodes []pgwirebase.FormatCode
 
-	// oids is a map from result column index to its Oid, similar to formatCodes
-	// (except oids must always be set).
-	oids []oid.Oid
+	// types is a map from result column index to its type T, similar to formatCodes
+	// (except types must always be set).
+	types []*types.T
 
 	// bufferingDisabled is conditionally set during planning of certain
 	// statements.
@@ -107,7 +107,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 
 	for _, f := range r.flushBeforeCloseFuncs {
 		if err := f(ctx); err != nil {
-			panic(fmt.Sprintf("unexpected err when closing: %s", err))
+			panic(errors.AssertionFailedf("unexpected err when closing: %s", err))
 		}
 	}
 	r.flushBeforeCloseFuncs = nil
@@ -137,7 +137,7 @@ func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndica
 	case noCompletionMsg:
 		// nothing to do
 	default:
-		panic(fmt.Sprintf("unknown type: %v", r.typ))
+		panic(errors.AssertionFailedf("unknown type: %v", r.typ))
 	}
 }
 
@@ -166,7 +166,7 @@ func (r *commandResult) SetError(err error) {
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	r.assertNotReleased()
 	if r.err != nil {
-		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
+		panic(errors.AssertionFailedf("can't call AddRow after having set error: %s",
 			r.err))
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
@@ -178,7 +178,7 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	}
 	r.rowsAffected++
 
-	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.oids)
+	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.types)
 	var err error
 	if r.bufferingDisabled {
 		err = r.conn.Flush(r.pos)
@@ -219,9 +219,9 @@ func (r *commandResult) SetColumns(ctx context.Context, cols sqlbase.ResultColum
 	if r.descOpt == sql.NeedRowDesc {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
 	}
-	r.oids = make([]oid.Oid, len(cols))
+	r.types = make([]*types.T, len(cols))
 	for i, col := range cols {
-		r.oids[i] = col.Typ.Oid()
+		r.types[i] = col.Typ
 	}
 }
 

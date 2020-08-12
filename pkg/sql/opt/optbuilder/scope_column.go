@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -40,6 +42,10 @@ type scopeColumn struct {
 	// mutation is true if the column is in the process of being dropped or added
 	// to the table. It should not be visible to variable references.
 	mutation bool
+
+	// system is true if the column is an implicit system column. It should not
+	// be included in mutations.
+	system bool
 
 	// descending indicates whether this column is sorted in descending order.
 	// This field is only used for ordering columns.
@@ -125,7 +131,9 @@ func (c *scopeColumn) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (c *scopeColumn) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
+func (c *scopeColumn) TypeCheck(
+	_ context.Context, _ *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
 	return c, nil
 }
 

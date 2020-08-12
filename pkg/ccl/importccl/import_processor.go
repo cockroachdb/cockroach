@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -25,10 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -48,6 +49,14 @@ var _ execinfra.Processor = &readImportDataProcessor{}
 
 func (cp *readImportDataProcessor) OutputTypes() []*types.T {
 	return csvOutputTypes
+}
+
+func injectTimeIntoEvalCtx(ctx *tree.EvalContext, walltime int64) {
+	sec := walltime / int64(time.Second)
+	nsec := walltime % int64(time.Second)
+	unixtime := timeutil.Unix(sec, nsec)
+	ctx.StmtTimestamp = unixtime
+	ctx.TxnTimestamp = unixtime
 }
 
 func newReadImportDataProcessor(
@@ -110,12 +119,12 @@ func makeInputConverter(
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
 ) (inputConverter, error) {
-
-	var singleTable *sqlbase.TableDescriptor
+	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
+	var singleTable *sqlbase.ImmutableTableDescriptor
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
-			singleTable = table.Desc
+			singleTable = sqlbase.NewImmutableTableDescriptor(*table.Desc)
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
 				singleTableTargetCols[i] = tree.Name(colName)
@@ -131,7 +140,7 @@ func makeInputConverter(
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := true
 		for _, file := range spec.Uri {
-			if conf, err := cloud.ExternalStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
+			if conf, err := cloudimpl.ExternalStorageConfFromURI(file, spec.User); err != nil || conf.Provider != roachpb.ExternalStorageProvider_Workload {
 				isWorkload = false
 				break
 			}
@@ -144,11 +153,13 @@ func makeInputConverter(
 			singleTable, singleTableTargetCols, evalCtx), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
-			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos, int(spec.ReaderParallelism), singleTable, evalCtx)
+			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
+			int(spec.ReaderParallelism), singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
-		return newPgCopyReader(ctx, kvCh, spec.Format.PgCopy, singleTable, evalCtx)
+		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
+			int(spec.ReaderParallelism), singleTable, evalCtx)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
@@ -187,7 +198,7 @@ func ingestKvs(
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
 	minBufferSize, maxBufferSize, stepSize := storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "pkAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -202,7 +213,7 @@ func ingestKvs(
 	defer pkIndexAdder.Close(ctx)
 
 	minBufferSize, maxBufferSize, stepSize = storageccl.ImportBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, storagebase.BulkAdderOptions{
+	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
 		Name:              "indexAdder",
 		DisallowShadowing: true,
 		SkipDuplicates:    true,
@@ -332,14 +343,14 @@ func ingestKvs(
 				// more efficient than parsing every kv.
 				if indexID == 1 {
 					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-						if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in primary index")
 						}
 						return err
 					}
 				} else {
 					if err := indexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
-						if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in index")
 						}
 						return err
@@ -363,14 +374,14 @@ func ingestKvs(
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
-		if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 			return nil, errors.Wrap(err, "duplicate key in primary index")
 		}
 		return nil, err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
-		if errors.HasType(err, (*storagebase.DuplicateKeyError)(nil)) {
+		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 			return nil, errors.Wrap(err, "duplicate key in index")
 		}
 		return nil, err

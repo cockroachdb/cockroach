@@ -42,7 +42,7 @@ export default function (props: GraphDashboardProps) {
       tooltip={(
         <div>
           Over the last minute, this node executed 99% of queries within this time.&nbsp;
-            <em>This time does not include network latency between the node and client.</em>
+          <em>This time does not include network latency between the node and client.</em>
         </div>
       )}
     >
@@ -88,14 +88,13 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
-      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection}/>}
+      tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="Capacity" />
+        <Metric name="cr.store.capacity" title="Max" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
     </LineGraph>,
-
   ];
 }

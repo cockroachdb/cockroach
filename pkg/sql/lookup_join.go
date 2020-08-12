@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -22,7 +23,7 @@ type lookupJoinNode struct {
 	table *scanNode
 
 	// joinType is either INNER or LEFT_OUTER.
-	joinType sqlbase.JoinType
+	joinType descpb.JoinType
 
 	// eqCols identifies the columns from the input which are used for the
 	// lookup. These correspond to a prefix of the index columns (of the index we

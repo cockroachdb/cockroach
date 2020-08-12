@@ -29,8 +29,9 @@ import (
 // the endpoint goes away.
 func TestGraphite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(context.Background())
 	ctx := context.Background()
 
 	const setQ = `SET CLUSTER SETTING "%s" = "%s"`

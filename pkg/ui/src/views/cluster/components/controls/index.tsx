@@ -19,7 +19,7 @@ import "./controls.styl";
 // tslint:disable-next-line: variable-name
 const ButtonGroup = Button.Group;
 
-interface RangeSelectProps {
+export interface RangeSelectProps {
   // If onArrowClick exists, don't display the arrow next to the dropdown,
   // display left and right arrows to either side instead.
   onArrowClick?: (direction: ArrowDirection) => void;
@@ -27,7 +27,7 @@ interface RangeSelectProps {
   disabledArrows?: ArrowDirection[];
 }
 
-class TimeFrameControls extends React.Component<RangeSelectProps> {
+export class TimeFrameControls extends React.Component<RangeSelectProps> {
   handleChangeArrow = (direction: ArrowDirection) => () => this.props.onArrowClick(direction);
 
   render() {

@@ -42,13 +42,6 @@ enum ReadConsistencyType {
   INCONSISTENT = 2;
 }
 
-// RangeInfo describes a range which executed a request. It contains
-// the range descriptor and lease information at the time of execution.
-message RangeInfo {
-  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  Lease lease = 2 [(gogoproto.nullable) = false];
-}
-
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   option (gogoproto.equal) = true;
@@ -67,7 +60,8 @@ message RequestHeader {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
 }
 
-// ResponseHeader is returned with every storage node response.
+// ResponseHeader is returned with every storage node response. Note that this is
+// different from a BatchResponse's header.
 message ResponseHeader {
   enum ResumeReason {
     option (gogoproto.goproto_enum_prefix) = false;
@@ -112,7 +106,10 @@ message ResponseHeader {
   int64 num_bytes = 8;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.
-  repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
+  //
+  // This field is deprecated in 20.2 in favor of
+  // BatchResponse.Header.range_infos.
+  repeated RangeInfo deprecated_range_infos = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetRequest is the argument for the Get() method.
@@ -160,9 +157,8 @@ message PutResponse {
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
 //
-// - Returns true and sets value if exp_value equals existing value.
-// - If key doesn't exist and exp_value is nil, sets value.
-// - If key exists, but value is empty and exp_value is not nil but empty, sets value.
+// - Returns true and sets value if exp_bytes equals existing value.
+// - If key doesn't exist and exp_bytes is empty, sets value.
 // - Otherwise, returns a ConditionFailedError containing the actual value of the key.
 //
 // Note that the client is free to send more requests after a
@@ -178,10 +174,31 @@ message ConditionalPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
-  // Set exp_value.bytes empty to test for non-existence. Specify as nil
-  // to indicate there should be no existing entry. This is different
-  // from the expectation that the value exists but is empty.
-  Value exp_value = 3;
+  // deprecated_exp_val represents the expected existing value for the key. If
+  // the existing value is different, the request will return a
+  // ConditionFailedError. A missing (Go nil) deprecated_exp_value.raw_bytes
+  // means that the key is expected to not exist.
+  //
+  // This is deprecated in 20.2 in favor of exp_bytes, which clarifies that the
+  // checksum and timestamp of the expected value are irrelevant. Remove in
+  // 21.1.
+  Value deprecated_exp_value = 3;
+  // exp_bytes represents the expected existing value for the key. If empty, the
+  // key is expected to not exist. If not empty, these bytes are expected to
+  // contain the tag and data of the existing value (without the existing
+  // value's checksum; the byte array is expected to come from
+  // Value.TagAndDataBytes()). A value's checksum covers the key in addition to
+  // covering the value, so not including a checksum here makes for a easier to
+  // use API - the creator of the ConditionalPutRequest can simply put in bytes
+  // coming from a different key.
+  // Note that there's no such thing as expecting a key to exist, but have an
+  // empty value. Such key-values don't exist.
+  //
+  // Note that the existing value's timestamp doesn't matter, only its data. So,
+  // the CPut will succeed in ABA situations (if a reader got value A and checks
+  // against it later, the check will succeed even if, in the meantime, there's
+  // been a subsequent write of value B and another one back to value A).
+  bytes exp_bytes = 6;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
@@ -1250,6 +1267,7 @@ enum ExternalStorageProvider {
   GoogleCloud = 4;
   Azure = 5;
   Workload = 6;
+  FileTable = 7;
 }
 
 message ExternalStorage {
@@ -1314,12 +1332,27 @@ message ExternalStorage {
     int64 batch_begin = 6;
     int64 batch_end = 7;
   }
+  message FileTable {
+    option (gogoproto.equal) = true;
+
+    // User interacting with the external storage. This is used to check access
+    // privileges of the requested user scoped tables.
+    string user = 1;
+
+    // QualifiedTableName specifies the database.schema.tablename which the
+    // FileTableSystem should interact with when servicing reads/writes.
+    string qualified_table_name = 2;
+
+    // Path is the filename being read/written to via the FileTableSystem.
+    string path = 3;
+  }
   LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
   Http HttpPath = 3 [(gogoproto.nullable) = false];
   GCS GoogleCloudConfig = 4;
   S3 S3Config = 5;
   Azure AzureConfig = 6;
   Workload WorkloadConfig = 7;
+  FileTable FileTableConfig = 8 [(gogoproto.nullable) = false];
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
@@ -1345,6 +1378,8 @@ enum MVCCFilter {
   All = 1;
 }
 
+// FileEncryptionOptions stores information needed by KV level requests (egs:
+// ExportRequest, ImportRequest) to encrypt or decrypt data.
 message FileEncryptionOptions {
   option (gogoproto.equal) = true;
   // Key specifies the key to use for encryption or decryption.
@@ -1509,11 +1544,14 @@ message AdminScatterRequest {
 message AdminScatterResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
+
   message Range {
     Span span = 1 [(gogoproto.nullable) = false];
     reserved 2;
   }
-  repeated Range ranges = 2 [(gogoproto.nullable) = false];
+  // This field is deprecated in 20.2 in favor of RangeInfos.
+  repeated Range deprecated_ranges = 2 [(gogoproto.nullable) = false];
+  repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
 }
 
 // AdminVerifyProtectedTimestampRequest is the argument to the
@@ -1700,6 +1738,10 @@ message RangeStatsResponse {
 
   // QueriesPerSecond is the rate of request/s or QPS for the range.
   double queries_per_second = 3;
+
+  // range_info contains descriptor and lease information. Added in 20.2.
+  // TODO(andrei): Make non-nullable in 21.1.
+  RangeInfo range_info = 4;
 }
 
 // A RequestUnion contains exactly one of the requests.
@@ -1846,6 +1888,15 @@ message Header {
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
   ReadConsistencyType read_consistency = 6;
+  // wait_policy specifies the desired behavior for the batch request if it
+  // encounters a conflicting lock held by another active transaction.
+  //
+  // If an Error wait policy is set and a conflicting lock held by an active
+  // transaction is encountered, a WriteIntentError will be returned.
+  //
+  // If the desired behavior is to block on the conflicting lock up to some
+  // maximum duration, use the Block wait policy and set a context timeout.
+  kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
   // If set to a non-zero value, the total number of keys touched by requests in
   // the batch is limited. A resume span will be provided on the response of the
   // requests that were not able to run to completion before the limit was
@@ -1927,7 +1978,18 @@ message Header {
   bool distinct_spans = 9;
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
+  // TODO(andrei): Remove straggler users of this field, then delete the field
+  // in 21.1 now that we have client_range_info.
   bool return_range_info = 10;
+  // client_range_info represents the kvclient's knowledge about the state of
+  // the range (i.e. of the range descriptor and lease). The kvserver checks
+  // whether the client's info is up to date and, if it isn't, it will return a
+  // RangeInfo with up-to-date information. This field supersedes return_range_info.
+  //
+  // The field is nil for RPCs coming from 20.1 clients. For 20.2+ clients, at
+  // least the descriptor info is filled in.
+  // TODO(andrei): Make the field non-nullable in 21.1.
+  ClientRangeInfo client_range_info = 17;
   // gateway_node_id is the ID of the gateway node where the request originated.
   int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
   // If set, the request will return to the client before proposing the
@@ -1952,6 +2014,15 @@ message Header {
   // TODO(nvanbenschoten): perform this migration.
   bool can_forward_read_timestamp = 16;
   reserved 7, 12, 14;
+}
+
+// ClientRangeInfo represents the kvclient's knowledge about the state of the
+// range (i.e. of the range descriptor and lease). The kvserver checks whether
+// the client's info is up to date and, if it isn't, it will return a RangeInfo
+// with up-to-date information.
+message ClientRangeInfo {
+  int64 descriptor_generation = 1 [(gogoproto.casttype) = "RangeGeneration"];
+  int64 lease_sequence = 2 [(gogoproto.casttype) = "LeaseSequence"];
 }
 
 
@@ -2000,10 +2071,44 @@ message BatchResponse {
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
+    // Range or list of ranges used to execute the request. The server only
+    // populates this if return_range_info is set on the request, or if the
+    // server detects the client's client_range_info to be stale.
+    //
+    // For one batch, the kvserver returns at most one element. The DistSender
+    // will combine multiple responses though when it reassembles a split batch;
+    // in this case the RangeInfos are maintained in sorted order by range id.
+    //
+    // Not set when Error is set.
+    //
+    // TODO(andrei): In 21.1 there should be no users of this field left above
+    // the DistSender. At that point, the DistSender will no longer need to
+    // combine these - in fact it should clear the field. And then the field
+    // doesn't need to be `repeated` any more - the proto encoding
+    // allows us to change it to non-repeated.
+    repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
+}
+
+// RangeLookupRequest is a request to proxy a RangeLookup through a Tenant
+// service. Its fields correspond to a subset of the args of kv.RangeLookup.
+message RangeLookupRequest {
+  bytes               key              = 1 [(gogoproto.casttype) = "RKey"];
+  ReadConsistencyType read_consistency = 2;
+  int64               prefetch_num     = 3;
+  bool                prefetch_reverse = 4;
+}
+
+// RangeLookupResponse is returned from a RangeLookup request proxied through a
+// Tenant service. Its fields correspond to the return values of kv.RangeLookup.
+message RangeLookupResponse {
+  repeated RangeDescriptor descriptors            = 1 [(gogoproto.nullable) = false];
+  repeated RangeDescriptor prefetched_descriptors = 2 [(gogoproto.nullable) = false];
+  // If non-nil, the other fields will be empty.
+  Error error = 3;
 }
 
 // RangeFeedRequest is a request that expresses the intention to establish a
@@ -2059,8 +2164,33 @@ message RangeFeedEvent {
   RangeFeedError      error      = 3;
 }
 
+// GossipSubscriptionRequest initiates a game of telephone. It establishes an
+// indefinite stream that proxies gossip information overheard by the recipient
+// node back to the caller. Gossip information is filtered down to just those
+// identified by a key matching any of the specified patterns.
+//
+// Upon establishment of the stream, all existing information that matches one
+// or more of the patterns is returned. After this point, only new information
+// matching the patterns is returned.
+message GossipSubscriptionRequest {
+  repeated string patterns = 1;
+}
+
+// GossipSubscriptionEvent is a single piece of proxied gossip information.
+message GossipSubscriptionEvent {
+  string key     = 1;
+  Value  content = 2 [(gogoproto.nullable) = false];
+  // Which pattern does this gossip information match?
+  string pattern_matched = 3;
+  // If non-nil, the other fields will be empty and this will be the final event
+  // send on the stream before it is terminated.
+  Error error = 4;
+}
+
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
-  rpc Batch     (BatchRequest)     returns (BatchResponse)         {}
-  rpc RangeFeed (RangeFeedRequest) returns (stream RangeFeedEvent) {}
+  rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
+  rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
+  rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
 }

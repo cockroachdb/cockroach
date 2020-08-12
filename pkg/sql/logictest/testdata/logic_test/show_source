@@ -25,61 +25,69 @@ SELECT *
 FROM [SHOW ALL]
 WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'session_id'
 ----
-variable                                     value
-application_name                             ·
-bytea_output                                 hex
-client_encoding                              UTF8
-client_min_messages                          notice
-database                                     test
-datestyle                                    ISO, MDY
-default_int_size                             8
-default_tablespace                           ·
-default_transaction_isolation                serializable
-default_transaction_priority                 normal
-default_transaction_read_only                off
-distsql                                      off
-enable_implicit_select_for_update            on
-enable_insert_fast_path                      on
-enable_zigzag_join                           on
-experimental_enable_hash_sharded_indexes     off
-experimental_enable_temp_tables              off
-experimental_optimizer_foreign_key_cascades  off
-extra_float_digits                           0
-force_savepoint_restart                      off
-foreign_key_cascades_limit                   10000
-idle_in_transaction_session_timeout          0
-integer_datetimes                            on
-intervalstyle                                postgres
-locality                                     region=test,dc=dc1
-lock_timeout                                 0
-max_identifier_length                        128
-max_index_keys                               32
-node_id                                      1
-optimizer_foreign_keys                       on
-optimizer_use_histograms                     on
-optimizer_use_multicol_stats                 on
-reorder_joins_limit                          4
-require_explicit_primary_keys                off
-results_buffer_size                          16384
-row_security                                 off
-search_path                                  public
-serial_normalization                         rowid
-server_encoding                              UTF8
-server_version                               9.5.0
-server_version_num                           90500
-session_user                                 root
-sql_safe_updates                             off
-standard_conforming_strings                  on
-statement_timeout                            0
-synchronize_seqscans                         on
-timezone                                     UTC
-tracing                                      off
-transaction_isolation                        serializable
-transaction_priority                         normal
-transaction_read_only                        off
-transaction_status                           NoTxn
-vectorize                                    on
-vectorize_row_count_threshold                0
+variable                                       value
+application_name                               ·
+bytea_output                                   hex
+client_encoding                                UTF8
+client_min_messages                            notice
+database                                       test
+datestyle                                      ISO, MDY
+default_int_size                               8
+default_tablespace                             ·
+default_transaction_isolation                  serializable
+default_transaction_priority                   normal
+default_transaction_read_only                  off
+disable_partially_distributed_plans            off
+distsql                                        off
+enable_experimental_alter_column_type_general  off
+enable_implicit_select_for_update              on
+enable_insert_fast_path                        on
+enable_interleaved_joins                       on
+enable_seqscan                                 on
+enable_zigzag_join                             on
+experimental_distsql_planning                  off
+experimental_enable_enums                      off
+experimental_enable_hash_sharded_indexes       off
+experimental_enable_temp_tables                off
+experimental_enable_user_defined_schemas       off
+experimental_partial_indexes                   off
+extra_float_digits                             0
+force_savepoint_restart                        off
+foreign_key_cascades_limit                     10000
+idle_in_session_timeout                        0
+idle_in_transaction_session_timeout            0
+integer_datetimes                              on
+intervalstyle                                  postgres
+locality                                       region=test,dc=dc1
+lock_timeout                                   0
+max_identifier_length                          128
+max_index_keys                                 32
+node_id                                        1
+optimizer_use_histograms                       on
+optimizer_use_multicol_stats                   on
+reorder_joins_limit                            8
+require_explicit_primary_keys                  off
+results_buffer_size                            16384
+row_security                                   off
+search_path                                    public
+serial_normalization                           rowid
+server_encoding                                UTF8
+server_version                                 9.5.0
+server_version_num                             90500
+session_user                                   root
+sql_safe_updates                               off
+standard_conforming_strings                    on
+statement_timeout                              0
+synchronize_seqscans                           on
+synchronous_commit                             on
+timezone                                       UTC
+tracing                                        off
+transaction_isolation                          serializable
+transaction_priority                           normal
+transaction_read_only                          off
+transaction_status                             NoTxn
+vectorize                                      on
+vectorize_row_count_threshold                  0
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -178,69 +186,71 @@ SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_name
 
-query TTT colnames,rowsort
+query TTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
-schema_name  table_name                       type
-public       namespace                        table
-public       descriptor                       table
-public       users                            table
-public       zones                            table
-public       settings                         table
-public       tenants                          table
-public       lease                            table
-public       eventlog                         table
-public       rangelog                         table
-public       ui                               table
-public       jobs                             table
-public       web_sessions                     table
-public       table_statistics                 table
-public       locations                        table
-public       role_members                     table
-public       comments                         table
-public       replication_constraint_stats     table
-public       replication_critical_localities  table
-public       replication_stats                table
-public       reports_meta                     table
-public       namespace2                       table
-public       protected_ts_meta                table
-public       protected_ts_records             table
-public       role_options                     table
-public       statement_bundle_chunks          table
-public       statement_diagnostics_requests   table
-public       statement_diagnostics            table
+schema_name  table_name                       type   estimated_row_count
+public       namespace                        table  NULL
+public       descriptor                       table  NULL
+public       users                            table  NULL
+public       zones                            table  NULL
+public       settings                         table  NULL
+public       tenants                          table  NULL
+public       lease                            table  NULL
+public       eventlog                         table  NULL
+public       rangelog                         table  NULL
+public       ui                               table  NULL
+public       jobs                             table  NULL
+public       web_sessions                     table  NULL
+public       table_statistics                 table  NULL
+public       locations                        table  NULL
+public       role_members                     table  NULL
+public       comments                         table  NULL
+public       replication_constraint_stats     table  NULL
+public       replication_critical_localities  table  NULL
+public       replication_stats                table  NULL
+public       reports_meta                     table  NULL
+public       namespace2                       table  NULL
+public       protected_ts_meta                table  NULL
+public       protected_ts_records             table  NULL
+public       role_options                     table  NULL
+public       statement_bundle_chunks          table  NULL
+public       statement_diagnostics_requests   table  NULL
+public       statement_diagnostics            table  NULL
+public       scheduled_jobs                   table  NULL
 
-query TTTT colnames,rowsort
+query TTTTT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
-schema_name  table_name                       type   comment
-public       namespace                        table  ·
-public       descriptor                       table  ·
-public       users                            table  ·
-public       zones                            table  ·
-public       settings                         table  ·
-public       tenants                          table  ·
-public       lease                            table  ·
-public       eventlog                         table  ·
-public       rangelog                         table  ·
-public       ui                               table  ·
-public       jobs                             table  ·
-public       web_sessions                     table  ·
-public       table_statistics                 table  ·
-public       locations                        table  ·
-public       role_members                     table  ·
-public       comments                         table  ·
-public       replication_constraint_stats     table  ·
-public       replication_critical_localities  table  ·
-public       replication_stats                table  ·
-public       reports_meta                     table  ·
-public       namespace2                       table  ·
-public       protected_ts_meta                table  ·
-public       protected_ts_records             table  ·
-public       role_options                     table  ·
-public       statement_bundle_chunks          table  ·
-public       statement_diagnostics_requests   table  ·
-public       statement_diagnostics            table  ·
+schema_name  table_name                       type   estimated_row_count  comment
+public       namespace                        table  NULL                 ·
+public       descriptor                       table  NULL                 ·
+public       users                            table  NULL                 ·
+public       zones                            table  NULL                 ·
+public       settings                         table  NULL                 ·
+public       tenants                          table  NULL                 ·
+public       lease                            table  NULL                 ·
+public       eventlog                         table  NULL                 ·
+public       rangelog                         table  NULL                 ·
+public       ui                               table  NULL                 ·
+public       jobs                             table  NULL                 ·
+public       web_sessions                     table  NULL                 ·
+public       table_statistics                 table  NULL                 ·
+public       locations                        table  NULL                 ·
+public       role_members                     table  NULL                 ·
+public       comments                         table  NULL                 ·
+public       replication_constraint_stats     table  NULL                 ·
+public       replication_critical_localities  table  NULL                 ·
+public       replication_stats                table  NULL                 ·
+public       reports_meta                     table  NULL                 ·
+public       namespace2                       table  NULL                 ·
+public       protected_ts_meta                table  NULL                 ·
+public       protected_ts_records             table  NULL                 ·
+public       role_options                     table  NULL                 ·
+public       statement_bundle_chunks          table  NULL                 ·
+public       statement_diagnostics_requests   table  NULL                 ·
+public       statement_diagnostics            table  NULL                 ·
+public       scheduled_jobs                   table  NULL                 ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
@@ -267,11 +277,11 @@ pg_catalog
 pg_extension
 public
 
-query TTT colnames
+query TTTI colnames
 CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 ----
-schema_name  table_name  type
-public       foo         table
+schema_name  table_name  type   estimated_row_count
+public       foo         table  0
 
 
 query T colnames
@@ -312,7 +322,7 @@ query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
 ----
 table_name                create_statement
-system.public.descriptor  CREATE TABLE descriptor (
+system.public.descriptor  CREATE TABLE public.descriptor (
                           id INT8 NOT NULL,
                           descriptor BYTES NULL,
                           CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -325,7 +335,7 @@ query TT colnames
 CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
 table_name  create_statement
-v           CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
+v           CREATE VIEW public.v (id) AS SELECT id FROM system.public.descriptor
 
 
 query TTT colnames

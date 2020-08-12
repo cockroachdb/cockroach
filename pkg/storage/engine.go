@@ -64,10 +64,10 @@ type SimpleIterator interface {
 	// for a key.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
-	// the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeKey() MVCCKey
 	// UnsafeValue returns the same value as Value, but the memory is
-	// invalidated on the next call to {Next,Prev,Seek,SeekReverse,Close}.
+	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
 }
 
@@ -122,6 +122,9 @@ type Iterator interface {
 	SetUpperBound(roachpb.Key)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
+	// SupportsPrev returns true if Iterator implementation supports reverse
+	// iteration with Prev() or SeekLT().
+	SupportsPrev() bool
 }
 
 // MVCCIterator is an interface that extends Iterator and provides concrete
@@ -503,6 +506,7 @@ type Stats struct {
 	TableReadersMemEstimate        int64
 	PendingCompactionBytesEstimate int64
 	L0FileCount                    int64
+	L0SublevelCount                int64
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
@@ -696,12 +700,6 @@ var ingestDelayL0Threshold = settings.RegisterIntSetting(
 	20,
 )
 
-var ingestDelayPendingLimit = settings.RegisterByteSizeSetting(
-	"rocksdb.ingest_backpressure.pending_compaction_threshold",
-	"pending compaction estimate above which to backpressure SST ingestions",
-	2<<30, /* 2 GiB */
-)
-
 var ingestDelayTime = settings.RegisterDurationSetting(
 	"rocksdb.ingest_backpressure.max_delay",
 	"maximum amount of time to backpressure a single SST ingestion",
@@ -731,7 +729,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 	if targetDelay == 0 {
 		return
 	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %db pending compaction", targetDelay, stats.L0FileCount, stats.PendingCompactionBytesEstimate)
+	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels", targetDelay, stats.L0FileCount, stats.L0SublevelCount)
 
 	select {
 	case <-time.After(targetDelay):
@@ -741,16 +739,16 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 
 func calculatePreIngestDelay(settings *cluster.Settings, stats *Stats) time.Duration {
 	maxDelay := ingestDelayTime.Get(&settings.SV)
-	l0Filelimit := ingestDelayL0Threshold.Get(&settings.SV)
-	compactionLimit := ingestDelayPendingLimit.Get(&settings.SV)
+	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
-	if stats.PendingCompactionBytesEstimate >= compactionLimit {
-		return maxDelay
-	}
 	const ramp = 10
-	if stats.L0FileCount > l0Filelimit {
+	l0ReadAmp := stats.L0FileCount
+	if stats.L0SublevelCount >= 0 {
+		l0ReadAmp = stats.L0SublevelCount
+	}
+	if l0ReadAmp > l0ReadAmpLimit {
 		delayPerFile := maxDelay / time.Duration(ramp)
-		targetDelay := time.Duration(stats.L0FileCount-l0Filelimit) * delayPerFile
+		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile
 		if targetDelay > maxDelay {
 			return maxDelay
 		}

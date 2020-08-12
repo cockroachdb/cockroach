@@ -12,6 +12,7 @@ package roachpb
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -277,7 +278,7 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	rh.ResumeReason = otherRH.ResumeReason
 	rh.NumKeys += otherRH.NumKeys
 	rh.NumBytes += otherRH.NumBytes
-	rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
+	rh.DeprecatedRangeInfos = append(rh.DeprecatedRangeInfos, otherRH.DeprecatedRangeInfos...)
 	return nil
 }
 
@@ -401,9 +402,38 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
 			return err
 		}
-		r.Ranges = append(r.Ranges, otherR.Ranges...)
+
+		// Combined responses will always have only RangeInfo set, rather than
+		// DeprecatedRanges.
+		// TODO(pbardea): Remove in 21.1.
+		r.maybeUpgrade()
+		otherR.maybeUpgrade()
+		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
 	}
 	return nil
+}
+
+// maybeUpgrade will upgrade responses from 20.1 clients to look like 20.2
+// responses.
+// It converts the DeprecatedRanges field of the response to the equivalent
+// RangeInfos and nils out DeprecatedRanges. Note that the converted RangeInfos
+// will have an empty lease and only have the start and end key of the range
+// descriptor populated.
+func (r *AdminScatterResponse) maybeUpgrade() {
+	if len(r.RangeInfos) == 0 {
+		r.RangeInfos = make([]RangeInfo, len(r.DeprecatedRanges))
+		for i, respRange := range r.DeprecatedRanges {
+			r.RangeInfos[i] = RangeInfo{
+				// respRange.Span's keys are not local keys. The keys were created with
+				// AsRawKey(), so converting back is safe.
+				Desc: RangeDescriptor{
+					StartKey: RKey(respRange.Span.Key),
+					EndKey:   RKey(respRange.Span.EndKey),
+				},
+			}
+		}
+	}
+	r.DeprecatedRanges = nil
 }
 
 var _ combinable = &AdminScatterResponse{}
@@ -452,6 +482,23 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	}
 	h.Now.Forward(o.Now)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	// Deduplicate the RangeInfos and maintain them in sorted order.
+	//
+	// TODO(andrei): stop merging RangeInfos once everybody but the DistSender
+	// stops using them.
+	for _, ri := range o.RangeInfos {
+		id := ri.Desc.RangeID
+		i := sort.Search(len(h.RangeInfos), func(i int) bool {
+			return h.RangeInfos[i].Desc.RangeID >= id
+		})
+		if i < len(h.RangeInfos) && h.RangeInfos[i].Desc.RangeID == id {
+			continue
+		}
+		// Insert ri in the middle.
+		h.RangeInfos = append(h.RangeInfos, RangeInfo{})
+		copy(h.RangeInfos[i+1:], h.RangeInfos[i:])
+		h.RangeInfos[i] = ri
+	}
 	return nil
 }
 
@@ -960,23 +1007,29 @@ func NewPutInline(key Key, value Value) Request {
 	}
 }
 
-// NewConditionalPut returns a Request initialized to put value as a byte
-// slice at key if the existing value at key equals expValueBytes.
-func NewConditionalPut(key Key, value, expValue Value, allowNotExist bool) Request {
+// NewConditionalPut returns a Request initialized to put value at key if the
+// existing value at key equals expValue.
+//
+// The callee takes ownership of value's underlying bytes and it will mutate
+// them. The caller retains ownership of expVal; NewConditionalPut will copy it
+// into the request.
+func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
-	var expValuePtr *Value
-	if expValue.RawBytes != nil {
-		// Make a copy to avoid forcing expValue itself on to the heap.
-		expValueTmp := expValue
-		expValuePtr = &expValueTmp
-		expValue.InitChecksum(key)
+	// Compatibility with 20.1 servers.
+	var expValueVal *Value
+	if expValue != nil {
+		expValueVal = &Value{}
+		expValueVal.SetTagAndData(expValue)
+		// The expected value does not need a checksum, so we don't initialize it.
 	}
+
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
 		Value:               value,
-		ExpValue:            expValuePtr,
+		DeprecatedExpValue:  expValueVal,
+		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
 	}
 }
@@ -1227,19 +1280,6 @@ func (b *ExternalStorage_S3) Keys() *aws.Config {
 	return &aws.Config{
 		Credentials: credentials.NewStaticCredentials(b.AccessKey, b.Secret, b.TempToken),
 	}
-}
-
-// InsertRangeInfo inserts ri into a slice of RangeInfo's if a descriptor for
-// the same range is not already present. If it is present, it's overwritten;
-// the rationale being that ri is newer information than what we had before.
-func InsertRangeInfo(ris []RangeInfo, ri RangeInfo) []RangeInfo {
-	for i := range ris {
-		if ris[i].Desc.RangeID == ri.Desc.RangeID {
-			ris[i] = ri
-			return ris
-		}
-	}
-	return append(ris, ri)
 }
 
 // BulkOpSummaryID returns the key within a BulkOpSummary's EntryCounts map for

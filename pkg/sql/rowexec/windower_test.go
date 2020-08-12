@@ -30,13 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-const noFilterIdx = -1
-
 func TestWindowerAccountingForResults(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	monitor := mon.MakeMonitorWithLimit(
+	monitor := mon.NewMonitorWithLimit(
 		"test-monitor",
 		mon.MemoryResource,
 		100000,        /* limit */
@@ -46,7 +44,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		math.MaxInt64, /* noteworthy */
 		st,
 	)
-	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)
+	evalCtx := tree.MakeTestingEvalContextWithMon(st, monitor)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -74,8 +72,8 @@ func TestWindowerAccountingForResults(t *testing.T) {
 			Func:         execinfrapb.WindowerSpec_Func{AggregateFunc: &aggSpec},
 			ArgsIdxs:     []uint32{0},
 			Ordering:     execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{{ColIdx: 0}}},
-			OutputColIdx: 0,
-			FilterColIdx: noFilterIdx,
+			OutputColIdx: 1,
+			FilterColIdx: tree.NoColumnIdx,
 			Frame: &execinfrapb.WindowerSpec_Frame{
 				Mode: execinfrapb.WindowerSpec_Frame_ROWS,
 				Bounds: execinfrapb.WindowerSpec_Frame_Bounds{
@@ -150,7 +148,7 @@ func windows(windowTestSpecs []windowTestSpec) ([]execinfrapb.WindowerSpec, erro
 			}
 			windowFnSpec.Ordering = execinfrapb.Ordering{Columns: ordCols}
 		}
-		windowFnSpec.FilterColIdx = noFilterIdx
+		windowFnSpec.FilterColIdx = tree.NoColumnIdx
 		windows[i].WindowFns[0] = windowFnSpec
 	}
 	return windows, nil
@@ -239,6 +237,7 @@ func BenchmarkWindower(b *testing.B) {
 				runName = runName + "ORDER BY"
 			}
 			runName = runName + ")"
+			spec.WindowFns[0].OutputColIdx = 3
 
 			b.Run(runName, func(b *testing.B) {
 				post := &execinfrapb.PostProcessSpec{}
@@ -252,7 +251,7 @@ func BenchmarkWindower(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					d.Run(context.TODO())
+					d.Run(context.Background())
 					input.Reset()
 				}
 				b.StopTimer()

@@ -23,3 +23,28 @@ SELECT crdb_internal.notice('debug1', 'now you see this'), crdb_internal.notice(
 ----
 DEBUG1: now you see this
 WARNING: and you see this
+
+statement ok
+CREATE DATABASE d;
+CREATE TABLE d.t (x int)
+
+query T noticetrace
+ALTER TABLE d.t RENAME TO d.t2
+----
+NOTICE: renaming tables with a qualification is deprecated
+HINT: use ALTER TABLE d.t RENAME TO t2 instead
+
+statement ok
+SET experimental_enable_enums=true;
+
+# Start off with an empty enum, and add values to it.
+statement ok
+CREATE TYPE color AS ENUM ()
+
+statement ok
+ALTER TYPE color ADD VALUE 'black'
+
+query T noticetrace
+ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
+----
+NOTICE: enum label "black" already exists, skipping

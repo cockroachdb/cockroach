@@ -1,8 +1,7 @@
-statement error pq: unimplemented: DROP TYPE
-DROP TYPE mytype
+# LogicTest: !3node-tenant(50049)
 
-statement error pq: unimplemented: DROP TYPE
-DROP TYPE IF EXISTS mytype
+statement ok
+SET experimental_enable_enums=true;
 
 statement ok
 CREATE TYPE t AS ENUM ()
@@ -53,11 +52,6 @@ SELECT 'Z'::int
 
 query T
 SELECT 'Z'::public.int
-----
-Z
-
-query T
-SELECT 'Z'::"int"
 ----
 Z
 
@@ -145,21 +139,6 @@ true true
 statement error pq: invalid input value for enum greeting: "notagreeting"
 SELECT 'hello'::greeting = 'notagreeting'
 
-statement error pq: value type greeting cannot be used for table columns
-CREATE TABLE bad (x greeting)
-
-statement error pq: unimplemented: ALTER TYPE ADD VALUE unsupported
-ALTER TYPE greeting ADD VALUE 'hola' AFTER 'hello'
-
-statement error pq: unimplemented: ALTER TYPE RENAME VALUE unsupported
-ALTER TYPE greeting RENAME VALUE 'hello' TO 'helloooooo'
-
-statement error pq: unimplemented: ALTER TYPE RENAME unsupported
-ALTER TYPE greeting RENAME TO greetings
-
-statement error pq: unimplemented: ALTER TYPE SET SCHEMA unsupported
-ALTER TYPE greeting SET SCHEMA newschema
-
 # Tests for enum builtins.
 statement ok
 CREATE TYPE dbs AS ENUM ('postgres', 'mysql', 'spanner', 'cockroach')
@@ -199,3 +178,943 @@ SELECT enum_range(NULL::dbs, NULL::dbs)
 
 query error pq: enum_range\(\): mismatched types
 SELECT enum_range('cockroach'::dbs, 'hello'::greeting)
+
+# Test inserting and reading enum data from tables.
+statement ok
+CREATE TABLE greeting_table (x1 greeting, x2 greeting)
+
+statement error pq: invalid input value for enum greeting: "bye"
+INSERT INTO greeting_table VALUES ('bye', 'hi')
+
+statement ok
+INSERT INTO greeting_table VALUES ('hi', 'hello')
+
+query TT
+SELECT * FROM greeting_table
+----
+hi hello
+
+query TT
+SELECT 'hello'::greeting, x1 FROM greeting_table
+----
+hello hi
+
+query TB
+SELECT x1, x1 < 'hello' FROM greeting_table
+----
+hi false
+
+query TT
+SELECT x1, enum_first(x1) FROM greeting_table
+----
+hi hello
+
+statement ok
+CREATE TABLE t1 (x greeting, INDEX i (x));
+CREATE TABLE t2 (x greeting, INDEX i (x));
+INSERT INTO t1 VALUES ('hello');
+INSERT INTO t2 VALUES ('hello')
+
+query TT
+SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+query TT
+SELECT * FROM t1 INNER HASH JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+query TT
+SELECT * FROM t1 INNER MERGE JOIN t2 ON t1.x = t2.x
+----
+hello hello
+
+statement ok
+INSERT INTO t2 VALUES ('hello'), ('hello'), ('howdy'), ('hi')
+
+query T rowsort
+SELECT DISTINCT x FROM t2
+----
+hello
+howdy
+hi
+
+query T
+SELECT DISTINCT x FROM t2 ORDER BY x DESC
+----
+hi
+howdy
+hello
+
+# Test out some subqueries.
+query T rowsort
+SELECT x FROM t2 WHERE x > (SELECT x FROM t1 ORDER BY x LIMIT 1)
+----
+hi
+howdy
+
+# Test ordinality.
+query TI
+SELECT * FROM t2 WITH ORDINALITY ORDER BY x
+----
+hello  1
+hello  2
+hello  3
+howdy  4
+hi     5
+
+# Test ordering with and without limits.
+statement ok
+INSERT INTO t1 VALUES ('hi'), ('hello'), ('howdy'), ('howdy'), ('howdy'), ('hello')
+
+query T
+SELECT x FROM t1 ORDER BY x DESC
+----
+hi
+howdy
+howdy
+howdy
+hello
+hello
+hello
+
+query T
+SELECT x FROM t1 ORDER BY x ASC
+----
+hello
+hello
+hello
+howdy
+howdy
+howdy
+hi
+
+query T
+SELECT x FROM t1 ORDER BY x ASC LIMIT 3
+----
+hello
+hello
+hello
+
+query T
+SELECT x FROM t1 ORDER BY x DESC LIMIT 3
+----
+hi
+howdy
+howdy
+
+# Test we can group on enums.
+query T rowsort
+(SELECT * FROM t1) UNION (SELECT * FROM t2)
+----
+hello
+howdy
+hi
+
+statement ok
+CREATE TABLE enum_agg (x greeting, y INT);
+INSERT INTO enum_agg VALUES
+  ('hello', 1),
+  ('hello', 3),
+  ('howdy', 5),
+  ('howdy', 0),
+  ('howdy', 1),
+  ('hi', 10)
+
+query TIRI rowsort
+SELECT x, max(y), sum(y), min(y) FROM enum_agg GROUP BY x
+----
+hello 3 4 1
+howdy 5 6 0
+hi 10 10 10
+
+# Test aggregations on ENUM columns.
+query TT
+SELECT max(x), min(x) FROM enum_agg
+----
+hi hello
+
+# Test that enums without any members can still get an aggregate
+# resolved when distributing a flow.
+statement ok
+CREATE TYPE empty AS ENUM ();
+CREATE TABLE empty_enum (x empty)
+
+query TT
+SELECT max(x), min(x) FROM empty_enum
+----
+NULL NULL
+
+# Regression to ensure that statistics jobs can be run on tables
+# with user defined types.
+statement ok
+CREATE TABLE greeting_stats (x greeting PRIMARY KEY);
+INSERT INTO greeting_stats VALUES ('hi');
+CREATE STATISTICS s FROM greeting_stats
+
+query T
+SELECT x FROM greeting_stats
+----
+hi
+
+# Test that we can cast from bytes to enum.
+# Use a singleton enum so that the bytes encoding is simple.
+statement ok
+CREATE TYPE as_bytes AS ENUM ('bytes')
+
+query TT
+SELECT b'\x80'::as_bytes, b'\x80':::as_bytes
+----
+bytes bytes
+
+query error pq: could not find \[255\] in enum representation
+SELECT b'\xFF'::as_bytes
+
+# Regression for #49300. Ensure that virtual tables have access to hydrated
+# type descriptors.
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE public.t1 (
+    x public.greeting NULL,
+    INDEX i (x ASC),
+    FAMILY "primary" (x, rowid)
+)
+
+# SHOW CREATE uses a virtual index, so also check the code path where a
+# descriptor scan is used.
+query T
+SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
+----
+CREATE TABLE public.t1 (
+   x public.greeting NULL,
+   INDEX i (x ASC),
+   FAMILY "primary" (x, rowid)
+)
+
+# Test that the implicit array type has been created, and that we can use it.
+query TT
+SELECT ARRAY['hello']::_greeting, ARRAY['hello'::greeting]
+----
+{hello} {hello}
+
+# Test that we can't mix enums in an array.
+query error pq: expected 'cockroach'::public.dbs to be of type greeting, found type dbs
+SELECT ARRAY['hello'::greeting, 'cockroach'::dbs]
+
+statement ok
+CREATE TABLE enum_array (x _greeting, y greeting[]);
+INSERT INTO enum_array VALUES (ARRAY['hello'], ARRAY['hello']), (ARRAY['howdy'], ARRAY['howdy'])
+
+query TT rowsort
+SELECT * FROM enum_array
+----
+{hello} {hello}
+{howdy} {howdy}
+
+query TTT
+SELECT pg_typeof(x), pg_typeof(x[1]), pg_typeof(ARRAY['hello']::_greeting) FROM enum_array LIMIT 1
+----
+greeting[]  greeting  greeting[]
+
+# Ensure that the implicitly created array type will tolerate collisions.
+# _collision will create __collision as its implicit array type, so the
+# creation of collision will have to retry twice before it finds the open
+# spot of ___collision for its implicit array type.
+statement ok
+CREATE TYPE _collision AS ENUM ();
+CREATE TYPE collision AS ENUM ();
+
+# _collision and __collision typelem and typarray should point back at each
+# other, and vice versa for collision and ___collision.
+query TOOO rowsort
+SELECT
+  typname, oid, typelem, typarray
+FROM
+  pg_type
+WHERE
+  typname IN ('collision', '_collision', '__collision', '___collision')
+----
+_collision    100082  0       100083
+__collision   100083  100082  0
+collision     100084  0       100085
+___collision  100085  100084  0
+
+# Regression for #49756.
+query TT
+SELECT
+  column_name, column_type
+FROM
+  crdb_internal.table_columns
+WHERE
+  descriptor_name = 'enum_array' AND column_name = 'x'
+----
+x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100064 array_contents:<InternalType:<family:EnumFamily width:0 precision:0 locale:"" visible_type:0 oid:100063 time_precision_is_set:false udt_metadata:<array_type_oid:100064 > > TypeMeta:<Version:0 > > time_precision_is_set:false
+
+# Test tables using enums in DEFAULT expressions.
+statement ok
+CREATE TABLE enum_default (
+  x INT,
+  y greeting DEFAULT 'hello',
+  z BOOL DEFAULT ('hello':::greeting IS OF (greeting, greeting)),
+  FAMILY (x, y, z)
+);
+INSERT INTO enum_default VALUES (1), (2)
+
+query ITB rowsort
+SELECT * FROM enum_default
+----
+1 hello true
+2 hello true
+
+# Test that enum default values are formatted in human readable ways.
+query TT
+SHOW CREATE enum_default
+----
+enum_default  CREATE TABLE public.enum_default (
+              x INT8 NULL,
+              y public.greeting NULL DEFAULT 'hello':::public.greeting,
+              z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
+              FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
+)
+
+# Test crdb_internal.table_columns.
+query TT
+SELECT
+  column_name, default_expr
+FROM
+  crdb_internal.table_columns
+WHERE
+  descriptor_name='enum_default' AND (column_name = 'y' OR column_name = 'z')
+ORDER BY
+  column_name
+----
+y  'hello':::public.greeting
+z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
+
+# Test information_schema.columns.
+query TT
+SELECT
+  column_name, column_default
+FROM
+  information_schema.columns
+WHERE
+  table_name='enum_default' AND (column_name = 'y' OR column_name = 'z')
+ORDER BY
+  column_name
+----
+y  'hello':::public.greeting
+z  'hello':::public.greeting IS OF (public.greeting, public.greeting)
+
+# Test computed columns with enum values.
+statement ok
+CREATE TABLE enum_computed (
+  x INT,
+  y greeting AS ('hello') STORED,
+  z BOOL AS (w = 'howdy') STORED,
+  w greeting,
+  FAMILY (x, y, z)
+);
+INSERT INTO enum_computed (x, w) VALUES (1, 'hello'), (2, 'hello')
+
+query ITBT rowsort
+SELECT * FROM enum_computed
+----
+1 hello false hello
+2 hello false hello
+
+query TT
+SHOW CREATE enum_computed
+----
+enum_computed  CREATE TABLE public.enum_computed (
+               x INT8 NULL,
+               y public.greeting NULL AS ('hello':::public.greeting) STORED,
+               z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
+               w public.greeting NULL,
+               FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+)
+
+# Test information_schema.columns. generation_expression should not be
+# formatted with type annotations.
+query TT
+SELECT
+  column_name, generation_expression
+FROM
+  information_schema.columns
+WHERE
+  table_name='enum_computed' AND (column_name = 'y' OR column_name = 'z')
+ORDER BY
+  column_name
+----
+y  'hello'
+z  w = 'howdy'
+
+# Test check constraints with enum values.
+statement ok
+CREATE TABLE enum_checks (
+  x greeting,
+  CHECK (x = 'hello'::greeting),
+  CHECK ('hello':::greeting = 'hello':::greeting)
+);
+INSERT INTO enum_checks VALUES ('hello')
+
+query TT
+SHOW CREATE enum_checks
+----
+enum_checks  CREATE TABLE public.enum_checks (
+             x public.greeting NULL,
+             FAMILY "primary" (x, rowid),
+             CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
+             CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
+)
+
+# Ensure that we can add check constraints to tables with enums.
+statement ok
+DROP TABLE enum_checks;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+ALTER TABLE enum_checks ADD CHECK (x > 'hello')
+
+# Ensure that checks are validated on insert.
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::public.greeting\)
+INSERT INTO enum_checks VALUES ('hello')
+
+# Try adding a check that fails validation.
+statement error pq: validation of CHECK "x = 'hello':::greeting" failed
+ALTER TABLE enum_checks ADD CHECK (x = 'hello')
+
+# Check the above cases, but in a transaction.
+statement ok
+DROP TABLE enum_checks;
+BEGIN;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+ALTER TABLE enum_checks ADD CHECK (x > 'hello')
+
+statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::public.greeting\)
+INSERT INTO enum_checks VALUES ('hello')
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+CREATE TABLE enum_checks (x greeting);
+INSERT INTO enum_checks VALUES ('hi'), ('howdy');
+
+# Try adding a check that fails validation.
+statement error pq: validation of CHECK "x = 'hello':::public.greeting" failed
+ALTER TABLE enum_checks ADD CHECK (x = 'hello')
+
+statement ok
+ROLLBACK
+
+# Test that cross database type references are disallowed.
+statement ok
+CREATE DATABASE other;
+CREATE TYPE other.t AS ENUM ('other')
+
+# We can still reference other databases types when creating objects
+# within those databases.
+statement ok
+CREATE TABLE other.tt (x other.t)
+
+# Referencing other databases in this database's objects will error.
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x other.t)
+
+# Test that we can't hide cross database references in expressions.
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x BOOL DEFAULT ('other':::other.t = 'other':::other.t))
+
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x BOOL AS ('other':::other.t = 'other':::other.t) STORED)
+
+statement error pq: cross database type references are not supported: other.public.t
+CREATE TABLE cross_error (x INT, CHECK ('other':::other.t = 'other':::other.t))
+
+# Test that we can't add columns or checks that use these either.
+statement ok
+CREATE TABLE cross_error (x INT)
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y other.t
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y BOOL DEFAULT ('other':::other.t = 'other':::other.t)
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD COLUMN y BOOL AS ('other':::other.t = 'other':::other.t) STORED
+
+statement error pq: cross database type references are not supported: other.public.t
+ALTER TABLE cross_error ADD CHECK ('other':::other.t = 'other':::other.t)
+
+subtest schema_changes
+
+# Ensure that we can drop and create indexes on user defined type columns,
+# as well as on other columns when the table has a user defined type column.
+statement ok
+CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
+INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
+
+statement ok
+CREATE INDEX i1 ON sc (x);
+CREATE INDEX i2 ON sc (y);
+CREATE INDEX i3 ON sc (x, y)
+
+query T rowsort
+SELECT x FROM sc@i1
+----
+hello
+howdy
+hi
+
+query TI rowsort
+SELECT x, y FROM sc@i3
+----
+hello 0
+howdy 1
+hi 2
+
+statement ok
+DROP INDEX sc@i1;
+DROP INDEX sc@i2;
+DROP INDEX sc@i3
+
+# Test the above, but exercise the schema change in txn code path.
+statement ok
+DROP TABLE sc
+
+statement ok
+BEGIN;
+CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
+INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
+CREATE INDEX i1 ON sc (x);
+CREATE INDEX i2 ON sc (y);
+CREATE INDEX i3 ON sc (x, y)
+
+query T rowsort
+SELECT x FROM sc@i1
+----
+hello
+howdy
+hi
+
+query TI rowsort
+SELECT x, y FROM sc@i3
+----
+hello 0
+howdy 1
+hi 2
+
+statement ok
+DROP INDEX sc@i1;
+DROP INDEX sc@i2;
+DROP INDEX sc@i3;
+COMMIT
+
+# Ensure that we can create an index on a table and type created in
+# the same transaction.
+statement ok
+BEGIN;
+CREATE TYPE in_txn AS ENUM ('in', 'txn');
+CREATE TABLE tbl_in_txn (x in_txn);
+INSERT INTO tbl_in_txn VALUES ('txn');
+CREATE INDEX i ON tbl_in_txn (x)
+
+query T
+SELECT * FROM tbl_in_txn@i
+----
+txn
+
+statement ok
+ROLLBACK
+
+# Ensure that index drops that can't use range deletions succeed.
+statement ok
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i
+
+# Test the above case, but in a transaction.
+statement ok
+DROP TABLE enum_child;
+DROP TABLE enum_parent;
+BEGIN;
+CREATE TABLE enum_parent (x greeting PRIMARY KEY);
+CREATE TABLE enum_child (x greeting, y greeting, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT enum_parent (x);
+INSERT INTO enum_parent VALUES ('hello');
+INSERT INTO enum_child VALUES ('hello', 'hello');
+CREATE INDEX i ON enum_child (x, y) INTERLEAVE IN PARENT enum_parent (x);
+DROP INDEX enum_child@i;
+ROLLBACK
+
+# Test primary key change to an ENUM column.
+statement ok
+CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
+INSERT INTO enum_not_pk VALUES (1, 'howdy');
+ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
+DROP TABLE enum_not_pk
+
+# Test primary key change away from an ENUM column.
+statement ok
+CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
+INSERT INTO enum_pk VALUES ('howdy', 1);
+ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
+DROP TABLE enum_pk
+
+# Repeat the above tests, but in a transaction.
+statement ok
+BEGIN;
+CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
+INSERT INTO enum_not_pk VALUES (1, 'howdy');
+ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
+ROLLBACK
+
+statement ok
+BEGIN;
+CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
+INSERT INTO enum_pk VALUES ('howdy', 1);
+ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
+ROLLBACK
+
+# Test basic CTAS.
+statement ok
+CREATE TABLE enum_ctas_base (x greeting, y greeting, z _greeting);
+INSERT INTO enum_ctas_base VALUES ('hi', 'howdy', ARRAY['hello']);
+CREATE TABLE enum_ctas AS TABLE enum_ctas_base
+
+query TTT
+SELECT * from enum_ctas
+----
+hi howdy {hello}
+
+statement ok
+DROP TABLE enum_ctas
+
+# Test basic CTAS in a transaction.
+statement ok
+BEGIN;
+CREATE TABLE enum_ctas AS TABLE enum_ctas_base
+
+query TTT
+SELECT * from enum_ctas
+----
+hi howdy {hello}
+
+statement ok
+ROLLBACK
+
+# Test CTAS with a SELECT query.
+statement ok
+CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
+
+query TTTT
+SELECT * FROM enum_ctas
+----
+hi hello {hello} {hello,howdy,hi}
+
+# Test CTAS with a SELECT query in a transaction.
+statement ok
+DROP TABLE enum_ctas;
+BEGIN;
+CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
+
+query TTTT
+SELECT * FROM enum_ctas
+----
+hi hello {hello} {hello,howdy,hi}
+
+statement ok
+ROLLBACK
+
+# Test CTAS from a VALUES clause.
+statement ok
+CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, ('how' || 'dy')::greeting, 'cockroach'::dbs)
+
+query TTT
+SELECT * FROM enum_ctas
+----
+howdy howdy cockroach
+
+statement ok
+DROP TABLE enum_ctas;
+
+# Test CTAS from a VALUES clause in a transaction.
+statement ok
+BEGIN;
+CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
+
+query TT
+SELECT * FROM enum_ctas
+----
+howdy cockroach
+
+statement ok
+ROLLBACK
+
+# Tests for column additions with enum tables.
+statement ok
+CREATE TABLE column_add (x greeting);
+INSERT INTO column_add VALUES ('hello')
+
+# Test that we can backfill a column when an enum column is in the table.
+statement ok
+ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1
+
+query TI
+SELECT * FROM column_add
+----
+hello 1
+
+# Test that we can add an enum column with a default value.
+statement ok
+ALTER TABLE column_add ADD COLUMN z greeting DEFAULT 'howdy'
+
+query TIT
+SELECT * FROM column_add
+----
+hello 1 howdy
+
+# Test that we can add an enum computed column.
+statement ok
+ALTER TABLE column_add ADD COLUMN w greeting AS ('hi') STORED
+
+query TITT
+SELECT * FROM column_add
+----
+hello 1 howdy hi
+
+# Test that we can add a computed column that uses an enum.
+statement ok
+ALTER TABLE column_add ADD COLUMN v BOOL AS (z < 'hi' AND x >= 'hello') STORED
+
+query TITTB
+SELECT * FROM column_add
+----
+hello 1 howdy hi true
+
+# Repeat the above process on a new table in a transaction to exercise
+# the schema change in txn codepath.
+statement ok
+DROP TABLE column_add
+
+statement ok
+BEGIN;
+CREATE TABLE column_add (x greeting);
+INSERT INTO column_add VALUES ('hello');
+ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1;
+ALTER TABLE column_add ADD COLUMN z greeting DEFAULT 'howdy';
+ALTER TABLE column_add ADD COLUMN w greeting AS ('hi') STORED;
+ALTER TABLE column_add ADD COLUMN v BOOL AS (z < 'hi' AND x >= 'hello') STORED
+
+query TITTB
+SELECT * FROM column_add
+----
+hello 1 howdy hi true
+
+statement ok
+COMMIT
+
+# Lastly, ensure that we can create a column using a type created in the
+# same transaction.
+statement ok
+BEGIN;
+CREATE TYPE in_txn AS ENUM ('in', 'txn');
+CREATE TABLE tbl_in_txn (x INT);
+INSERT INTO tbl_in_txn VALUES (1);
+ALTER TABLE tbl_in_txn ADD COLUMN y in_txn DEFAULT 'txn';
+
+query IT
+SELECT * FROM tbl_in_txn
+----
+1 txn
+
+statement ok
+ROLLBACK
+
+# Test that we can add foreign keys using enum columns.
+statement ok
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('hello');
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+# Try a foreign key insert that fails validation.
+statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+INSERT INTO enum_origin VALUES ('howdy')
+
+# Try the above, but in a transaction.
+statement ok
+DROP TABLE enum_referenced, enum_origin;
+BEGIN;
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('hello');
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+statement error pq: insert on table "enum_origin" violates foreign key constraint "fk_x_ref_enum_referenced"
+INSERT INTO enum_origin VALUES ('howdy')
+
+statement ok
+ROLLBACK
+
+# Try adding a foreign key that fails validation when building.
+# Foreign keys added in the same transaction as a new table are not validated,
+# so we can't test the below case in a transaction as well.
+statement ok
+CREATE TABLE enum_origin (x greeting PRIMARY KEY);
+CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
+INSERT INTO enum_origin VALUES ('hello');
+INSERT INTO enum_referenced VALUES ('howdy')
+
+statement error pq: foreign key violation: "enum_origin" row x='hello' has no match in "enum_referenced"
+ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
+
+# Tests for ALTER COLUMN SET DATA TYPE.
+statement ok
+SET enable_experimental_alter_column_type_general = true;
+CREATE TABLE enum_data_type (x STRING);
+INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
+INSERT INTO enum_data_type VALUES ('hi')
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+hello
+howdy
+hi
+
+statement ok
+DROP TABLE enum_data_type;
+CREATE TABLE enum_data_type (x greeting);
+INSERT INTO enum_data_type VALUES ('hello'), ('howdy')
+
+# Enum to the same enum is a noop.
+statement ok
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting
+
+# Now, set it to string.
+statement ok
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE STRING
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+hello
+howdy
+
+# Convert an enum type into another with USING.
+statement ok
+DROP TABLE enum_data_type;
+CREATE TABLE enum_data_type (x greeting);
+INSERT INTO enum_data_type VALUES ('hello'), ('hi')
+
+statement ok
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE dbs USING
+  (CASE WHEN x = 'hello' THEN 'cockroach' ELSE 'postgres' END)
+
+query T rowsort
+SELECT * FROM enum_data_type
+----
+cockroach
+postgres
+
+# Test when the conversion of string -> enum should fail.
+statement ok
+DROP TABLE enum_data_type;
+CREATE TABLE enum_data_type (x STRING);
+INSERT INTO enum_data_type VALUES ('notagreeting')
+
+statement error pq: invalid input value for enum greeting: "notagreeting"
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting
+
+statement ok
+ALTER TABLE enum_data_type
+  ALTER COLUMN x SET DATA TYPE greeting USING (CASE WHEN x = 'notagreeting' THEN 'hello' ELSE 'hi' END)
+
+query T
+SELECT * FROM enum_data_type
+----
+hello
+
+query T
+SELECT to_json('hello'::greeting)
+----
+"hello"
+
+# Regression for #51474.
+statement ok
+CREATE TABLE t51474 (x greeting);
+INSERT INTO t51474 VALUES ('hello'), ('howdy')
+
+query T rowsort
+SELECT * FROM t51474 INTERSECT ALL SELECT * FROM t51474
+----
+hello
+howdy
+
+# Transactions which create or modify types must not distribute their
+# plans to remote nodes.
+statement ok
+BEGIN;
+CREATE TYPE local_type AS ENUM ('local');
+CREATE TABLE local_table (x INT);
+INSERT INTO local_table VALUES (1), (2)
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
+----
+·     distribution  local
+
+statement ok
+ROLLBACK
+
+statement ok
+BEGIN;
+ALTER TYPE greeting RENAME TO greeting_local;
+CREATE TABLE local_table (x INT);
+INSERT INTO local_table VALUES (1), (2)
+
+query TTT
+SELECT * FROM [EXPLAIN SELECT * FROM local_table] LIMIT 1
+----
+·     distribution  local
+
+statement ok
+ROLLBACK
+
+# This test case ensures that DistSQL flows don't attempt to use the lease
+# manager to access type data once the current transaction has already modified
+# or created a type.
+statement ok
+BEGIN;
+CREATE TYPE local_type AS ENUM ('local');
+CREATE TABLE local_table (x local_type);
+INSERT INTO local_table VALUES ('local')
+
+query T
+SELECT * FROM local_table
+----
+local
+
+statement ok
+ROLLBACK
+
+query TT
+SHOW ENUMS
+----
+as_bytes   bytes
+dbs        postgres|mysql|spanner|cockroach
+farewell   bye|seeya
+greeting   hello|howdy|hi
+greeting2  hello
+int        Z|S of int
+notbad     dup|DUP

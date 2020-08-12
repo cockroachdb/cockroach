@@ -13,6 +13,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/errors"
@@ -37,15 +38,16 @@ import (
 //   expr := sb.build()
 //
 type indexScanBuilder struct {
-	c                *CustomFuncs
-	f                *norm.Factory
-	mem              *memo.Memo
-	tabID            opt.TableID
-	pkCols           opt.ColSet
-	scanPrivate      memo.ScanPrivate
-	innerFilters     memo.FiltersExpr
-	outerFilters     memo.FiltersExpr
-	indexJoinPrivate memo.IndexJoinPrivate
+	c                     *CustomFuncs
+	f                     *norm.Factory
+	mem                   *memo.Memo
+	tabID                 opt.TableID
+	pkCols                opt.ColSet
+	scanPrivate           memo.ScanPrivate
+	innerFilters          memo.FiltersExpr
+	outerFilters          memo.FiltersExpr
+	invertedFilterPrivate memo.InvertedFilterPrivate
+	indexJoinPrivate      memo.IndexJoinPrivate
 }
 
 func (b *indexScanBuilder) init(c *CustomFuncs, tabID opt.TableID) {
@@ -74,7 +76,27 @@ func (b *indexScanBuilder) setScan(scanPrivate *memo.ScanPrivate) {
 	b.scanPrivate = *scanPrivate
 	b.innerFilters = nil
 	b.outerFilters = nil
+	b.invertedFilterPrivate = memo.InvertedFilterPrivate{}
 	b.indexJoinPrivate = memo.IndexJoinPrivate{}
+}
+
+// addInvertedFilter wraps the input expression with an InvertedFilter
+// expression having the given span expression.
+func (b *indexScanBuilder) addInvertedFilter(
+	spanExpr *invertedexpr.SpanExpression, invertedCol opt.ColumnID,
+) {
+	if spanExpr != nil {
+		if b.invertedFilterPrivate.InvertedColumn != 0 {
+			panic(errors.AssertionFailedf("cannot call addInvertedFilter twice"))
+		}
+		if b.indexJoinPrivate.Table != 0 {
+			panic(errors.AssertionFailedf("cannot add inverted filter after index join is added"))
+		}
+		b.invertedFilterPrivate = memo.InvertedFilterPrivate{
+			InvertedExpression: spanExpr,
+			InvertedColumn:     invertedCol,
+		}
+	}
 }
 
 // addSelect wraps the input expression with a Select expression having the
@@ -153,7 +175,7 @@ func (b *indexScanBuilder) build(grp memo.RelExpr) {
 	// 2. Wrap scan in inner filter if it was added.
 	input := b.f.ConstructScan(&b.scanPrivate)
 	if len(b.innerFilters) != 0 {
-		if b.indexJoinPrivate.Table == 0 {
+		if b.indexJoinPrivate.Table == 0 && b.invertedFilterPrivate.InvertedColumn == 0 {
 			b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.innerFilters}, grp)
 			return
 		}
@@ -161,7 +183,20 @@ func (b *indexScanBuilder) build(grp memo.RelExpr) {
 		input = b.f.ConstructSelect(input, b.innerFilters)
 	}
 
-	// 3. Wrap input in index join if it was added.
+	// 3. Wrap input in inverted filter if it was added.
+	if b.invertedFilterPrivate.InvertedColumn != 0 {
+		if b.indexJoinPrivate.Table == 0 {
+			invertedFilter := &memo.InvertedFilterExpr{
+				Input: input, InvertedFilterPrivate: b.invertedFilterPrivate,
+			}
+			b.mem.AddInvertedFilterToGroup(invertedFilter, grp)
+			return
+		}
+
+		input = b.f.ConstructInvertedFilter(input, &b.invertedFilterPrivate)
+	}
+
+	// 4. Wrap input in index join if it was added.
 	if b.indexJoinPrivate.Table != 0 {
 		if len(b.outerFilters) == 0 {
 			indexJoin := &memo.IndexJoinExpr{Input: input, IndexJoinPrivate: b.indexJoinPrivate}
@@ -172,7 +207,7 @@ func (b *indexScanBuilder) build(grp memo.RelExpr) {
 		input = b.f.ConstructIndexJoin(input, &b.indexJoinPrivate)
 	}
 
-	// 4. Wrap input in outer filter (which must exist at this point).
+	// 5. Wrap input in outer filter (which must exist at this point).
 	if len(b.outerFilters) == 0 {
 		// indexJoinDef == 0: outerFilters == 0 handled by #1 and #2 above.
 		// indexJoinDef != 0: outerFilters == 0 handled by #3 above.

@@ -20,58 +20,21 @@
 package colexec
 
 import (
-	"bytes"
-	"math"
-	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/errors"
 )
-
-// Remove unused warning.
-var _ = execgen.UNSAFEGET
 
 // Remove unused warning.
 var _ = colexecerror.InternalError
 
 // {{/*
 // Declarations to make the template compile properly.
-
-// Dummy import to pull in "bytes" package.
-var _ bytes.Buffer
-
-// Dummy import to pull in "apd" package.
-var _ apd.Decimal
-
-// Dummy import to pull in "time" package.
-var _ time.Time
-
-// Dummy import to pull in "duration" package.
-var _ duration.Duration
-
-// Dummy import to pull in "tree" package.
-var _ tree.Datum
-
-// Dummy import to pull in "math" package.
-var _ = math.MaxInt64
-
-// _GOTYPESLICE is the template variable.
-type _GOTYPESLICE interface{}
-
-// _CANONICAL_TYPE_FAMILY is the template variable.
-const _CANONICAL_TYPE_FAMILY = types.UnknownFamily
-
-// _TYPE_WIDTH is the template variable.
-const _TYPE_WIDTH = 0
 
 // _ASSIGN_CMP is the template function for assigning true to the first input
 // if the second input compares successfully to the third input. The comparison
@@ -80,84 +43,126 @@ func _ASSIGN_CMP(_, _, _, _, _, _ string) bool {
 	colexecerror.InternalError("")
 }
 
-// */}}
-
-// {{range .}} {{/* for each aggregation (min and max) */}}
-
-// {{/* Capture the aggregation name so we can use it in the inner loop. */}}
-// {{$agg := .AggNameLower}}
-
-func new_AGG_TITLEAggAlloc(
-	allocator *colmem.Allocator, t *types.T, allocSize int64,
-) (aggregateFuncAlloc, error) {
-	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-	// {{range .Overloads}}
-	case _CANONICAL_TYPE_FAMILY:
-		switch t.Width() {
-		// {{range .WidthOverloads}}
-		case _TYPE_WIDTH:
-			return &_AGG_TYPEAggAlloc{allocator: allocator, allocSize: allocSize}, nil
-			// {{end}}
-		}
-		// {{end}}
-	}
-	return nil, errors.Errorf("unsupported _AGG agg type %s", t.Name())
+// _COPYVAL_MAYBE_CAST is the template function for copying the second argument
+// into the first one, possibly performing a cast in the process.
+func _COPYVAL_MAYBE_CAST(_, _ string) bool {
+	colexecerror.InternalError("")
 }
 
-// {{range .Overloads}}
-// {{range .WidthOverloads}}
+// */}}
 
-type _AGG_TYPEAgg struct {
+func newMin_AGGKINDAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		return &minBool_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.BytesFamily:
+		return &minBytes_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.DecimalFamily:
+		return &minDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &minInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &minInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		default:
+			return &minInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		return &minFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.TimestampTZFamily:
+		return &minTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.IntervalFamily:
+		return &minInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	default:
+		return &minDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	}
+}
+
+func newMax_AGGKINDAggAlloc(
+	allocator *colmem.Allocator, t *types.T, allocSize int64,
+) aggregateFuncAlloc {
+	allocBase := aggAllocBase{allocator: allocator, allocSize: allocSize}
+	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
+	case types.BoolFamily:
+		return &maxBool_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.BytesFamily:
+		return &maxBytes_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.DecimalFamily:
+		return &maxDecimal_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.IntFamily:
+		switch t.Width() {
+		case 16:
+			return &maxInt16_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		case 32:
+			return &maxInt32_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		default:
+			return &maxInt64_AGGKINDAggAlloc{aggAllocBase: allocBase}
+		}
+	case types.FloatFamily:
+		return &maxFloat64_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.TimestampTZFamily:
+		return &maxTimestamp_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	case types.IntervalFamily:
+		return &maxInterval_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	default:
+		return &maxDatum_AGGKINDAggAlloc{aggAllocBase: allocBase}
+	}
+}
+
+// {{range .}}
+
+type _AGG_TYPE_AGGKINDAgg struct {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	orderedAggregateFuncBase
+	// {{else}}
+	hashAggregateFuncBase
+	// {{end}}
 	allocator *colmem.Allocator
-	groups    []bool
-	curIdx    int
 	// curAgg holds the running min/max, so we can index into the slice once per
 	// group, instead of on each iteration.
 	// NOTE: if foundNonNullForCurrentGroup is false, curAgg is undefined.
-	curAgg _GOTYPE
+	curAgg _RET_GOTYPE
 	// col points to the output vector we are updating.
-	col _GOTYPESLICE
+	col _RET_GOTYPESLICE
 	// vec is the same as col before conversion from coldata.Vec.
 	vec coldata.Vec
-	// nulls points to the output null vector that we are updating.
-	nulls *coldata.Nulls
 	// foundNonNullForCurrentGroup tracks if we have seen any non-null values
 	// for the group that is currently being aggregated.
 	foundNonNullForCurrentGroup bool
 }
 
-var _ aggregateFunc = &_AGG_TYPEAgg{}
+var _ aggregateFunc = &_AGG_TYPE_AGGKINDAgg{}
 
-const sizeOf_AGG_TYPEAgg = int64(unsafe.Sizeof(_AGG_TYPEAgg{}))
+const sizeOf_AGG_TYPE_AGGKINDAgg = int64(unsafe.Sizeof(_AGG_TYPE_AGGKINDAgg{}))
 
-func (a *_AGG_TYPEAgg) Init(groups []bool, v coldata.Vec) {
-	a.groups = groups
-	a.vec = v
-	a.col = v._TYPE()
-	a.nulls = v.Nulls()
+func (a *_AGG_TYPE_AGGKINDAgg) Init(groups []bool, vec coldata.Vec) {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Init(groups, vec)
+	// {{else}}
+	a.hashAggregateFuncBase.Init(groups, vec)
+	// {{end}}
+	a.vec = vec
+	a.col = vec._RET_TYPE()
 	a.Reset()
 }
 
-func (a *_AGG_TYPEAgg) Reset() {
-	a.curIdx = -1
+func (a *_AGG_TYPE_AGGKINDAgg) Reset() {
+	// {{if eq "_AGGKIND" "Ordered"}}
+	a.orderedAggregateFuncBase.Reset()
+	// {{else}}
+	a.hashAggregateFuncBase.Reset()
+	// {{end}}
 	a.foundNonNullForCurrentGroup = false
-	a.nulls.UnsetNulls()
 }
 
-func (a *_AGG_TYPEAgg) CurrentOutputIndex() int {
-	return a.curIdx
-}
-
-func (a *_AGG_TYPEAgg) SetOutputIndex(idx int) {
-	if a.curIdx != -1 {
-		a.curIdx = idx
-		a.nulls.UnsetNullsAfter(idx + 1)
-	}
-}
-
-func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
-	inputLen := b.Length()
-	vec, sel := b.ColVec(int(inputIdxs[0])), b.Selection()
+func (a *_AGG_TYPE_AGGKINDAgg) Compute(
+	vecs []coldata.Vec, inputIdxs []uint32, inputLen int, sel []int,
+) {
+	vec := vecs[inputIdxs[0]]
 	col, nulls := vec._TYPE(), vec.Nulls()
 	a.allocator.PerformOperation(
 		[]coldata.Vec{a.vec},
@@ -170,7 +175,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 					}
 				} else {
 					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
+					for i := 0; i < inputLen; i++ {
 						_ACCUMULATE_MINMAX(a, nulls, i, true)
 					}
 				}
@@ -182,7 +187,7 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 					}
 				} else {
 					col = execgen.SLICE(col, 0, inputLen)
-					for execgen.RANGE(i, col, 0, inputLen) {
+					for i := 0; i < inputLen; i++ {
 						_ACCUMULATE_MINMAX(a, nulls, i, false)
 					}
 				}
@@ -191,34 +196,37 @@ func (a *_AGG_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	)
 }
 
-func (a *_AGG_TYPEAgg) Flush() {
+func (a *_AGG_TYPE_AGGKINDAgg) Flush(outputIdx int) {
 	// The aggregation is finished. Flush the last value. If we haven't found
 	// any non-nulls for this group so far, the output for this group should
 	// be null.
-	if !a.foundNonNullForCurrentGroup {
-		a.nulls.SetNull(a.curIdx)
-	} else {
-		execgen.SET(a.col, a.curIdx, a.curAgg)
-	}
+	// {{if eq "_AGGKIND" "Ordered"}}
+	// Go around "argument overwritten before first use" linter error.
+	_ = outputIdx
+	outputIdx = a.curIdx
 	a.curIdx++
+	// {{end}}
+	if !a.foundNonNullForCurrentGroup {
+		a.nulls.SetNull(outputIdx)
+	} else {
+		// TODO(yuzefovich): think about whether it is ok for this SET call to
+		// not be registered with the allocator on types with variable sizes
+		// (e.g. Bytes).
+		execgen.SET(a.col, outputIdx, a.curAgg)
+	}
 }
 
-func (a *_AGG_TYPEAgg) HandleEmptyInputScalar() {
-	a.nulls.SetNull(0)
+type _AGG_TYPE_AGGKINDAggAlloc struct {
+	aggAllocBase
+	aggFuncs []_AGG_TYPE_AGGKINDAgg
 }
 
-type _AGG_TYPEAggAlloc struct {
-	allocator *colmem.Allocator
-	allocSize int64
-	aggFuncs  []_AGG_TYPEAgg
-}
+var _ aggregateFuncAlloc = &_AGG_TYPE_AGGKINDAggAlloc{}
 
-var _ aggregateFuncAlloc = &_AGG_TYPEAggAlloc{}
-
-func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
+func (a *_AGG_TYPE_AGGKINDAggAlloc) newAggFunc() aggregateFunc {
 	if len(a.aggFuncs) == 0 {
-		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPEAgg * a.allocSize)
-		a.aggFuncs = make([]_AGG_TYPEAgg, a.allocSize)
+		a.allocator.AdjustMemoryUsage(sizeOf_AGG_TYPE_AGGKINDAgg * a.allocSize)
+		a.aggFuncs = make([]_AGG_TYPE_AGGKINDAgg, a.allocSize)
 	}
 	f := &a.aggFuncs[0]
 	f.allocator = a.allocator
@@ -227,33 +235,31 @@ func (a *_AGG_TYPEAggAlloc) newAggFunc() aggregateFunc {
 }
 
 // {{end}}
-// {{end}}
-// {{end}}
 
 // {{/*
 // _ACCUMULATE_MINMAX sets the output for the current group to be the value of
 // the ith row if it is smaller/larger than the current result. If this is the
 // first row of a new group, and no non-nulls have been found for the current
 // group, then the output for the current group is set to null.
-func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
-
+func _ACCUMULATE_MINMAX(a *_AGG_TYPE_AGGKINDAgg, nulls *coldata.Nulls, i int, _HAS_NULLS bool) { // */}}
 	// {{define "accumulateMinMax"}}
+
+	// {{if eq "_AGGKIND" "Ordered"}}
 	if a.groups[i] {
 		// If we encounter a new group, and we haven't found any non-nulls for the
-		// current group, the output for this group should be null. If a.curIdx is
-		// negative, it means that this is the first group.
-		if a.curIdx >= 0 {
-			if !a.foundNonNullForCurrentGroup {
-				a.nulls.SetNull(a.curIdx)
-			} else {
-				// {{with .Global}}
-				execgen.SET(a.col, a.curIdx, a.curAgg)
-				// {{end}}
-			}
+		// current group, the output for this group should be null.
+		if !a.foundNonNullForCurrentGroup {
+			a.nulls.SetNull(a.curIdx)
+		} else {
+			// {{with .Global}}
+			execgen.SET(a.col, a.curIdx, a.curAgg)
+			// {{end}}
 		}
 		a.curIdx++
 		a.foundNonNullForCurrentGroup = false
 	}
+	// {{end}}
+
 	var isNull bool
 	// {{if .HasNulls}}
 	isNull = nulls.NullAt(i)
@@ -263,15 +269,15 @@ func _ACCUMULATE_MINMAX(a *_AGG_TYPEAgg, nulls *coldata.Nulls, i int, _HAS_NULLS
 	// {{with .Global}}
 	if !isNull {
 		if !a.foundNonNullForCurrentGroup {
-			val := execgen.UNSAFEGET(col, i)
-			execgen.COPYVAL(a.curAgg, val)
+			val := col.Get(i)
+			_COPYVAL_MAYBE_CAST(a.curAgg, val)
 			a.foundNonNullForCurrentGroup = true
 		} else {
 			var cmp bool
-			candidate := execgen.UNSAFEGET(col, i)
+			candidate := col.Get(i)
 			_ASSIGN_CMP(cmp, candidate, a.curAgg, _, col, _)
 			if cmp {
-				execgen.COPYVAL(a.curAgg, candidate)
+				_COPYVAL_MAYBE_CAST(a.curAgg, candidate)
 			}
 		}
 	}

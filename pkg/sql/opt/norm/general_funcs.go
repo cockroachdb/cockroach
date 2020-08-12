@@ -11,7 +11,7 @@
 package norm
 
 import (
-	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -40,23 +40,6 @@ func (c *CustomFuncs) Init(f *Factory) {
 // Succeeded returns true if a result expression is not nil.
 func (c *CustomFuncs) Succeeded(result opt.Expr) bool {
 	return result != nil
-}
-
-// OrderingSucceeded returns true if an OrderingChoice is not nil.
-func (c *CustomFuncs) OrderingSucceeded(result *physical.OrderingChoice) bool {
-	return result != nil
-}
-
-// DerefOrderingChoice returns an OrderingChoice from a pointer.
-func (c *CustomFuncs) DerefOrderingChoice(result *physical.OrderingChoice) physical.OrderingChoice {
-	return *result
-}
-
-// ExprIsNeverNull returns true if we can prove that the given scalar expression
-// is always non-NULL. Any variables that refer to columns in the notNullCols
-// set are assumed to be non-NULL. See memo.ExprIsNeverNull.
-func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
-	return memo.ExprIsNeverNull(e, notNullCols)
 }
 
 // ----------------------------------------------------------------------
@@ -143,6 +126,17 @@ func (c *CustomFuncs) IsAdditiveType(typ *types.T) bool {
 	return types.IsAdditiveType(typ)
 }
 
+// IsConstJSON returns true if the given ScalarExpr is a ConstExpr that wraps a
+// DJSON datum.
+func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		if _, ok := constExpr.Value.(*tree.DJSON); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // ----------------------------------------------------------------------
 //
 // Column functions
@@ -179,23 +173,13 @@ func (c *CustomFuncs) IsColNotNull2(col opt.ColumnID, left, right memo.RelExpr) 
 		right.Relational().NotNullCols.Contains(col)
 }
 
-// HasNoCols returns true if the input expression has zero output columns.
-func (c *CustomFuncs) HasNoCols(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Empty()
-}
-
-// HasOneCol returns true if the input expression has exactly one output column.
-func (c *CustomFuncs) HasOneCol(input memo.RelExpr) bool {
-	return input.Relational().OutputCols.Len() == 1
-}
-
 // ColsAreConst returns true if the given columns have the same values for all
 // rows in the given input expression.
 func (c *CustomFuncs) ColsAreConst(cols opt.ColSet, input memo.RelExpr) bool {
 	return cols.SubsetOf(input.Relational().FuncDeps.ConstantCols())
 }
 
-// ColsAreEmpty returns true if the column set is empty.
+// ColsAreEmpty returns true if the given column set is empty.
 func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
 	return cols.Empty()
 }
@@ -203,6 +187,11 @@ func (c *CustomFuncs) ColsAreEmpty(cols opt.ColSet) bool {
 // MakeEmptyColSet returns a column set with no columns in it.
 func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 	return opt.ColSet{}
+}
+
+// ColsAreLenOne returns true if the input ColSet has exactly one column.
+func (c *CustomFuncs) ColsAreLenOne(cols opt.ColSet) bool {
+	return cols.Len() == 1
 }
 
 // ColsAreSubset returns true if the left columns are a subset of the right
@@ -280,6 +269,30 @@ func (c *CustomFuncs) RedundantCols(input memo.RelExpr, cols opt.ColSet) opt.Col
 	return cols.Difference(reducedCols)
 }
 
+// RemapCols remaps columns IDs in the input ScalarExpr by replacing occurrences
+// of the keys of colMap with the corresponding values. If column IDs are
+// encountered in the input ScalarExpr that are not keys in colMap, they are not
+// remapped.
+func (c *CustomFuncs) RemapCols(scalar opt.ScalarExpr, colMap opt.ColMap) opt.ScalarExpr {
+	// Recursively walk the scalar sub-tree looking for references to columns
+	// that need to be replaced and then replace them appropriately.
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			dstCol, ok := colMap.Get(int(t.Col))
+			if !ok {
+				// The column ID is not in colMap so no replacement is required.
+				return e
+			}
+			return c.f.ConstructVariable(opt.ColumnID(dstCol))
+		}
+		return c.f.Replace(e, replace)
+	}
+
+	return replace(scalar).(opt.ScalarExpr)
+}
+
 // ----------------------------------------------------------------------
 //
 // Outer column functions
@@ -307,7 +320,7 @@ func (c *CustomFuncs) HasOuterCols(input opt.Expr) bool {
 }
 
 // IsCorrelated returns true if any variable in the source expression references
-// a column from the destination expression. For example:
+// a column from the given set of output columns. For example:
 //   (InnerJoin
 //     (Scan a)
 //     (Scan b)
@@ -317,8 +330,8 @@ func (c *CustomFuncs) HasOuterCols(input opt.Expr) bool {
 // The $item expression is correlated with the (Scan a) expression because it
 // references one of its columns. But the $item expression is not correlated
 // with the (Scan b) expression.
-func (c *CustomFuncs) IsCorrelated(src, dst memo.RelExpr) bool {
-	return src.Relational().OuterCols.Intersects(dst.Relational().OutputCols)
+func (c *CustomFuncs) IsCorrelated(src memo.RelExpr, cols opt.ColSet) bool {
+	return src.Relational().OuterCols.Intersects(cols)
 }
 
 // IsBoundBy returns true if all outer references in the source expression are
@@ -337,11 +350,11 @@ func (c *CustomFuncs) IsBoundBy(src opt.Expr, cols opt.ColSet) bool {
 	return c.OuterCols(src).SubsetOf(cols)
 }
 
-// IsDeterminedBy returns true if all outer references in the source expression
-// are bound by the closure of the given columns according to the functional
-// dependencies of the input expression.
-func (c *CustomFuncs) IsDeterminedBy(src opt.Expr, cols opt.ColSet, input memo.RelExpr) bool {
-	return input.Relational().FuncDeps.InClosureOf(c.OuterCols(src), cols)
+// ColsAreDeterminedBy returns true if the given columns are functionally
+// determined by the "in" ColSet according to the functional dependencies of the
+// input expression.
+func (c *CustomFuncs) ColsAreDeterminedBy(cols, in opt.ColSet, input memo.RelExpr) bool {
+	return input.Relational().FuncDeps.InClosureOf(cols, in)
 }
 
 // AreProjectionsCorrelated returns true if any element in the projections
@@ -497,9 +510,16 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 // ----------------------------------------------------------------------
 //
 // Property functions
-//   General custom functions related to expression logical properties.
+//   General custom functions related to expression properties.
 //
 // ----------------------------------------------------------------------
+
+// ExprIsNeverNull returns true if we can prove that the given scalar expression
+// is always non-NULL. Any variables that refer to columns in the notNullCols
+// set are assumed to be non-NULL. See memo.ExprIsNeverNull.
+func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
+	return memo.ExprIsNeverNull(e, notNullCols)
+}
 
 // sharedProps returns the shared logical properties for the given expression.
 // Only relational expressions and certain scalar list items (e.g. FiltersItem,
@@ -524,10 +544,13 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 //
 // ----------------------------------------------------------------------
 
-// HasColsInOrdering returns true if all columns that appear in an ordering are
-// output columns of the input expression.
-func (c *CustomFuncs) HasColsInOrdering(input memo.RelExpr, ordering physical.OrderingChoice) bool {
-	return ordering.CanProjectCols(input.Relational().OutputCols)
+// OrderingCanProjectCols returns true if the given OrderingChoice can be
+// expressed using only the given columns. Or in other words, at least one
+// column from every ordering group is a member of the given ColSet.
+func (c *CustomFuncs) OrderingCanProjectCols(
+	ordering physical.OrderingChoice, cols opt.ColSet,
+) bool {
+	return ordering.CanProjectCols(cols)
 }
 
 // OrderingCols returns all non-optional columns that are part of the given
@@ -537,8 +560,8 @@ func (c *CustomFuncs) OrderingCols(ordering physical.OrderingChoice) opt.ColSet 
 }
 
 // PruneOrdering removes any columns referenced by an OrderingChoice that are
-// not part of the needed column set. Should only be called if HasColsInOrdering
-// is true.
+// not part of the needed column set. Should only be called if
+// OrderingCanProjectCols is true.
 func (c *CustomFuncs) PruneOrdering(
 	ordering physical.OrderingChoice, needed opt.ColSet,
 ) physical.OrderingChoice {
@@ -577,10 +600,13 @@ func (c *CustomFuncs) OrdinalityOrdering(private *memo.OrdinalityPrivate) physic
 }
 
 // IsSameOrdering evaluates whether the two orderings are equal.
-func (c *CustomFuncs) IsSameOrdering(
-	first physical.OrderingChoice, other physical.OrderingChoice,
-) bool {
+func (c *CustomFuncs) IsSameOrdering(first, other physical.OrderingChoice) bool {
 	return first.Equals(&other)
+}
+
+// OrderingImplies returns true if the first OrderingChoice implies the second.
+func (c *CustomFuncs) OrderingImplies(first, second physical.OrderingChoice) bool {
+	return first.Implies(&second)
 }
 
 // -----------------------------------------------------------------------
@@ -632,15 +658,7 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.FiltersExpr) memo.FiltersEx
 func (c *CustomFuncs) RemoveFiltersItem(
 	filters memo.FiltersExpr, search *memo.FiltersItem,
 ) memo.FiltersExpr {
-	newFilters := make(memo.FiltersExpr, len(filters)-1)
-	for i := range filters {
-		if search == &filters[i] {
-			copy(newFilters, filters[:i])
-			copy(newFilters[i:], filters[i+1:])
-			return newFilters
-		}
-	}
-	panic(errors.AssertionFailedf("item to remove is not in the list: %v", search))
+	return filters.RemoveFiltersItem(search)
 }
 
 // ReplaceFiltersItem returns a new list that is a copy of the given list,
@@ -846,6 +864,78 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 	return private.Ordering
 }
 
+// AppendAggCols constructs a new Aggregations operator containing the aggregate
+// functions from an existing Aggregations operator plus an additional set of
+// aggregate functions, one for each column in the given set. The new functions
+// are of the given aggregate operator type.
+func (c *CustomFuncs) AppendAggCols(
+	aggs memo.AggregationsExpr, aggOp opt.Operator, cols opt.ColSet,
+) memo.AggregationsExpr {
+	outAggs := make(memo.AggregationsExpr, len(aggs)+cols.Len())
+	copy(outAggs, aggs)
+	c.makeAggCols(aggOp, cols, outAggs[len(aggs):])
+	return outAggs
+}
+
+// MakeAggCols constructs a new Aggregations operator containing an aggregate
+// function of the given operator type for each of column in the given set. For
+// example, for ConstAggOp and columns (1,2), this expression is returned:
+//
+//   (Aggregations
+//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
+//     [1,2]
+//   )
+//
+func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.AggregationsExpr {
+	colsLen := cols.Len()
+	aggs := make(memo.AggregationsExpr, colsLen)
+	c.makeAggCols(aggOp, cols, aggs)
+	return aggs
+}
+
+// ----------------------------------------------------------------------
+//
+// Join functions
+//   General functions related to join operators.
+//
+// ----------------------------------------------------------------------
+
+// JoinDoesNotDuplicateLeftRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed not to output any given row from its left input more
+// than once.
+func (c *CustomFuncs) JoinDoesNotDuplicateLeftRows(join memo.RelExpr) bool {
+	mult := memo.GetJoinMultiplicity(join)
+	return mult.JoinDoesNotDuplicateLeftRows(join.Op())
+}
+
+// JoinDoesNotDuplicateRightRows returns true if the given InnerJoin, LeftJoin
+// or FullJoin is guaranteed not to output any given row from its right input
+// more than once.
+func (c *CustomFuncs) JoinDoesNotDuplicateRightRows(join memo.RelExpr) bool {
+	mult := memo.GetJoinMultiplicity(join)
+	return mult.JoinDoesNotDuplicateRightRows(join.Op())
+}
+
+// JoinPreservesLeftRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed to output every row from its left input at least once.
+func (c *CustomFuncs) JoinPreservesLeftRows(join memo.RelExpr) bool {
+	mult := memo.GetJoinMultiplicity(join)
+	return mult.JoinPreservesLeftRows(join.Op())
+}
+
+// JoinPreservesRightRows returns true if the given InnerJoin, LeftJoin or
+// FullJoin is guaranteed to output every row from its right input at least
+// once.
+func (c *CustomFuncs) JoinPreservesRightRows(join memo.RelExpr) bool {
+	mult := memo.GetJoinMultiplicity(join)
+	return mult.JoinPreservesRightRows(join.Op())
+}
+
+// NoJoinHints returns true if no hints were specified for this join.
+func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
+	return p.Flags.Empty()
+}
+
 // ----------------------------------------------------------------------
 //
 // Constant value functions
@@ -854,9 +944,9 @@ func (c *CustomFuncs) ExtractGroupingOrdering(
 // ----------------------------------------------------------------------
 
 // IsPositiveInt is true if the given Datum value is greater than zero.
-func (c *CustomFuncs) IsPositiveInt(val tree.Datum) bool {
-	limitVal := int64(*val.(*tree.DInt))
-	return limitVal > 0
+func (c *CustomFuncs) IsPositiveInt(datum tree.Datum) bool {
+	val := int64(*datum.(*tree.DInt))
+	return val > 0
 }
 
 // EqualsString returns true if the given strings are equal. This function is
@@ -918,4 +1008,44 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
+}
+
+// IsGreaterThan returns true if the first datum compares as greater than the
+// second.
+func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
+	return first.Compare(c.f.evalCtx, second) == 1
+}
+
+// ----------------------------------------------------------------------
+//
+// Scan functions
+//   General functions related to scan operators.
+//
+// ----------------------------------------------------------------------
+
+// DuplicateScanPrivate constructs a new ScanPrivate with new table and column
+// IDs. Only the Index, Flags and Locking fields are copied from the old
+// ScanPrivate, so the new ScanPrivate will not have constraints even if the old
+// one did.
+func (c *CustomFuncs) DuplicateScanPrivate(sp *memo.ScanPrivate) *memo.ScanPrivate {
+	md := c.mem.Metadata()
+	tabMeta := md.TableMeta(sp.Table)
+	newTableID := md.DuplicateTable(sp.Table, c.RemapCols)
+
+	// Build a new set of column IDs from the new TableMeta.
+	var newColIDs opt.ColSet
+	cols := sp.Cols
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		ord := tabMeta.MetaID.ColumnOrdinal(col)
+		newColID := newTableID.ColumnID(ord)
+		newColIDs.Add(newColID)
+	}
+
+	return &memo.ScanPrivate{
+		Table:   newTableID,
+		Index:   sp.Index,
+		Cols:    newColIDs,
+		Flags:   sp.Flags,
+		Locking: sp.Locking,
+	}
 }

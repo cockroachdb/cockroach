@@ -533,7 +533,7 @@ CREATE TABLE ab(
 statement count 1
 INSERT INTO ab(a, b) VALUES (1, 0);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
 statement count 1
@@ -551,34 +551,34 @@ CREATE TABLE abc_check(
 statement count 1
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (1, 1);
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (-1, 1);
 
 statement count 1
 INSERT INTO abc_check(a, b, c) VALUES (2, 0, 3);
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a, b) VALUES (3, 2, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET b=12312313;
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET c=1;
 
-statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+statement error pq: failed to satisfy CHECK constraint \(c > 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET c=1;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
 
-statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+statement error pq: failed to satisfy CHECK constraint \(b < 1:::INT8\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
 
 subtest 29495
@@ -636,7 +636,7 @@ BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
-CREATE TABLE t29494 (
+CREATE TABLE public.t29494 (
    x INT8 NULL,
    FAMILY "primary" (x, rowid)
 )
@@ -1213,3 +1213,24 @@ DROP TABLE source
 
 statement ok
 DROP TABLE target
+
+# Regression test for UPSERT batching logic (#51391).
+statement ok
+SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
+CREATE TABLE src (s STRING);
+CREATE TABLE dest (s STRING);
+INSERT INTO src
+SELECT
+	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+FROM
+	generate_series(1, 50000)
+
+# This statement produces a raft command of about 6.6 MiB in size, so if the
+# batching logic is incorrect, we'll encounter "command is too large" error.
+statement ok
+UPSERT INTO dest (s) (SELECT s FROM src)
+
+statement ok
+RESET CLUSTER SETTING kv.raft.command.max_size;
+DROP TABLE src;
+DROP TABLE dest

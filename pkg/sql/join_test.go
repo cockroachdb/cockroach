@@ -15,19 +15,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
-	desc := sqlbase.GetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
 
 	p := planner{alloc: &sqlbase.DatumAlloc{}}
 	scan := p.Scan()
 	scan.desc = desc
-	err := scan.initDescDefaults(p.curPlan.deps, publicColumnsCfg)
+	var colCfg scanColumnsConfig
+	for _, col := range desc.Columns {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ID))
+	}
+	err := scan.initDescDefaults(colCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +52,7 @@ func newTestScanNode(kvDB *kv.DB, tableName string) (*scanNode, error) {
 		}
 	}
 	scan.reqOrdering = ordering
-	sb := span.MakeBuilder(keys.SystemSQLCodec, desc.TableDesc(), &desc.PrimaryIndex)
+	sb := span.MakeBuilder(keys.SystemSQLCodec, desc, &desc.PrimaryIndex)
 	scan.spans, err = sb.SpansFromConstraint(nil /* constraint */, exec.TableColumnOrdinalSet{}, false /* forDelete */)
 	if err != nil {
 		return nil, err

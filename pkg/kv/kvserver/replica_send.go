@@ -14,10 +14,11 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -114,7 +115,61 @@ func (r *Replica) sendWithRangeID(
 			pErr = filter(ctx, *ba, br)
 		}
 	}
+
+	// Return range information if it was requested. Note that we don't return it
+	// on errors because the code doesn't currently support returning both a br
+	// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
+	// ways of returning range info.
+	if pErr == nil {
+		r.maybeAddRangeInfoToResponse(ctx, ba, br)
+	}
+
 	return br, pErr
+}
+
+func (r *Replica) maybeAddRangeInfoToResponse(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+) {
+	if ba.ReturnRangeInfo {
+		desc, lease := r.GetDescAndLease(ctx)
+		br.RangeInfos = []roachpb.RangeInfo{{Desc: desc, Lease: lease}}
+
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionClientRangeInfosOnBatchResponse) {
+			// Also set the RangeInfo on the individual responses, for compatibility
+			// with 20.1.
+			for _, r := range br.Responses {
+				reply := r.GetInner()
+				header := reply.Header()
+				header.DeprecatedRangeInfos = br.RangeInfos
+				reply.SetHeader(header)
+			}
+		}
+	} else if ba.ClientRangeInfo != nil {
+		returnRangeInfoIfClientStale(ctx, br, r, *ba.ClientRangeInfo)
+	}
+}
+
+// returnRangeInfoIfClientStale populates br.RangeInfos if the client doesn't
+// have up-to-date info about the range's descriptor and lease.
+func returnRangeInfoIfClientStale(
+	ctx context.Context, br *roachpb.BatchResponse, r *Replica, cinfo roachpb.ClientRangeInfo,
+) {
+	desc, lease := r.GetDescAndLease(ctx)
+	// Compare the client's info with the replica's info to detect if the client
+	// has stale knowledge. Note that the client can have more recent knowledge
+	// than the replica in case this is a follower.
+	needInfo := (cinfo.LeaseSequence < lease.Sequence) ||
+		(cinfo.DescriptorGeneration < desc.Generation)
+	if !needInfo {
+		return
+	}
+	log.VEventf(ctx, 3, "client had stale range info; returning an update")
+	br.RangeInfos = []roachpb.RangeInfo{
+		{
+			Desc:  desc,
+			Lease: lease,
+		},
+	}
 }
 
 // batchExecutionFn is a method on Replica that is able to execute a
@@ -143,7 +198,7 @@ func (r *Replica) sendWithRangeID(
 // the function returns one of these errors, it must also pass ownership of the
 // concurrency guard back to the caller.
 type batchExecutionFn func(
-	*Replica, context.Context, *roachpb.BatchRequest, storagepb.LeaseStatus, *concurrency.Guard,
+	*Replica, context.Context, *roachpb.BatchRequest, kvserverpb.LeaseStatus, *concurrency.Guard,
 ) (*roachpb.BatchResponse, *concurrency.Guard, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
@@ -182,7 +237,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 
 		// Determine the lease under which to evaluate the request.
-		var status storagepb.LeaseStatus
+		var status kvserverpb.LeaseStatus
 		if !ba.ReadConsistency.RequiresReadLease() {
 			// Get a clock reading for checkExecutionCanProceed.
 			status.Timestamp = r.Clock().Now()
@@ -226,6 +281,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Timestamp:       ba.Timestamp,
 			Priority:        ba.UserPriority,
 			ReadConsistency: ba.ReadConsistency,
+			WaitPolicy:      ba.WaitPolicy,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans,
 			LockSpans:       lockSpans,
@@ -257,10 +313,13 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// error. It must have also handed back ownership of the concurrency
 		// guard without having already released the guard's latches.
 		g.AssertLatches()
+		if filter := r.store.cfg.TestingKnobs.TestingConcurrencyRetryFilter; filter != nil {
+			filter(ctx, *ba, pErr)
+		}
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.WriteIntentError:
 			// Drop latches, but retain lock wait-queues.
-			if g, pErr = r.handleWriteIntentError(ctx, ba, g, pErr, t); pErr != nil {
+			if g, pErr = r.handleWriteIntentError(ctx, ba, g, status.Lease, pErr, t); pErr != nil {
 				return nil, pErr
 			}
 		case *roachpb.TransactionPushError:
@@ -331,6 +390,7 @@ func (r *Replica) handleWriteIntentError(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
 	g *concurrency.Guard,
+	lease roachpb.Lease,
 	pErr *roachpb.Error,
 	t *roachpb.WriteIntentError,
 ) (*concurrency.Guard, *roachpb.Error) {
@@ -338,7 +398,7 @@ func (r *Replica) handleWriteIntentError(
 		return g, pErr
 	}
 	// g's latches will be dropped, but it retains its spot in lock wait-queues.
-	return r.concMgr.HandleWriterIntentError(ctx, g, t)
+	return r.concMgr.HandleWriterIntentError(ctx, g, lease.Sequence, t)
 }
 
 func (r *Replica) handleTransactionPushError(
@@ -445,7 +505,7 @@ func (r *Replica) executeAdminBatch(
 	// NB: we pass nil for the spanlatch guard because we haven't acquired
 	// latches yet. This is ok because each individual request that the admin
 	// request sends will acquire latches.
-	if err := r.checkExecutionCanProceed(ba, nil /* g */, &status); err != nil {
+	if err := r.checkExecutionCanProceed(ctx, ba, nil /* g */, &status); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -472,7 +532,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.AdminChangeReplicasRequest:
 		chgs := tArgs.Changes()
-		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, storagepb.ReasonAdminRequest, "", chgs)
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
 		pErr = roachpb.NewError(err)
 		if pErr != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
@@ -518,10 +578,6 @@ func (r *Replica) executeAdminBatch(
 
 	if pErr != nil {
 		return nil, pErr
-	}
-
-	if ba.Header.ReturnRangeInfo {
-		returnRangeInfo(resp, r)
 	}
 
 	br := &roachpb.BatchResponse{}
@@ -634,7 +690,7 @@ func (r *Replica) collectSpans(
 //    guaranteed to be greater than any write which occurred under
 //    the previous leaseholder.
 func (r *Replica) limitTxnMaxTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, status storagepb.LeaseStatus,
+	ctx context.Context, ba *roachpb.BatchRequest, status kvserverpb.LeaseStatus,
 ) {
 	if ba.Txn == nil {
 		return
@@ -656,7 +712,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 	// lease before this replica acquired it.
 	// TODO(nvanbenschoten): Do we ever need to call this when
 	//   status.State != VALID?
-	if status.State == storagepb.LeaseState_VALID {
+	if status.State == kvserverpb.LeaseState_VALID {
 		obsTS.Forward(status.Lease.Start)
 	}
 	if obsTS.Less(ba.Txn.MaxTimestamp) {

@@ -38,7 +38,7 @@
 [DecorrelateJoin, Normalize]
 (JoinApply
     $left:*
-    $right:* & ^(IsCorrelated $right $left)
+    $right:* & ^(IsCorrelated $right (OutputCols $left))
     $on:*
     $private:*
 )

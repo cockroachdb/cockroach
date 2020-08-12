@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -99,7 +98,7 @@ func (ex *connExecutor) addPreparedStmt(
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
-		panic(fmt.Sprintf("prepared statement already exists: %q", name))
+		panic(errors.AssertionFailedf("prepared statement already exists: %q", name))
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
@@ -218,7 +217,7 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(stmt.AST)
+	protoTS, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}
@@ -359,9 +358,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	// Create the new PreparedPortal.
-	if err := ex.addPortal(
-		ctx, portalName, bindCmd.PreparedStatementName, ps, qargs, columnFormatCodes,
-	); err != nil {
+	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
 		return retErr(err)
 	}
 
@@ -380,22 +377,32 @@ func (ex *connExecutor) execBind(
 func (ex *connExecutor) addPortal(
 	ctx context.Context,
 	portalName string,
-	psName string,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
 ) error {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-		panic(fmt.Sprintf("portal already exists: %q", portalName))
+		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
 
-	portal, err := ex.newPreparedPortal(ctx, portalName, stmt, qargs, outFormats)
+	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)
 	if err != nil {
 		return err
 	}
 
 	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 	return nil
+}
+
+// exhaustPortal marks a portal with the provided name as "exhausted" and
+// panics if there is no portal with such name.
+func (ex *connExecutor) exhaustPortal(portalName string) {
+	portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
+	if !ok {
+		panic(errors.AssertionFailedf("portal %s doesn't exist", portalName))
+	}
+	portal.exhausted = true
+	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
@@ -412,7 +419,7 @@ func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
 	if !ok {
 		return
 	}
-	portal.decRef(ctx)
+	portal.decRef(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 	delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 }
 
@@ -437,7 +444,7 @@ func (ex *connExecutor) execDelPrepStmt(
 		}
 		ex.deletePortal(ctx, delCmd.Name)
 	default:
-		panic(fmt.Sprintf("unknown del type: %s", delCmd.Type))
+		panic(errors.AssertionFailedf("unknown del type: %s", delCmd.Type))
 	}
 	return nil, nil
 }

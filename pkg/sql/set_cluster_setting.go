@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/hintdetail"
 )
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -51,6 +54,12 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
+	if !p.execCfg.TenantTestingKnobs.CanSetClusterSettings() && !p.execCfg.Codec.ForSystemTenant() {
+		// Setting cluster settings is disabled for phase 2 tenants if a test does
+		// not explicitly allow for setting in-memory cluster settings.
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can SET CLUSTER SETTING")
+	}
+
 	name := strings.ToLower(n.Name)
 	st := p.EvalContext().Settings
 	v, ok := settings.Lookup(name, settings.LookupForLocalAccess)
@@ -63,6 +72,12 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
+	if _, ok := setting.(*settings.StateMachineSetting); ok && p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
+		// A tenant that is allowed to set in-memory cluster settings is attempting
+		// to set a state machine setting, which is disallowed due to complexity.
+		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can set state machine settings")
+	}
+
 	var value tree.TypedExpr
 	if n.Value != nil {
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
@@ -71,6 +86,8 @@ func (p *planner) SetClusterSetting(
 			expr = unresolvedNameToStrVal(expr)
 
 			var requiredType *types.T
+			var dummyHelper tree.IndexedVarHelper
+
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
 				requiredType = types.String
@@ -84,14 +101,32 @@ func (p *planner) SetClusterSetting(
 				requiredType = types.Any
 			case *settings.DurationSetting:
 				requiredType = types.Interval
+			case *settings.DurationSettingWithExplicitUnit:
+				requiredType = types.Interval
+				// Ensure that the expression contains a unit (i.e can't be a float)
+				_, err := p.analyzeExpr(
+					ctx, expr, nil, dummyHelper, types.Float, false, "SET CLUSTER SETTING "+name,
+				)
+				// An interval with a unit (valid) will return an
+				// "InvalidTextRepresentation" error when trying to parse it as a float.
+				// If we don't get an error => No unit was present. Values that can't be
+				// parsed as intervals will continue to be caught below using
+				// requiredType.
+				if err == nil {
+					_, hint := setting.ErrorHint()
+					return nil, hintdetail.WithHint(errors.New("invalid cluster setting argument type"), hint)
+				}
 			default:
 				return nil, errors.Errorf("unsupported setting type %T", setting)
 			}
 
-			var dummyHelper tree.IndexedVarHelper
 			typed, err := p.analyzeExpr(
 				ctx, expr, nil, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+name)
 			if err != nil {
+				hasHint, hint := setting.ErrorHint()
+				if hasHint {
+					return nil, hintdetail.WithHint(err, hint)
+				}
 				return nil, err
 			}
 
@@ -107,6 +142,30 @@ func (p *planner) SetClusterSetting(
 func (n *setClusterSettingNode) startExec(params runParams) error {
 	if !params.p.ExtendedEvalContext().TxnImplicit {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
+	}
+
+	if !params.p.execCfg.Codec.ForSystemTenant() {
+		// Sanity check that this tenant is able to set in-memory settings.
+		if !params.p.execCfg.TenantTestingKnobs.CanSetClusterSettings() {
+			return errors.Errorf("tenants cannot set cluster settings, this permission should have been checked at plan time")
+		}
+		var encodedValue string
+		if n.value == nil {
+			encodedValue = n.setting.EncodedDefault()
+		} else {
+			value, err := n.value.Eval(params.p.EvalContext())
+			if err != nil {
+				return err
+			}
+			if _, ok := n.setting.(*settings.StateMachineSetting); ok {
+				return errors.Errorf("tenants cannot change state machine settings, this should've been checked at plan time")
+			}
+			encodedValue, err = toSettingString(params.ctx, n.st, n.name, n.setting, value, nil /* prev */)
+			if err != nil {
+				return err
+			}
+		}
+		return params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(n.name, encodedValue, n.setting.Typ())
 	}
 
 	execCfg := params.extendedEvalCtx.ExecCfg
@@ -327,6 +386,18 @@ func toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
 	case *settings.DurationSetting:
+		if f, ok := d.(*tree.DInterval); ok {
+			if f.Duration.Months > 0 || f.Duration.Days > 0 {
+				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
+			}
+			d := time.Duration(f.Duration.Nanos()) * time.Nanosecond
+			if err := setting.Validate(d); err != nil {
+				return "", err
+			}
+			return settings.EncodeDuration(d), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for duration setting", d.ResolvedType(), d)
+	case *settings.DurationSettingWithExplicitUnit:
 		if f, ok := d.(*tree.DInterval); ok {
 			if f.Duration.Months > 0 || f.Duration.Days > 0 {
 				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
