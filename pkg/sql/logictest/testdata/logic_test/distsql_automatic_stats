@@ -1,4 +1,4 @@
-# LogicTest: fakedist fakedist-metadata
+# LogicTest: !3node-tenant(47925)
 
 # Disable automatic stats
 statement ok
