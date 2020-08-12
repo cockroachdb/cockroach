@@ -949,7 +949,6 @@ const (
 	// proposed whose proposal we still consider to be inflight. These commands
 	// will never receive a response through the regular channel.
 	reasonSnapshotApplied
-	reasonReplicaIDChanged
 	reasonTicks
 )
 
