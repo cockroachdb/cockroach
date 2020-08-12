@@ -1976,7 +1976,7 @@ CREATE TABLE pg_catalog.pg_operator (
 				leftType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
 				rightType = tree.NewDOid(tree.DInt(params.Types()[1].Oid()))
 			default:
-				panic(errors.AssertionFailedf("Unexpected operator %s with %d params",
+				panic(errors.AssertionFailedf("unexpected operator %s with %d params",
 					opName, params.Length()))
 			}
 			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))

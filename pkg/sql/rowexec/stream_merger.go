@@ -179,7 +179,7 @@ func makeStreamMerger(
 	}
 	for i, ord := range leftOrdering {
 		if ord.Direction != rightOrdering[i].Direction {
-			return streamMerger{}, errors.New("Ordering mismatch")
+			return streamMerger{}, errors.New("ordering mismatch")
 		}
 	}
 

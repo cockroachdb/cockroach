@@ -603,7 +603,7 @@ func (r *Registry) Start(
 			log.Errorf(ctx, "error getting live session: %s", err)
 			return
 		}
-		log.VEventf(ctx, 1, "Registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
+		log.VEventf(ctx, 1, "registry live claim (instance_id: %s, sid: %s)", r.ID(), s.ID())
 
 		if _, err := r.ex.QueryRowEx(
 			ctx, "expire-sessions", nil,

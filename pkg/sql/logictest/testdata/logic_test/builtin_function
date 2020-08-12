@@ -2420,7 +2420,7 @@ SELECT width_bucket(now(), array['yesterday', 'today', 'tomorrow']::timestamptz[
 ----
 2
 
-query error pq: width_bucket\(\): Operand and thresholds must be of the same type
+query error pq: width_bucket\(\): operand and thresholds must be of the same type
 SELECT width_bucket(1, array['a', 'h', 'l', 'z']);
 
 # Regression for #40623

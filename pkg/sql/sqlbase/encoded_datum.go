@@ -168,7 +168,7 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 	if d == nil {
-		panic(errors.AssertionFailedf("Cannot convert nil datum to EncDatum"))
+		panic(errors.AssertionFailedf("cannot convert nil datum to EncDatum"))
 	}
 
 	dTyp := d.ResolvedType()

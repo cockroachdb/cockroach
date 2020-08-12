@@ -699,7 +699,7 @@ func (c *transientCluster) runWorkload(
 						// Only log an error and return when the workload function throws
 						// an error, because errors these errors should be ignored, and
 						// should not interrupt the rest of the demo.
-						log.Warningf(ctx, "Error running workload query: %+v\n", err)
+						log.Warningf(ctx, "error running workload query: %+v", err)
 						return
 					}
 				}

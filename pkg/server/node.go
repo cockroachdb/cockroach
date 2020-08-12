@@ -356,7 +356,7 @@ func (n *Node) start(
 		select {
 		case <-n.storeCfg.Gossip.Connected:
 		default:
-			log.Fatalf(ctx, "Gossip is not connected yet")
+			log.Fatalf(ctx, "gossip is not connected yet")
 		}
 		ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
 		newID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)

@@ -113,7 +113,7 @@ func (d *delegator) delegateShowPartitions(n *tree.ShowPartitions) (tree.Stateme
 	if tn.ObjectName == "" {
 		err := errors.New("no table specified")
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index")
+		err = errors.WithHint(err, "Specify a table using the hint syntax of table@index.")
 		return nil, err
 	}
 

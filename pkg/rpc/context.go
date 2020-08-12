@@ -952,7 +952,7 @@ func (ctx *Context) grpcDialRaw(
 	dialerFunc := dialer.dial
 	if ctx.Knobs.ArtificialLatencyMap != nil {
 		latency := ctx.Knobs.ArtificialLatencyMap[target]
-		log.VEventf(ctx.masterCtx, 1, "Connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
+		log.VEventf(ctx.masterCtx, 1, "connecting to node %s (%d) with simulated latency %dms", target, remoteNodeID,
 			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
