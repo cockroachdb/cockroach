@@ -337,6 +337,8 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 52682)
+
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
 
