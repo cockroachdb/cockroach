@@ -725,3 +725,29 @@ DELETE FROM t52318
 
 statement ok
 COMMIT
+
+# Regression tests for #52702. Indexes with predicates that always evaluate to
+# true can be forced with any query filter. Predicates that always evaluate to
+# false can be forced for a filter that always evaluates to false.
+subtest regression_52702
+
+statement ok
+CREATE TABLE t52702 (
+    a INT,
+    b INT,
+    INDEX t52702_true (a) WHERE 1 = 1,
+    INDEX t52702_false (a) WHERE 1 = 2
+)
+
+statement ok
+SELECT * FROM t52702@t52702_true;
+SELECT * FROM t52702@t52702_true WHERE true;
+SELECT * FROM t52702@t52702_true WHERE 1 = 1;
+SELECT * FROM t52702@t52702_true WHERE 's' = 's';
+SELECT * FROM t52702@t52702_true WHERE b = 1;
+SELECT * FROM t52702@t52702_true WHERE false;
+
+statement ok
+SELECT * FROM t52702@t52702_false WHERE 1 = 2;
+SELECT * FROM t52702@t52702_false WHERE 's' = 't';
+SELECT * FROM t52702@t52702_false WHERE false;
