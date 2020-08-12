@@ -873,6 +873,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// to transfer! It would be better if this responsibility remained
 	// around here.
 	planner.curPlan.flags.Set(planFlagExecDone)
+	if !planner.ExecCfg().Codec.ForSystemTenant() {
+		planner.curPlan.flags.Set(planFlagTenant)
+	}
 
 	if distributePlan {
 		planner.curPlan.flags.Set(planFlagDistributed)
