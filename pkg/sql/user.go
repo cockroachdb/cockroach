@@ -204,6 +204,21 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[string]bool, error) {
 	return users, nil
 }
 
+// RoleExists returns true if the role exists.
+func (p *planner) RoleExists(ctx context.Context, role string) (bool, error) {
+	query := `SELECT username FROM system.users WHERE username = $1`
+	row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+		ctx, "read-users", p.txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		query, role,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return row != nil, nil
+}
+
 var roleMembersTableName = tree.MakeTableName("system", "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the

@@ -74,6 +74,7 @@ func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionBy) alterTableCmd()        {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
+func (*AlterTableOwner) alterTableCmd()              {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -90,6 +91,7 @@ var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionBy{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
+var _ AlterTableCmd = &AlterTableOwner{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -570,4 +572,20 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	node.Name.Format(ctx)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(node.Schema)
+}
+
+// AlterTableOwner represents an ALTER TABLE OWNER TO command.
+type AlterTableOwner struct {
+	Owner string
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableOwner) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "owner to")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString(" OWNER TO ")
+	ctx.FormatNameP(&node.Owner)
 }

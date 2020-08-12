@@ -641,10 +641,10 @@ SHOW DATABASE
 ----
 test
 
-statement error user testuser does not have CREATE privilege on relation privs
+statement error pq: must be owner of table privs or have CREATE privilege on table privs
 ALTER TABLE privs ADD c INT
 
-statement error user testuser does not have CREATE privilege on relation privs
+statement error pq: must be owner of table privs or have CREATE privilege on table privs
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root

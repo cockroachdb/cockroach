@@ -55,7 +55,7 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (bool, sqlbase.ResolvedSchema, error) {
 	if _, ok := l.vs.GetVirtualSchema(scName); ok {
-		return true, sqlbase.ResolvedSchema{Kind: sqlbase.SchemaVirtual}, nil
+		return true, sqlbase.ResolvedSchema{Kind: sqlbase.SchemaVirtual, Name: scName}, nil
 	}
 
 	// Fallthrough.

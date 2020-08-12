@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -42,6 +43,11 @@ type userRoleMembership map[string]bool
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
+	CheckPrivilegeForUser(
+		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
+	) error
+
+	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(
 		ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
 	) error
@@ -68,10 +74,10 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
-// CheckPrivilege implements the AuthorizationAccessor interface.
+// CheckPrivilegeForUser implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
-func (p *planner) CheckPrivilege(
-	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+func (p *planner) CheckPrivilegeForUser(
+	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind, user string,
 ) error {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
@@ -94,10 +100,8 @@ func (p *planner) CheckPrivilege(
 		return nil
 	}
 
-	user := p.SessionData().User
-
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role string) bool {
-		return isOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
+		return IsOwner(descriptor, role) || privs.CheckPrivilege(role, privilege)
 	})
 	if err != nil {
 		return err
@@ -110,11 +114,19 @@ func (p *planner) CheckPrivilege(
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
 
+// CheckPrivilege implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) CheckPrivilege(
+	ctx context.Context, descriptor sqlbase.Descriptor, privilege privilege.Kind,
+) error {
+	return p.CheckPrivilegeForUser(ctx, descriptor, privilege, p.User())
+}
+
+// IsOwner returns if the role has ownership on the descriptor.
 // TODO(richardjcai): Add checks for if the user owns the parent of the object.
 // Ie, being the owner of a database gives access to all tables in the db.
 // Issue #51931.
-// isOwner returns if the role has ownership privilege of the descriptor.
-func isOwner(desc sqlbase.Descriptor, role string) bool {
+func IsOwner(desc sqlbase.Descriptor, role string) bool {
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := desc.GetPrivileges().Owner
 
@@ -139,7 +151,7 @@ func (p *planner) HasOwnership(ctx context.Context, descriptor sqlbase.Descripto
 	user := p.SessionData().User
 
 	return p.checkRolePredicate(ctx, user, func(role string) bool {
-		return isOwner(descriptor, role)
+		return IsOwner(descriptor, role)
 	})
 }
 
@@ -451,3 +463,25 @@ const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
 // counts in SetClusterSetting() and importing pgwire here would
 // create a circular dependency.
 const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
+
+func (p *planner) canCreateOnSchema(
+	ctx context.Context, dbID descpb.ID, schemaID descpb.ID, user string,
+) error {
+	resolvedSchema, err := resolver.ResolveSchemaByID(ctx, p.Txn(), p.ExecCfg().Codec, dbID, schemaID)
+	if err != nil {
+		return err
+	}
+
+	switch resolvedSchema.Kind {
+	case sqlbase.SchemaPublic:
+		// Anyone can CREATE on a public schema.
+		return nil
+	case sqlbase.SchemaTemporary, sqlbase.SchemaVirtual:
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"cannot CREATE on schema %s", resolvedSchema.Name)
+	case sqlbase.SchemaUserDefined:
+		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.CREATE, user)
+	default:
+		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+	}
+}
