@@ -540,3 +540,11 @@ func (s *sampleAggregator) generateHistogram(
 	}
 	return stats.EquiDepthHistogram(evalCtx, values, numRows, distinctCount, maxBuckets)
 }
+
+var _ execinfra.DoesNotUseTxn = &sampleAggregator{}
+
+// DoesNotUseTxn implements the DoesNotUseTxn interface.
+func (s *sampleAggregator) DoesNotUseTxn() bool {
+	txnUser, ok := s.input.(execinfra.DoesNotUseTxn)
+	return ok && txnUser.DoesNotUseTxn()
+}

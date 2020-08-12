@@ -274,9 +274,14 @@ func (f *vectorizedFlow) IsVectorized() bool {
 	return true
 }
 
-// ConcurrentExecution is part of the flowinfra.Flow interface.
-func (f *vectorizedFlow) ConcurrentExecution() bool {
-	return f.operatorConcurrency || f.FlowBase.ConcurrentExecution()
+// ConcurrentTxnUse is part of the flowinfra.Flow interface. It is conservative
+// in that it returns that there is concurrent txn use as soon as any operator
+// concurrency is detected. This should be inconsequential for local flows that
+// use the RootTxn (which are the cases in which we care about this return
+// value), because only unordered synchronizers introduce operator concurrency
+// at the time of writing.
+func (f *vectorizedFlow) ConcurrentTxnUse() bool {
+	return f.operatorConcurrency || f.FlowBase.ConcurrentTxnUse()
 }
 
 // Release releases this vectorizedFlow back to the pool.

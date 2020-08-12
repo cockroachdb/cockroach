@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant(50049)
+# LogicTest: !3node-tenant(52567)
 
 statement ok
 GRANT CREATE ON DATABASE test TO testuser

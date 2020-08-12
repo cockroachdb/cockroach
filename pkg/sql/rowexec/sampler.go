@@ -483,6 +483,14 @@ func (s *samplerProcessor) close() {
 	}
 }
 
+var _ execinfra.DoesNotUseTxn = &samplerProcessor{}
+
+// DoesNotUseTxn implements the DoesNotUseTxn interface.
+func (s *samplerProcessor) DoesNotUseTxn() bool {
+	txnUser, ok := s.input.(execinfra.DoesNotUseTxn)
+	return ok && txnUser.DoesNotUseTxn()
+}
+
 // addRow adds a row to the sketch and updates row counts.
 func (s *sketchInfo) addRow(
 	row sqlbase.EncDatumRow, typs []*types.T, buf *[]byte, da *sqlbase.DatumAlloc,

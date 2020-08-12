@@ -512,3 +512,8 @@ func (rc *RowChannel) ConsumerClosed() {
 func (rc *RowChannel) Types() []*types.T {
 	return rc.types
 }
+
+// DoesNotUseTxn implements the DoesNotUseTxn interface. Since the RowChannel's
+// input is run in a different goroutine, the flow will check the RowChannel's
+// input separately.
+func (rc *RowChannel) DoesNotUseTxn() bool { return true }
