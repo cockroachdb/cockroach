@@ -1393,7 +1393,7 @@ type chunkingBatchSource struct {
 	batch  coldata.Batch
 }
 
-var _ colexecbase.Operator = &chunkingBatchSource{}
+var _ ResettableOperator = &chunkingBatchSource{}
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
@@ -1436,7 +1436,7 @@ func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	return c.batch
 }
 
-func (c *chunkingBatchSource) reset() {
+func (c *chunkingBatchSource) reset(context.Context) {
 	c.curIdx = 0
 }
 
