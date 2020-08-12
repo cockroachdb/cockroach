@@ -367,5 +367,12 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 
 // IsDefault returns true if this backup options struct has default value.
 func (o RestoreOptions) IsDefault() bool {
-	return o == RestoreOptions{}
+	options := RestoreOptions{}
+	return o.SkipMissingFKs == options.SkipMissingFKs &&
+		o.SkipMissingSequences == options.SkipMissingSequences &&
+		o.SkipMissingSequenceOwners == options.SkipMissingSequenceOwners &&
+		o.SkipMissingViews == options.SkipMissingViews &&
+		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
+		o.EncryptionPassphrase == options.EncryptionPassphrase &&
+		o.IntoDB == options.IntoDB
 }

@@ -878,19 +878,59 @@ func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 	)
 }
 
+func resolveOptionsForRestoreJobDescription(
+	opts tree.RestoreOptions, intoDB string, kmsURIs []string,
+) (tree.RestoreOptions, error) {
+	if opts.IsDefault() {
+		return opts, nil
+	}
+
+	newOpts := tree.RestoreOptions{
+		SkipMissingFKs:            opts.SkipMissingFKs,
+		SkipMissingSequences:      opts.SkipMissingSequences,
+		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
+		SkipMissingViews:          opts.SkipMissingViews,
+	}
+
+	if opts.EncryptionPassphrase != nil {
+		newOpts.EncryptionPassphrase = tree.NewDString("redacted")
+	}
+
+	if opts.IntoDB != nil {
+		newOpts.IntoDB = tree.NewDString(intoDB)
+	}
+
+	for _, uri := range kmsURIs {
+		redactedURI, err := cloudimpl.RedactKMSURI(uri)
+		if err != nil {
+			return tree.RestoreOptions{}, err
+		}
+		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
+	}
+
+	return newOpts, nil
+}
+
 func restoreJobDescription(
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
 	opts tree.RestoreOptions,
 	intoDB string,
+	kmsURIs []string,
 ) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
-		Options: resolveOptionsForRestoreJobDescription(opts, intoDB),
 		Targets: restore.Targets,
 		From:    make([]tree.StringOrPlaceholderOptList, len(restore.From)),
 	}
+
+	var options tree.RestoreOptions
+	var err error
+	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, kmsURIs); err != nil {
+		return "", err
+	}
+	r.Options = options
 
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
@@ -939,6 +979,18 @@ func restorePlanHook(
 	var err error
 	if restoreStmt.Options.EncryptionPassphrase != nil {
 		pwFn, err = p.TypeAsString(ctx, restoreStmt.Options.EncryptionPassphrase, "RESTORE")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
+	var kmsFn func() ([]string, error)
+	if restoreStmt.Options.DecryptionKMSURI != nil {
+		if restoreStmt.Options.EncryptionPassphrase != nil {
+			return nil, nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
+		}
+		kmsFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
+			"RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -1015,6 +1067,14 @@ func restorePlanHook(
 			}
 		}
 
+		var kms []string
+		if kmsFn != nil {
+			kms, err = kmsFn()
+			if err != nil {
+				return err
+			}
+		}
+
 		var intoDB string
 		if intoDBFn != nil {
 			intoDB, err = intoDBFn()
@@ -1023,7 +1083,7 @@ func restorePlanHook(
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, intoDB, endTime, resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, endTime, resultsCh)
 	}
 	return fn, RestoreHeader, nil, false, nil
 }
@@ -1034,6 +1094,7 @@ func doRestorePlan(
 	p sql.PlanHookState,
 	from [][]string,
 	passphrase string,
+	kms []string,
 	intoDB string,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
@@ -1058,7 +1119,25 @@ func doRestorePlan(
 			return err
 		}
 		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-		encryption = &jobspb.BackupEncryptionOptions{Key: encryptionKey}
+		encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
+			Key: encryptionKey}
+	} else if restoreStmt.Options.DecryptionKMSURI != nil {
+		opts, err := readEncryptionOptions(ctx, baseStores[0])
+		if err != nil {
+			return err
+		}
+		ioConf := baseStores[0].ExternalIOConf()
+		defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kms,
+			newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
+				baseStores[0].Settings(),
+				&ioConf,
+			})
+		if err != nil {
+			return err
+		}
+		encryption = &jobspb.BackupEncryptionOptions{
+			Mode:    jobspb.EncryptionMode_KMS,
+			KMSInfo: defaultKMSInfo}
 	}
 
 	defaultURIs, mainBackupManifests, localityInfo, err := resolveBackupManifests(
@@ -1149,7 +1228,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB)
+	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB, kms)
 	if err != nil {
 		return err
 	}
