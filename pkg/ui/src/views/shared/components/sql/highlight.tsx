@@ -11,6 +11,7 @@
 import * as hljs from "highlight.js";
 import React from "react";
 import * as protos from "src/js/protos";
+import get from "lodash/get";
 
 interface SqlBoxProps {
   value: string;
@@ -50,7 +51,7 @@ export class Highlight extends React.Component<SqlBoxProps> {
         <span className="hljs-built_in">{`${String(zoneConfig.range_max_bytes)},`}</span>
         <br />
         <span className="hljs-label">gc.ttlseconds = </span>
-        <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
+        <span className="hljs-built_in">{`${get(zoneConfig, "gc.ttl_seconds", null)},`}</span>
         <br />
         <span className="hljs-label">num_replicas = </span>
         <span className="hljs-built_in">{`${zoneConfig.num_replicas},`}</span>
