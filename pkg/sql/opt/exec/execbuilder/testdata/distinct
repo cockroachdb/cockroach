@@ -81,8 +81,8 @@ EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ·          distribution  local
 ·          vectorized    true
 distinct   ·             ·
- │         distinct on   w, z
- │         order key     w, z
+ │         distinct on   y, z
+ │         order key     y, z
  └── scan  ·             ·
 ·          table         xyz@foo
 ·          spans         FULL SCAN
@@ -93,9 +93,9 @@ EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ·               distribution  local
 ·               vectorized    true
 sort            ·             ·
- │              order         +w
+ │              order         +y
  └── distinct   ·             ·
-      │         distinct on   w
+      │         distinct on   y
       └── scan  ·             ·
 ·               table         xyz@primary
 ·               spans         FULL SCAN
@@ -127,8 +127,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 distinct             ·             ·          (z)     ·
  │                   distinct on   z          ·       ·
  │                   order key     z          ·       ·
- └── render          ·             ·          (z)     +z
-      │              render 0      z          ·       ·
+ └── project         ·             ·          (z)     +z
       └── filter     ·             ·          (y, z)  +z
            │         filter        y > 1      ·       ·
            └── scan  ·             ·          (y, z)  +z
@@ -148,15 +147,16 @@ CREATE TABLE abcd (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
-·          distribution  local              ·          ·
-·          vectorized    true               ·          ·
-render     ·             ·                  (z, d, b)  ·
- │         render 0      1                  ·          ·
- │         render 1      d                  ·          ·
- │         render 2      b                  ·          ·
- └── scan  ·             ·                  (b, d)     +d,+b
-·          table         abcd@abcd_d_b_key  ·          ·
-·          spans         FULL SCAN          ·          ·
+·               distribution  local              ·          ·
+·               vectorized    true               ·          ·
+project         ·             ·                  (z, d, b)  ·
+ └── render     ·             ·                  (z, b, d)  +d,+b
+      │         render 0      1                  ·          ·
+      │         render 1      b                  ·          ·
+      │         render 2      d                  ·          ·
+      └── scan  ·             ·                  (b, d)     +d,+b
+·               table         abcd@abcd_d_b_key  ·          ·
+·               spans         FULL SCAN          ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd

@@ -41,18 +41,7 @@ EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), std
 ----
 ·                    distribution  local                        ·                                                                                                                                                    ·
 ·                    vectorized    true                         ·                                                                                                                                                    ·
-render               ·             ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
- │                   render 0      (min)[int]                   ·                                                                                                                                                    ·
- │                   render 1      (max)[int]                   ·                                                                                                                                                    ·
- │                   render 2      (count)[int]                 ·                                                                                                                                                    ·
- │                   render 3      (sum_int)[int]               ·                                                                                                                                                    ·
- │                   render 4      (avg)[decimal]               ·                                                                                                                                                    ·
- │                   render 5      (sum)[decimal]               ·                                                                                                                                                    ·
- │                   render 6      (stddev)[decimal]            ·                                                                                                                                                    ·
- │                   render 7      (variance)[decimal]          ·                                                                                                                                                    ·
- │                   render 8      (bool_and)[bool]             ·                                                                                                                                                    ·
- │                   render 9      (bool_and)[bool]             ·                                                                                                                                                    ·
- │                   render 10     (xor_agg)[bytes]             ·                                                                                                                                                    ·
+project              ·             ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
  └── group           ·             ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, xor_agg bytes)                 ·
       │              aggregate 0   min(v)                       ·                                                                                                                                                    ·
       │              aggregate 1   max(v)                       ·                                                                                                                                                    ·
@@ -78,55 +67,54 @@ render               ·             ·                            (min int, max 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
-·                 distribution   local                               ·                                                                                                                                                   ·
-·                 vectorized     false                               ·                                                                                                                                                   ·
-render            ·              ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
- │                render 0       (min)[int]                          ·                                                                                                                                                   ·
- │                render 1       (count)[int]                        ·                                                                                                                                                   ·
- │                render 2       (max)[int]                          ·                                                                                                                                                   ·
- │                render 3       (sum_int)[int]                      ·                                                                                                                                                   ·
- │                render 4       ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
- │                render 5       (sum)[decimal]                      ·                                                                                                                                                   ·
- │                render 6       (stddev)[decimal]                   ·                                                                                                                                                   ·
- │                render 7       (variance)[decimal]                 ·                                                                                                                                                   ·
- │                render 8       (bool_and)[bool]                    ·                                                                                                                                                   ·
- │                render 9       (bool_or)[bool]                     ·                                                                                                                                                   ·
- │                render 10      (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
- └── group        ·              ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
-      │           aggregate 0    min(column1)                        ·                                                                                                                                                   ·
-      │           aggregate 1    count(column3)                      ·                                                                                                                                                   ·
-      │           aggregate 2    max(column1)                        ·                                                                                                                                                   ·
-      │           aggregate 3    sum_int(column1)                    ·                                                                                                                                                   ·
-      │           aggregate 4    avg(column1)                        ·                                                                                                                                                   ·
-      │           aggregate 5    sum(column1)                        ·                                                                                                                                                   ·
-      │           aggregate 6    stddev(column1)                     ·                                                                                                                                                   ·
-      │           aggregate 7    variance(column1)                   ·                                                                                                                                                   ·
-      │           aggregate 8    bool_and(column11)                  ·                                                                                                                                                   ·
-      │           aggregate 9    bool_or(column11)                   ·                                                                                                                                                   ·
-      │           aggregate 10   xor_agg(column14)                   ·                                                                                                                                                   ·
-      │           scalar         ·                                   ·                                                                                                                                                   ·
-      └── values  ·              ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
-·                 size           4 columns, 1 row                    ·                                                                                                                                                   ·
-·                 row 0, expr 0  (1)[int]                            ·                                                                                                                                                   ·
-·                 row 0, expr 1  (NULL)[unknown]                     ·                                                                                                                                                   ·
-·                 row 0, expr 2  (true)[bool]                        ·                                                                                                                                                   ·
-·                 row 0, expr 3  ('\x01')[bytes]                     ·                                                                                                                                                   ·
+·                      distribution   local                               ·                                                                                                                                                   ·
+·                      vectorized     false                               ·                                                                                                                                                   ·
+project                ·              ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
+ └── render            ·              ·                                   (avg float, to_hex string, min int, count int, max int, sum_int int, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool)    ·
+      │                render 0       ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
+      │                render 1       (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
+      │                render 2       (min)[int]                          ·                                                                                                                                                   ·
+      │                render 3       (count)[int]                        ·                                                                                                                                                   ·
+      │                render 4       (max)[int]                          ·                                                                                                                                                   ·
+      │                render 5       (sum_int)[int]                      ·                                                                                                                                                   ·
+      │                render 6       (sum)[decimal]                      ·                                                                                                                                                   ·
+      │                render 7       (stddev)[decimal]                   ·                                                                                                                                                   ·
+      │                render 8       (variance)[decimal]                 ·                                                                                                                                                   ·
+      │                render 9       (bool_and)[bool]                    ·                                                                                                                                                   ·
+      │                render 10      (bool_or)[bool]                     ·                                                                                                                                                   ·
+      └── group        ·              ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
+           │           aggregate 0    min(column1)                        ·                                                                                                                                                   ·
+           │           aggregate 1    count(column3)                      ·                                                                                                                                                   ·
+           │           aggregate 2    max(column1)                        ·                                                                                                                                                   ·
+           │           aggregate 3    sum_int(column1)                    ·                                                                                                                                                   ·
+           │           aggregate 4    avg(column1)                        ·                                                                                                                                                   ·
+           │           aggregate 5    sum(column1)                        ·                                                                                                                                                   ·
+           │           aggregate 6    stddev(column1)                     ·                                                                                                                                                   ·
+           │           aggregate 7    variance(column1)                   ·                                                                                                                                                   ·
+           │           aggregate 8    bool_and(column11)                  ·                                                                                                                                                   ·
+           │           aggregate 9    bool_or(column11)                   ·                                                                                                                                                   ·
+           │           aggregate 10   xor_agg(column14)                   ·                                                                                                                                                   ·
+           │           scalar         ·                                   ·                                                                                                                                                   ·
+           └── values  ·              ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
+·                      size           4 columns, 1 row                    ·                                                                                                                                                   ·
+·                      row 0, expr 0  (1)[int]                            ·                                                                                                                                                   ·
+·                      row 0, expr 1  (NULL)[unknown]                     ·                                                                                                                                                   ·
+·                      row 0, expr 2  (true)[bool]                        ·                                                                                                                                                   ·
+·                      row 0, expr 3  ('\x01')[bytes]                     ·                                                                                                                                                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
-·               distribution  local              ·                        ·
-·               vectorized    true               ·                        ·
-render          ·             ·                  (count int, k int)       ·
- │              render 0      (count_rows)[int]  ·                        ·
- │              render 1      (k)[int]           ·                        ·
- └── group      ·             ·                  (k int, count_rows int)  ·
-      │         aggregate 0   count_rows()       ·                        ·
-      │         group by      k                  ·                        ·
-      │         ordered       +k                 ·                        ·
-      └── scan  ·             ·                  (k int)                  +k
-·               table         kv@primary         ·                        ·
-·               spans         FULL SCAN          ·                        ·
+·               distribution  local         ·                        ·
+·               vectorized    true          ·                        ·
+project         ·             ·             (count int, k int)       ·
+ └── group      ·             ·             (k int, count_rows int)  ·
+      │         aggregate 0   count_rows()  ·                        ·
+      │         group by      k             ·                        ·
+      │         ordered       +k            ·                        ·
+      └── scan  ·             ·             (k int)                  +k
+·               table         kv@primary    ·                        ·
+·               spans         FULL SCAN     ·                        ·
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
@@ -134,9 +122,7 @@ EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 ·                    distribution  local                       ·                              ·
 ·                    vectorized    true                        ·                              ·
-render               ·             ·                           (count int, r int)             ·
- │                   render 0      (count_rows)[int]           ·                              ·
- │                   render 1      (column7)[int]              ·                              ·
+project              ·             ·                           (count int, r int)             ·
  └── group           ·             ·                           (column7 int, count_rows int)  ·
       │              aggregate 0   count_rows()                ·                              ·
       │              group by      column7                     ·                              ·
@@ -150,19 +136,20 @@ render               ·             ·                           (count int, r i
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
-·               distribution  local                                  ·                                          ·
-·               vectorized    true                                   ·                                          ·
-render          ·             ·                                      (count int, r int)                         ·
- │              render 0      (count_rows)[int]                      ·                                          ·
- │              render 1      ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
- └── group      ·             ·                                      (k int, count_rows int, any_not_null int)  ·
-      │         aggregate 0   count_rows()                           ·                                          ·
-      │         aggregate 1   any_not_null(v)                        ·                                          ·
-      │         group by      k                                      ·                                          ·
-      │         ordered       +k                                     ·                                          ·
-      └── scan  ·             ·                                      (k int, v int)                             +k
-·               table         kv@primary                             ·                                          ·
-·               spans         FULL SCAN                              ·                                          ·
+·                    distribution  local                                  ·                                          ·
+·                    vectorized    true                                   ·                                          ·
+project              ·             ·                                      (count int, r int)                         ·
+ └── render          ·             ·                                      (r int, count_rows int)                    ·
+      │              render 0      ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
+      │              render 1      (count_rows)[int]                      ·                                          ·
+      └── group      ·             ·                                      (k int, count_rows int, any_not_null int)  ·
+           │         aggregate 0   count_rows()                           ·                                          ·
+           │         aggregate 1   any_not_null(v)                        ·                                          ·
+           │         group by      k                                      ·                                          ·
+           │         ordered       +k                                     ·                                          ·
+           └── scan  ·             ·                                      (k int, v int)                             +k
+·                    table         kv@primary                             ·                                          ·
+·                    spans         FULL SCAN                              ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k) FROM kv
@@ -235,8 +222,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ----
 ·                     distribution  local
 ·                     vectorized    true
-render                ·             ·
- │                    render 0      min
+project               ·             ·
  └── group            ·             ·
       │               aggregate 0   min(k)
       │               group by      k
@@ -256,8 +242,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ----
 ·                     distribution  local
 ·                     vectorized    true
-render                ·             ·
- │                    render 0      min
+project               ·             ·
  └── group            ·             ·
       │               aggregate 0   min(k)
       │               group by      k
@@ -278,8 +263,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ----
 ·                     distribution  local
 ·                     vectorized    true
-render                ·             ·
- │                    render 0      min
+project               ·             ·
  └── group            ·             ·
       │               aggregate 0   min(k)
       │               group by      k
@@ -300,8 +284,7 @@ EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
 ----
 ·                     distribution  local
 ·                     vectorized    true
-render                ·             ·
- │                    render 0      v
+project               ·             ·
  └── distinct         ·             ·
       │               distinct on   v, w, s
       └── cross join  ·             ·
@@ -396,8 +379,7 @@ EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 group           ·             ·                (min int)       ·
  │              aggregate 0   any_not_null(y)  ·               ·
  │              scalar        ·                ·               ·
- └── render     ·             ·                (y int)         ·
-      │         render 0      (y)[int]         ·               ·
+ └── project    ·             ·                (y int)         ·
       └── scan  ·             ·                (x int, y int)  ·
 ·               table         xyz@xy           ·               ·
 ·               spans         /1/!NULL-/2      ·               ·
@@ -410,8 +392,7 @@ EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 group           ·             ·                (max int)       ·
  │              aggregate 0   any_not_null(y)  ·               ·
  │              scalar        ·                ·               ·
- └── render     ·             ·                (y int)         ·
-      │         render 0      (y)[int]         ·               ·
+ └── project    ·             ·                (y int)         ·
       └── scan  ·             ·                (x int, y int)  ·
 ·               table         xyz@xy           ·               ·
 ·               spans         /1/!NULL-/2      ·               ·
@@ -424,8 +405,7 @@ EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7
 group           ·             ·                            (min int)         ·
  │              aggregate 0   any_not_null(y)              ·                 ·
  │              scalar        ·                            ·                 ·
- └── render     ·             ·                            (y int)           ·
-      │         render 0      (y)[int]                     ·                 ·
+ └── project    ·             ·                            (y int)           ·
       └── scan  ·             ·                            (y int, z float)  ·
 ·               table         xyz@zyx                      ·                 ·
 ·               spans         /7/!NULL-/7.000000000000001  ·                 ·
@@ -439,8 +419,7 @@ EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE z = 7
 group              ·             ·                            (max int)         ·
  │                 aggregate 0   any_not_null(y)              ·                 ·
  │                 scalar        ·                            ·                 ·
- └── render        ·             ·                            (y int)           ·
-      │            render 0      (y)[int]                     ·                 ·
+ └── project       ·             ·                            (y int)           ·
       └── revscan  ·             ·                            (y int, z float)  ·
 ·                  table         xyz@zyx                      ·                 ·
 ·                  spans         /7/!NULL-/7.000000000000001  ·                 ·
@@ -454,8 +433,7 @@ EXPLAIN (TYPES) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 group           ·             ·          (min int)                ·
  │              aggregate 0   min(x)     ·                        ·
  │              scalar        ·          ·                        ·
- └── render     ·             ·          (x int)                  ·
-      │         render 0      (x)[int]   ·                        ·
+ └── project    ·             ·          (x int)                  ·
       └── scan  ·             ·          (x int, y int, z float)  ·
 ·               table         xyz@zyx    ·                        ·
 ·               spans         /3/2-/3/3  ·                        ·
@@ -479,8 +457,7 @@ EXPLAIN (TYPES) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 group           ·             ·          (max int)                ·
  │              aggregate 0   max(x)     ·                        ·
  │              scalar        ·          ·                        ·
- └── render     ·             ·          (x int)                  ·
-      │         render 0      (x)[int]   ·                        ·
+ └── project    ·             ·          (x int)                  ·
       └── scan  ·             ·          (x int, y int, z float)  ·
 ·               table         xyz@zyx    ·                        ·
 ·               spans         /3/2-/3/3  ·                        ·
@@ -579,39 +556,37 @@ INSERT INTO ab VALUES
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ----
-·               distribution  local         ·                   ·
-·               vectorized    true          ·                   ·
-sort            ·             ·             (v int, count int)  +count
- │              order         +count        ·                   ·
- └── group      ·             ·             (v int, count int)  ·
-      │         aggregate 0   count_rows()  ·                   ·
-      │         group by      v             ·                   ·
-      └── scan  ·             ·             (v int)             ·
-·               table         kv@primary    ·                   ·
-·               spans         FULL SCAN     ·                   ·
+·               distribution  local         ·                        ·
+·               vectorized    true          ·                        ·
+sort            ·             ·             (v int, count int)       +count
+ │              order         +count_rows   ·                        ·
+ └── group      ·             ·             (v int, count_rows int)  ·
+      │         aggregate 0   count_rows()  ·                        ·
+      │         group by      v             ·                        ·
+      └── scan  ·             ·             (v int)                  ·
+·               table         kv@primary    ·                        ·
+·               spans         FULL SCAN     ·                        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ----
-·               distribution  local         ·                   ·
-·               vectorized    true          ·                   ·
-sort            ·             ·             (v int, count int)  +count
- │              order         +count        ·                   ·
- └── group      ·             ·             (v int, count int)  ·
-      │         aggregate 0   count_rows()  ·                   ·
-      │         group by      v             ·                   ·
-      └── scan  ·             ·             (v int)             ·
-·               table         kv@primary    ·                   ·
-·               spans         FULL SCAN     ·                   ·
+·               distribution  local         ·                        ·
+·               vectorized    true          ·                        ·
+sort            ·             ·             (v int, count int)       +count
+ │              order         +count_rows   ·                        ·
+ └── group      ·             ·             (v int, count_rows int)  ·
+      │         aggregate 0   count_rows()  ·                        ·
+      │         group by      v             ·                        ·
+      └── scan  ·             ·             (v int)                  ·
+·               table         kv@primary    ·                        ·
+·               spans         FULL SCAN     ·                        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v, count(NULL) FROM kv GROUP BY v ORDER BY count(1)
 ----
 ·                         distribution  local            ·                                   ·
 ·                         vectorized    true             ·                                   ·
-render                    ·             ·                (v int, count int)                  ·
- │                        render 0      (v)[int]         ·                                   ·
- │                        render 1      (count)[int]     ·                                   ·
+project                   ·             ·                (v int, count int)                  ·
  └── sort                 ·             ·                (v int, count int, count_rows int)  +count_rows
       │                   order         +count_rows      ·                                   ·
       └── group           ·             ·                (v int, count int, count_rows int)  ·
@@ -658,9 +633,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5)
 ----
 ·                    distribution  local                                  ·                      ·
 ·                    vectorized    true                                   ·                      ·
-render               ·             ·                                      (count, max)           ·
- │                   render 0      count                                  ·                      ·
- │                   render 1      max                                    ·                      ·
+project              ·             ·                                      (count, max)           ·
  └── group           ·             ·                                      (v, count, max)        ·
       │              aggregate 0   count(column6) FILTER (WHERE column7)  ·                      ·
       │              aggregate 1   max(column7) FILTER (WHERE column7)    ·                      ·
@@ -678,8 +651,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY
 ----
 ·                    distribution  local                                  ·                      ·
 ·                    vectorized    true                                   ·                      ·
-render               ·             ·                                      (count)                ·
- │                   render 0      count                                  ·                      ·
+project              ·             ·                                      (count)                ·
  └── group           ·             ·                                      (v, count)             ·
       │              aggregate 0   count(column6) FILTER (WHERE column7)  ·                      ·
       │              group by      v                                      ·                      ·
@@ -708,13 +680,12 @@ EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.
 ----
 ·                     distribution  local                             ·                     ·
 ·                     vectorized    true                              ·                     ·
-render                ·             ·                                 (sum decimal)         ·
- │                    render 0      (sum)[decimal]                    ·                     ·
+project               ·             ·                                 (sum decimal)         ·
  └── group            ·             ·                                 (k int, sum decimal)  ·
       │               aggregate 0   sum(d)                            ·                     ·
       │               group by      k                                 ·                     ·
       └── cross join  ·             ·                                 (k int, d decimal)    ·
-           │          type          inner                             ·                     ·
+           │          type          cross                             ·                     ·
            │          pred          ((k)[int] >= (d)[decimal])[bool]  ·                     ·
            ├── scan   ·             ·                                 (k int)               ·
            │          table         kv@primary                        ·                     ·
@@ -752,9 +723,8 @@ EXPLAIN (TYPES) SELECT min(v) FROM opt_test WHERE k <> 4
 group                     ·             ·                             (min int)       ·
  │                        aggregate 0   any_not_null(v)               ·               ·
  │                        scalar        ·                             ·               ·
- └── render               ·             ·                             (v int)         ·
-      │                   render 0      (v)[int]                      ·               ·
-      └── limit           ·             ·                             (k int, v int)  +v
+ └── project              ·             ·                             (v int)         ·
+      └── limit           ·             ·                             (k int, v int)  ·
            │              count         (1)[int]                      ·               ·
            └── filter     ·             ·                             (k int, v int)  +v
                 │         filter        ((k)[int] != (4)[int])[bool]  ·               ·
@@ -784,8 +754,7 @@ EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 ----
 ·               distribution  local             ·                 ·
 ·               vectorized    true              ·                 ·
-render          ·             ·                 (min int)         ·
- │              render 0      (min)[int]        ·                 ·
+project         ·             ·                 (min int)         ·
  └── group      ·             ·                 (k int, min int)  ·
       │         aggregate 0   min(v)            ·                 ·
       │         group by      k                 ·                 ·
@@ -811,23 +780,24 @@ render     ·             ·                                        (r tuple{int
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-·                     distribution  local                                               ·                                                ·
-·                     vectorized    true                                                ·                                                ·
-render                ·             ·                                                   (min string, r tuple{int, int})                  ·
- │                    render 0      (min)[string]                                       ·                                                ·
- │                    render 1      (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
- └── group            ·             ·                                                   (a int, x string, min string, any_not_null int)  ·
-      │               aggregate 0   min(y)                                              ·                                                ·
-      │               aggregate 1   any_not_null(b)                                     ·                                                ·
-      │               group by      a, x                                                ·                                                ·
-      └── cross join  ·             ·                                                   (a int, b int, x string, y string)               ·
-           │          type          cross                                               ·                                                ·
-           ├── scan   ·             ·                                                   (a int, b int)                                   ·
-           │          table         ab@primary                                          ·                                                ·
-           │          spans         FULL SCAN                                           ·                                                ·
-           └── scan   ·             ·                                                   (x string, y string)                             ·
-·                     table         xy@primary                                          ·                                                ·
-·                     spans         FULL SCAN                                           ·                                                ·
+·                          distribution  local                                               ·                                                ·
+·                          vectorized    true                                                ·                                                ·
+project                    ·             ·                                                   (min string, r tuple{int, int})                  ·
+ └── render                ·             ·                                                   (r tuple{int, int}, min string)                  ·
+      │                    render 0      (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
+      │                    render 1      (min)[string]                                       ·                                                ·
+      └── group            ·             ·                                                   (a int, x string, min string, any_not_null int)  ·
+           │               aggregate 0   min(y)                                              ·                                                ·
+           │               aggregate 1   any_not_null(b)                                     ·                                                ·
+           │               group by      a, x                                                ·                                                ·
+           └── cross join  ·             ·                                                   (a int, b int, x string, y string)               ·
+                │          type          cross                                               ·                                                ·
+                ├── scan   ·             ·                                                   (a int, b int)                                   ·
+                │          table         ab@primary                                          ·                                                ·
+                │          spans         FULL SCAN                                           ·                                                ·
+                └── scan   ·             ·                                                   (x string, y string)                             ·
+·                          table         xy@primary                                          ·                                                ·
+·                          spans         FULL SCAN                                           ·                                                ·
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
@@ -971,8 +941,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
 ·                    distribution  local        ·               ·
 ·                    vectorized    true         ·               ·
-render               ·             ·            (m)             ·
- │                   render 0      min          ·               ·
+project              ·             ·            (m)             ·
  └── group           ·             ·            (column6, min)  ·
       │              aggregate 0   min(a)       ·               ·
       │              group by      column6      ·               ·
@@ -988,8 +957,7 @@ EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
 ·                    distribution  local        ·               ·
 ·                    vectorized    true         ·               ·
-render               ·             ·            (m)             ·
- │                   render 0      min          ·               ·
+project              ·             ·            (m)             ·
  └── group           ·             ·            (column6, min)  ·
       │              aggregate 0   min(a)       ·               ·
       │              group by      column6      ·               ·
@@ -1019,8 +987,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY s
 ----
 ·               distribution  local       ·       ·
 ·               vectorized    true        ·       ·
-render          ·             ·           (k)     ·
- │              render 0      k           ·       ·
+project         ·             ·           (k)     ·
  └── sort       ·             ·           (k, s)  +s
       │         order         +s          ·       ·
       └── scan  ·             ·           (k, s)  ·
@@ -1078,7 +1045,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 group                ·             ·             (count)  ·
  │                   aggregate 0   count_rows()  ·        ·
  │                   scalar        ·             ·        ·
- └── render          ·             ·             ()       ·
+ └── project         ·             ·             ()       ·
       └── hash join  ·             ·             (y, v)   ·
            │         type          inner         ·        ·
            │         equality      (y) = (v)     ·        ·

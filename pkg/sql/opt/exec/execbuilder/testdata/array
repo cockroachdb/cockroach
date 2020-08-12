@@ -109,7 +109,7 @@ EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
 ·               distribution  local
 ·               vectorized    true
-render          ·             ·
+project         ·             ·
  └── filter     ·             ·
       │         filter        y = ARRAY[NULL,NULL]
       └── scan  ·             ·
@@ -121,7 +121,7 @@ EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
 ----
 ·               distribution  local
 ·               vectorized    true
-render          ·             ·
+project         ·             ·
  └── filter     ·             ·
       │         filter        y = ARRAY[NULL,NULL]
       └── scan  ·             ·

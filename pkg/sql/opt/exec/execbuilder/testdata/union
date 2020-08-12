@@ -36,14 +36,13 @@ append     ·             ·
 query TTT
 EXPLAIN SELECT node_id FROM crdb_internal.node_build_info UNION VALUES(123)
 ----
-·                        distribution  local
-·                        vectorized    false
-union                    ·             ·
- ├── values              ·             ·
- │                       size          1 column, 1 row
- └── render              ·             ·
-      └── virtual table  ·             ·
-·                        source        node_build_info@primary
+·                   distribution  local
+·                   vectorized    false
+union               ·             ·
+ ├── virtual table  ·             ·
+ │                  table         node_build_info@primary
+ └── values         ·             ·
+·                   size          1 column, 1 row
 
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT)
@@ -56,14 +55,12 @@ EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc OR
 sort                 ·             ·            (a)     +a
  │                   order         +a           ·       ·
  └── union           ·             ·            (a)     ·
-      ├── render     ·             ·            (a)     ·
-      │    │         render 0      a            ·       ·
-      │    └── scan  ·             ·            (a, c)  ·
+      ├── project    ·             ·            (a)     ·
+      │    └── scan  ·             ·            (a, b)  ·
       │              table         abc@primary  ·       ·
       │              spans         FULL SCAN    ·       ·
-      └── render     ·             ·            (a)     ·
-           │         render 0      a            ·       ·
-           └── scan  ·             ·            (a, b)  ·
+      └── project    ·             ·            (a)     ·
+           └── scan  ·             ·            (a, c)  ·
 ·                    table         abc@primary  ·       ·
 ·                    spans         FULL SCAN    ·       ·
 
@@ -73,18 +70,13 @@ EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''
 ----
 ·                      distribution   local            ·                         ·
 ·                      vectorized     false            ·                         ·
-render                 ·              ·                (a)                       ·
- │                     render 0       a                ·                         ·
+project                ·              ·                (a)                       ·
  └── union             ·              ·                (a, a)                    ·
-      ├── render       ·              ·                (a, a)                    ·
-      │    │           render 0       a                ·                         ·
-      │    │           render 1       a                ·                         ·
+      ├── project      ·              ·                (a, a)                    ·
       │    └── values  ·              ·                (a)                       ·
       │                size           1 column, 1 row  ·                         ·
       │                row 0, expr 0  ''               ·                         ·
-      └── render       ·              ·                ("?column?", "?column?")  ·
-           │           render 0       "?column?"       ·                         ·
-           │           render 1       "?column?"       ·                         ·
+      └── project      ·              ·                ("?column?", "?column?")  ·
            └── values  ·              ·                ("?column?")              ·
 ·                      size           1 column, 1 row  ·                         ·
 ·                      row 0, expr 0  ''               ·                         ·
@@ -100,10 +92,7 @@ render                 ·              ·                 ("?column?", "?column?
  │                     render 1       "?column?"        ·                                     ·
  │                     render 2       "?column?"        ·                                     ·
  └── union             ·              ·                 ("?column?", "?column?", "?column?")  ·
-      ├── render       ·              ·                 ("?column?", "?column?", "?column?")  ·
-      │    │           render 0       "?column?"        ·                                     ·
-      │    │           render 1       "?column?"        ·                                     ·
-      │    │           render 2       "?column?"        ·                                     ·
+      ├── project      ·              ·                 ("?column?", "?column?", "?column?")  ·
       │    └── values  ·              ·                 ("?column?", "?column?")              ·
       │                size           2 columns, 1 row  ·                                     ·
       │                row 0, expr 0  ''                ·                                     ·
@@ -123,13 +112,13 @@ SELECT 1 FROM (SELECT k FROM uniontest WHERE k > 3 UNION ALL SELECT k FROM union
 render                    ·             ·                  ("?column?")  ·
  │                        render 0      1                  ·             ·
  └── append               ·             ·                  ()            ·
-      ├── scan            ·             ·                  ()            ·
+      ├── project         ·             ·                  ()            ·
+      │    └── filter     ·             ·                  (k)           ·
+      │         │         filter        k > 3              ·             ·
+      │         └── scan  ·             ·                  (k)           ·
       │                   table         uniontest@primary  ·             ·
       │                   spans         FULL SCAN          ·             ·
-      └── render          ·             ·                  ()            ·
-           └── filter     ·             ·                  (k)           ·
-                │         filter        k > 3              ·             ·
-                └── scan  ·             ·                  (k)           ·
+      └── scan            ·             ·                  ()            ·
 ·                         table         uniontest@primary  ·             ·
 ·                         spans         FULL SCAN          ·             ·
 
