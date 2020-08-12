@@ -4,4 +4,4 @@ set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-mark-build.sh"
 
-mark_build "qualified"
+mark_build "internal-rc"
