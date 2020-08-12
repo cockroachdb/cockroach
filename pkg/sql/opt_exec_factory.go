@@ -1651,13 +1651,24 @@ func (ef *execFactory) ConstructDeleteRange(
 
 // ConstructCreateTable is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateTable(
+	schema cat.Schema, ct *tree.CreateTable,
+) (exec.Node, error) {
+	return &createTableNode{
+		n:      ct,
+		dbDesc: schema.(*optSchema).database,
+	}, nil
+}
+
+//
+// ConstructCreateTableAs is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
-	nd := &createTableNode{n: ct, dbDesc: schema.(*optSchema).database}
-	if input != nil {
-		nd.sourcePlan = input.(planNode)
-	}
-	return nd, nil
+	return &createTableNode{
+		n:          ct,
+		dbDesc:     schema.(*optSchema).database,
+		sourcePlan: input.(planNode),
+	}, nil
 }
 
 // ConstructCreateView is part of the exec.Factory interface.
