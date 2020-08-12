@@ -469,3 +469,69 @@ func TestFixPrivileges(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateOwnership(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Use a non-system id.
+	id := ID(keys.MinUserDescID)
+
+	// A privilege descriptor with a version before OwnerVersion can have
+	// no owner.
+	privs := PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       security.AdminRole,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+		}}
+	err := privs.Validate(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A privilege descriptor with version OwnerVersion and onwards should
+	// have an owner.
+	privs = PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       security.AdminRole,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+		},
+		Version: OwnerVersion,
+	}
+
+	err = privs.Validate(id)
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+
+	privs = PrivilegeDescriptor{
+		Owner: security.RootUser,
+		Users: []UserPrivileges{
+			{
+				User:       security.AdminRole,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: DefaultSuperuserPrivileges.ToBitField(),
+			},
+		},
+		Version: OwnerVersion,
+	}
+
+	err = privs.Validate(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
