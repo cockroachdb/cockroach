@@ -18,6 +18,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/errors"
+)
+
+// PrivilegeDescVersion is a custom type for PrivilegeDescriptor versions.
+//go:generate stringer -type=PrivilegeDescVersion
+type PrivilegeDescVersion uint32
+
+const (
+	// InitialVersion corresponds to all descriptors created before 20.1.
+	// These descriptors may not have owners explicitly set.
+	InitialVersion PrivilegeDescVersion = iota
+
+	// OwnerVersion corresponds to descriptors created 20.2 and onward.
+	// These descriptors should always have owner set.
+	OwnerVersion
 )
 
 func isPrivilegeSet(bits uint32, priv privilege.Kind) bool {
@@ -90,6 +105,7 @@ func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List, owner string) *P
 				Privileges: priv.ToBitField(),
 			},
 		},
+		Version: OwnerVersion,
 	}
 }
 
@@ -104,6 +120,7 @@ func NewPrivilegeDescriptor(user string, priv privilege.List, owner string) *Pri
 				Privileges: priv.ToBitField(),
 			},
 		},
+		Version: OwnerVersion,
 	}
 }
 
@@ -250,6 +267,12 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 	// We expect an "admin" role. Check that it has desired superuser permissions.
 	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.AdminRole); err != nil {
 		return err
+	}
+
+	if p.Version >= OwnerVersion {
+		if p.Owner == "" {
+			return errors.AssertionFailedf("found no owner for system object with ID=%d", id)
+		}
 	}
 
 	allowedPrivilegesBits := allowedPrivileges.ToBitField()
