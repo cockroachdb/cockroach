@@ -43,7 +43,8 @@ type alterTableNode struct {
 	// statsData is populated with data for "alter table inject statistics"
 	// commands - the JSON stats expressions.
 	// It is parallel with n.Cmds (for the inject stats commands).
-	statsData map[int]tree.TypedExpr
+	statsData    map[int]tree.TypedExpr
+	hasOwnership bool
 }
 
 // AlterTable applies a schema change on a table.
@@ -69,8 +70,18 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+	hasOwnership, err := p.HasOwnership(ctx, tableDesc)
+	if err != nil {
 		return nil, err
+	}
+
+	if !hasOwnership {
+		// This check for CREATE privilege is kept for backwards compatibility.
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"must be owner of table %s or have CREATE privilege on table %s",
+				tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
+		}
 	}
 
 	n.HoistAddColumnConstraints()
@@ -96,9 +107,10 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	}
 
 	return &alterTableNode{
-		n:         n,
-		tableDesc: tableDesc,
-		statsData: statsData,
+		n:            n,
+		tableDesc:    tableDesc,
+		statsData:    statsData,
+		hasOwnership: hasOwnership,
 	}, nil
 }
 
@@ -724,7 +736,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-
+		case *tree.AlterTableOwner:
+			changed, err := params.p.alterTableOwner(params.p.EvalContext().Context, n, t.Owner)
+			if err != nil {
+				return err
+			}
+			descriptorChanged = descriptorChanged || changed
 		default:
 			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
@@ -1131,4 +1148,58 @@ func (p *planner) updateFKBackReferenceName(
 		}
 	}
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
+}
+
+// alterTableOwner sets the owner of the table to newOwner and returns true if the descriptor
+// was updated.
+func (p *planner) alterTableOwner(
+	ctx context.Context, n *alterTableNode, newOwner string,
+) (bool, error) {
+	desc := n.tableDesc
+	privs := desc.GetPrivileges()
+
+	// Make sure the newOwner exists.
+	roleExists, err := p.RoleExists(ctx, newOwner)
+	if err != nil {
+		return false, err
+	}
+	if !roleExists {
+		return false, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+	}
+
+	// Make sure the user has ownership on the table
+	// and not just create privilege.
+	if !n.hasOwnership {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"must be owner of table %s", tree.Name(desc.GetName()))
+	}
+
+	// Requirements from PG:
+	// To alter the owner, you must also be a direct or indirect member of the
+	// new owning role, and that role must have CREATE privilege on the
+	// table's schema.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, privs.Owner)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := memberOf[newOwner]; !ok {
+		return false, pgerror.Newf(
+			pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	}
+
+	// Ensure the new owner has CREATE privilege on the table's schema.
+	if err := p.canCreateOnSchema(
+		ctx, desc.GetParentID(), desc.GetParentSchemaID(), newOwner,
+	); err != nil {
+		return false, err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner {
+		return false, nil
+	}
+
+	privs.SetOwner(newOwner)
+
+	return true, nil
 }
