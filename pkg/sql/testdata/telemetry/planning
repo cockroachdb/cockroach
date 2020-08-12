@@ -137,8 +137,6 @@ sql.plan.stats.created
 # Test various planning counters.
 feature-allowlist
 sql.plan.cte.*
-sql.plan.lateral-join
-sql.plan.subquery.*
 ----
 
 feature-usage
@@ -151,6 +149,11 @@ WITH RECURSIVE a AS (SELECT 1 UNION ALL SELECT * FROM a WHERE false) SELECT * FR
 ----
 sql.plan.cte
 sql.plan.cte.recursive
+
+feature-allowlist
+sql.plan.lateral-join
+sql.plan.subquery.*
+----
 
 feature-usage
 SELECT * FROM (VALUES (1), (2)) AS a(x), LATERAL (SELECT a.x+1)
