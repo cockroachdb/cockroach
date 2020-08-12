@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -156,6 +157,17 @@ func (c *transientCluster) start(
 		serv := serverFactory.New(args).(*server.TestServer)
 		if i == 0 {
 			c.s = serv
+			// The first node connects its Settings instance to the `log`
+			// package for crash reporting.
+			//
+			// There's a known shortcoming with this approach: restarting
+			// node 1 using the \demo commands will break this connection:
+			// if the user changes the cluster setting after restarting node
+			// 1, the `log` package will not see this change.
+			//
+			// TODO(knz): re-connect the `log` package every time the first
+			// node is restarted and gets a new `Settings` instance.
+			settings.SetCanonicalValuesContainer(&serv.ClusterSettings().SV)
 		}
 		servers = append(servers, serv)
 
