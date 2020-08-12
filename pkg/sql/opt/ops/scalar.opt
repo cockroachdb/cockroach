@@ -848,6 +848,11 @@ define StdDevPop {
 }
 
 [Scalar, Aggregate]
+define STMakeLine {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define XorAgg {
     Input ScalarExpr
 }
