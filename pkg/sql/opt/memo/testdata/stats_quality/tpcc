@@ -15,8 +15,9 @@ import file=tpcc_stats_w10
 # reflect on-line database activity as typically found in production
 # environments.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_01 ignore-tables=1
 SELECT w_tax FROM warehouse WHERE w_id = 1
+----
 ----
 project
  ├── save-table-name: new_order_01_project_1
@@ -34,8 +35,7 @@ project
       ├── key: ()
       └── fd: ()-->(1,8)
 
-stats table=new_order_01_scan_2
-----
+----Stats for new_order_01_scan_2----
 column_names  row_count  distinct_count  null_count
 {w_id}        1          1               0
 {w_tax}       1          1               0
@@ -43,11 +43,14 @@ column_names  row_count  distinct_count  null_count
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {w_id}        1.00           1.00           1.00                1.00                0.00            1.00
 {w_tax}       1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_02
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_02 ignore-tables=1
 SELECT c_discount, c_last, c_credit
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
+----
 ----
 project
  ├── save-table-name: new_order_02_project_1
@@ -65,8 +68,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-3,6,14,16)
 
-stats table=new_order_02_scan_2
-----
+----Stats for new_order_02_scan_2----
 column_names  row_count  distinct_count  null_count
 {c_credit}    1          1               0
 {c_d_id}      1          1               0
@@ -82,12 +84,15 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_id}        1.00           1.00           1.00                1.00                0.00            1.00
 {c_last}      1.00           1.00           1.00                1.00                0.00            1.00
 {c_w_id}      1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_03
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_03
 SELECT i_price, i_name, i_data
 FROM item
 WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
 ORDER BY i_id
+----
 ----
 scan item
  ├── save-table-name: new_order_03_scan_1
@@ -111,8 +116,7 @@ scan item
  ├── fd: (1)-->(3-5)
  └── ordering: +1
 
-stats table=new_order_03_scan_1
-----
+----Stats for new_order_03_scan_1----
 column_names  row_count  distinct_count  null_count
 {i_data}      12         12              0
 {i_id}        12         12              0
@@ -124,12 +128,15 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {i_id}        12.00          1.00           12.00               1.00                0.00            1.00
 {i_name}      12.00          1.00           12.00               1.00                0.00            1.00
 {i_price}     12.00          1.00           12.00               1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=new_order_04
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=new_order_04 ignore-tables=1
 SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
+----
 ----
 project
  ├── save-table-name: new_order_04_project_1
@@ -154,8 +161,7 @@ project
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       └── ordering: +1 opt(2) [actual: +1]
 
-stats table=new_order_04_scan_2
-----
+----Stats for new_order_04_scan_2----
 column_names    row_count  distinct_count  null_count
 {s_data}        5          5               0
 {s_dist_05}     5          5               0
@@ -175,6 +181,8 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {s_remote_cnt}  5.00           1.00           1.00                1.00                0.00            1.00
 {s_w_id}        5.00           1.00           1.00                1.00                0.00            1.00
 {s_ytd}         5.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
 # --------------------------------------------------
 # 2.5 The Payment Transaction
@@ -185,11 +193,12 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 # stringent response time requirements to satisfy on-line users. In addition,
 # this transaction includes non-primary key access to the CUSTOMER table.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=payment_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=payment_01 ignore-tables=1
 SELECT c_id
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_last = 'ANTIABLEABLE'
 ORDER BY c_first ASC
+----
 ----
 project
  ├── save-table-name: payment_01_project_1
@@ -209,8 +218,7 @@ project
       ├── fd: ()-->(2,3,6), (1)-->(4)
       └── ordering: +4 opt(2,3,6) [actual: +4]
 
-stats table=payment_01_scan_2
-----
+----Stats for payment_01_scan_2----
 column_names  row_count  distinct_count  null_count
 {c_d_id}      2          1               0
 {c_first}     2          2               0
@@ -224,6 +232,8 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_id}        3.00           1.50           3.00                1.50                0.00            1.00
 {c_last}      3.00           1.50           1.00                1.00                0.00            1.00
 {c_w_id}      3.00           1.50           1.00                1.00                0.00            1.00
+----
+----
 
 # --------------------------------------------------
 # 2.6 The Order Status Transaction
@@ -234,10 +244,11 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # users. In addition, this table includes non-primary key access to the
 # CUSTOMER table.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=order_status_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_01 ignore-tables=1
 SELECT c_balance, c_first, c_middle, c_last
 FROM customer
 WHERE c_w_id = 1 AND c_d_id = 1 AND c_id = 50
+----
 ----
 project
  ├── save-table-name: order_status_01_project_1
@@ -255,8 +266,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-6,17)
 
-stats table=order_status_01_scan_2
-----
+----Stats for order_status_01_scan_2----
 column_names  row_count  distinct_count  null_count
 {c_balance}   1          1               0
 {c_d_id}      1          1               0
@@ -274,12 +284,15 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_last}      1.00           1.00           1.00                1.00                0.00            1.00
 {c_middle}    1.00           1.00           1.00                1.00                0.00            1.00
 {c_w_id}      1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=order_status_02
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_02 ignore-tables=(1,3)
 SELECT c_id, c_balance, c_first, c_middle
 FROM customer
 WHERE c_w_id = 2 AND c_d_id = 2 AND c_last = 'ANTIBARESE'
 ORDER BY c_first ASC
+----
 ----
 project
  ├── save-table-name: order_status_02_project_1
@@ -308,8 +321,7 @@ project
            ├── fd: ()-->(2,3,6), (1)-->(4)
            └── ordering: +4 opt(2,3,6) [actual: +4]
 
-stats table=order_status_02_index_join_2
-----
+----Stats for order_status_02_index_join_2----
 column_names  row_count  distinct_count  null_count
 {c_balance}   3          1               0
 {c_d_id}      3          1               0
@@ -327,13 +339,16 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_last}      3.00           1.00           1.00                1.00                0.00            1.00
 {c_middle}    3.00           1.00           1.00                1.00                0.00            1.00
 {c_w_id}      3.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=order_status_03
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_03 ignore-tables=1
 SELECT o_id, o_entry_d, o_carrier_id
 FROM "order"
 WHERE o_w_id = 4 AND o_d_id = 3 AND o_c_id = 10
 ORDER BY o_id DESC
 LIMIT 1
+----
 ----
 project
  ├── save-table-name: order_status_03_project_1
@@ -351,10 +366,30 @@ project
       ├── key: ()
       └── fd: ()-->(1-6)
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=order_status_04
+----Stats for order_status_03_scan_2----
+column_names    row_count  distinct_count  null_count
+{o_c_id}        1          1               0
+{o_carrier_id}  1          1               0
+{o_d_id}        1          1               0
+{o_entry_d}     1          1               0
+{o_id}          1          1               0
+{o_w_id}        1          1               0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_c_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{o_carrier_id}  1.00           1.00           1.00                1.00                0.00            1.00
+{o_d_id}        1.00           1.00           1.00                1.00                0.00            1.00
+{o_entry_d}     1.00           1.00           1.00                1.00                0.00            1.00
+{o_id}          1.00           1.00           1.00                1.00                0.00            1.00
+{o_w_id}        1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=order_status_04 ignore-tables=1
 SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
 FROM order_line
 WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
+----
 ----
 project
  ├── save-table-name: order_status_04_project_1
@@ -369,8 +404,7 @@ project
       │                <---- 1 --
       └── fd: ()-->(1-3)
 
-stats table=order_status_04_scan_2
-----
+----Stats for order_status_04_scan_2----
 column_names      row_count  distinct_count  null_count
 {ol_amount}       12         1               0
 {ol_d_id}         12         1               0
@@ -390,6 +424,8 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 {ol_quantity}     9.00           1.33           1.00                1.00                0.00            1.00
 {ol_supply_w_id}  9.00           1.33           6.00                6.00 <==            0.00            1.00
 {ol_w_id}         9.00           1.33           1.00                1.00                0.00            1.00
+----
+----
 
 # --------------------------------------------------
 # 2.7 The Delivery Transaction
@@ -407,12 +443,13 @@ column_names      row_count_est  row_count_err  distinct_count_est  distinct_cou
 # indicating transaction completion. The result of the deferred execution is
 # recorded into a result file.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=delivery_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_01 ignore-tables=1
 SELECT no_o_id
 FROM new_order
 WHERE no_w_id = 7 AND no_d_id = 6
 ORDER BY no_o_id ASC
 LIMIT 1
+----
 ----
 project
  ├── save-table-name: delivery_01_project_1
@@ -430,8 +467,7 @@ project
       ├── key: ()
       └── fd: ()-->(1-3)
 
-stats table=delivery_01_scan_2
-----
+----Stats for delivery_01_scan_2----
 column_names  row_count  distinct_count  null_count
 {no_d_id}     1          1               0
 {no_o_id}     1          1               0
@@ -441,11 +477,14 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {no_d_id}     1.00           1.00           1.00                1.00                0.00            1.00
 {no_o_id}     1.00           1.00           1.00                1.00                0.00            1.00
 {no_w_id}     1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=delivery_02
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=delivery_02
 SELECT sum(ol_amount)
 FROM order_line
 WHERE ol_w_id = 8 AND ol_d_id = 6 AND ol_o_id = 1000
+----
 ----
 scalar-group-by
  ├── save-table-name: delivery_02_scalar_group_by_1
@@ -466,8 +505,14 @@ scalar-group-by
       └── sum [as=sum:12, type=decimal, outer=(9)]
            └── ol_amount:9 [type=decimal]
 
-stats table=delivery_02_scan_2
-----
+----Stats for delivery_02_scalar_group_by_1----
+column_names  row_count  distinct_count  null_count
+{sum}         1          1               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{sum}         1.00           1.00           1.00                1.00                0.00            1.00
+
+----Stats for delivery_02_scan_2----
 column_names  row_count  distinct_count  null_count
 {ol_amount}   7          1               0
 {ol_d_id}     7          1               0
@@ -479,14 +524,8 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ol_d_id}     10.00          1.43           1.00                1.00                0.00            1.00
 {ol_o_id}     10.00          1.43           1.00                1.00                0.00            1.00
 {ol_w_id}     10.00          1.43           1.00                1.00                0.00            1.00
-
-stats table=delivery_02_scalar_group_by_1
 ----
-column_names  row_count  distinct_count  null_count
-{sum}         1          1               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{sum}         1.00           1.00           1.00                1.00                0.00            1.00
+----
 
 # --------------------------------------------------
 # 2.8 The Stock-Level Transaction
@@ -496,10 +535,11 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # heavy read-only database transaction with a low frequency of execution, a
 # relaxed response time requirement, and relaxed consistency requirements.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=stock_level_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=stock_level_01 ignore-tables=1
 SELECT d_next_o_id
 FROM district
 WHERE d_w_id = 4 AND d_id = 9
+----
 ----
 project
  ├── save-table-name: stock_level_01_project_1
@@ -517,8 +557,7 @@ project
       ├── key: ()
       └── fd: ()-->(1,2,11)
 
-stats table=stock_level_01_scan_2
-----
+----Stats for stock_level_01_scan_2----
 column_names   row_count  distinct_count  null_count
 {d_id}         1          1               0
 {d_next_o_id}  1          1               0
@@ -528,8 +567,10 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {d_id}         1.00           1.00           1.00                1.00                0.00            1.00
 {d_next_o_id}  1.00           1.00           1.00                1.00                0.00            1.00
 {d_w_id}       1.00           1.00           1.00                1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=stock_level_02
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=stock_level_02
 SELECT count(DISTINCT s_i_id)
 FROM order_line
 JOIN stock
@@ -538,6 +579,7 @@ WHERE ol_w_id = 1
     AND ol_d_id = 1
     AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
     AND s_quantity < 15
+----
 ----
 scalar-group-by
  ├── save-table-name: stock_level_02_scalar_group_by_1
@@ -573,22 +615,21 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count:30, type=int]
 
-stats table=stock_level_02_scan_4
-----
+----Stats for stock_level_02_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
-{ol_d_id}     193        1               0
-{ol_i_id}     193        193             0
-{ol_o_id}     193        20              0
-{ol_w_id}     193        1               0
+{count}       1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}     188.00         1.03           1.00                1.00                0.00            1.00
-{ol_i_id}     188.00         1.03           188.00              1.03                0.00            1.00
-{ol_o_id}     188.00         1.03           20.00               1.00                0.00            1.00
-{ol_w_id}     188.00         1.03           1.00                1.00                0.00            1.00
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=stock_level_02_lookup_join_3
-----
+----Stats for stock_level_02_distinct_on_2----
+column_names  row_count  distinct_count  null_count
+{s_i_id}      15         15              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{s_i_id}      188.00         12.53 <==      188.00              12.53 <==           0.00            1.00
+
+----Stats for stock_level_02_lookup_join_3----
 column_names  row_count  distinct_count  null_count
 {ol_d_id}     15         1               0
 {ol_i_id}     15         15              0
@@ -607,15 +648,20 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_quantity}  219.00         14.60 <==      30.00               6.00 <==            0.00            1.00
 {s_w_id}      219.00         14.60 <==      1.00                1.00                0.00            1.00
 
-# TODO(radu): add stock_level_02_distinct_on_2.
-
-stats table=stock_level_02_scalar_group_by_1
-----
+----Stats for stock_level_02_scan_4----
 column_names  row_count  distinct_count  null_count
-{count}       1          1               0
+{ol_d_id}     193        1               0
+{ol_i_id}     193        193             0
+{ol_o_id}     193        20              0
+{ol_w_id}     193        1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       1.00           1.00           1.00                1.00                0.00            1.00
+{ol_d_id}     188.00         1.03           1.00                1.00                0.00            1.00
+{ol_i_id}     188.00         1.03           188.00              1.03                0.00            1.00
+{ol_o_id}     188.00         1.03           20.00               1.00                0.00            1.00
+{ol_w_id}     188.00         1.03           1.00                1.00                0.00            1.00
+----
+----
 
 # --------------------------------------------------
 # Consistency Queries
@@ -623,7 +669,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 # These queries run after TPCC in order to check database consistency.
 # They are not part of the benchmark itself.
 # --------------------------------------------------
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_01
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_01 ignore-tables=(3,5)
 SELECT count(*)
 FROM warehouse
 FULL OUTER JOIN
@@ -634,6 +680,7 @@ FULL OUTER JOIN
 )
 ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
+----
 ----
 scalar-group-by
  ├── save-table-name: consistency_01_scalar_group_by_1
@@ -684,18 +731,14 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count_rows:24, type=int]
 
-stats table=consistency_01_group_by_4
-----
+----Stats for consistency_01_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
-{d_w_id}      10         10              0
-{sum}         10         1               0
+{count}       1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{d_w_id}      10.00          1.00           10.00               1.00                0.00            1.00
-{sum}         10.00          1.00           10.00               10.00 <==           0.00            1.00
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=consistency_01_merge_join_2
-----
+----Stats for consistency_01_merge_join_2----
 column_names  row_count  distinct_count  null_count
 {d_w_id}      0          0               0
 {sum}         0          0               0
@@ -708,18 +751,22 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {w_id}        3.00           +Inf <==       3.00                +Inf <==            0.00            1.00
 {w_ytd}       3.00           +Inf <==       1.00                +Inf <==            0.00            1.00
 
-stats table=consistency_01_scalar_group_by_1
-----
+----Stats for consistency_01_group_by_4----
 column_names  row_count  distinct_count  null_count
-{count}       1          1               0
+{d_w_id}      10         10              0
+{sum}         10         1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       1.00           1.00           1.00                1.00                0.00            1.00
+{d_w_id}      10.00          1.00           10.00               1.00                0.00            1.00
+{sum}         10.00          1.00           10.00               10.00 <==           0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_02
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_02
 SELECT d_next_o_id
 FROM district
 ORDER BY d_w_id, d_id
+----
 ----
 scan district
  ├── save-table-name: consistency_02_scan_1
@@ -731,11 +778,25 @@ scan district
  ├── fd: (1,2)-->(11)
  └── ordering: +2,+1
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_03
+----Stats for consistency_02_scan_1----
+column_names   row_count  distinct_count  null_count
+{d_id}         100        10              0
+{d_next_o_id}  100        1               0
+{d_w_id}       100        10              0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{d_id}         100.00         1.00           10.00               1.00                0.00            1.00
+{d_next_o_id}  100.00         1.00           1.00                1.00                0.00            1.00
+{d_w_id}       100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_03 ignore-tables=2
 SELECT max(no_o_id)
 FROM new_order
 GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
+----
 ----
 group-by
  ├── save-table-name: consistency_03_group_by_1
@@ -757,8 +818,7 @@ group-by
       └── max [as=max:5, type=int, outer=(1)]
            └── no_o_id:1 [type=int]
 
-stats table=consistency_03_group_by_1
-----
+----Stats for consistency_03_group_by_1----
 column_names  row_count  distinct_count  null_count
 {max}         100        1               0
 {no_d_id}     100        10              0
@@ -768,12 +828,15 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
 {no_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
 {no_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_04
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_04 ignore-tables=2
 SELECT max(o_id)
 FROM "order"
 GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
+----
 ----
 group-by
  ├── save-table-name: consistency_04_group_by_1
@@ -795,8 +858,7 @@ group-by
       └── max [as=max:10, type=int, outer=(1)]
            └── o_id:1 [type=int]
 
-stats table=consistency_04_group_by_1
-----
+----Stats for consistency_04_group_by_1----
 column_names  row_count  distinct_count  null_count
 {max}         100        1               0
 {o_d_id}      100        10              0
@@ -806,8 +868,10 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
 {o_d_id}      100.00         1.00           10.00               1.00                0.00            1.00
 {o_w_id}      100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_05
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_05 ignore-tables=4
 SELECT count(*)
 FROM
 (
@@ -816,6 +880,7 @@ FROM
     GROUP BY no_w_id, no_d_id
 )
 WHERE nod != -1
+----
 ----
 scalar-group-by
  ├── save-table-name: consistency_05_scalar_group_by_1
@@ -859,24 +924,14 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count_rows:9, type=int]
 
-stats table=consistency_05_group_by_3
-----
+----Stats for consistency_05_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
-{count_rows}  100        1               0
-{max}         100        1               0
-{min}         100        1               0
-{no_d_id}     100        10              0
-{no_w_id}     100        10              0
+{count}       1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count_rows}  100.00         1.00           100.00              100.00 <==          0.00            1.00
-{max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
-{min}         100.00         1.00           100.00              100.00 <==          0.00            1.00
-{no_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
-{no_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=consistency_05_select_2
-----
+----Stats for consistency_05_select_2----
 column_names  row_count  distinct_count  null_count
 {count_rows}  0          0               0
 {max}         0          0               0
@@ -891,19 +946,29 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {no_d_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
 {no_w_id}     33.00          +Inf <==       10.00               +Inf <==            0.00            1.00
 
-stats table=consistency_05_scalar_group_by_1
-----
+----Stats for consistency_05_group_by_3----
 column_names  row_count  distinct_count  null_count
-{count}       1          1               0
+{count_rows}  100        1               0
+{max}         100        1               0
+{min}         100        1               0
+{no_d_id}     100        10              0
+{no_w_id}     100        10              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       1.00           1.00           1.00                1.00                0.00            1.00
+{count_rows}  100.00         1.00           100.00              100.00 <==          0.00            1.00
+{max}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{min}         100.00         1.00           100.00              100.00 <==          0.00            1.00
+{no_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
+{no_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_06
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_06 ignore-tables=2
 SELECT sum(o_ol_cnt)
 FROM "order"
 GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
+----
 ----
 group-by
  ├── save-table-name: consistency_06_group_by_1
@@ -924,8 +989,7 @@ group-by
       └── sum [as=sum:10, type=decimal, outer=(7)]
            └── o_ol_cnt:7 [type=int]
 
-stats table=consistency_06_group_by_1
-----
+----Stats for consistency_06_group_by_1----
 column_names  row_count  distinct_count  null_count
 {o_d_id}      100        10              0
 {o_w_id}      100        10              0
@@ -935,12 +999,15 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_d_id}      100.00         1.00           10.00               1.00                0.00            1.00
 {o_w_id}      100.00         1.00           10.00               1.00                0.00            1.00
 {sum}         100.00         1.00           100.00              1.08                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_07
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_07 ignore-tables=2
 SELECT count(*)
 FROM order_line
 GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
+----
 ----
 group-by
  ├── save-table-name: consistency_07_group_by_1
@@ -960,8 +1027,7 @@ group-by
  └── aggregations
       └── count-rows [as=count_rows:12, type=int]
 
-stats table=consistency_07_group_by_1
-----
+----Stats for consistency_07_group_by_1----
 column_names  row_count  distinct_count  null_count
 {count}       100        93              0
 {ol_d_id}     100        10              0
@@ -971,11 +1037,14 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {count}       100.00         1.00           100.00              1.08                0.00            1.00
 {ol_d_id}     100.00         1.00           10.00               1.00                0.00            1.00
 {ol_w_id}     100.00         1.00           10.00               1.00                0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_08
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_08 ignore-tables=(2,3,5)
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
+----
 ----
 except-all
  ├── save-table-name: consistency_08_except_all_1
@@ -1012,8 +1081,18 @@ except-all
            └── filters
                 └── o_carrier_id:10 IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
 
-stats table=consistency_08_select_4
-----
+----Stats for consistency_08_except_all_1----
+column_names  row_count  distinct_count  null_count
+{no_d_id}     0          0               0
+{no_o_id}     0          0               0
+{no_w_id}     0          0               0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{no_d_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+{no_o_id}     90000.00       +Inf <==       900.00              +Inf <==            0.00            1.00
+{no_w_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+
+----Stats for consistency_08_select_4----
 column_names    row_count  distinct_count  null_count
 {o_carrier_id}  90000      1               90000
 {o_d_id}        90000      10              0
@@ -1025,23 +1104,14 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
 {o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
 {o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
-
-stats table=consistency_08_except_all_1
 ----
-column_names  row_count  distinct_count  null_count
-{no_d_id}     0          0               0
-{no_o_id}     0          0               0
-{no_w_id}     0          0               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{no_d_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
-{no_o_id}     90000.00       +Inf <==       900.00              +Inf <==            0.00            1.00
-{no_w_id}     90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_09
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_09 ignore-tables=(2-5)
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+----
 ----
 except-all
  ├── save-table-name: consistency_09_except_all_1
@@ -1078,8 +1148,7 @@ except-all
       │                 <--- 0 ---- 1 ---- 2 ---- 3 ---- 4 ---- 5 ---- 6 ---- 7 ---- 8 ---- 9 -
       └── key: (10-12)
 
-stats table=consistency_09_except_all_1
-----
+----Stats for consistency_09_except_all_1----
 column_names  row_count  distinct_count  null_count
 {o_d_id}      0          0               0
 {o_id}        0          0               0
@@ -1089,8 +1158,10 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_d_id}      90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
 {o_id}        90000.00       +Inf <==       2999.00             +Inf <==            0.00            1.00
 {o_w_id}      90000.00       +Inf <==       10.00               +Inf <==            0.00            1.00
+----
+----
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_10
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_10 ignore-tables=(2,4)
 (
     SELECT o_w_id, o_d_id, o_id, o_ol_cnt
     FROM "order"
@@ -1103,6 +1174,7 @@ EXCEPT ALL
     GROUP BY (ol_w_id, ol_d_id, ol_o_id)
     ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
 )
+----
 ----
 except-all
  ├── save-table-name: consistency_10_except_all_1
@@ -1136,22 +1208,7 @@ except-all
       └── aggregations
            └── count-rows [as=count_rows:21, type=int]
 
-stats table=consistency_10_group_by_3
-----
-column_names  row_count  distinct_count  null_count
-{count_rows}  300000     11              0
-{ol_d_id}     300000     10              0
-{ol_o_id}     300000     2999            0
-{ol_w_id}     300000     10              0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count_rows}  295745.00      1.01           295745.00           26885.91 <==        0.00            1.00
-{ol_d_id}     295745.00      1.01           10.00               1.00                0.00            1.00
-{ol_o_id}     295745.00      1.01           2999.00             1.00                0.00            1.00
-{ol_w_id}     295745.00      1.01           10.00               1.00                0.00            1.00
-
-stats table=consistency_10_except_all_1
-----
+----Stats for consistency_10_except_all_1----
 column_names  row_count  distinct_count  null_count
 {o_d_id}      0          0               0
 {o_id}        0          0               0
@@ -1164,7 +1221,22 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_ol_cnt}    300000.00      +Inf <==       11.00               +Inf <==            0.00            1.00
 {o_w_id}      300000.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
-save-tables format=hide-qual database=tpcc save-tables-prefix=consistency_11
+----Stats for consistency_10_group_by_3----
+column_names  row_count  distinct_count  null_count
+{count_rows}  300000     11              0
+{ol_d_id}     300000     10              0
+{ol_o_id}     300000     2999            0
+{ol_w_id}     300000     10              0
+~~~~
+column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{count_rows}  295745.00      1.01           295745.00           26885.91 <==        0.00            1.00
+{ol_d_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+{ol_o_id}     295745.00      1.01           2999.00             1.00                0.00            1.00
+{ol_w_id}     295745.00      1.01           10.00               1.00                0.00            1.00
+----
+----
+
+stats-quality format=hide-qual database=tpcc stats-quality-prefix=consistency_11 ignore-tables=(2-4)
 (
     SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
     FROM order_line
@@ -1177,6 +1249,7 @@ EXCEPT ALL
     FROM "order"
     ORDER BY o_w_id, o_d_id, o_id DESC
 )
+----
 ----
 except-all
  ├── save-table-name: consistency_11_except_all_1
@@ -1210,8 +1283,7 @@ except-all
       ├── key: (13-15)
       └── fd: (13-15)-->(19)
 
-stats table=consistency_11_except_all_1
-----
+----Stats for consistency_11_except_all_1----
 column_names  row_count  distinct_count  null_count
 {count}       0          0               0
 {ol_d_id}     0          0               0
@@ -1223,8 +1295,10 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ol_d_id}     295745.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 {ol_o_id}     295745.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
 {ol_w_id}     295745.00      +Inf <==       10.00               +Inf <==            0.00            1.00
+----
+----
 
-save-tables database=tpcc save-tables-prefix=consistency_12
+stats-quality database=tpcc stats-quality-prefix=consistency_12 ignore-tables=(4,6,7,9)
 SELECT count(*)
 FROM
 (
@@ -1240,6 +1314,7 @@ FULL OUTER JOIN
 )
 ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
+----
 ----
 scalar-group-by
  ├── save-table-name: consistency_12_scalar_group_by_1
@@ -1304,54 +1379,14 @@ scalar-group-by
  └── aggregations
       └── count-rows [as=count_rows:21, type=int]
 
-stats table=consistency_12_select_5
-----
-column_names     row_count  distinct_count  null_count
-{ol_d_id}        899134     10              0
-{ol_delivery_d}  899134     1               899134
-{ol_o_id}        899134     900             0
-{ol_w_id}        899134     10              0
-~~~~
-column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ol_d_id}        899134.00      1.00           10.00               1.00                0.00            1.00
-{ol_delivery_d}  899134.00      1.00           1.00                1.00                899134.00       1.00
-{ol_o_id}        899134.00      1.00           2999.00             3.33 <==            0.00            1.00
-{ol_w_id}        899134.00      1.00           10.00               1.00                0.00            1.00
-
-stats table=consistency_12_select_8
-----
-column_names    row_count  distinct_count  null_count
-{o_carrier_id}  90000      1               90000
-{o_d_id}        90000      10              0
-{o_id}          90000      900             0
-{o_w_id}        90000      10              0
-~~~~
-column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_carrier_id}  90000.00       1.00           1.00                1.00                90000.00        1.00
-{o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
-{o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
-{o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
-
-stats table=consistency_12_full_join_3
-----
+----Stats for consistency_12_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
-{o_d_id}      899134     10              0
-{o_id}        899134     900             0
-{o_w_id}      899134     10              0
-{ol_d_id}     899134     10              0
-{ol_o_id}     899134     900             0
-{ol_w_id}     899134     10              0
+{count}       1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{o_d_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
-{o_id}        899134.00      1.00           2999.00             3.33 <==            629304.00       +Inf <==
-{o_w_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
-{ol_d_id}     899134.00      1.00           10.00               1.00                0.00            1.00
-{ol_o_id}     899134.00      1.00           2999.00             3.33 <==            0.00            1.00
-{ol_w_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+{count}       1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=consistency_12_select_2
-----
+----Stats for consistency_12_select_2----
 column_names  row_count  distinct_count  null_count
 {o_d_id}      0          0               0
 {o_id}        0          0               0
@@ -1368,10 +1403,47 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ol_o_id}     299711.00      +Inf <==       2999.00             +Inf <==            0.00            1.00
 {ol_w_id}     299711.00      +Inf <==       10.00               +Inf <==            0.00            1.00
 
-stats table=consistency_12_scalar_group_by_1
-----
+----Stats for consistency_12_full_join_3----
 column_names  row_count  distinct_count  null_count
-{count}       1          1               0
+{o_d_id}      899134     10              0
+{o_id}        899134     900             0
+{o_w_id}      899134     10              0
+{ol_d_id}     899134     10              0
+{ol_o_id}     899134     900             0
+{ol_w_id}     899134     10              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{count}       1.00           1.00           1.00                1.00                0.00            1.00
+{o_d_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
+{o_id}        899134.00      1.00           2999.00             3.33 <==            629304.00       +Inf <==
+{o_w_id}      899134.00      1.00           10.00               1.00                629304.00       +Inf <==
+{ol_d_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+{ol_o_id}     899134.00      1.00           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}     899134.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_select_5----
+column_names     row_count  distinct_count  null_count
+{ol_d_id}        899134     10              0
+{ol_delivery_d}  899134     1               899134
+{ol_o_id}        899134     900             0
+{ol_w_id}        899134     10              0
+~~~~
+column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{ol_d_id}        899134.00      1.00           10.00               1.00                0.00            1.00
+{ol_delivery_d}  899134.00      1.00           1.00                1.00                899134.00       1.00
+{ol_o_id}        899134.00      1.00           2999.00             3.33 <==            0.00            1.00
+{ol_w_id}        899134.00      1.00           10.00               1.00                0.00            1.00
+
+----Stats for consistency_12_select_8----
+column_names    row_count  distinct_count  null_count
+{o_carrier_id}  90000      1               90000
+{o_d_id}        90000      10              0
+{o_id}          90000      900             0
+{o_w_id}        90000      10              0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_carrier_id}  90000.00       1.00           1.00                1.00                90000.00        1.00
+{o_d_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+{o_id}          90000.00       1.00           2999.00             3.33 <==            0.00            1.00
+{o_w_id}        90000.00       1.00           10.00               1.00                0.00            1.00
+----
+----

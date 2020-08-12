@@ -22,7 +22,7 @@ import file=tpch_stats
 #   1. Allow Select to be pushed below Ordinality used to add key column
 #   2. Add decorrelation rule for Ordinality/RowKey
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q2
+stats-quality database=tpch stats-quality-prefix=q2
 SELECT
     s_acctbal,
     s_name,
@@ -67,6 +67,7 @@ ORDER BY
     s_name,
     p_partkey
 LIMIT 100;
+----
 ----
 project
  ├── save-table-name: q2_project_1
@@ -281,8 +282,7 @@ project
       │              └── ps_supplycost:22 = min:57 [type=bool, outer=(22,57), constraints=(/22: (/NULL - ]; /57: (/NULL - ]), fd=(22)==(57), (57)==(22)]
       └── 100 [type=int]
 
-stats table=q2_project_1
-----
+----Stats for q2_project_1----
 column_names  row_count  distinct_count  null_count
 {n_name}      100        5               0
 {p_mfgr}      100        5               0
@@ -303,8 +303,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_name}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 {s_phone}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 
-stats table=q2_limit_2
-----
+----Stats for q2_limit_2----
 column_names     row_count  distinct_count  null_count
 {min}            100        100             0
 {n_name}         100        5               0
@@ -333,8 +332,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_name}         1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 {s_phone}        1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 
-stats table=q2_sort_3
-----
+----Stats for q2_sort_3----
 column_names     row_count  distinct_count  null_count
 {min}            100        100             0
 {n_name}         100        5               0
@@ -363,8 +361,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_name}         1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 {s_phone}        1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
 
-stats table=q2_select_4
-----
+----Stats for q2_select_4----
 column_names     row_count  distinct_count  null_count
 {min}            460        458             0
 {n_name}         460        5               0
@@ -393,8 +390,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_name}         1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
 {s_phone}        1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
 
-stats table=q2_group_by_5
-----
+----Stats for q2_group_by_5----
 column_names     row_count  distinct_count  null_count
 {min}            642        458             0
 {n_name}         642        5               0
@@ -423,8 +419,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_name}         1477.00        2.30 <==       1477.00             2.70 <==            0.00            1.00
 {s_phone}        1477.00        2.30 <==       1477.00             2.70 <==            0.00            1.00
 
-stats table=q2_inner_join_6
-----
+----Stats for q2_inner_join_6----
 column_names       row_count  distinct_count  null_count
 {n_name}           1070       5               0
 {n_nationkey_1}    1070       5               0
@@ -485,8 +480,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_suppkey}        2818.00        2.63 <==       1403.00             2.56 <==            0.00            1.00
 {s_suppkey_1}      2818.00        2.63 <==       1444.00             2.64 <==            0.00            1.00
 
-stats table=q2_lookup_join_7
-----
+----Stats for q2_lookup_join_7----
 column_names       row_count  distinct_count  null_count
 {n_name}           2568       5               0
 {n_nationkey}      2568       5               0
@@ -535,8 +529,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_phone}          4452.00        1.73           3593.00             6.56 <==            0.00            1.00
 {s_suppkey}        4452.00        1.73           3587.00             6.55 <==            0.00            1.00
 
-stats table=q2_inner_join_8
-----
+----Stats for q2_inner_join_8----
 column_names     row_count  distinct_count  null_count
 {n_name}         642        5               0
 {n_nationkey}    642        5               0
@@ -579,8 +572,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_phone}        1932.00        3.01 <==       1757.00             3.21 <==            0.00            1.00
 {s_suppkey}      1932.00        3.01 <==       1755.00             3.20 <==            0.00            1.00
 
-stats table=q2_lookup_join_9
-----
+----Stats for q2_lookup_join_9----
 column_names     row_count  distinct_count  null_count
 {p_mfgr}         2988       5               0
 {p_partkey}      2988       747             0
@@ -599,8 +591,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_suppkey}     5354.00        1.79           4137.00             1.61                0.00            1.00
 {ps_supplycost}  5354.00        1.79           5213.00             1.77                0.00            1.00
 
-stats table=q2_select_10
-----
+----Stats for q2_select_10----
 column_names  row_count  distinct_count  null_count
 {p_mfgr}      747        5               0
 {p_partkey}   747        747             0
@@ -613,8 +604,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      1333.00        1.78           1.00                1.00                0.00            1.00
 {p_type}      1333.00        1.78           150.00              5.00 <==            0.00            1.00
 
-stats table=q2_scan_11
-----
+----Stats for q2_scan_11----
 column_names  row_count  distinct_count  null_count
 {p_mfgr}      200000     5               0
 {p_partkey}   200000     199241          0
@@ -627,8 +617,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      200000.00      1.00           50.00               1.00                0.00            1.00
 {p_type}      200000.00      1.00           150.00              1.00                0.00            1.00
 
-stats table=q2_inner_join_12
-----
+----Stats for q2_inner_join_12----
 column_names   row_count  distinct_count  null_count
 {n_name}       1987       5               0
 {n_nationkey}  1987       5               0
@@ -657,8 +646,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_phone}      2000.00        1.01           1846.00             1.08                0.00            1.00
 {s_suppkey}    2000.00        1.01           1845.00             1.08                0.00            1.00
 
-stats table=q2_scan_13
-----
+----Stats for q2_scan_13----
 column_names   row_count  distinct_count  null_count
 {s_acctbal}    10000      9967            0
 {s_address}    10000      10027           0
@@ -677,8 +665,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_phone}      10000.00       1.00           10000.00            1.00                0.00            1.00
 {s_suppkey}    10000.00       1.00           9920.00             1.00                0.00            1.00
 
-stats table=q2_inner_join_14
-----
+----Stats for q2_inner_join_14----
 column_names   row_count  distinct_count  null_count
 {n_name}       5          5               0
 {n_nationkey}  5          5               0
@@ -693,8 +680,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       5.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q2_scan_15
-----
+----Stats for q2_scan_15----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -705,8 +691,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
 {n_regionkey}  25.00          1.00           5.00                1.00                0.00            1.00
 
-stats table=q2_select_16
-----
+----Stats for q2_select_16----
 column_names   row_count  distinct_count  null_count
 {r_name}       1          1               0
 {r_regionkey}  1          1               0
@@ -715,8 +700,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q2_scan_17
-----
+----Stats for q2_scan_17----
 column_names   row_count  distinct_count  null_count
 {r_name}       5          5               0
 {r_regionkey}  5          5               0
@@ -725,8 +709,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       5.00           1.00           5.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q2_lookup_join_18
-----
+----Stats for q2_lookup_join_18----
 column_names   row_count  distinct_count  null_count
 {n_nationkey}  1987       5               0
 {n_regionkey}  1987       1               0
@@ -743,8 +726,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  2000.00        1.01           5.00                1.00                0.00            1.00
 {s_suppkey}    2000.00        1.01           1845.00             1.08                0.00            1.00
 
-stats table=q2_merge_join_19
-----
+----Stats for q2_merge_join_19----
 column_names   row_count  distinct_count  null_count
 {n_nationkey}  5          5               0
 {n_regionkey}  5          1               0
@@ -757,8 +739,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       5.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q2_scan_20
-----
+----Stats for q2_scan_20----
 column_names   row_count  distinct_count  null_count
 {n_nationkey}  25         25              0
 {n_regionkey}  25         5               0
@@ -767,8 +748,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
 {n_regionkey}  25.00          1.00           5.00                1.00                0.00            1.00
 
-stats table=q2_select_21
-----
+----Stats for q2_select_21----
 column_names   row_count  distinct_count  null_count
 {r_name}       1          1               0
 {r_regionkey}  1          1               0
@@ -777,8 +757,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q2_scan_22
-----
+----Stats for q2_scan_22----
 column_names   row_count  distinct_count  null_count
 {r_name}       5          5               0
 {r_regionkey}  5          5               0
@@ -786,3 +765,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {r_name}       5.00           1.00           5.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           5.00                1.00                0.00            1.00
+----
+----

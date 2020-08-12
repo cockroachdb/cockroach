@@ -18,7 +18,7 @@ import file=tpch_stats
 # all qualifying lineitems in a particular nation is defined as
 # sum(l_extendedprice * (1 - l_discount)).
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q5
+stats-quality database=tpch stats-quality-prefix=q5
 SELECT
     n_name,
     sum(l_extendedprice * (1 - l_discount)) AS revenue
@@ -43,6 +43,7 @@ GROUP BY
     n_name
 ORDER BY
     revenue DESC;
+----
 ----
 sort
  ├── save-table-name: q5_sort_1
@@ -168,8 +169,7 @@ sort
            └── sum [as=sum:55, type=float, outer=(54)]
                 └── column54:54 [type=float]
 
-stats table=q5_sort_1
-----
+----Stats for q5_sort_1----
 column_names  row_count  distinct_count  null_count
 {n_name}      5          5               0
 {revenue}     5          5               0
@@ -178,8 +178,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      5.00           1.00           5.00                1.00                0.00            1.00
 {revenue}     5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q5_group_by_2
-----
+----Stats for q5_group_by_2----
 column_names  row_count  distinct_count  null_count
 {n_name}      5          5               0
 {sum}         5          5               0
@@ -188,8 +187,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      5.00           1.00           5.00                1.00                0.00            1.00
 {sum}         5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q5_project_3
-----
+----Stats for q5_project_3----
 column_names  row_count  distinct_count  null_count
 {column54}    7243       7245            0
 {n_name}      7243       5               0
@@ -198,8 +196,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column54}    13445.00       1.86           13136.00            1.81                0.00            1.00
 {n_name}      13445.00       1.86           5.00                1.00                0.00            1.00
 
-stats table=q5_inner_join_4
-----
+----Stats for q5_inner_join_4----
 column_names       row_count  distinct_count  null_count
 {c_custkey}        7243       5557            0
 {c_nationkey}      7243       5               0
@@ -236,8 +233,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      13445.00       1.86           5.00                1.00                0.00            1.00
 {s_suppkey}        13445.00       1.86           1844.00             1.05                0.00            1.00
 
-stats table=q5_lookup_join_5
-----
+----Stats for q5_lookup_join_5----
 column_names       row_count  distinct_count  null_count
 {c_custkey}        184082     17300           0
 {c_nationkey}      184082     5               0
@@ -270,8 +266,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {r_name}           296135.00      1.61           1.00                1.00                0.00            1.00
 {r_regionkey}      296135.00      1.61           1.00                1.00                0.00            1.00
 
-stats table=q5_inner_join_6
-----
+----Stats for q5_inner_join_6----
 column_names   row_count  distinct_count  null_count
 {c_custkey}    46008      17300           0
 {c_nationkey}  46008      5               0
@@ -296,8 +291,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       75364.00       1.64           1.00                1.00                0.00            1.00
 {r_regionkey}  75364.00       1.64           1.00                1.00                0.00            1.00
 
-stats table=q5_index_join_7
-----
+----Stats for q5_index_join_7----
 column_names   row_count  distinct_count  null_count
 {o_custkey}    227597     86427           0
 {o_orderdate}  227597     365             0
@@ -308,8 +302,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {o_orderdate}  230331.00      1.01           365.00              1.00                0.00            1.00
 {o_orderkey}   230331.00      1.01           230331.00           1.01                0.00            1.00
 
-stats table=q5_scan_8
-----
+----Stats for q5_scan_8----
 column_names   row_count  distinct_count  null_count
 {o_orderdate}  227597     365             0
 {o_orderkey}   227597     229152          0
@@ -318,8 +311,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {o_orderdate}  230331.00      1.01           365.00              1.00                0.00            1.00
 {o_orderkey}   230331.00      1.01           230331.00           1.01                0.00            1.00
 
-stats table=q5_lookup_join_9
-----
+----Stats for q5_lookup_join_9----
 column_names   row_count  distinct_count  null_count
 {c_custkey}    30183      29993           0
 {c_nationkey}  30183      5               0
@@ -338,8 +330,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       30000.00       1.01           1.00                1.00                0.00            1.00
 {r_regionkey}  30000.00       1.01           1.00                1.00                0.00            1.00
 
-stats table=q5_inner_join_10
-----
+----Stats for q5_inner_join_10----
 column_names   row_count  distinct_count  null_count
 {n_name}       5          5               0
 {n_nationkey}  5          5               0
@@ -354,8 +345,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       5.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q5_scan_11
-----
+----Stats for q5_scan_11----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -366,8 +356,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
 {n_regionkey}  25.00          1.00           5.00                1.00                0.00            1.00
 
-stats table=q5_select_12
-----
+----Stats for q5_select_12----
 column_names   row_count  distinct_count  null_count
 {r_name}       1          1               0
 {r_regionkey}  1          1               0
@@ -376,8 +365,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {r_regionkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q5_scan_13
-----
+----Stats for q5_scan_13----
 column_names   row_count  distinct_count  null_count
 {r_name}       5          5               0
 {r_regionkey}  5          5               0
@@ -386,8 +374,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {r_name}       5.00           1.00           5.00                1.00                0.00            1.00
 {r_regionkey}  5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q5_scan_14
-----
+----Stats for q5_scan_14----
 column_names   row_count  distinct_count  null_count
 {s_nationkey}  10000      25              0
 {s_suppkey}    10000      9920            0
@@ -395,3 +382,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {s_nationkey}  10000.00       1.00           25.00               1.00                0.00            1.00
 {s_suppkey}    10000.00       1.00           9920.00             1.00                0.00            1.00
+----
+----

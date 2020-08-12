@@ -18,7 +18,7 @@ import file=tpch_stats
 # Revenue lost is defined as sum(l_extendedprice*(1-l_discount)) for all
 # qualifying lineitems.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q10
+stats-quality database=tpch stats-quality-prefix=q10
 SELECT
     c_custkey,
     c_name,
@@ -51,6 +51,7 @@ GROUP BY
 ORDER BY
     revenue DESC
 LIMIT 20;
+----
 ----
 limit
  ├── save-table-name: q10_limit_1
@@ -165,8 +166,7 @@ limit
  │                   └── n_name:38 [type=char]
  └── 20 [type=int]
 
-stats table=q10_limit_1
-----
+----Stats for q10_limit_1----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   20         20              0
 {c_address}   20         20              0
@@ -187,8 +187,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      20.00          1.00           20.00               1.54                0.00            1.00
 {revenue}     20.00          1.00           20.00               1.00                0.00            1.00
 
-stats table=q10_sort_2
-----
+----Stats for q10_sort_2----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   0          0               0
 {c_address}   0          0               0
@@ -209,8 +208,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      34518.00       +Inf <==       34518.00            +Inf <==            0.00            1.00
 {sum}         34518.00       +Inf <==       34518.00            +Inf <==            0.00            1.00
 
-stats table=q10_group_by_3
-----
+----Stats for q10_group_by_3----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   37967      37658           0
 {c_address}   37967      38065           0
@@ -219,7 +217,7 @@ column_names  row_count  distinct_count  null_count
 {c_name}      37967      37859           0
 {c_phone}     37967      38026           0
 {n_name}      37967      25              0
-{sum}         37967      37934           0
+{sum}         37967      37881           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_acctbal}   34518.00       1.10           34518.00            1.09                0.00            1.00
@@ -231,8 +229,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      34518.00       1.10           34518.00            1380.72 <==         0.00            1.00
 {sum}         34518.00       1.10           34518.00            1.10                0.00            1.00
 
-stats table=q10_project_4
-----
+----Stats for q10_project_4----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   114705     37658           0
 {c_address}   114705     38065           0
@@ -253,8 +250,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column42}    91241.00       1.26           45841.00            2.50 <==            0.00            1.00
 {n_name}      91241.00       1.26           25.00               1.00                0.00            1.00
 
-stats table=q10_inner_join_5
-----
+----Stats for q10_inner_join_5----
 column_names       row_count  distinct_count  null_count
 {c_acctbal}        114705     37658           0
 {c_address}        114705     38065           0
@@ -291,8 +287,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderdate}      91241.00       1.26           92.00               1.00                0.00            1.00
 {o_orderkey}       91241.00       1.26           39048.00            1.24                0.00            1.00
 
-stats table=q10_inner_join_6
-----
+----Stats for q10_inner_join_6----
 column_names       row_count  distinct_count  null_count
 {c_acctbal}        114705     37658           0
 {c_address}        114705     38065           0
@@ -325,8 +320,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderdate}      91241.00       1.26           92.00               1.00                0.00            1.00
 {o_orderkey}       91241.00       1.26           44562.00            1.09                0.00            1.00
 
-stats table=q10_scan_7
-----
+----Stats for q10_scan_7----
 column_names   row_count  distinct_count  null_count
 {c_acctbal}    150000     140628          0
 {c_address}    150000     149937          0
@@ -345,8 +339,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {c_nationkey}  150000.00      1.00           25.00               1.00                0.00            1.00
 {c_phone}      150000.00      1.00           150000.00           1.01                0.00            1.00
 
-stats table=q10_lookup_join_8
-----
+----Stats for q10_lookup_join_8----
 column_names       row_count  distinct_count  null_count
 {l_discount}       114705     11              0
 {l_extendedprice}  114705     106228          0
@@ -365,8 +358,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderdate}      90519.00       1.27           92.00               1.00                0.00            1.00
 {o_orderkey}       90519.00       1.27           55062.00            1.13                0.00            1.00
 
-stats table=q10_index_join_9
-----
+----Stats for q10_index_join_9----
 column_names   row_count  distinct_count  null_count
 {o_custkey}    57069      42598           0
 {o_orderdate}  57069      92              0
@@ -377,8 +369,16 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {o_orderdate}  55062.00       1.04           92.00               1.00                0.00            1.00
 {o_orderkey}   55062.00       1.04           55062.00            1.02                0.00            1.00
 
-stats table=q10_scan_11
-----
+----Stats for q10_scan_10----
+column_names   row_count  distinct_count  null_count
+{o_orderdate}  57069      92              0
+{o_orderkey}   57069      56240           0
+~~~~
+column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{o_orderdate}  55062.00       1.04           92.00               1.00                0.00            1.00
+{o_orderkey}   55062.00       1.04           55062.00            1.02                0.00            1.00
+
+----Stats for q10_scan_11----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -386,3 +386,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----
