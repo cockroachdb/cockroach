@@ -1633,9 +1633,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "added http endpoints")
 
-	// Attempt to upgrade cluster version.
-	s.startAttemptUpgrade(ctx)
-
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
 	nodeStartCounter := "storage.engine."
@@ -1675,6 +1672,11 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
+
+	// Attempt to upgrade cluster version now that the sql server has been
+	// started. At this point we know that all sqlmigrations have successfully
+	// been run so it is safe to upgrade to the binary's current version.
+	s.startAttemptUpgrade(ctx)
 
 	log.Event(ctx, "server ready")
 	return nil
