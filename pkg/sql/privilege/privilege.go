@@ -60,11 +60,12 @@ const (
 
 // Predefined sets of privileges.
 var (
-	AllPrivileges           = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
-	ReadData                = List{GRANT, SELECT}
-	ReadWriteData           = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBSchemaTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	TypePrivileges          = List{ALL, GRANT, USAGE}
+	AllPrivileges     = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData          = List{GRANT, SELECT}
+	ReadWriteData     = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	DBTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	SchemaPrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	TypePrivileges    = List{ALL, GRANT, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -195,7 +196,7 @@ func ListFromStrings(strs []string) (List, error) {
 func ValidatePrivileges(privileges List, objectType ObjectType) error {
 	validPrivs := GetValidPrivilegesForObject(objectType)
 	for _, priv := range privileges {
-		// Check if priv is in DBSchemaTablePrivileges.
+		// Check if priv is in DBTablePrivileges.
 		if validPrivs.ToBitField()&priv.Mask() == 0 {
 			return pgerror.Newf(pgcode.InvalidGrantOperation,
 				"invalid privilege type %s for %s", priv.String(), objectType)
@@ -209,8 +210,10 @@ func ValidatePrivileges(privileges List, objectType ObjectType) error {
 // specified object type.
 func GetValidPrivilegesForObject(objectType ObjectType) List {
 	switch objectType {
-	case Table, Database, Schema:
-		return DBSchemaTablePrivileges
+	case Table, Database:
+		return DBTablePrivileges
+	case Schema:
+		return SchemaPrivileges
 	case Type:
 		return TypePrivileges
 	case Any:
