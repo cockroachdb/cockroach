@@ -135,14 +135,14 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 
 		// Spend some time reading data with a timeout to make sure the
 		// DROP above didn't brick the cluster. At the time of writing,
-		// clearing all of the table data takes ~6min, so we want to run
+		// clearing all of the table data takes ~1min, so we want to run
 		// for at least a multiple of that duration.
-		const minDuration = 45 * time.Minute
+		const minDuration = 5 * time.Minute
 		deadline := timeutil.Now().Add(minDuration)
 		curBankRanges := numBankRanges()
 		t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", minDuration, " to pass)")
 		for timeutil.Now().Before(deadline) || curBankRanges > 1 {
-			after := time.After(5 * time.Minute)
+			after := time.After(1 * time.Minute)
 			curBankRanges = numBankRanges() // this call takes minutes, unfortunately
 			t.WorkerProgress(1 - float64(curBankRanges)/float64(initialBankRanges))
 

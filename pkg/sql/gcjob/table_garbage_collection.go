@@ -12,7 +12,6 @@ package gcjob
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,74 +100,15 @@ func clearTableData(
 	}
 	log.Infof(ctx, "clearing data for table %d", table.ID)
 
-	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.ID)))
-	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	tableSpan := table.TableSpan(codec)
 
-	// ClearRange requests lays down RocksDB range deletion tombstones that have
-	// serious performance implications (#24029). The logic below attempts to
-	// bound the number of tombstones in one store by sending the ClearRange
-	// requests to each range in the table in small, sequential batches rather
-	// than letting DistSender send them all in parallel, to hopefully give the
-	// compaction queue time to compact the range tombstones away in between
-	// requests.
-	//
-	// As written, this approach has several deficiencies. It does not actually
-	// wait for the compaction queue to compact the tombstones away before
-	// sending the next request. It is likely insufficient if multiple DROP
-	// TABLEs are in flight at once. It does not save its progress in case the
-	// coordinator goes down. These deficiencies could be addressed, but this code
-	// was originally a stopgap to avoid the range tombstone performance hit. The
-	// RocksDB range tombstone implementation has since been improved and the
-	// performance implications of many range tombstones has been reduced
-	// dramatically making this simplistic throttling sufficient.
-
-	// These numbers were chosen empirically for the clearrange roachtest and
-	// could certainly use more tuning.
-	const batchSize = 100
-	const waitTime = 500 * time.Millisecond
-
-	var n int
-	lastKey := tableSpan.Key
-	ri := kvcoord.NewRangeIterator(distSender)
-	timer := timeutil.NewTimer()
-	defer timer.Stop()
-
-	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
-		if !ri.Valid() {
-			return ri.Error()
-		}
-
-		if n++; n >= batchSize || !ri.NeedAnother(tableSpan) {
-			endKey := ri.Desc().EndKey
-			if tableSpan.EndKey.Less(endKey) {
-				endKey = tableSpan.EndKey
-			}
-			var b kv.Batch
-			b.AddRawRequest(&roachpb.ClearRangeRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key:    lastKey.AsRawKey(),
-					EndKey: endKey.AsRawKey(),
-				},
-			})
-			log.VEventf(ctx, 2, "ClearRange %s - %s", lastKey, endKey)
-			if err := db.Run(ctx, &b); err != nil {
-				return errors.Wrapf(err, "clear range %s - %s", lastKey, endKey)
-			}
-			n = 0
-			lastKey = endKey
-			timer.Reset(waitTime)
-			select {
-			case <-timer.C:
-				timer.Read = true
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-
-		if !ri.NeedAnother(tableSpan) {
-			break
-		}
-	}
-
-	return nil
+	log.VEventf(ctx, 2, "ClearRange %s - %s", tableSpan.Key, tableSpan.EndKey)
+	var b kv.Batch
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tableSpan.Key,
+			EndKey: tableSpan.EndKey,
+		},
+	})
+	return db.Run(ctx, &b)
 }
