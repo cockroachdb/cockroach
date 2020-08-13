@@ -32,3 +32,8 @@ func TestTenantLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", logictestPkg+testdataGlob)
 }
+
+func TestTenantSQLLiteLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	logictest.RunSQLLiteLogicTest(t, "3node-tenant")
+}
