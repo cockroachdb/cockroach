@@ -125,7 +125,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += " (TestCrashReportingPacket)"
 			return message
 		}(), []extraPair{
-			{"1: details", "panic: %v\n-- arg 1: " + panicPre},
+			{"1: details", "format: \"panic: %v\"\n-- arg 1: " + panicPre},
 		}},
 		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 11, func() string {
 			message := prefix
@@ -138,7 +138,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += " (TestCrashReportingPacket)"
 			return message
 		}(), []extraPair{
-			{"1: details", "panic: %v\n-- arg 1: " + panicPost},
+			{"1: details", "format: \"panic: %v\"\n-- arg 1: " + panicPost},
 		}},
 	}
 
@@ -244,11 +244,11 @@ func TestInternalErrorReporting(t *testing.T) {
 	t.Logf("%# v", pretty.Formatter(p))
 
 	assert.Regexp(t, `\*errors.errorString\n`+
-		`\*safedetails.withSafeDetails: %s \(1\)\n`+
+		`\*safedetails.withSafeDetails: format: "%s" \(1\)\n`+
 		`builtins.go:\d+: \*withstack.withStack \(top exception\)\n`+
 		`\*assert.withAssertionFailure\n`+
 		`\*errutil.withMessage\n`+
-		`\*safedetails.withSafeDetails: %s\(\) \(2\)\n`+
+		`\*safedetails.withSafeDetails: format: "%s\(\)" \(2\)\n`+
 		`eval.go:\d+: \*withstack.withStack \(3\)\n`+
 		`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(4\)\n`+
 		`\(check the extra data payloads\)`, p.Message)
@@ -257,8 +257,8 @@ func TestInternalErrorReporting(t *testing.T) {
 		key   string
 		reVal string
 	}{
-		{"1: details", "%s\n.*<string>"},
-		{"2: details", `%s\(\).*\n.*force_assertion_error`},
+		{"1: details", "format: \"%s\"\n.*string:<redacted>"},
+		{"2: details", `format: "%s\(\)".*\n.*force_assertion_error`},
 		{"4: details", `crdb_internal\.force_assertion_error\(\)`},
 	}
 	for _, ex := range expectedExtra {
@@ -282,7 +282,7 @@ func TestInternalErrorReporting(t *testing.T) {
 	// The innermost stack trace (and main exception object) is the last
 	// one in the Sentry event.
 	assert.Regexp(t, `^builtins.go:\d+ \(.*\)$`, p.Exception[1].Type)
-	assert.Regexp(t, `^\*errors\.errorString: %s`, p.Exception[1].Value)
+	assert.Regexp(t, `^\*errors\.errorString: format: "%s"`, p.Exception[1].Value)
 	fr := p.Exception[1].Stacktrace.Frames
 	assert.Regexp(t, `.*/builtins.go`, fr[len(fr)-1].Filename)
 	assert.Regexp(t, `.*/eval.go`, fr[len(fr)-2].Filename)
