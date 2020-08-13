@@ -43,3 +43,16 @@ func (node *AlterSchemaRename) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNameP(&node.NewName)
 }
+
+func (*AlterSchemaOwner) alterSchemaCmd() {}
+
+// AlterSchemaOwner represents an ALTER SCHEMA RENAME command.
+type AlterSchemaOwner struct {
+	Owner string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterSchemaOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString(" OWNER TO ")
+	ctx.FormatNameP(&node.Owner)
+}

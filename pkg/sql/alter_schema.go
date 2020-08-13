@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,9 +64,45 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterSchemaRename:
 		return params.p.renameSchema(params.ctx, n.db, n.desc, t.NewName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	case *tree.AlterSchemaOwner:
+		return params.p.alterSchemaOwner(params.ctx, n.db, n.desc, t.Owner, tree.AsStringWithFQNames(n.n, params.Ann()))
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)
 	}
+}
+
+func (p *planner) alterSchemaOwner(
+	ctx context.Context,
+	db *sqlbase.MutableDatabaseDescriptor,
+	scDesc *sqlbase.MutableSchemaDescriptor,
+	newOwner string,
+	jobDesc string,
+) error {
+	privs := scDesc.GetPrivileges()
+
+	hasOwnership, err := p.HasOwnership(ctx, scDesc)
+	if err != nil {
+		return err
+	}
+
+	if err := p.checkCanAlterToNewOwner(ctx, scDesc, privs, newOwner, hasOwnership); err != nil {
+		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner {
+		return nil
+	}
+
+	// The new owner must also have CREATE privilege on the schema's database.
+	if err := p.CheckPrivilegeForUser(ctx, db, privilege.CREATE, newOwner); err != nil {
+		return err
+	}
+
+	// Update the owner of the schema.
+	privs.SetOwner(newOwner)
+
+	return p.writeSchemaDescChange(ctx, scDesc, jobDesc)
 }
 
 func (p *planner) renameSchema(
