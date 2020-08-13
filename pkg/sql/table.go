@@ -36,6 +36,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
 	databaseID descpb.ID,
+	schemasToDrop []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*typedesc.Mutable,
 	jobDesc string,
@@ -59,6 +60,7 @@ func (p *planner) createDropDatabaseJob(
 		Username:      p.User(),
 		DescriptorIDs: tableIDs,
 		Details: jobspb.SchemaChangeDetails{
+			DroppedSchemas:    schemasToDrop,
 			DroppedTables:     tableDropDetails,
 			DroppedTypes:      typeIDs,
 			DroppedDatabaseID: databaseID,

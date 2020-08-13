@@ -269,6 +269,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	return p.createDropDatabaseJob(
 		ctx,
 		n.db.ID,
+		nil, /* schemasToDrop */
 		nil, /* tableDropDetails */
 		nil, /* typesToDrop */
 		tree.AsStringWithFQNames(n.n, params.Ann()),
