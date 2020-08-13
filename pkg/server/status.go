@@ -365,7 +365,7 @@ func (s *statusServer) Allocator(
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
 						if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-							return true, nil // continue
+							return false, nil // continue
 						}
 						return true, err
 					}
