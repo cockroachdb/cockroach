@@ -856,6 +856,9 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
+  pkg/sql/colexec/default_cmp_expr.eg.go \
+  pkg/sql/colexec/default_cmp_proj_ops.eg.go \
+  pkg/sql/colexec/default_cmp_sel_ops.eg.go \
   pkg/sql/colexec/distinct.eg.go \
   pkg/sql/colexec/hashjoiner.eg.go \
   pkg/sql/colexec/hashtable_distinct.eg.go \
@@ -872,6 +875,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/hash_sum_agg.eg.go \
   pkg/sql/colexec/hash_sum_int_agg.eg.go \
   pkg/sql/colexec/hash_utils.eg.go \
+  pkg/sql/colexec/is_null_ops.eg.go \
   pkg/sql/colexec/like_ops.eg.go \
   pkg/sql/colexec/mergejoinbase.eg.go \
   pkg/sql/colexec/mergejoiner_exceptall.eg.go \

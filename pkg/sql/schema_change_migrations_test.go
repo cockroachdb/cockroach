@@ -317,8 +317,8 @@ func migrateJobToOldFormat(
 			details := job.Details().(jobspb.SchemaChangeDetails)
 			// Explicitly zero out these fields as they will be set to their 0 value
 			// on 19.2 nodes.
-			details.TableID = 0
-			details.MutationID = 0
+			details.DescID = 0
+			details.TableMutationID = 0
 			details.FormatVersion = jobspb.BaseFormatVersion
 			if isDeletingTable(schemaChangeType) {
 				details.DroppedTables = []jobspb.DroppedTableDetails{

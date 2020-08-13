@@ -601,6 +601,17 @@ func (tc *Collection) getMutableDescriptorByID(
 	return desc.(catalog.MutableDescriptor), nil
 }
 
+// GetMutableSchemaDescriptorByID gets a MutableSchemaDescriptor by ID.
+func (tc *Collection) GetMutableSchemaDescriptorByID(
+	ctx context.Context, scID descpb.ID, txn *kv.Txn,
+) (*sqlbase.MutableSchemaDescriptor, error) {
+	desc, err := tc.getMutableDescriptorByID(ctx, scID, txn)
+	if err != nil {
+		return nil, err
+	}
+	return desc.(*sqlbase.MutableSchemaDescriptor), nil
+}
+
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
@@ -1155,6 +1166,13 @@ func (tc *Collection) DatabaseCache() *database.Cache {
 // ResetDatabaseCache resets the table collection's database.Cache.
 func (tc *Collection) ResetDatabaseCache(dbCache *database.Cache) {
 	tc.databaseCache = dbCache
+}
+
+// ResetSchemaCache resets the table collection's schema cache.
+// TODO (rohany): This can removed once we use the collection's descriptors
+//  to manage schemas.
+func (tc *Collection) ResetSchemaCache() {
+	tc.schemaCache = sync.Map{}
 }
 
 // MigrationSchemaChangeRequiredContext flags a schema change as necessary to

@@ -75,9 +75,13 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	cmpOp := tree.LT
 	var input colexecbase.Operator
 	colIdx := 3
+	inputTypes := make([]*types.T, colIdx+1)
+	inputTypes[colIdx] = types.Date
 	constVal := int64(31)
 	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
-	op, err := GetSelectionConstOperator(types.Date, types.Date, cmpOp, input, colIdx, constArg, nil)
+	op, err := GetSelectionConstOperator(
+		cmpOp, input, inputTypes, colIdx, constArg, nil /* evalCtx */, nil, /* cmpExpr */
+	)
 	if err != nil {
 		t.Error(err)
 	}
@@ -99,13 +103,17 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	cmpOp := tree.LT
 	var input colexecbase.Operator
 	colIdx := 3
-	constVal := int16(31)
+	inputTypes := make([]*types.T, colIdx+1)
+	inputTypes[colIdx] = types.Int2
+	constVal := int64(31)
 	constArg := tree.NewDInt(tree.DInt(constVal))
-	op, err := GetSelectionConstOperator(types.Int, types.Int2, cmpOp, input, colIdx, constArg, nil)
+	op, err := GetSelectionConstOperator(
+		cmpOp, input, inputTypes, colIdx, constArg, nil /* evalCtx */, nil, /* cmpExpr */
+	)
 	if err != nil {
 		t.Error(err)
 	}
-	expected := &selLTInt64Int16ConstOp{
+	expected := &selLTInt16Int64ConstOp{
 		selConstOpBase: selConstOpBase{
 			OneInputNode: NewOneInputNode(input),
 			colIdx:       colIdx,
@@ -125,7 +133,12 @@ func TestGetSelectionOperator(t *testing.T) {
 	var input colexecbase.Operator
 	col1Idx := 5
 	col2Idx := 7
-	op, err := GetSelectionOperator(ct, ct, cmpOp, input, col1Idx, col2Idx, nil)
+	inputTypes := make([]*types.T, col2Idx+1)
+	inputTypes[col1Idx] = ct
+	inputTypes[col2Idx] = ct
+	op, err := GetSelectionOperator(
+		cmpOp, input, inputTypes, col1Idx, col2Idx, nil /* evalCtx */, nil, /* cmpExpr */
+	)
 	if err != nil {
 		t.Error(err)
 	}
