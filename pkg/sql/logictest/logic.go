@@ -448,6 +448,8 @@ type testClusterConfig struct {
 	useTenant bool
 }
 
+const threeNodeTenantConfigName = "3node-tenant"
+
 // logicTestConfigs contains all possible cluster configs. A test file can
 // specify a list of configs they run on in a file-level comment like:
 //   # LogicTest: default distsql
@@ -613,13 +615,29 @@ var logicTestConfigs = []testClusterConfig{
 		overrideExperimentalDistSQLPlanning: "on",
 	},
 	{
-		name:     "3node-tenant",
+		// 3node-tenant is a config that runs the test as a SQL tenant. This config
+		// can only be run with a CCL binary, so is a noop if run through the normal
+		// logictest command.
+		// To run a logic test with this config as a directive, run:
+		// make test PKG=./pkg/ccl/logictestccl TESTS=TestTenantLogic//<test_name>
+		name:     threeNodeTenantConfigName,
 		numNodes: 3,
 		// overrideAutoStats will disable automatic stats on the cluster this tenant
 		// is connected to.
 		overrideAutoStats: "false",
 		useTenant:         true,
 	},
+}
+
+// isCCLConfig returns true for any config name that can only be run with a CCL
+// binary.
+func isCCLConfig(configName string) bool {
+	switch configName {
+	case threeNodeTenantConfigName:
+		return true
+	default:
+		return false
+	}
 }
 
 // An index in the above slice.
@@ -2662,15 +2680,21 @@ type TestServerArgs struct {
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
 func RunLogicTest(t *testing.T, serverArgs TestServerArgs, globs ...string) {
-	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, globs...)
+	RunLogicTestWithDefaultConfig(t, serverArgs, *overrideConfig, false /* runCCLConfigs */, globs...)
 }
 
 // RunLogicTestWithDefaultConfig is the main entry point for the logic test.
 // The globs parameter specifies the default sets of files to run. The config
 // override parameter, if not empty, specifies the set of configurations to run
 // those files in. If empty, the default set of configurations is used.
+// runCCLConfigs specifies whether the test runner should skip configs that can
+// only be run with a CCL binary.
 func RunLogicTestWithDefaultConfig(
-	t *testing.T, serverArgs TestServerArgs, configOverride string, globs ...string,
+	t *testing.T,
+	serverArgs TestServerArgs,
+	configOverride string,
+	runCCLConfigs bool,
+	globs ...string,
 ) {
 	// Note: there is special code in teamcity-trigger/main.go to run this package
 	// with less concurrency in the nightly stress runs. If you see problems
@@ -2741,6 +2765,11 @@ func RunLogicTestWithDefaultConfig(
 			configName := logicTestConfigs[idx].name
 			if _, ok := configFilter[configName]; configFilter != nil && !ok {
 				// Config filter present but not containing test.
+				continue
+			}
+			if isCCLConfig(configName) && !runCCLConfigs {
+				// Config is a CCL config and the caller specified that CCL configs
+				// should not be run.
 				continue
 			}
 			configPaths[idx] = append(configPaths[idx], path)
