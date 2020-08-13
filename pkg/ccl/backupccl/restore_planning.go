@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -890,6 +891,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		Detached:                  opts.Detached,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -945,16 +947,6 @@ func restoreJobDescription(
 
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(r, ann), nil
-}
-
-// RestoreHeader is the header for RESTORE stmt results.
-var RestoreHeader = sqlbase.ResultColumns{
-	{Name: "job_id", Typ: types.Int},
-	{Name: "status", Typ: types.String},
-	{Name: "fraction_completed", Typ: types.Float},
-	{Name: "rows", Typ: types.Int},
-	{Name: "index_entries", Typ: types.Int},
-	{Name: "bytes", Typ: types.Int},
 }
 
 // restorePlanHook implements sql.PlanHookFn.
@@ -1021,8 +1013,8 @@ func restorePlanHook(
 			return err
 		}
 
-		if !p.ExtendedEvalContext().TxnImplicit {
-			return errors.Errorf("RESTORE cannot be used inside a transaction")
+		if !(p.ExtendedEvalContext().TxnImplicit || restoreStmt.Options.Detached) {
+			return errors.Errorf("RESTORE cannot be used inside a transaction without DETACHED option")
 		}
 
 		subdir, err := subdirFn()
@@ -1085,7 +1077,11 @@ func restorePlanHook(
 
 		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, endTime, resultsCh)
 	}
-	return fn, RestoreHeader, nil, false, nil
+
+	if restoreStmt.Options.Detached {
+		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
+	}
+	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
 
 func doRestorePlan(
@@ -1252,7 +1248,7 @@ func doRestorePlan(
 	}
 
 	// Collect telemetry.
-	{
+	collectTelemetry := func() {
 		telemetry.Count("restore.total.started")
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 			telemetry.Count("restore.full-cluster")
@@ -1285,6 +1281,17 @@ func doRestorePlan(
 		},
 		Progress: jobspb.RestoreProgress{},
 	}
+
+	if restoreStmt.Options.Detached {
+		// When running in detached mode, we simply create the job record.
+		// We do not wait for the job to finish.
+		if err := utilccl.StartAsyncJob(ctx, p, &jr, resultsCh); err != nil {
+			return err
+		}
+		collectTelemetry()
+		return nil
+	}
+
 	var sj *jobs.StartableJob
 	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		sj, err = p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, jr, txn, resultsCh)
@@ -1300,6 +1307,7 @@ func doRestorePlan(
 		}
 	}
 
+	collectTelemetry()
 	return sj.Run(ctx)
 }
 

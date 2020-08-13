@@ -2331,9 +2331,14 @@ opt_with_schedule_options:
 //    "[scheme]://[host]/[path to backup]?[parameters]"
 //
 // Options:
-//    INTO_DB
-//    SKIP_MISSING_FOREIGN_KEYS
-//
+//    into_db: specify target database
+//    skip_missing_foreign_keys: remove foreign key constraints before restoring
+//    skip_missing_sequences: ignore sequence dependencies
+//    skip_missing_views: skip restoring views because of dependencies that cannot be restored
+//    skip_missing_sequence_owners: remove sequence-table ownership dependencies before restoring
+//    encryption_passphrase=passphrase: decrypt BACKUP with specified passphrase
+//    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
+//    detached: execute restore job asynchronously, without waiting for its completion
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -2443,6 +2448,10 @@ restore_options:
 | SKIP_MISSING_VIEWS
   {
     $$.val = &tree.RestoreOptions{SkipMissingViews: true}
+  }
+| DETACHED
+  {
+    $$.val = &tree.RestoreOptions{Detached: true}
   }
 
 import_format:

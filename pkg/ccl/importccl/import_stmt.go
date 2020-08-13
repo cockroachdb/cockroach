@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -801,7 +802,7 @@ func importPlanHook(
 		}
 		return sj.Run(ctx)
 	}
-	return fn, backupccl.RestoreHeader, nil, false, nil
+	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
 }
 
 func parseAvroOptions(
