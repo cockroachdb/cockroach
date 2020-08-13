@@ -61,6 +61,9 @@ type MigrationManagerTestingKnobs struct {
 	// AlwaysRunJobMigration controls whether to always run the schema change job
 	// migration regardless of whether it has been marked as complete.
 	AlwaysRunJobMigration bool
+
+	// AfterEnsureMigrations is called after each call to EnsureMigrations.
+	AfterEnsureMigrations func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -552,6 +555,9 @@ func ExpectedDescriptorIDs(
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb.Version) error {
+	if m.testingKnobs.AfterEnsureMigrations != nil {
+		defer m.testingKnobs.AfterEnsureMigrations()
+	}
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db, m.codec)
 	if err != nil {
