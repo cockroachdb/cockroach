@@ -63,16 +63,17 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 		t.Fatal(err)
 	}
 
-	rUnsafe := errors.New("panic: i'm not safe")
+	rUnsafe := errors.New("some error")
 	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST)
 
-	const expMessage = "panic: i'm not safe"
+	const expMessage = "some error"
 	actMessage := safeErr.Error()
 	if actMessage != expMessage {
 		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
 	const expSafeRedactedMessage = `...conn_executor_test.go:NN: *errors.errorString: <redacted>
+*safedetails.withSafeDetails: some error
 *withstack.withStack
   (more details:)
   github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting

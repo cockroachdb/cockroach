@@ -40,11 +40,14 @@ type safeErrorTestCase struct {
 var safeErrorTestCases = func() []safeErrorTestCase {
 	var errSentinel = struct{ error }{} // explodes if Error() called
 	var errFundamental = errors.Errorf("%s", "not recoverable :(")
-	var errWrapped1 = errors.Wrap(errFundamental, "not recoverable :(")
-	var errWrapped2 = errors.Wrapf(errWrapped1, "this is reportable")
-	var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
+	var errWrapped1 = errors.Wrap(errFundamental, "this is reportable")
+	var errWrapped2 = errors.Wrapf(errWrapped1, "this is reportable too")
+	var errWrapped3 = errors.Wrap(errWrapped2, "this is reportable as well")
 	var errFormatted = errors.Newf("this embed an error: %v", errWrapped2)
-	var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "this is reportable"), "seecret")
+	var errWrappedSentinel = errors.Wrap(
+		errors.Wrapf(errSentinel,
+			"this is reportable"),
+		"this is also reportable")
 
 	runtimeErr := makeTypeAssertionErr()
 
@@ -61,9 +64,10 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 		},
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
-			err: errors.Wrap(runtimeErr, "unseen"),
+			err: errors.Wrap(runtimeErr, "some visible detail"),
 			expErr: `...crash_reporting_test.go:NN: *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int
 *errutil.withMessage: <redacted>
+*safedetails.withSafeDetails: some visible detail
 *withstack.withStack
   (more details:)
   github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
@@ -181,6 +185,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
   runtime.goexit
   	...asm_amd64.s:NN
 *errutil.withMessage: <redacted>
+*safedetails.withSafeDetails: this is also reportable
 *withstack.withStack
   (more details:)
   github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
@@ -217,21 +222,6 @@ var safeErrorTestCases = func() []safeErrorTestCase {
   runtime.goexit
   	...asm_amd64.s:NN
 *errutil.withMessage: <redacted>
-*withstack.withStack
-  (more details:)
-  github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
-  	...crash_reporting_test.go:NN
-  github.com/cockroachdb/cockroach/pkg/util/log.init
-  	...crash_reporting_test.go:NN
-  runtime.doInit
-  	...proc.go:NN
-  runtime.doInit
-  	...proc.go:NN
-  runtime.main
-  	...proc.go:NN
-  runtime.goexit
-  	...asm_amd64.s:NN
-*errutil.withMessage: <redacted>
 *safedetails.withSafeDetails: this is reportable
 *withstack.withStack
   (more details:)
@@ -248,6 +238,23 @@ var safeErrorTestCases = func() []safeErrorTestCase {
   runtime.goexit
   	...asm_amd64.s:NN
 *errutil.withMessage: <redacted>
+*safedetails.withSafeDetails: this is reportable too
+*withstack.withStack
+  (more details:)
+  github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
+  	...crash_reporting_test.go:NN
+  github.com/cockroachdb/cockroach/pkg/util/log.init
+  	...crash_reporting_test.go:NN
+  runtime.doInit
+  	...proc.go:NN
+  runtime.doInit
+  	...proc.go:NN
+  runtime.main
+  	...proc.go:NN
+  runtime.goexit
+  	...asm_amd64.s:NN
+*errutil.withMessage: <redacted>
+*safedetails.withSafeDetails: this is reportable as well
 *withstack.withStack
   (more details:)
   github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
@@ -298,6 +305,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
     runtime.goexit
     	...asm_amd64.s:NN
   *errutil.withMessage: <redacted>
+  *safedetails.withSafeDetails: this is reportable
   *withstack.withStack
     (more details:)
     github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
@@ -313,7 +321,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
     runtime.goexit
     	...asm_amd64.s:NN
   *errutil.withMessage: <redacted>
-  *safedetails.withSafeDetails: this is reportable
+  *safedetails.withSafeDetails: this is reportable too
   *withstack.withStack
     (more details:)
     github.com/cockroachdb/cockroach/pkg/util/log.glob..func4
