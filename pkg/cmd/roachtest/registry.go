@@ -28,7 +28,6 @@ func registerTests(r *testRegistry) {
 	registerClockMonotonicTests(r)
 	registerCopy(r)
 	registerDecommission(r)
-	registerDecommissionMixedVersion(r)
 	registerDiskFull(r)
 	registerDiskStalledDetection(r)
 	registerDjango(r)
