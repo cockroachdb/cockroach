@@ -1,5 +1,3 @@
-# LogicTest: local
-
 statement ok
 CREATE DATABASE a
 

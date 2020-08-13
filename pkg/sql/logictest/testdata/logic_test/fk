@@ -1,4 +1,4 @@
-# LogicTest: local fakedist
+# LogicTest: !3node-tenant(49854)
 
 # Randomize the use of insert fast path.
 # The let statement will also log the value.
