@@ -298,7 +298,7 @@ func constructVirtualScan(
 	// Virtual indexes never provide a legitimate ordering, so we have to make
 	// sure to sort if we have a required ordering.
 	if len(reqOrdering) != 0 {
-		n, err = ef.ConstructSort(n, sqlbase.ColumnOrdering(reqOrdering), 0)
+		n, err = ef.ConstructSort(n, reqOrdering, 0)
 		if err != nil {
 			return nil, err
 		}

@@ -95,6 +95,44 @@ func (ob *OutputBuilder) AddField(key, value string) {
 	ob.entries = append(ob.entries, entry{field: key, fieldVal: value})
 }
 
+// Attr adds an information field under the current node.
+func (ob *OutputBuilder) Attr(key string, value interface{}) {
+	ob.AddField(key, fmt.Sprint(value))
+}
+
+// VAttr is a verbose-only version of Attr.
+func (ob *OutputBuilder) VAttr(key string, value interface{}) {
+	if ob.flags.Verbose {
+		ob.AddField(key, fmt.Sprint(value))
+	}
+}
+
+// Attrf is a formatter version of Attr.
+func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
+	ob.AddField(key, fmt.Sprintf(format, args...))
+}
+
+// Expr adds an information field with an expression. The expression's
+// IndexedVars refer to the given columns. If the expression is nil, nothing is
+// emitted.
+func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+	if expr == nil {
+		return
+	}
+	flags := tree.FmtSymbolicSubqueries
+	if ob.flags.ShowTypes {
+		flags |= tree.FmtShowTypes
+	}
+	f := tree.NewFmtCtx(flags)
+	f.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
+		// Ensure proper quoting.
+		n := tree.Name(varColumns[idx].Name)
+		ctx.WriteString(n.String())
+	})
+	f.FormatNode(expr)
+	ob.AddField(key, f.CloseAndGetString())
+}
+
 // buildTreeRows creates the treeprinter structure; returns one string for each
 // entry in ob.entries.
 func (ob *OutputBuilder) buildTreeRows() []string {

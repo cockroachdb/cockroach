@@ -917,7 +917,8 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/norm/factory.og.go \
 	pkg/sql/opt/rule_name.og.go \
 	pkg/sql/opt/rule_name_string.go \
-	pkg/sql/opt/exec/factory.og.go
+	pkg/sql/opt/exec/factory.og.go \
+	pkg/sql/opt/exec/explain/explain_factory.og.go
 
 go-targets-ccl := \
 	$(COCKROACH) $(COCKROACHSHORT) \
@@ -1620,6 +1621,9 @@ pkg/sql/opt/norm/factory.og.go: $(optgen-defs) $(optgen-norm-rules) bin/optgen
 
 pkg/sql/opt/exec/factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
 	optgen -out $@ execfactory $(optgen-exec-defs)
+
+pkg/sql/opt/exec/explain/explain_factory.og.go: $(optgen-defs) $(optgen-exec-defs) bin/optgen
+	optgen -out $@ execexplain $(optgen-exec-defs)
 
 # Format non-generated .cc and .h files in libroach using clang-format.
 .PHONY: c-deps-fmt
