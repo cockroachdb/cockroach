@@ -1987,43 +1987,65 @@ func (s *Server) Decommission(
 }
 
 // startSampleEnvironment begins the heap profiler worker.
-func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Duration) error {
+func (s *Server) startSampleEnvironment(
+	ctx context.Context, minSampleInterval time.Duration,
+) error {
 	// Immediately record summaries once on server startup.
 	ctx = s.AnnotateCtx(ctx)
 
-	// We're not going to take heap profiles or goroutine dumps if
-	// running only with in-memory stores.  This helps some tests that
-	// can't write any files.
-	allStoresInMem := true
-	for _, storeSpec := range s.cfg.Stores.Specs {
-		if !storeSpec.InMemory {
-			allStoresInMem = false
-			break
-		}
-	}
-
+	// Initialize a goroutine dumper if we have an output directory
+	// specified.
 	var goroutineDumper *goroutinedumper.GoroutineDumper
-	var heapProfiler *heapprofiler.HeapProfiler
-
-	if !allStoresInMem {
-		var err error
-		if s.cfg.GoroutineDumpDirName != "" {
-			if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
-				return errors.Wrap(err, "creating goroutine dump dir")
-			}
-			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+	if s.cfg.GoroutineDumpDirName != "" {
+		hasValidDumpDir := true
+		if err := os.MkdirAll(s.cfg.GoroutineDumpDirName, 0755); err != nil {
+			// This is possible when running with only in-memory stores;
+			// in that case the start-up code sets the output directory
+			// to the current directory (.). If wrunning the process
+			// from a directory which is not writable, we won't
+			// be able to create a sub-directory here.
+			log.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
+			hasValidDumpDir = false
+		}
+		if hasValidDumpDir {
+			var err error
+			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(ctx, s.cfg.GoroutineDumpDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting goroutine dumper worker")
 			}
 		}
+	}
 
-		if s.cfg.HeapProfileDirName != "" {
-			if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
-				return errors.Wrap(err, "creating heap profiles dir")
-			}
-			heapProfiler, err = heapprofiler.NewHeapProfiler(s.cfg.HeapProfileDirName, s.ClusterSettings())
+	// Initialize a heap profiler if we have an output directory
+	// specified.
+	var heapProfiler *heapprofiler.HeapProfiler
+	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
+	var statsProfiler *heapprofiler.StatsProfiler
+	if s.cfg.HeapProfileDirName != "" {
+		hasValidDumpDir := true
+		if err := os.MkdirAll(s.cfg.HeapProfileDirName, 0755); err != nil {
+			// This is possible when running with only in-memory stores;
+			// in that case the start-up code sets the output directory
+			// to the current directory (.). If wrunning the process
+			// from a directory which is not writable, we won't
+			// be able to create a sub-directory here.
+			log.Warningf(ctx, "cannot create memory dump dir -- memory profile dumps will be disabled: %v", err)
+			hasValidDumpDir = false
+		}
+
+		if hasValidDumpDir {
+			var err error
+			heapProfiler, err = heapprofiler.NewHeapProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
+			}
+			nonGoAllocProfiler, err = heapprofiler.NewNonGoAllocProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
+			if err != nil {
+				return errors.Wrap(err, "starting non-go alloc profiler worker")
+			}
+			statsProfiler, err = heapprofiler.NewStatsProfiler(ctx, s.cfg.HeapProfileDirName, s.ClusterSettings())
+			if err != nil {
+				return errors.Wrap(err, "starting memory stats collector worker")
 			}
 		}
 	}
@@ -2035,7 +2057,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
-		timer.Reset(frequency)
+		timer.Reset(minSampleInterval)
 
 		for {
 			select {
@@ -2043,7 +2065,7 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 				return
 			case <-timer.C:
 				timer.Read = true
-				timer.Reset(frequency)
+				timer.Reset(minSampleInterval)
 
 				// We read the heap stats on another goroutine and give up after 1s.
 				// This is necessary because as of Go 1.12, runtime.ReadMemStats()
@@ -2075,14 +2097,16 @@ func (s *Server) startSampleEnvironment(ctx context.Context, frequency time.Dura
 				}
 
 				curStats := goMemStats.Load().(*status.GoMemStats)
-				s.runtime.SampleEnvironment(ctx, *curStats)
+				cgoStats := status.GetCGoMemStats(ctx)
+				s.runtime.SampleEnvironment(ctx, curStats, cgoStats)
 				if goroutineDumper != nil {
 					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
 				}
 				if heapProfiler != nil {
-					heapProfiler.MaybeTakeProfile(ctx, curStats.MemStats)
+					heapProfiler.MaybeTakeProfile(ctx, s.runtime.GoAllocBytes.Value())
+					nonGoAllocProfiler.MaybeTakeProfile(ctx, s.runtime.CgoTotalBytes.Value())
+					statsProfiler.MaybeTakeProfile(ctx, s.runtime.RSSBytes.Value(), curStats, cgoStats)
 				}
-
 			}
 		}
 	})

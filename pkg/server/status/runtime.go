@@ -383,6 +383,30 @@ type GoMemStats struct {
 	Collected time.Time
 }
 
+// CGoMemStats reports what has been allocated outside of Go.
+type CGoMemStats struct {
+	// CGoAllocated represents allocated bytes.
+	CGoAllocatedBytes int64
+	// CGoTotal represents total bytes (allocated + metadata etc).
+	CGoTotalBytes int64
+}
+
+// GetCGoMemStats collects non-Go memory statistics.
+func GetCGoMemStats(ctx context.Context) *CGoMemStats {
+	var cgoAllocated, cgoTotal uint
+	if getCgoMemStats != nil {
+		var err error
+		cgoAllocated, cgoTotal, err = getCgoMemStats(ctx)
+		if err != nil {
+			log.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
+		}
+	}
+	return &CGoMemStats{
+		CGoAllocatedBytes: int64(cgoAllocated),
+		CGoTotalBytes:     int64(cgoTotal),
+	}
+}
+
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
 // RuntimeStatSampler. This makes runtime statistics more convenient for
@@ -393,7 +417,10 @@ type GoMemStats struct {
 //
 // SampleEnvironment takes GoMemStats as input because that is collected
 // separately, on a different schedule.
-func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemStats) {
+// The CGoMemStats should be provided via GetCGoMemStats().
+func (rsr *RuntimeStatSampler) SampleEnvironment(
+	ctx context.Context, ms *GoMemStats, cs *CGoMemStats,
+) {
 	// Note that debug.ReadGCStats() does not suffer the same problem as
 	// runtime.ReadMemStats(). The only way you can know that is by reading the
 	// source.
@@ -480,15 +507,6 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	rsr.last.stime = stime
 	rsr.last.gcPauseTime = uint64(gc.PauseTotal)
 
-	var cgoAllocated, cgoTotal uint
-	if getCgoMemStats != nil {
-		var err error
-		cgoAllocated, cgoTotal, err = getCgoMemStats(ctx)
-		if err != nil {
-			log.Warningf(ctx, "problem fetching CGO memory stats: %s; CGO stats will be empty.", err)
-		}
-	}
-
 	// Log summary of statistics to console.
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
 	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
@@ -507,7 +525,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(ms.HeapAlloc), humanize.IBytes(ms.HeapIdle), humanize.IBytes(goTotal),
 		staleMsg,
-		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
+		humanize.IBytes(uint64(cs.CGoAllocatedBytes)), humanize.IBytes(uint64(cs.CGoTotalBytes)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
 	)))
@@ -518,8 +536,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, ms GoMemSt
 	rsr.GoTotalBytes.Update(int64(goTotal))
 	rsr.CgoCalls.Update(numCgoCall)
 	rsr.Goroutines.Update(int64(numGoroutine))
-	rsr.CgoAllocBytes.Update(int64(cgoAllocated))
-	rsr.CgoTotalBytes.Update(int64(cgoTotal))
+	rsr.CgoAllocBytes.Update(cs.CGoAllocatedBytes)
+	rsr.CgoTotalBytes.Update(cs.CGoTotalBytes)
 	rsr.GcCount.Update(gc.NumGC)
 	rsr.GcPauseNS.Update(int64(gc.PauseTotal))
 	rsr.GcPausePercent.Update(gcPausePercent)

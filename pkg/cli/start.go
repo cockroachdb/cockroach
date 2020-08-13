@@ -22,7 +22,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"runtime/pprof"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -59,11 +57,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
-
-// jemallocHeapDump is an optional function to be called at heap dump time.
-// This will be non-nil when jemalloc is linked in with profiling enabled.
-// The function takes a filename to write the profile to.
-var jemallocHeapDump func(string) error
 
 // startCmd starts a node by initializing the stores and joining
 // the cluster.
@@ -104,170 +97,6 @@ replication disabled (replication factor = 1).
 // StartCmds exports startCmd and startSingleNodeCmds so that other
 // packages can add flags to them.
 var StartCmds = []*cobra.Command{startCmd, startSingleNodeCmd}
-
-// maxSizePerProfile is the maximum total size in bytes for profiles per
-// profile type.
-var maxSizePerProfile = envutil.EnvOrDefaultInt64(
-	"COCKROACH_MAX_SIZE_PER_PROFILE", 100<<20 /* 100 MB */)
-
-// gcProfiles removes old profiles matching the specified prefix when the sum
-// of newer profiles is larger than maxSize. Requires that the suffix used for
-// the profiles indicates age (e.g. by using a date/timestamp suffix) such that
-// sorting the filenames corresponds to ordering the profiles from oldest to
-// newest.
-func gcProfiles(dir, prefix string, maxSize int64) {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Warningf(context.Background(), "%v", err)
-		return
-	}
-	var sum int64
-	var found int
-	for i := len(files) - 1; i >= 0; i-- {
-		f := files[i]
-		if !f.Mode().IsRegular() {
-			continue
-		}
-		if !strings.HasPrefix(f.Name(), prefix) {
-			continue
-		}
-		found++
-		sum += f.Size()
-		if found == 1 {
-			// Always keep the most recent profile.
-			continue
-		}
-		if sum <= maxSize {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
-			log.Infof(context.Background(), "%v", err)
-		}
-	}
-}
-
-func initMemProfile(ctx context.Context, dir string) {
-	const jeprof = "jeprof."
-	const memprof = "memprof."
-
-	gcProfiles(dir, jeprof, maxSizePerProfile)
-	gcProfiles(dir, memprof, maxSizePerProfile)
-
-	memProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", -1)
-	if memProfileInterval <= 0 {
-		return
-	}
-	if min := time.Second; memProfileInterval < min {
-		log.Infof(ctx, "fixing excessively short memory profiling interval: %s -> %s",
-			memProfileInterval, min)
-		memProfileInterval = min
-	}
-
-	if jemallocHeapDump != nil {
-		log.Infof(ctx, "writing go and jemalloc memory profiles to %s every %s", dir, memProfileInterval)
-	} else {
-		log.Infof(ctx, "writing go only memory profiles to %s every %s", dir, memProfileInterval)
-		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
-	}
-
-	go func() {
-		ctx := context.Background()
-		t := time.NewTicker(memProfileInterval)
-		defer t.Stop()
-
-		for {
-			<-t.C
-
-			func() {
-				const format = "2006-01-02T15_04_05.999"
-				suffix := timeutil.Now().Format(format)
-
-				// Try jemalloc heap profile first, we only log errors.
-				if jemallocHeapDump != nil {
-					jepath := filepath.Join(dir, jeprof+suffix)
-					if err := jemallocHeapDump(jepath); err != nil {
-						log.Warningf(ctx, "error writing jemalloc heap %s: %s", jepath, err)
-					}
-					gcProfiles(dir, jeprof, maxSizePerProfile)
-				}
-
-				path := filepath.Join(dir, memprof+suffix)
-				// Try writing a go heap profile.
-				f, err := os.Create(path)
-				if err != nil {
-					log.Warningf(ctx, "error creating go heap file %s", err)
-					return
-				}
-				defer f.Close()
-				if err = pprof.WriteHeapProfile(f); err != nil {
-					log.Warningf(ctx, "error writing go heap %s: %s", path, err)
-					return
-				}
-				gcProfiles(dir, memprof, maxSizePerProfile)
-			}()
-		}
-	}()
-}
-
-func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
-	const cpuprof = "cpuprof."
-	gcProfiles(dir, cpuprof, maxSizePerProfile)
-
-	cpuProfileInterval := envutil.EnvOrDefaultDuration("COCKROACH_CPUPROF_INTERVAL", -1)
-	if cpuProfileInterval <= 0 {
-		return
-	}
-	if min := time.Second; cpuProfileInterval < min {
-		log.Infof(ctx, "fixing excessively short cpu profiling interval: %s -> %s",
-			cpuProfileInterval, min)
-		cpuProfileInterval = min
-	}
-
-	go func() {
-		defer log.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
-
-		ctx := context.Background()
-
-		t := time.NewTicker(cpuProfileInterval)
-		defer t.Stop()
-
-		var currentProfile *os.File
-		defer func() {
-			if currentProfile != nil {
-				pprof.StopCPUProfile()
-				currentProfile.Close()
-			}
-		}()
-
-		for {
-			// Grab a profile.
-			if err := debug.CPUProfileDo(st, cluster.CPUProfileDefault, func() error {
-				const format = "2006-01-02T15_04_05.999"
-
-				var buf bytes.Buffer
-				// Start the new profile. Write to a buffer so we can name the file only
-				// when we know the time at end of profile.
-				if err := pprof.StartCPUProfile(&buf); err != nil {
-					return err
-				}
-
-				<-t.C
-
-				pprof.StopCPUProfile()
-
-				suffix := timeutil.Now().Format(format)
-				if err := ioutil.WriteFile(filepath.Join(dir, cpuprof+suffix), buf.Bytes(), 0644); err != nil {
-					return err
-				}
-				gcProfiles(dir, cpuprof, maxSizePerProfile)
-				return nil
-			}); err != nil {
-				// Log errors, but continue. There's always next time.
-				log.Infof(ctx, "error during CPU profile: %s", err)
-			}
-		}
-	}()
-}
 
 func initBlockProfile() {
 	// Enable the block profile for a sample of mutex and channel operations.
@@ -1328,7 +1157,6 @@ func setupAndInitializeLoggingAndProfiling(
 	info := build.GetInfo()
 	log.Infof(ctx, "%s", info.Short())
 
-	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory, serverCfg.Settings)
 	initBlockProfile()
 	initMutexProfile()
