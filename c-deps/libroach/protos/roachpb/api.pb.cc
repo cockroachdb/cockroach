@@ -42,7 +42,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminUnsplitResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_BulkOpSummary;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComputeChecksumResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ConditionalPutResponse;
@@ -87,6 +86,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminVerifyProtectedTimestampResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_CheckConsistencyResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ClearRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ComputeChecksumRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ConditionalPutRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_EndTxnResponse;
@@ -1134,9 +1134,10 @@ static void InitDefaultsClearRangeRequest() {
   ::cockroach::roachpb::ClearRangeRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ClearRangeRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsClearRangeRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ClearRangeRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsClearRangeRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
 static void InitDefaultsClearRangeResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -7077,9 +7078,18 @@ void DeleteRangeResponse::InternalSwap(DeleteRangeResponse* other) {
 void ClearRangeRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ClearRangeRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_ClearRangeRequest_default_instance_._instance.get_mutable()->deadline_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+      ::cockroach::util::hlc::Timestamp::internal_default_instance());
+}
+void ClearRangeRequest::clear_deadline() {
+  if (GetArenaNoVirtual() == NULL && deadline_ != NULL) {
+    delete deadline_;
+  }
+  deadline_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ClearRangeRequest::kHeaderFieldNumber;
+const int ClearRangeRequest::kDeadlineFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ClearRangeRequest::ClearRangeRequest()
@@ -7098,11 +7108,18 @@ ClearRangeRequest::ClearRangeRequest(const ClearRangeRequest& from)
   } else {
     header_ = NULL;
   }
+  if (from.has_deadline()) {
+    deadline_ = new ::cockroach::util::hlc::Timestamp(*from.deadline_);
+  } else {
+    deadline_ = NULL;
+  }
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ClearRangeRequest)
 }
 
 void ClearRangeRequest::SharedCtor() {
-  header_ = NULL;
+  ::memset(&header_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&deadline_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(deadline_));
 }
 
 ClearRangeRequest::~ClearRangeRequest() {
@@ -7112,6 +7129,7 @@ ClearRangeRequest::~ClearRangeRequest() {
 
 void ClearRangeRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete deadline_;
 }
 
 void ClearRangeRequest::SetCachedSize(int size) const {
@@ -7133,6 +7151,10 @@ void ClearRangeRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && deadline_ != NULL) {
+    delete deadline_;
+  }
+  deadline_ = NULL;
   _internal_metadata_.Clear();
 }
 
@@ -7157,6 +7179,17 @@ bool ClearRangeRequest::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_header()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_deadline()));
         } else {
           goto handle_unusual;
         }
@@ -7194,6 +7227,11 @@ void ClearRangeRequest::SerializeWithCachedSizes(
       1, this->_internal_header(), output);
   }
 
+  if (this->has_deadline()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2, this->_internal_deadline(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ClearRangeRequest)
@@ -7209,6 +7247,12 @@ size_t ClearRangeRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  if (this->has_deadline()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *deadline_);
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -7231,6 +7275,9 @@ void ClearRangeRequest::MergeFrom(const ClearRangeRequest& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
+  if (from.has_deadline()) {
+    mutable_deadline()->::cockroach::util::hlc::Timestamp::MergeFrom(from.deadline());
+  }
 }
 
 void ClearRangeRequest::CopyFrom(const ClearRangeRequest& from) {
@@ -7251,6 +7298,7 @@ void ClearRangeRequest::Swap(ClearRangeRequest* other) {
 void ClearRangeRequest::InternalSwap(ClearRangeRequest* other) {
   using std::swap;
   swap(header_, other->header_);
+  swap(deadline_, other->deadline_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
