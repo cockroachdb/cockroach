@@ -266,10 +266,3 @@ func startVersionStep(nodes nodeListOption, version string, extraArgs ...string)
 		u.c.Start(ctx, t, nodes, binaryArg, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"}, extra)
 	}
 }
-
-// stopStep stops specified cockroach node
-func stopStep(nodes nodeListOption) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		u.c.Stop(ctx, nodes)
-	}
-}

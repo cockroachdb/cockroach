@@ -13,15 +13,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"math/rand"
+
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 // runMixedVersionSplits runs a workload against a mixed-version cluster that
 // would end up generating a bunch of splits.
-func runMixedVersionSplits(
-	ctx context.Context, t *test, c *cluster, buildVersion version.Version,
-) {
+func runMixedVersionSplits(ctx context.Context, t *test, c *cluster, buildVersion version.Version) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
@@ -58,13 +57,10 @@ func runMixedVersionSplits(
 		// Initialize schema for the workload, and limit range size to induce
 		// splits more readily.
 		initWorkloadStep(pinnedWorkload, getRandNode()),
-		limitRangeSizeStep(getRandNode(), 128<<10 /* 128 KiB */),
+		limitRangeSizeStep(getRandNode(), 1<<20 /* 1 MiB */),
 
-		// Upgrade one of the nodes, and give it a lot txn liveness heartbeat
-		// multiplier to cause more aborts.
-		stopStep(c.Node(pinnedUpgrade)),
-		startVersionStep(c.Node(pinnedUpgrade), mainVersion, "--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=1"),
-
+		// Upgrade one of the nodes and run the workload.
+		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
 		runSplitsWorkloadStep(pinnedWorkload, getRandNode()),
 
 		binaryUpgradeStep(allNodes, mainVersion),
@@ -99,9 +95,8 @@ func initWorkloadStep(from, to int) versionStep {
 
 func runSplitsWorkloadStep(from, to int) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		// We tune these numbers so that they're enough to cause contention, and
-		// thus aborts, but also not too much contention so there's not enough
-		// data being generated to cause splits.
+		// We tune these numbers so that there's enough just enough data being
+		// generated to cause splits.
 		const cycleLength = 1024
 		const concurrency = 64
 		const avgConcPerKey = 1
@@ -112,7 +107,7 @@ func runSplitsWorkloadStep(from, to int) versionStep {
 			fmt.Sprintf("--concurrency %d", concurrency),
 			fmt.Sprintf("--cycle-length %d", cycleLength),
 			fmt.Sprintf("--batch %d", batchSize),
-			"--duration 2m30s",
+			"--duration 5m",
 			"--duration 0m",
 			"--read-percent 0",
 			"--tolerate-errors",
