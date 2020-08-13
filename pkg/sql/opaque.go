@@ -24,18 +24,20 @@ import (
 )
 
 type opaqueMetadata struct {
-	info string
-	plan planNode
+	info    string
+	plan    planNode
+	columns sqlbase.ResultColumns
 }
 
 var _ opt.OpaqueMetadata = &opaqueMetadata{}
 
-func (o *opaqueMetadata) ImplementsOpaqueMetadata() {}
-func (o *opaqueMetadata) String() string            { return o.info }
+func (o *opaqueMetadata) ImplementsOpaqueMetadata()      {}
+func (o *opaqueMetadata) String() string                 { return o.info }
+func (o *opaqueMetadata) Columns() sqlbase.ResultColumns { return o.columns }
 
 func buildOpaque(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, stmt tree.Statement,
-) (opt.OpaqueMetadata, sqlbase.ResultColumns, error) {
+) (opt.OpaqueMetadata, error) {
 	p := evalCtx.Planner.(*planner)
 
 	// Opaque statements handle their own scalar arguments, with no help from the
@@ -154,20 +156,21 @@ func buildOpaque(
 	case tree.CCLOnlyStatement:
 		plan, err = p.maybePlanHook(ctx, stmt)
 		if plan == nil && err == nil {
-			return nil, nil, pgerror.Newf(pgcode.CCLRequired,
+			return nil, pgerror.Newf(pgcode.CCLRequired,
 				"a CCL binary is required to use this statement type: %T", stmt)
 		}
 	default:
-		return nil, nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
+		return nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	res := &opaqueMetadata{
-		info: stmt.StatementTag(),
-		plan: plan,
+		info:    stmt.StatementTag(),
+		plan:    plan,
+		columns: planColumns(plan),
 	}
-	return res, planColumns(plan), nil
+	return res, nil
 }
 
 func init() {
