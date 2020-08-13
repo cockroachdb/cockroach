@@ -10,8 +10,10 @@ package backupccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path"
 	"regexp"
 	"sort"
@@ -499,4 +501,25 @@ INSERT INTO t1 values (-1), (10), (-100);
 			require.Equal(t, tc.verifyTables, backedUp)
 		})
 	}
+}
+
+func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, th.server.ServingSQLAddr(),
+		"TestCreateSchedule-testuser", url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, testuser.Close())
+	}()
+
+	_, err = testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
+	require.Error(t, err)
 }
