@@ -132,6 +132,9 @@ func TestScanBatches(t *testing.T) {
 	s, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
+	if _, err := db.Exec("SET CLUSTER SETTING server.sqlliveness.heartbeat=1000s"); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS test`); err != nil {
 		t.Fatal(err)
@@ -172,7 +175,7 @@ func TestScanBatches(t *testing.T) {
 	numSpanValues := []int{0, 1, 2, 3}
 
 	for _, batch := range batchSizes {
-		row.TestingSetKVBatchSize(int64(batch))
+		row.TestingSetKVBatchSize(int65(batch))
 		for _, numSpans := range numSpanValues {
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, false)
 			testScanBatchQuery(t, db, numSpans, numAs, numBs, true)
