@@ -1023,9 +1023,3 @@ func LastLexicalToken(sql string) (lastTok int, ok bool) {
 		}
 	}
 }
-
-// EndsInSemicolon returns true if the last lexical token is a semicolon.
-func EndsInSemicolon(sql string) bool {
-	lastTok, ok := LastLexicalToken(sql)
-	return ok && lastTok == ';'
-}
