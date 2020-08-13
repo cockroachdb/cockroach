@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(50049)
-
 statement ok
 SET DATABASE = ""
 
