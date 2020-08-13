@@ -40,8 +40,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
 ----
 ·               distribution  local        ·          ·
 ·               vectorized    true         ·          ·
-render          ·             ·            (x)        ·
- │              render 0      x            ·          ·
+project         ·             ·            (x)        ·
  └── distinct   ·             ·            (x, y, z)  ·
       │         distinct on   x, y, z      ·          ·
       └── scan  ·             ·            (x, y, z)  ·
@@ -53,10 +52,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
 ----
 ·          distribution  local        ·          ·
 ·          vectorized    true         ·          ·
-render     ·             ·            (a, c, b)  ·
- │         render 0      a            ·          ·
- │         render 1      c            ·          ·
- │         render 2      b            ·          ·
+project    ·             ·            (a, c, b)  ·
  └── scan  ·             ·            (a, b, c)  ·
 ·          table         abc@primary  ·          ·
 ·          spans         FULL SCAN    ·          ·
@@ -91,9 +87,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
 ----
 ·               distribution  local        ·       ·
 ·               vectorized    true         ·       ·
-render          ·             ·            (y, x)  ·
- │              render 0      y            ·       ·
- │              render 1      x            ·       ·
+project         ·             ·            (y, x)  ·
  └── distinct   ·             ·            (x, y)  ·
       │         distinct on   x, y         ·       ·
       └── scan  ·             ·            (x, y)  ·
@@ -105,8 +99,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
 ----
 ·               distribution  local        ·       ·
 ·               vectorized    true         ·       ·
-render          ·             ·            (x)     ·
- │              render 0      x            ·       ·
+project         ·             ·            (x)     ·
  └── distinct   ·             ·            (x, y)  ·
       │         distinct on   x, y         ·       ·
       └── scan  ·             ·            (x, y)  ·
@@ -129,9 +122,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
 ----
 ·               distribution  local        ·         ·
 ·               vectorized    true         ·         ·
-render          ·             ·            (pk1, x)  ·
- │              render 0      pk1          ·         ·
- │              render 1      x            ·         ·
+project         ·             ·            (pk1, x)  ·
  └── distinct   ·             ·            (x, pk1)  +pk1
       │         distinct on   x, pk1       ·         ·
       │         order key     pk1          ·         ·
@@ -144,9 +135,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
 ·               distribution  local        ·          ·
 ·               vectorized    true         ·          ·
-render          ·             ·            (a, b)     ·
- │              render 0      a            ·          ·
- │              render 1      b            ·          ·
+project         ·             ·            (a, b)     ·
  └── distinct   ·             ·            (a, b, c)  ·
       │         distinct on   a, c         ·          ·
       │         order key     a            ·          ·
@@ -159,10 +148,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
 ----
 ·               distribution  local        ·          ·
 ·               vectorized    true         ·          ·
-render          ·             ·            (b, c, a)  ·
- │              render 0      b            ·          ·
- │              render 1      c            ·          ·
- │              render 2      a            ·          ·
+project         ·             ·            (b, c, a)  ·
  └── distinct   ·             ·            (a, b, c)  ·
       │         distinct on   a, c         ·          ·
       │         order key     a            ·          ·
@@ -194,9 +180,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
 ·                    distribution     local        ·          ·
 ·                    vectorized       true         ·          ·
-render               ·                ·            (a, c)     +a
- │                   render 0         a            ·          ·
- │                   render 1         c            ·          ·
+project              ·                ·            (a, c)     +a
  └── distinct        ·                ·            (a, b, c)  +a
       │              distinct on      a            ·          ·
       │              order key        a            ·          ·
@@ -229,10 +213,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
 ·                    distribution  local        ·          ·
 ·                    vectorized    true         ·          ·
-render               ·             ·            (y, z, x)  ·
- │                   render 0      y            ·          ·
- │                   render 1      z            ·          ·
- │                   render 2      x            ·          ·
+project              ·             ·            (y, z, x)  ·
  └── distinct        ·             ·            (x, y, z)  +z
       │              distinct on   x, z         ·          ·
       │              order key     z            ·          ·
@@ -247,10 +228,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC
 ----
 ·                    distribution  local        ·          ·
 ·                    vectorized    true         ·          ·
-render               ·             ·            (y, z, x)  ·
- │                   render 0      y            ·          ·
- │                   render 1      z            ·          ·
- │                   render 2      x            ·          ·
+project              ·             ·            (y, z, x)  ·
  └── distinct        ·             ·            (x, y, z)  +x
       │              distinct on   x            ·          ·
       │              order key     x            ·          ·
@@ -299,8 +277,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
 ·               distribution  local        ·         ·
 ·               vectorized    true         ·         ·
-render          ·             ·            (min)     ·
- │              render 0      min          ·         ·
+project         ·             ·            (min)     ·
  └── group      ·             ·            (y, min)  ·
       │         aggregate 0   min(x)       ·         ·
       │         group by      y            ·         ·
@@ -313,8 +290,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING m
 ----
 ·                         distribution  local        ·         ·
 ·                         vectorized    true         ·         ·
-render                    ·             ·            (min)     ·
- │                        render 0      min          ·         ·
+project                   ·             ·            (min)     ·
  └── limit                ·             ·            (y, min)  ·
       │                   count         1            ·         ·
       └── filter          ·             ·            (y, min)  ·
@@ -335,13 +311,11 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
 ·                    distribution  local                                                                  ·                ·
 ·                    vectorized    true                                                                   ·                ·
-render               ·             ·                                                                      (y)              ·
- │                   render 0      y                                                                      ·                ·
+project              ·             ·                                                                      (y)              ·
  └── distinct        ·             ·                                                                      (y, row_number)  ·
       │              distinct on   row_number                                                             ·                ·
       └── window     ·             ·                                                                      (y, row_number)  ·
            │         window 0      row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
-           │         render 1      row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
            └── scan  ·             ·                                                                      (y)              ·
 ·                    table         xyz@primary                                                            ·                ·
 ·                    spans         FULL SCAN                                                              ·                ·
@@ -382,8 +356,8 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
 ·          distribution  local        ·       ·
 ·          vectorized    true         ·       ·
 distinct   ·             ·            (y, x)  ·
- │         distinct on   y            ·       ·
- └── scan  ·             ·            (y, x)  ·
+ │         distinct on   x            ·       ·
+ └── scan  ·             ·            (x, y)  ·
 ·          table         xyz@primary  ·       ·
 ·          spans         FULL SCAN    ·       ·
 
@@ -394,8 +368,8 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
 ·          distribution  local        ·    ·
 ·          vectorized    true         ·    ·
 distinct   ·             ·            (y)  ·
- │         distinct on   y            ·    ·
- └── scan  ·             ·            (y)  ·
+ │         distinct on   x            ·    ·
+ └── scan  ·             ·            (x)  ·
 ·          table         xyz@primary  ·    ·
 ·          spans         FULL SCAN    ·    ·
 
@@ -435,8 +409,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
 ·                    distribution  local        ·               ·
 ·                    vectorized    true         ·               ·
-render               ·             ·            (pk1)           ·
- │                   render 0      pk1          ·               ·
+project              ·             ·            (pk1)           ·
  └── distinct        ·             ·            (x, y, z, pk1)  +x
       │              distinct on   x, y, z      ·               ·
       │              order key     x            ·               ·
@@ -452,7 +425,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
 ·                    distribution  local        ·       ·
 ·                    vectorized    true         ·       ·
-limit                ·             ·            (x, y)  +y
+limit                ·             ·            (x, y)  ·
  │                   count         1            ·       ·
  └── sort            ·             ·            (x, y)  +y
       │              order         +y           ·       ·
@@ -470,8 +443,8 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHE
 group                          ·             ·             (count)  ·
  │                             aggregate 0   count_rows()  ·        ·
  │                             scalar        ·             ·        ·
- └── render                    ·             ·             ()       ·
-      └── limit                ·             ·             (x, y)   +y
+ └── project                   ·             ·             ()       ·
+      └── limit                ·             ·             (x, y)   ·
            │                   count         1             ·        ·
            └── sort            ·             ·             (x, y)   +y
                 │              order         +y            ·        ·

@@ -29,15 +29,15 @@ EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)
 ----
 ·                                    distribution     local
 ·                                    vectorized       false
-render                               ·                ·
+project                              ·                ·
  └── filter                          ·                ·
       │                              filter           st_intersects('010100000000000000000008400000000000000840', geom)
       └── index join                 ·                ·
            │                         table            geo_table2@primary
            │                         key columns      k, k_plus_one
-           └── render                ·                ·
+           └── project               ·                ·
                 └── inverted filter  ·                ·
-                     │               inverted column  2
+                     │               inverted column  geom
                      │               num spans        31
                      └── scan        ·                ·
 ·                                    table            geo_table2@geom_index
@@ -48,15 +48,15 @@ EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_DFullyWithin('POINT(3.0 3.
 ----
 ·                                    distribution     local
 ·                                    vectorized       false
-render                               ·                ·
+project                              ·                ·
  └── filter                          ·                ·
       │                              filter           st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
       └── index join                 ·                ·
            │                         table            geo_table2@primary
            │                         key columns      k, k_plus_one
-           └── render                ·                ·
+           └── project               ·                ·
                 └── inverted filter  ·                ·
-                     │               inverted column  2
+                     │               inverted column  geom
                      │               num spans        20
                      └── scan        ·                ·
 ·                                    table            geo_table2@geom_index

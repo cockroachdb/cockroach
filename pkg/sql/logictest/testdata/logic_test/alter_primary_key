@@ -500,12 +500,10 @@ t  CREATE TABLE public.t (
 query TTT
 SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
 ----
-count                  ·            ·
- └── insert fast path  ·            ·
-·                      into         t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
-·                      strategy     inserter
-·                      auto commit  ·
-·                      size         7 columns, 1 row
+insert fast path  ·            ·
+·                 into         t(x, y, z, crdb_internal_z_shard_5, crdb_internal_y_shard_10)
+·                 auto commit  ·
+·                 size         7 columns, 1 row
 
 # Ensure that all of the indexes have been rewritten.
 query IT

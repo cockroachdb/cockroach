@@ -82,9 +82,7 @@ EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x 
 ----
 ·                    distribution        full                 ·            ·
 ·                    vectorized          true                 ·            ·
-render               ·                   ·                    (x, str)     ·
- │                   render 0            x                    ·            ·
- │                   render 1            str                  ·            ·
+project              ·                   ·                    (x, str)     ·
  └── merge join      ·                   ·                    (x, y, str)  ·
       │              type                inner                ·            ·
       │              equality            (x) = (y)            ·            ·
@@ -170,10 +168,7 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 ----
 ·                    distribution  full               ·              ·
 ·                    vectorized    true               ·              ·
-render               ·             ·                  (y, str, res)  ·
- │                   render 0      y                  ·              ·
- │                   render 1      str                ·              ·
- │                   render 2      res                ·              ·
+project              ·             ·                  (y, str, res)  ·
  └── sort            ·             ·                  (res, y, str)  +res
       │              order         +res               ·              ·
       └── render     ·             ·                  (res, y, str)  ·
@@ -189,11 +184,8 @@ EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY
 ----
 ·                         distribution  full               ·              ·
 ·                         vectorized    true               ·              ·
-render                    ·             ·                  (y, str, res)  ·
- │                        render 0      y                  ·              ·
- │                        render 1      str                ·              ·
- │                        render 2      res                ·              ·
- └── limit                ·             ·                  (res, y, str)  +res
+project                   ·             ·                  (y, str, res)  ·
+ └── limit                ·             ·                  (res, y, str)  ·
       │                   count         10                 ·              ·
       └── sort            ·             ·                  (res, y, str)  +res
            │              order         +res               ·              ·

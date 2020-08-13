@@ -1369,15 +1369,16 @@ func Example_misc_table() {
 	//     hai
 	// (1 row)
 	// sql --format=table -e explain select s, 'foo' from t.t
-	//     tree    |    field     | description
-	// ------------+--------------+--------------
-	//             | distribution | full
-	//             | vectorized   | false
-	//   render    |              |
-	//    └── scan |              |
-	//             | table        | t@primary
-	//             | spans        | FULL SCAN
-	// (6 rows)
+	//        tree      |    field     | description
+	// -----------------+--------------+--------------
+	//                  | distribution | full
+	//                  | vectorized   | false
+	//   project        |              |
+	//    └── render    |              |
+	//         └── scan |              |
+	//                  | table        | t@primary
+	//                  | spans        | FULL SCAN
+	// (7 rows)
 }
 
 func Example_cert() {

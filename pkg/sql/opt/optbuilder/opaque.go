@@ -17,14 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
 // BuildOpaqueFn is a handler for building the metadata for an opaque statement.
 type BuildOpaqueFn func(
 	context.Context, *tree.SemaContext, *tree.EvalContext, tree.Statement,
-) (opt.OpaqueMetadata, sqlbase.ResultColumns, error)
+) (opt.OpaqueMetadata, error)
 
 // OpaqueType indicates whether an opaque statement can mutate data or change
 // schema.
@@ -67,12 +66,12 @@ func (b *Builder) tryBuildOpaque(stmt tree.Statement, inScope *scope) (outScope 
 	if !ok {
 		return nil
 	}
-	obj, cols, err := info.buildFn(b.ctx, b.semaCtx, b.evalCtx, stmt)
+	obj, err := info.buildFn(b.ctx, b.semaCtx, b.evalCtx, stmt)
 	if err != nil {
 		panic(err)
 	}
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, cols)
+	b.synthesizeResultColumns(outScope, obj.Columns())
 	private := &memo.OpaqueRelPrivate{
 		Columns:  colsToColList(outScope.cols),
 		Metadata: obj,

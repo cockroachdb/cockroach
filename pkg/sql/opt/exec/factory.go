@@ -265,3 +265,27 @@ type InsertFastPathFKCheck struct {
 // MkErrFn is a function that generates an error which includes values from a
 // relevant row.
 type MkErrFn func(tree.Datums) error
+
+// ExplainFactory is an extension of Factory used when constructing a plan that
+// can be explained. It allows annotation of nodes with extra information.
+type ExplainFactory interface {
+	Factory
+
+	// AnnotateNode annotates a constructed Node with extra information.
+	AnnotateNode(n Node, id ExplainAnnotationID, value interface{})
+}
+
+// ExplainAnnotationID identifies the type of a node annotation.
+type ExplainAnnotationID int
+
+const (
+	// EstimatedRowCount is the estimated number of rows produced by an operator.
+	EstimatedRowCount ExplainAnnotationID = iota
+	// EstimatedCost is the internal optimizer cost for the subtree rooted at an
+	// operator.
+	EstimatedCost
+)
+
+// BuildPlanForExplainFn builds an execution plan against the given
+// ExplainFactory.
+type BuildPlanForExplainFn func(ef ExplainFactory) (Plan, error)

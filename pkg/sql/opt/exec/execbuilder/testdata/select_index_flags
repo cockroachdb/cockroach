@@ -188,7 +188,7 @@ EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
 ·               distribution  local
 ·               vectorized    true
-render          ·             ·
+project         ·             ·
  └── filter     ·             ·
       │         filter        (a >= 20) AND (a <= 30)
       └── scan  ·             ·
@@ -201,7 +201,7 @@ EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
 ·                     distribution  local
 ·                     vectorized    true
-render                ·             ·
+project               ·             ·
  └── filter           ·             ·
       │               filter        (c >= 20) AND (c <= 30)
       └── index join  ·             ·

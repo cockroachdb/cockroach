@@ -1430,7 +1430,11 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 		alreadyOrderedPrefix = i + 1
 	}
 
-	node, err := b.factory.ConstructSort(input.root, input.sqlOrdering(ordering), alreadyOrderedPrefix)
+	node, err := b.factory.ConstructSort(
+		input.root,
+		exec.OutputOrdering(input.sqlOrdering(ordering)),
+		alreadyOrderedPrefix,
+	)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1522,9 +1526,13 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
-	onExpr, err := b.buildScalar(&ctx, &join.On)
-	if err != nil {
-		return execPlan{}, err
+	var onExpr tree.TypedExpr
+	if len(join.On) > 0 {
+		var err error
+		onExpr, err = b.buildScalar(&ctx, &join.On)
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
 
 	tab := md.Table(join.Table)

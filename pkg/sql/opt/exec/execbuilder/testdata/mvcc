@@ -11,7 +11,7 @@ EXPLAIN SELECT z FROM t WHERE x = 1
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t@primary
 ·          spans         /1/0-/1/1 /1/2/1-/1/2/2
@@ -19,12 +19,13 @@ render     ·             ·
 query TTT
 EXPLAIN SELECT crdb_internal_mvcc_timestamp, z FROM t WHERE x = 1
 ----
-·          distribution  local
-·          vectorized    true
-render     ·             ·
- └── scan  ·             ·
-·          table         t@primary
-·          spans         /1-/1/#
+·               distribution  local
+·               vectorized    true
+project         ·             ·
+ └── project    ·             ·
+      └── scan  ·             ·
+·               table         t@primary
+·               spans         /1-/1/#
 
 # Ensure that the presence of mutation columns doesn't affect accessing system
 # columns.

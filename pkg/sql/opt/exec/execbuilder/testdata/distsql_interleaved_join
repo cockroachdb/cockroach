@@ -194,7 +194,7 @@ EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
 ·                distribution       full
 ·                vectorized         true
-render           ·                  ·
+project          ·                  ·
  └── merge join  ·                  ·
       │          type               inner
       │          equality           (pid1) = (pid1)
@@ -215,7 +215,7 @@ EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
 ·                      distribution  full
 ·                      vectorized    true
-render                 ·             ·
+project                ·             ·
  └── interleaved join  ·             ·
 ·                      type          inner
 ·                      left table    parent1@primary
@@ -234,11 +234,7 @@ EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child1 USING(pid1) WHERE pid1 >= 3 
 ----
 ·                      distribution  full                 ·                             ·
 ·                      vectorized    true                 ·                             ·
-render                 ·             ·                    (pid1, pa1, cid1, ca1)        ·
- │                     render 0      pid1                 ·                             ·
- │                     render 1      pa1                  ·                             ·
- │                     render 2      cid1                 ·                             ·
- │                     render 3      ca1                  ·                             ·
+project                ·             ·                    (pid1, pa1, cid1, ca1)        ·
  └── interleaved join  ·             ·                    (pid1, pa1, pid1, cid1, ca1)  ·
 ·                      type          inner                ·                             ·
 ·                      left table    parent1@primary      ·                             ·
@@ -258,11 +254,7 @@ EXPLAIN (VERBOSE) SELECT * FROM child1 JOIN parent1 USING(pid1) WHERE pid1 >= 3 
 ----
 ·                      distribution  full                 ·                             ·
 ·                      vectorized    true                 ·                             ·
-render                 ·             ·                    (pid1, cid1, ca1, pa1)        ·
- │                     render 0      pid1                 ·                             ·
- │                     render 1      cid1                 ·                             ·
- │                     render 2      ca1                  ·                             ·
- │                     render 3      pa1                  ·                             ·
+project                ·             ·                    (pid1, cid1, ca1, pa1)        ·
  └── interleaved join  ·             ·                    (pid1, cid1, ca1, pid1, pa1)  ·
 ·                      type          inner                ·                             ·
 ·                      left table    child1@primary       ·                             ·
@@ -309,12 +301,7 @@ EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 >= 12
 ----
 ·                      distribution  full             ·                                   ·
 ·                      vectorized    true             ·                                   ·
-render                 ·             ·                (pid1, pa1, cid2, cid3, ca2)        +pid1
- │                     render 0      pid1             ·                                   ·
- │                     render 1      pa1              ·                                   ·
- │                     render 2      cid2             ·                                   ·
- │                     render 3      cid3             ·                                   ·
- │                     render 4      ca2              ·                                   ·
+project                ·             ·                (pid1, pa1, cid2, cid3, ca2)        +pid1
  └── interleaved join  ·             ·                (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
 ·                      type          inner            ·                                   ·
 ·                      left table    parent1@primary  ·                                   ·
@@ -334,12 +321,7 @@ EXPLAIN (VERBOSE) SELECT * FROM parent1 JOIN child2 USING(pid1) WHERE pid1 IN (1
 ----
 ·                      distribution  full                                                                                   ·                                   ·
 ·                      vectorized    true                                                                                   ·                                   ·
-render                 ·             ·                                                                                      (pid1, pa1, cid2, cid3, ca2)        +pid1
- │                     render 0      pid1                                                                                   ·                                   ·
- │                     render 1      pa1                                                                                    ·                                   ·
- │                     render 2      cid2                                                                                   ·                                   ·
- │                     render 3      cid3                                                                                   ·                                   ·
- │                     render 4      ca2                                                                                    ·                                   ·
+project                ·             ·                                                                                      (pid1, pa1, cid2, cid3, ca2)        +pid1
  └── interleaved join  ·             ·                                                                                      (pid1, pa1, pid1, cid2, cid3, ca2)  +pid1
 ·                      type          inner                                                                                  ·                                   ·
 ·                      left table    parent1@primary                                                                        ·                                   ·
@@ -365,13 +347,7 @@ EXPLAIN (VERBOSE)
 ----
 ·                      distribution  full                                                                                                                    ·                                           ·
 ·                      vectorized    true                                                                                                                    ·                                           ·
-render                 ·             ·                                                                                                                       (pid1, pa1, cid2, cid3, gcid2, gca2)        ·
- │                     render 0      pid1                                                                                                                    ·                                           ·
- │                     render 1      pa1                                                                                                                     ·                                           ·
- │                     render 2      cid2                                                                                                                    ·                                           ·
- │                     render 3      cid3                                                                                                                    ·                                           ·
- │                     render 4      gcid2                                                                                                                   ·                                           ·
- │                     render 5      gca2                                                                                                                    ·                                           ·
+project                ·             ·                                                                                                                       (pid1, pa1, cid2, cid3, gcid2, gca2)        ·
  └── interleaved join  ·             ·                                                                                                                       (pid1, pa1, pid1, cid2, cid3, gcid2, gca2)  ·
 ·                      type          inner                                                                                                                   ·                                           ·
 ·                      left table    parent1@primary                                                                                                         ·                                           ·
@@ -402,13 +378,7 @@ EXPLAIN (VERBOSE)
 ----
 ·                      distribution  full                                                                                                                    ·                                           ·
 ·                      vectorized    true                                                                                                                    ·                                           ·
-render                 ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pa1)        ·
- │                     render 0      pid1                                                                                                                    ·                                           ·
- │                     render 1      cid2                                                                                                                    ·                                           ·
- │                     render 2      cid3                                                                                                                    ·                                           ·
- │                     render 3      gcid2                                                                                                                   ·                                           ·
- │                     render 4      gca2                                                                                                                    ·                                           ·
- │                     render 5      pa1                                                                                                                     ·                                           ·
+project                ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pa1)        ·
  └── interleaved join  ·             ·                                                                                                                       (pid1, cid2, cid3, gcid2, gca2, pid1, pa1)  ·
 ·                      type          inner                                                                                                                   ·                                           ·
 ·                      left table    grandchild2@primary                                                                                                     ·                                           ·
@@ -438,7 +408,7 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
 ----
 ·                      distribution  full
 ·                      vectorized    true
-render                 ·             ·
+project                ·             ·
  └── interleaved join  ·             ·
 ·                      type          inner
 ·                      left table    grandchild2@primary
@@ -619,12 +589,7 @@ EXPLAIN (VERBOSE) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) W
 ----
 ·                      distribution  full                  ·                                   ·
 ·                      vectorized    true                  ·                                   ·
-render                 ·             ·                     (pid1, cid1, cid2, ca1, pa1)        ·
- │                     render 0      pid1                  ·                                   ·
- │                     render 1      cid1                  ·                                   ·
- │                     render 2      cid2                  ·                                   ·
- │                     render 3      ca1                   ·                                   ·
- │                     render 4      pa1                   ·                                   ·
+project                ·             ·                     (pid1, cid1, cid2, ca1, pa1)        ·
  └── interleaved join  ·             ·                     (pid1, cid1, cid2, ca1, pid1, pa1)  ·
 ·                      type          left outer            ·                                   ·
 ·                      left table    outer_c1@primary      ·                                   ·
@@ -641,22 +606,17 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVF1rnEAUfe-vGM7T2k6Jo7
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
 ----
-·                      distribution  full                  ·                                           ·
-·                      vectorized    true                  ·                                           ·
-render                 ·             ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
- │                     render 0      pid1                  ·                                           ·
- │                     render 1      pa1                   ·                                           ·
- │                     render 2      cid1                  ·                                           ·
- │                     render 3      cid2                  ·                                           ·
- │                     render 4      gcid1                 ·                                           ·
- │                     render 5      gca1                  ·                                           ·
- └── interleaved join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
-·                      type          left outer            ·                                           ·
-·                      left table    outer_gc1@primary     ·                                           ·
-·                      left spans    /1/#/60/1-/20/#/60/2  ·                                           ·
-·                      right table   outer_p1@primary      ·                                           ·
-·                      right spans   /1-/20/#              ·                                           ·
-·                      ancestor      right                 ·                                           ·
+·                           distribution  full                  ·                                           ·
+·                           vectorized    true                  ·                                           ·
+project                     ·             ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
+ └── project                ·             ·                     (pa1, pid1, cid1, cid2, gcid1, gca1)        ·
+      └── interleaved join  ·             ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
+·                           type          left outer            ·                                           ·
+·                           left table    outer_gc1@primary     ·                                           ·
+·                           left spans    /1/#/60/1-/20/#/60/2  ·                                           ·
+·                           right table   outer_p1@primary      ·                                           ·
+·                           right spans   /1-/20/#              ·                                           ·
+·                           ancestor      right                 ·                                           ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]

@@ -83,15 +83,15 @@ CREATE TABLE data (a INT PRIMARY KEY)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, generate_series(a, a + 1) FROM data ORDER BY 1, 2
 ----
-·                 distribution  local                        ·                     ·
-·                 vectorized    true                         ·                     ·
-sort              ·             ·                            (a, generate_series)  +a,+generate_series
- │                order         +a,+generate_series          ·                     ·
- └── project set  ·             ·                            (a, generate_series)  ·
-      │           render 0      generate_series(@1, @1 + 1)  ·                     ·
-      └── scan    ·             ·                            (a)                   ·
-·                 table         data@primary                 ·                     ·
-·                 spans         FULL SCAN                    ·                     ·
+·                 distribution  local                      ·                     ·
+·                 vectorized    true                       ·                     ·
+sort              ·             ·                          (a, generate_series)  +a,+generate_series
+ │                order         +a,+generate_series        ·                     ·
+ └── project set  ·             ·                          (a, generate_series)  ·
+      │           render 0      generate_series(a, a + 1)  ·                     ·
+      └── scan    ·             ·                          (a)                   ·
+·                 table         data@primary               ·                     ·
+·                 spans         FULL SCAN                  ·                     ·
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
@@ -103,85 +103,76 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y, z])
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
-·                               distribution        local                                                  ·                                                ·
-·                               vectorized          true                                                   ·                                                ·
-render                          ·                   ·                                                      (x, y, z, "information_schema._pg_expandarray")  ·
- │                              render 0            x                                                      ·                                                ·
- │                              render 1            y                                                      ·                                                ·
- │                              render 2            z                                                      ·                                                ·
- │                              render 3            "information_schema._pg_expandarray"                   ·                                                ·
- └── sort                       ·                   ·                                                      ("information_schema._pg_expandarray", x, y, z)  +x
-      │                         order               +x                                                     ·                                                ·
-      └── render                ·                   ·                                                      ("information_schema._pg_expandarray", x, y, z)  ·
-           │                    render 0            ((x, n) AS x, n)                                       ·                                                ·
-           │                    render 1            x                                                      ·                                                ·
-           │                    render 2            y                                                      ·                                                ·
-           │                    render 3            z                                                      ·                                                ·
-           └── project set      ·                   ·                                                      (x, y, x, z, x, n)                               ·
-                │               render 0            information_schema._pg_expandarray(ARRAY[@1, @2, @4])  ·                                                ·
-                └── merge join  ·                   ·                                                      (x, y, x, z)                                     ·
-                     │          type                inner                                                  ·                                                ·
-                     │          equality            (x) = (x)                                              ·                                                ·
-                     │          left cols are key   ·                                                      ·                                                ·
-                     │          right cols are key  ·                                                      ·                                                ·
-                     │          mergeJoinOrder      +"(x=x)"                                               ·                                                ·
-                     │          pred                y < z                                                  ·                                                ·
-                     ├── scan   ·                   ·                                                      (x, y)                                           +x
-                     │          table               xy@primary                                             ·                                                ·
-                     │          spans               FULL SCAN                                              ·                                                ·
-                     └── scan   ·                   ·                                                      (x, z)                                           +x
-·                               table               xz@primary                                             ·                                                ·
-·                               spans               FULL SCAN                                              ·                                                ·
+·                               distribution        local                                               ·                                                ·
+·                               vectorized          true                                                ·                                                ·
+project                         ·                   ·                                                   (x, y, z, "information_schema._pg_expandarray")  ·
+ └── sort                       ·                   ·                                                   ("information_schema._pg_expandarray", x, y, z)  +x
+      │                         order               +x                                                  ·                                                ·
+      └── render                ·                   ·                                                   ("information_schema._pg_expandarray", x, y, z)  ·
+           │                    render 0            ((x, n) AS x, n)                                    ·                                                ·
+           │                    render 1            x                                                   ·                                                ·
+           │                    render 2            y                                                   ·                                                ·
+           │                    render 3            z                                                   ·                                                ·
+           └── project set      ·                   ·                                                   (x, y, x, z, x, n)                               ·
+                │               render 0            information_schema._pg_expandarray(ARRAY[x, y, z])  ·                                                ·
+                └── merge join  ·                   ·                                                   (x, y, x, z)                                     ·
+                     │          type                inner                                               ·                                                ·
+                     │          equality            (x) = (x)                                           ·                                                ·
+                     │          left cols are key   ·                                                   ·                                                ·
+                     │          right cols are key  ·                                                   ·                                                ·
+                     │          pred                y < z                                               ·                                                ·
+                     │          mergeJoinOrder      +"(x=x)"                                            ·                                                ·
+                     ├── scan   ·                   ·                                                   (x, y)                                           +x
+                     │          table               xy@primary                                          ·                                                ·
+                     │          spans               FULL SCAN                                           ·                                                ·
+                     └── scan   ·                   ·                                                   (x, z)                                           +x
+·                               table               xz@primary                                          ·                                                ·
+·                               spans               FULL SCAN                                           ·                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-·                           distribution  local                    ·                        ·
-·                           vectorized    true                     ·                        ·
-render                      ·             ·                        (generate_series)        ·
- │                          render 0      generate_series          ·                        ·
- └── project set            ·             ·                        (x, z, generate_series)  ·
-      │                     render 0      generate_series(@1, @2)  ·                        ·
-      └── cross join        ·             ·                        (x, z)                   ·
-           │                type          semi                     ·                        ·
-           │                pred          z < generate_series      ·                        ·
-           ├── scan         ·             ·                        (x, z)                   ·
-           │                table         xz@primary               ·                        ·
-           │                spans         FULL SCAN                ·                        ·
-           └── project set  ·             ·                        (x, y, generate_series)  ·
-                │           render 0      generate_series(@1, @2)  ·                        ·
-                └── scan    ·             ·                        (x, y)                   ·
-·                           table         xy@primary               ·                        ·
-·                           spans         FULL SCAN                ·                        ·
+·                           distribution  local                  ·                        ·
+·                           vectorized    true                   ·                        ·
+project                     ·             ·                      (generate_series)        ·
+ └── project set            ·             ·                      (x, z, generate_series)  ·
+      │                     render 0      generate_series(x, z)  ·                        ·
+      └── cross join        ·             ·                      (x, z)                   ·
+           │                type          semi                   ·                        ·
+           │                pred          z < generate_series    ·                        ·
+           ├── scan         ·             ·                      (x, z)                   ·
+           │                table         xz@primary             ·                        ·
+           │                spans         FULL SCAN              ·                        ·
+           └── project set  ·             ·                      (x, y, generate_series)  ·
+                │           render 0      generate_series(x, y)  ·                        ·
+                └── scan    ·             ·                      (x, y)                   ·
+·                           table         xy@primary             ·                        ·
+·                           spans         FULL SCAN              ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-·                     distribution        local                                    ·                                                           ·
-·                     vectorized          true                                     ·                                                           ·
-render                ·                   ·                                        (generate_subscripts, generate_series, unnest, y, z)        ·
- │                    render 0            generate_subscripts                      ·                                                           ·
- │                    render 1            generate_series                          ·                                                           ·
- │                    render 2            unnest                                   ·                                                           ·
- │                    render 3            y                                        ·                                                           ·
- │                    render 4            z                                        ·                                                           ·
- └── project set      ·                   ·                                        (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
-      │               render 0            generate_subscripts(ARRAY[0, @1, 1, 2])  ·                                                           ·
-      │               render 1            generate_series(@1, @2)                  ·                                                           ·
-      │               render 2            unnest(ARRAY[0, @1, @2, @4])             ·                                                           ·
-      └── merge join  ·                   ·                                        (x, y, x, z)                                                ·
-           │          type                left outer                               ·                                                           ·
-           │          equality            (x) = (x)                                ·                                                           ·
-           │          left cols are key   ·                                        ·                                                           ·
-           │          right cols are key  ·                                        ·                                                           ·
-           │          mergeJoinOrder      +"(x=x)"                                 ·                                                           ·
-           ├── scan   ·                   ·                                        (x, y)                                                      +x
-           │          table               xy@primary                               ·                                                           ·
-           │          spans               FULL SCAN                                ·                                                           ·
-           └── scan   ·                   ·                                        (x, z)                                                      +x
-·                     table               xz@primary                               ·                                                           ·
-·                     spans               FULL SCAN                                ·                                                           ·
+·                          distribution        local                                   ·                                                           ·
+·                          vectorized          true                                    ·                                                           ·
+project                    ·                   ·                                       (generate_subscripts, generate_series, unnest, y, z)        ·
+ └── project               ·                   ·                                       (y, z, generate_subscripts, generate_series, unnest)        ·
+      └── project set      ·                   ·                                       (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
+           │               render 0            generate_subscripts(ARRAY[0, x, 1, 2])  ·                                                           ·
+           │               render 1            generate_series(x, y)                   ·                                                           ·
+           │               render 2            unnest(ARRAY[0, x, y, z])               ·                                                           ·
+           └── merge join  ·                   ·                                       (x, y, x, z)                                                ·
+                │          type                left outer                              ·                                                           ·
+                │          equality            (x) = (x)                               ·                                                           ·
+                │          left cols are key   ·                                       ·                                                           ·
+                │          right cols are key  ·                                       ·                                                           ·
+                │          mergeJoinOrder      +"(x=x)"                                ·                                                           ·
+                ├── scan   ·                   ·                                       (x, y)                                                      +x
+                │          table               xy@primary                              ·                                                           ·
+                │          spans               FULL SCAN                               ·                                                           ·
+                └── scan   ·                   ·                                       (x, z)                                                      +x
+·                          table               xz@primary                              ·                                                           ·
+·                          spans               FULL SCAN                               ·                                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
@@ -189,10 +180,9 @@ EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z
 ·                               distribution  local                                 ·                     ·
 ·                               vectorized    true                                  ·                     ·
 root                            ·             ·                                     (generate_series)     ·
- ├── render                     ·             ·                                     (generate_series)     ·
- │    │                         render 0      generate_series                       ·                     ·
+ ├── project                    ·             ·                                     (generate_series)     ·
  │    └── project set           ·             ·                                     (z, generate_series)  ·
- │         │                    render 0      generate_series(@S1, @1)              ·                     ·
+ │         │                    render 0      generate_series(@S1, z)               ·                     ·
  │         └── scan             ·             ·                                     (z)                   ·
  │                              table         xz@primary                            ·                     ·
  │                              spans         FULL SCAN                             ·                     ·
@@ -201,10 +191,9 @@ root                            ·             ·                               
       │                         original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
       │                         exec mode     one row                               ·                     ·
       └── max1row               ·             ·                                     (unnest)              ·
-           └── render           ·             ·                                     (unnest)              ·
-                │               render 0      unnest                                ·                     ·
+           └── project          ·             ·                                     (unnest)              ·
                 └── apply join  ·             ·                                     (x, y, unnest)        ·
-                     │          type          inner                                 ·                     ·
+                     │          type          cross                                 ·                     ·
                      └── scan   ·             ·                                     (x, y)                ·
 ·                               table         xy@primary                            ·                     ·
 ·                               spans         FULL SCAN                             ·                     ·
@@ -224,36 +213,33 @@ EXPLAIN (VERBOSE) SELECT
 FROM
   groups g
 ----
-·                                   distribution        local                     ·                                             ·
-·                                   vectorized          true                      ·                                             ·
-render                              ·                   ·                         (group_name, jsonb_array_elements)            ·
- │                                  render 0            data->>'name'             ·                                             ·
- │                                  render 1            jsonb_array_elements      ·                                             ·
- └── project set                    ·                   ·                         (id, data, "?column?", jsonb_array_elements)  ·
-      │                             render 0            jsonb_array_elements(@3)  ·                                             ·
-      └── distinct                  ·                   ·                         (id, data, "?column?")                        ·
-           │                        distinct on         id                        ·                                             ·
-           │                        error on duplicate  ·                         ·                                             ·
-           └── render               ·                   ·                         (id, data, "?column?")                        ·
-                │                   render 0            id                        ·                                             ·
-                │                   render 1            data                      ·                                             ·
-                │                   render 2            "?column?"                ·                                             ·
-                └── hash join       ·                   ·                         (column10, id, data, column11, "?column?")    ·
-                     │              type                left outer                ·                                             ·
-                     │              equality            (column10) = (column11)   ·                                             ·
-                     ├── render     ·                   ·                         (column10, id, data)                          ·
-                     │    │         render 0            data->>'name'             ·                                             ·
-                     │    │         render 1            id                        ·                                             ·
-                     │    │         render 2            data                      ·                                             ·
-                     │    └── scan  ·                   ·                         (id, data)                                    ·
-                     │              table               groups@primary            ·                                             ·
-                     │              spans               FULL SCAN                 ·                                             ·
-                     └── render     ·                   ·                         (column11, "?column?")                        ·
-                          │         render 0            data->>'name'             ·                                             ·
-                          │         render 1            data->'members'           ·                                             ·
-                          └── scan  ·                   ·                         (data)                                        ·
-·                                   table               groups@primary            ·                                             ·
-·                                   spans               FULL SCAN                 ·                                             ·
+·                                   distribution        local                             ·                                             ·
+·                                   vectorized          true                              ·                                             ·
+render                              ·                   ·                                 (group_name, jsonb_array_elements)            ·
+ │                                  render 0            data->>'name'                     ·                                             ·
+ │                                  render 1            jsonb_array_elements              ·                                             ·
+ └── project set                    ·                   ·                                 (id, data, "?column?", jsonb_array_elements)  ·
+      │                             render 0            jsonb_array_elements("?column?")  ·                                             ·
+      └── distinct                  ·                   ·                                 (id, data, "?column?")                        ·
+           │                        distinct on         id                                ·                                             ·
+           │                        error on duplicate  ·                                 ·                                             ·
+           └── project              ·                   ·                                 (id, data, "?column?")                        ·
+                └── hash join       ·                   ·                                 (column10, id, data, column11, "?column?")    ·
+                     │              type                left outer                        ·                                             ·
+                     │              equality            (column10) = (column11)           ·                                             ·
+                     ├── render     ·                   ·                                 (column10, id, data)                          ·
+                     │    │         render 0            data->>'name'                     ·                                             ·
+                     │    │         render 1            id                                ·                                             ·
+                     │    │         render 2            data                              ·                                             ·
+                     │    └── scan  ·                   ·                                 (id, data)                                    ·
+                     │              table               groups@primary                    ·                                             ·
+                     │              spans               FULL SCAN                         ·                                             ·
+                     └── render     ·                   ·                                 (column11, "?column?")                        ·
+                          │         render 0            data->>'name'                     ·                                             ·
+                          │         render 1            data->'members'                   ·                                             ·
+                          └── scan  ·                   ·                                 (data)                                        ·
+·                                   table               groups@primary                    ·                                             ·
+·                                   spans               FULL SCAN                         ·                                             ·
 
 # Regression test for #32162.
 query TTTTT
@@ -287,39 +273,30 @@ ORDER BY a0.created_at
    LIMIT 10
   OFFSET 0;
 ----
-·                                     distribution  local                      ·                                                                                        ·
-·                                     vectorized    true                       ·                                                                                        ·
-limit                                 ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
- │                                    count         10                         ·                                                                                        ·
- └── sort                             ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          +created_at
-      │                               order         +created_at                ·                                                                                        ·
-      └── group                       ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-           │                          aggregate 0   any_not_null(body)         ·                                                                                        ·
-           │                          aggregate 1   any_not_null(description)  ·                                                                                        ·
-           │                          aggregate 2   any_not_null(title)        ·                                                                                        ·
-           │                          aggregate 3   any_not_null(slug)         ·                                                                                        ·
-           │                          aggregate 4   any_not_null(tag_list)     ·                                                                                        ·
-           │                          aggregate 5   any_not_null(user_id)      ·                                                                                        ·
-           │                          aggregate 6   any_not_null(created_at)   ·                                                                                        ·
-           │                          aggregate 7   any_not_null(updated_at)   ·                                                                                        ·
-           │                          group by      id                         ·                                                                                        ·
-           └── render                 ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-                │                     render 0      id                         ·                                                                                        ·
-                │                     render 1      body                       ·                                                                                        ·
-                │                     render 2      description                ·                                                                                        ·
-                │                     render 3      title                      ·                                                                                        ·
-                │                     render 4      slug                       ·                                                                                        ·
-                │                     render 5      tag_list                   ·                                                                                        ·
-                │                     render 6      user_id                    ·                                                                                        ·
-                │                     render 7      created_at                 ·                                                                                        ·
-                │                     render 8      updated_at                 ·                                                                                        ·
-                └── filter            ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
-                     │                filter        unnest = 'dragons'         ·                                                                                        ·
-                     └── project set  ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)  ·
-                          │           render 0      unnest(@6)                 ·                                                                                        ·
-                          └── scan    ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)          ·
-·                                     table         articles@primary           ·                                                                                        ·
-·                                     spans         FULL SCAN                  ·                                                                                        ·
+·                                     distribution  local                      ·                                                                                                                     ·
+·                                     vectorized    true                       ·                                                                                                                     ·
+limit                                 ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)                                       ·
+ │                                    count         10                         ·                                                                                                                     ·
+ └── sort                             ·             ·                          (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)  +any_not_null
+      │                               order         +any_not_null              ·                                                                                                                     ·
+      └── group                       ·             ·                          (id, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null, any_not_null)  ·
+           │                          aggregate 0   any_not_null(body)         ·                                                                                                                     ·
+           │                          aggregate 1   any_not_null(description)  ·                                                                                                                     ·
+           │                          aggregate 2   any_not_null(title)        ·                                                                                                                     ·
+           │                          aggregate 3   any_not_null(slug)         ·                                                                                                                     ·
+           │                          aggregate 4   any_not_null(tag_list)     ·                                                                                                                     ·
+           │                          aggregate 5   any_not_null(user_id)      ·                                                                                                                     ·
+           │                          aggregate 6   any_not_null(created_at)   ·                                                                                                                     ·
+           │                          aggregate 7   any_not_null(updated_at)   ·                                                                                                                     ·
+           │                          group by      id                         ·                                                                                                                     ·
+           └── project                ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)                                       ·
+                └── filter            ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)                               ·
+                     │                filter        unnest = 'dragons'         ·                                                                                                                     ·
+                     └── project set  ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at, unnest)                               ·
+                          │           render 0      unnest(tag_list)           ·                                                                                                                     ·
+                          └── scan    ·             ·                          (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)                                       ·
+·                                     table         articles@primary           ·                                                                                                                     ·
+·                                     spans         FULL SCAN                  ·                                                                                                                     ·
 
 # Regression test for #32723.
 query TTTTT
@@ -329,22 +306,17 @@ EXPLAIN (VERBOSE)
     FROM
         (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
 ----
-·                           distribution   local                            ·                         ·
-·                           vectorized     false                            ·                         ·
-render                      ·              ·                                (generate_series)         ·
- │                          render 0       generate_series                  ·                         ·
- └── project set            ·              ·                                (a, a, generate_series)   ·
-      │                     render 0       generate_series(@2 + 1, @2 + 1)  ·                         ·
-      └── union             ·              ·                                (a, a)                    ·
-           ├── render       ·              ·                                (a, a)                    ·
-           │    │           render 0       a                                ·                         ·
-           │    │           render 1       a                                ·                         ·
-           │    └── values  ·              ·                                (a)                       ·
-           │                size           1 column, 1 row                  ·                         ·
-           │                row 0, expr 0  1                                ·                         ·
-           └── render       ·              ·                                ("?column?", "?column?")  ·
-                │           render 0       "?column?"                       ·                         ·
-                │           render 1       "?column?"                       ·                         ·
-                └── values  ·              ·                                ("?column?")              ·
-·                           size           1 column, 1 row                  ·                         ·
-·                           row 0, expr 0  0                                ·                         ·
+·                           distribution   local                          ·                         ·
+·                           vectorized     false                          ·                         ·
+project                     ·              ·                              (generate_series)         ·
+ └── project set            ·              ·                              (a, a, generate_series)   ·
+      │                     render 0       generate_series(a + 1, a + 1)  ·                         ·
+      └── union             ·              ·                              (a, a)                    ·
+           ├── project      ·              ·                              (a, a)                    ·
+           │    └── values  ·              ·                              (a)                       ·
+           │                size           1 column, 1 row                ·                         ·
+           │                row 0, expr 0  1                              ·                         ·
+           └── project      ·              ·                              ("?column?", "?column?")  ·
+                └── values  ·              ·                              ("?column?")              ·
+·                           size           1 column, 1 row                ·                         ·
+·                           row 0, expr 0  0                              ·                         ·
