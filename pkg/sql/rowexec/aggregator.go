@@ -580,9 +580,12 @@ func (ag *orderedAggregator) accumulateRows() (
 	return aggEmittingRows, nil, nil
 }
 
+// getAggResults returns the new aggregatorState and the results from the
+// bucket. The bucket is closed.
 func (ag *aggregatorBase) getAggResults(
 	bucket aggregateFuncs,
 ) (aggregatorState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	defer bucket.close(ag.Ctx)
 	for i, b := range bucket {
 		result, err := b.Result()
 		if err != nil {
@@ -595,7 +598,6 @@ func (ag *aggregatorBase) getAggResults(
 		}
 		ag.row[i] = sqlbase.DatumToEncDatum(&ag.outputTypes[i], result)
 	}
-	bucket.close(ag.Ctx)
 
 	if outRow := ag.ProcessRowHelper(ag.row); outRow != nil {
 		return aggEmittingRows, outRow, nil
@@ -665,7 +667,7 @@ func (ag *hashAggregator) emitRow() (
 	// NOTE: accounting for the memory under aggregate builtins in the bucket
 	// is updated in getAggResults (the bucket will be closed), however, we
 	// choose to not reduce our estimate of the map's internal footprint
-	// because it is error-prone to estimate the new footprint (we don't
+	// because it is error-prone to estimate the new footprint (we don't know
 	// whether and when Go runtime will release some of the underlying memory).
 	// This behavior is ok, though, since actual usage of buckets will be lower
 	// than what we accounted for - in the worst case, the query might hit a
