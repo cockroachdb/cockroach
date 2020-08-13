@@ -973,6 +973,7 @@ col_name_keyword ::=
 	| 'BIGINT'
 	| 'BIT'
 	| 'BOOLEAN'
+	| 'BOX2D'
 	| 'CHAR'
 	| 'CHARACTER'
 	| 'CHARACTERISTICS'
@@ -2415,6 +2416,7 @@ const_datetime ::=
 const_geo ::=
 	'GEOGRAPHY'
 	| 'GEOMETRY'
+	| 'BOX2D'
 	| 'GEOMETRY' '(' geo_shape_type ')'
 	| 'GEOGRAPHY' '(' geo_shape_type ')'
 	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'

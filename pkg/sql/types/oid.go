@@ -93,6 +93,7 @@ var OidToType = map[oid.Oid]*T{
 
 	oidext.T_geometry:  Geometry,
 	oidext.T_geography: Geography,
+	oidext.T_box2d:     Box2D,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -134,6 +135,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 
 	oidext.T_geometry:  oidext.T__geometry,
 	oidext.T_geography: oidext.T__geography,
+	oidext.T_box2d:     oidext.T__box2d,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
@@ -165,6 +167,7 @@ var familyToOid = map[Family]oid.Oid{
 
 	GeometryFamily:  oidext.T_geometry,
 	GeographyFamily: oidext.T_geography,
+	Box2DFamily:     oidext.T_box2d,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.

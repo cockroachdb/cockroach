@@ -434,6 +434,15 @@ var (
 		},
 	}
 
+	// Box2D is the type of a geospatial box2d object.
+	Box2D = &T{
+		InternalType: InternalType{
+			Family: Box2DFamily,
+			Oid:    oidext.T_box2d,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -442,6 +451,7 @@ var (
 	//
 	Scalar = []*T{
 		Bool,
+		Box2D,
 		Int,
 		Float,
 		Decimal,
@@ -1218,6 +1228,7 @@ var familyNames = map[Family]string{
 	ArrayFamily:          "array",
 	BitFamily:            "bit",
 	BoolFamily:           "bool",
+	Box2DFamily:          "box2d",
 	BytesFamily:          "bytes",
 	CollatedStringFamily: "collatedstring",
 	DateFamily:           "date",

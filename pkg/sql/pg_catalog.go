@@ -3036,6 +3036,7 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.FloatFamily:       typCategoryNumeric,
 	types.IntFamily:         typCategoryNumeric,
 	types.IntervalFamily:    typCategoryTimespan,
+	types.Box2DFamily:       typCategoryUserDefined,
 	types.GeographyFamily:   typCategoryUserDefined,
 	types.GeometryFamily:    typCategoryUserDefined,
 	types.JsonFamily:        typCategoryUserDefined,

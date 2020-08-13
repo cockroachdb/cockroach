@@ -355,6 +355,16 @@ enum Family {
     // field. It does not have a canonical form.
     EnumFamily = 24;
 
+    // Box2DFamily is a family representing the box2d type. This is compatible
+    // with PostGIS's box2d implementation.
+    //
+    //   Canonical: types.Box2D
+    //   Oid      : oidext.T_box2d
+    //
+    // Examples:
+    //   Box2D
+    Box2DFamily = 25;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
