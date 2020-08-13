@@ -576,24 +576,3 @@ func InitTableDescriptor(
 		},
 	}
 }
-
-// NewMutableTableDescriptorAsReplacement creates a new MutableTableDescriptor
-// as a replacement of an existing table. This is utilized with truncate.
-//
-// The passed readTimestamp is serialized into the descriptor's ReplacementOf
-// field for debugging purposes. The passed id will be the ID of the newly
-// returned replacement.
-//
-// TODO(ajwerner): Decide whether we need to clone here.
-func NewMutableTableDescriptorAsReplacement(
-	id descpb.ID, replacementOf *MutableTableDescriptor, readTimestamp hlc.Timestamp,
-) *MutableTableDescriptor {
-	replacement := &MutableTableDescriptor{ImmutableTableDescriptor: replacementOf.ImmutableTableDescriptor}
-	replacement.ID = id
-	replacement.Version = 1
-	replacement.ReplacementOf = descpb.TableDescriptor_Replacement{
-		ID:   replacementOf.ID,
-		Time: readTimestamp,
-	}
-	return replacement
-}

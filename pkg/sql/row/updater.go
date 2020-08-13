@@ -174,11 +174,7 @@ func MakeUpdater(
 		// When changing the primary key, we delete the old values and reinsert
 		// them, so request them all.
 		var err error
-		if ru.rd, err = MakeDeleter(
-			ctx, txn, codec, tableDesc, tableCols, alloc,
-		); err != nil {
-			return Updater{}, err
-		}
+		ru.rd = MakeDeleter(codec, tableDesc, tableCols)
 		ru.FetchCols = ru.rd.FetchCols
 		ru.FetchColIDtoRowIndex = ColIDtoRowIndexFromCols(ru.FetchCols)
 		if ru.ri, err = MakeInserter(

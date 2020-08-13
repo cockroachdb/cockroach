@@ -341,6 +341,37 @@ func (p *planner) dropTableImpl(
 	return droppedViews, err
 }
 
+// unsplitRangesForTable unsplit any manually split ranges within the table span.
+func (p *planner) unsplitRangesForTable(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+) error {
+	// Gate this on being the system tenant because secondary tenants aren't
+	// allowed to scan the meta ranges directly.
+	if p.ExecCfg().Codec.ForSystemTenant() {
+		span := tableDesc.TableSpan(p.ExecCfg().Codec)
+		ranges, err := ScanMetaKVs(ctx, p.txn, span)
+		if err != nil {
+			return err
+		}
+		for _, r := range ranges {
+			var desc roachpb.RangeDescriptor
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			if (desc.GetStickyBit() != hlc.Timestamp{}) {
+				// Swallow "key is not the start of a range" errors because it would mean
+				// that the sticky bit was removed and merged concurrently. DROP TABLE
+				// should not fail because of this.
+				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
+					!strings.Contains(err.Error(), "is not the start of a range") {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // drainName when set implies that the name needs to go through the draining
 // names process. This parameter is always passed in as true except from
 // TRUNCATE which directly deletes the old name to id map and doesn't need
@@ -369,29 +400,9 @@ func (p *planner) initiateDropTable(
 	}
 
 	// Unsplit all manually split ranges in the table so they can be
-	// automatically merged by the merge queue. Gate this on being the
-	// system tenant because secondary tenants aren't allowed to scan
-	// the meta ranges directly.
-	if p.ExecCfg().Codec.ForSystemTenant() {
-		span := tableDesc.TableSpan(p.ExecCfg().Codec)
-		ranges, err := ScanMetaKVs(ctx, p.txn, span)
-		if err != nil {
-			return err
-		}
-		for _, r := range ranges {
-			var desc roachpb.RangeDescriptor
-			if err := r.ValueProto(&desc); err != nil {
-				return err
-			}
-			if (desc.GetStickyBit() != hlc.Timestamp{}) {
-				// Swallow "key is not the start of a range" errors because it would mean
-				// that the sticky bit was removed and merged concurrently. DROP TABLE
-				// should not fail because of this.
-				if err := p.ExecCfg().DB.AdminUnsplit(ctx, desc.StartKey); err != nil && !strings.Contains(err.Error(), "is not the start of a range") {
-					return err
-				}
-			}
-		}
+	// automatically merged by the merge queue.
+	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+		return err
 	}
 
 	tableDesc.State = descpb.TableDescriptor_DROP

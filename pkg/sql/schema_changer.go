@@ -974,7 +974,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				// index swap occurs. The logic that generates spans for subzone
 				// configurations removes spans for indexes in the dropping state,
 				// which we don't want. So, set up the zone configs before we swap.
-				if err := sc.maybeUpdateZoneConfigsForPKChange(
+				if err := maybeUpdateZoneConfigsForPKChange(
 					ctx, txn, sc.execCfg, scTable, pkSwap); err != nil {
 					return err
 				}
@@ -1126,7 +1126,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
 // indexes from the old index over to the new index.
-func (sc *SchemaChanger) maybeUpdateZoneConfigsForPKChange(
+func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
