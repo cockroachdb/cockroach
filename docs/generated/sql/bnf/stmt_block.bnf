@@ -738,6 +738,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
@@ -847,6 +848,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEROLE'
+	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
 	| 'NOWAIT'
 	| 'NULLS'
@@ -1944,6 +1946,8 @@ role_option ::=
 	| 'NOCREATEROLE'
 	| 'LOGIN'
 	| 'NOLOGIN'
+	| 'CONTROLJOB'
+	| 'NOCONTROLJOB'
 	| password_clause
 	| valid_until_clause
 

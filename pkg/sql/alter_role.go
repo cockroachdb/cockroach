@@ -49,7 +49,7 @@ func (p *planner) AlterRoleNode(
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support superuser privilege right now.
 	// However we make it so the admin role cannot be edited (done in startExec).
-	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 

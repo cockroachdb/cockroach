@@ -59,7 +59,7 @@ func (p *planner) CreateRoleNode(
 	opName string,
 	kvOptions tree.KVOptions,
 ) (*CreateRoleNode, error) {
-	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 
