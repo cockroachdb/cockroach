@@ -1,5 +1,3 @@
-# LogicTest: local fakedist
-
 # Check that all native types as well as some datum-backed types can be read
 # correctly.
 statement ok

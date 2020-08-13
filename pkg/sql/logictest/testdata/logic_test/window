@@ -1,5 +1,3 @@
-# LogicTest: default-configs 5node-default-configs
-
 statement ok
 CREATE TABLE kv (
   -- don't add column "a"
