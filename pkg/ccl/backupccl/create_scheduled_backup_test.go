@@ -178,6 +178,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		nameRe     string
 		backupStmt string
 		period     time.Duration
+		runsNow    bool
 	}
 
 	testCases := []struct {
@@ -230,7 +231,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .*: CHANGES",
+					nameRe:     "BACKUP .*: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH detached",
 					period:     time.Hour,
 				},
@@ -238,6 +239,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "BACKUP .+",
 					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
 					period:     24 * time.Hour,
+					runsNow:    true,
 				},
 			},
 		},
@@ -247,7 +249,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "my-backup: CHANGES",
+					nameRe:     "my-backup: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH detached",
 					period:     time.Hour,
 				},
@@ -255,6 +257,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "my-backup",
 					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
 					period:     24 * time.Hour,
+					runsNow:    true,
 				},
 			},
 		},
@@ -295,7 +298,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "my_backup_name: CHANGES",
+					nameRe:     "my_backup_name: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH revision_history, detached",
 					period:     time.Hour,
 				},
@@ -303,6 +306,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "my_backup_name",
 					backupStmt: "BACKUP INTO 'somewhere' WITH revision_history, detached",
 					period:     24 * time.Hour,
+					runsNow:    true,
 				},
 			},
 		},
@@ -372,26 +376,25 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedSchedules), len(schedules))
 
-			// Build a map of expected backup statement to expected schedule frequency.
-			// And a map of backup statement to the expected schedule name.
-			expectedFrequencies := make(map[string]time.Duration)
-			expectedNames := make(map[string]string)
+			// Build a map of expected backup statement to expected schedule.
+			expectedByName := make(map[string]expectedSchedule)
 			for _, s := range tc.expectedSchedules {
-				expectedFrequencies[s.backupStmt] = s.period
-				expectedNames[s.backupStmt] = s.nameRe
+				expectedByName[s.backupStmt] = s
 			}
 
 			for _, s := range schedules {
 				stmt := getScheduledBackupStatement(t, s.ExecutionArgs())
-				nameRe, ok := expectedNames[stmt]
+				expectedSchedule, ok := expectedByName[stmt]
 				require.True(t, ok, "could not find matching name for %q", stmt)
-				require.Regexp(t, regexp.MustCompile(nameRe), s.ScheduleName())
+				require.Regexp(t, regexp.MustCompile(expectedSchedule.nameRe), s.ScheduleName())
 
-				expectedFrequency, ok := expectedFrequencies[stmt]
-				require.True(t, ok, "could not find matching frequency for %q", stmt)
 				frequency, err := s.Frequency()
 				require.NoError(t, err)
-				require.EqualValues(t, expectedFrequency, frequency)
+				require.EqualValues(t, expectedSchedule.period, frequency, expectedSchedule)
+
+				if expectedSchedule.runsNow {
+					require.EqualValues(t, th.env.Now().Round(time.Microsecond), s.ScheduledRunTime())
+				}
 			}
 		})
 	}
