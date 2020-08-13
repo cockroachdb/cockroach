@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -373,13 +374,14 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	logEntries := make([][]byte, 0, preallocSize)
 
 	var raftLogBytes int64
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+	scanFunc := func(cur iterutil.Cur) error {
+		kv := *cur.Elem.(*roachpb.KeyValue)
 		bytes, err := kv.Value.GetBytes()
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
 		}
-		return false, err
+		return err
 	}
 
 	rangeID := header.State.Desc.RangeID

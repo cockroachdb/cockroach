@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -361,26 +362,29 @@ func (s *statusServer) Allocator(
 			// Use IterateRangeDescriptors to read from the engine only
 			// because it's already exported.
 			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) (bool, error) {
+				func(cur iterutil.Cur) error {
+					desc := *cur.Elem.(*roachpb.RangeDescriptor)
 					rep, err := store.GetReplica(desc.RangeID)
 					if err != nil {
 						if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-							return false, nil // continue
+							return nil // continue
 						}
-						return true, err
+						cur.Stop()
+						return err
 					}
 					if !rep.OwnsValidLease(ctx, store.Clock().Now()) {
-						return false, nil
+						return nil
 					}
 					allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
 					if err != nil {
-						return true, err
+						cur.Stop()
+						return err
 					}
 					output.DryRuns = append(output.DryRuns, &serverpb.AllocatorDryRun{
 						RangeID: desc.RangeID,
 						Events:  recordedSpansToTraceEvents(allocatorSpans),
 					})
-					return false, nil
+					return nil
 				})
 			return err
 		}
@@ -1429,13 +1433,15 @@ func (s *statusServer) Ranges(
 			// Use IterateRangeDescriptors to read from the engine only
 			// because it's already exported.
 			err := kvserver.IterateRangeDescriptors(ctx, store.Engine(),
-				func(desc roachpb.RangeDescriptor) (done bool, _ error) {
+				func(cur iterutil.Cur) error {
+					desc := *cur.Elem.(*roachpb.RangeDescriptor)
 					rep, err := store.GetReplica(desc.RangeID)
 					if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-						return false, nil // continue
+						return nil // continue
 					}
 					if err != nil {
-						return true, err
+						cur.Stop()
+						return err
 					}
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
@@ -1444,7 +1450,7 @@ func (s *statusServer) Ranges(
 							store.Ident.StoreID,
 							rep.Metrics(ctx, timestamp, isLiveMap, clusterNodes),
 						))
-					return false, nil
+					return nil
 				})
 			return err
 		}

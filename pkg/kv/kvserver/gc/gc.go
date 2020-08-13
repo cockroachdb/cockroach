@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -484,8 +485,9 @@ func processLocalKeyRange(
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
 	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, storage.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
-			return false, handleOne(kv)
+		func(cur iterutil.Cur) error {
+			kv := *cur.Elem.(*roachpb.KeyValue)
+			return handleOne(kv)
 		})
 	return err
 }
