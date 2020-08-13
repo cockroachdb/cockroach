@@ -188,11 +188,16 @@ func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurre
 	return forceFullBackup
 }
 
+const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
+
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
 func doCreateBackupSchedules(
 	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupEval, resultsCh chan<- tree.Datums,
 ) error {
+	if err := p.RequireAdminRole(ctx, scheduleBackupOp); err != nil {
+		return err
+	}
 	env := scheduledjobs.ProdJobSchedulerEnv
 	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -394,8 +399,6 @@ func createBackupSchedule(
 	}
 	return nil
 }
-
-const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
 
 // makeScheduleBackupEval prepares helper scheduledBackupEval struct to assist in evaluation
 // of various schedule and backup specific components.
