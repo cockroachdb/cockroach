@@ -43,7 +43,7 @@ func (p *planner) DropRole(ctx context.Context, n *tree.DropRole) (planNode, err
 func (p *planner) DropRoleNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropRoleNode, error) {
-	if err := p.HasRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
 		return nil, err
 	}
 

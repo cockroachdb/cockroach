@@ -204,10 +204,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 		p.SessionData().User, descriptor.TypeName(), descriptor.GetName())
 }
 
-// HasAdminRole implements the AuthorizationAccessor interface.
-// Requires a valid transaction to be open.
-func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
-	user := p.SessionData().User
+func (p *planner) IsUserAdminRole(ctx context.Context, user string) (bool, error) {
 	if user == "" {
 		return false, errors.AssertionFailedf("empty user")
 	}
@@ -237,6 +234,12 @@ func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// HasAdminRole implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
+	return p.IsUserAdminRole(ctx, p.User())
 }
 
 // RequireAdminRole implements the AuthorizationAccessor interface.
@@ -373,42 +376,43 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 // HasRoleOption converts the roleoption to it's SQL column name and
 // checks if the user belongs to a role where the roleprivilege has value true.
-// Only works on checking the "positive version" of the privilege.
 // Requires a valid transaction to be open.
-// Example: CREATEROLE instead of NOCREATEROLE.
-func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) error {
+// This check should be done on the version of the privilege that is stored in
+// the role options table.
+// Example: CREATEROLE instead of NOCREATEROLE. NOLOGIN instead of LOGIN.
+func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
 	if p.txn == nil || !p.txn.IsOpen() {
-		return errors.AssertionFailedf("cannot use HasRoleOption without a txn")
+		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
 	user := p.SessionData().User
 	if user == security.RootUser || user == security.NodeUser {
-		return nil
+		return true, nil
 	}
 
 	normalizedName, err := NormalizeAndValidateUsername(user)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Create list of roles for sql WHERE IN clause.
 	memberOf, err := p.MemberOfWithAdminOption(ctx, normalizedName)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	var roles = tree.NewDArray(types.String)
 	err = roles.Append(tree.NewDString(normalizedName))
 	if err != nil {
-		return err
+		return false, err
 	}
 	for role := range memberOf {
 		err := roles.Append(tree.NewDString(role))
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -422,16 +426,31 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		roles)
 
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if len(hasRolePrivilege) != 0 {
-		return nil
+		return true, nil
 	}
 
 	// User is not a member of a role that has CREATEROLE privilege.
-	return pgerror.Newf(pgcode.InsufficientPrivilege,
-		"user %s does not have %s privilege", user, roleOption.String())
+	return false, nil
+}
+
+// CheckRoleOption checks if the current user has roleOption and returns an
+// insufficient privilege error if the user does not have roleOption.
+func (p *planner) CheckRoleOption(ctx context.Context, roleOption roleoption.Option) error {
+	hasRoleOption, err := p.HasRoleOption(ctx, roleOption)
+	if err != nil {
+		return err
+	}
+
+	if !hasRoleOption {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s privilege", p.User(), roleOption.String())
+	}
+
+	return nil
 }
 
 // ConnAuditingClusterSettingName is the name of the cluster setting

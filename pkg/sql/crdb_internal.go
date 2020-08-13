@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -534,6 +535,11 @@ CREATE TABLE crdb_internal.jobs (
 			return nil, nil, err
 		}
 
+		hasControlJob, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
+		if err != nil {
+			return nil, nil, err
+		}
+
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
@@ -587,8 +593,12 @@ CREATE TABLE crdb_internal.jobs (
 
 				// We filter out masked rows before we allocate all the
 				// datums. Needless allocate when not necessary.
+				ownedByAdmin, err := p.IsUserAdminRole(ctx, payload.Username)
+				if err != nil {
+					errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+				}
 				sameUser := payload != nil && payload.Username == currentUser
-				if canAccess := isAdmin || sameUser; !canAccess {
+				if canAccess := isAdmin || !ownedByAdmin && hasControlJob || sameUser; !canAccess {
 					// This user is neither an admin nor the user who created the
 					// job. They cannot see this row.
 					continue
