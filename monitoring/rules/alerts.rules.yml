@@ -157,6 +157,28 @@ groups:
       priority: P4
     annotations:
       summary: UI certificate for {{ $labels.instance }} expires in less than 20 days
+  # Slow Latch/Lease/Raft requests.
+  - alert: SlowLatchRequest
+    expr: requests_slow_latch{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow latch requests on {{ $labels.instance }}'
+  - alert: SlowLeaseRequest
+    expr: requests_slow_lease{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow lease requests on {{ $labels.instance }}'
+  - alert: SlowRaftRequest
+    expr: requests_slow_raft{job="cockroachdb"} > 0
+    for: 5m
+    labels:
+      severity: testing
+    annotations:
+      summary: '{{ $value }} slow raft requests on {{ $labels.instance }}'
   # Getting close to open file descriptor limit.
   - alert: HighOpenFDCount
     expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} > 0.8
