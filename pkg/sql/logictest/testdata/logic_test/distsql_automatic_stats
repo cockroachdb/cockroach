@@ -1,5 +1,3 @@
-# LogicTest: fakedist fakedist-metadata
-
 # Disable automatic stats
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false

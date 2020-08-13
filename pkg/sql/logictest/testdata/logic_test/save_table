@@ -1,5 +1,3 @@
-# LogicTest: local
-
 # savetables is the name of the database where tables created by the
 # saveTableNode are stored.
 statement ok
