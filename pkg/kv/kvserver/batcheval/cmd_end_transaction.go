@@ -1036,6 +1036,9 @@ func splitTriggerHelper(
 	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
 		deltaPostSplitLeft.ContainsEstimates = 0
 	}
+	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
+		deltaPostSplitLeft.AbortSpanBytes = 0
+	}
 	return deltaPostSplitLeft, pd, nil
 }
 
