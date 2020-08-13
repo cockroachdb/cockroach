@@ -268,12 +268,13 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 
 	size := func() int64 { return 2 << 10 }
 	st := cluster.MakeTestingClusterSettings()
 	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stop.NewStopper())
 	r := MakeDistSQLReceiver(
-		context.Background(), nil /* resultWriter */, tree.Rows,
+		ctx, nil /* resultWriter */, tree.Rows,
 		rangeCache, nil /* txn */, nil /* updateClock */, &SessionTracing{})
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}
@@ -323,7 +324,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	for i := range descs {
-		ri := rangeCache.GetCached(descs[i].StartKey, false /* inclusive */)
+		ri := rangeCache.GetCached(ctx, descs[i].StartKey, false /* inclusive */)
 		require.NotNilf(t, ri, "failed to find range for key: %s", descs[i].StartKey)
 		require.Equal(t, &descs[i], ri.Desc())
 		require.NotNil(t, ri.Lease())
