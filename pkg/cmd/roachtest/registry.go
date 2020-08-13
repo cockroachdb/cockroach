@@ -85,6 +85,7 @@ func registerTests(r *testRegistry) {
 	registerScrubAllChecksTPCC(r)
 	registerScrubIndexOnlyTPCC(r)
 	registerSecondaryIndexesMultiVersionCluster(r)
+	registerSplitsMixedVersions(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
 	registerSyncTest(r)

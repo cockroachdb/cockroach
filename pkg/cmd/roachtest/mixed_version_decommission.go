@@ -41,10 +41,10 @@ func runDecommissionMixedVersions(
 	u := newVersionUpgradeTest(c,
 		// We upload both binaries to each node, to be able to vary the binary
 		// used when issuing `cockroach node` subcommands.
-		uploadVersion(allNodes, predecessorVersion),
-		uploadVersion(allNodes, mainVersion),
+		uploadVersionStep(allNodes, predecessorVersion),
+		uploadVersionStep(allNodes, mainVersion),
 
-		startVersion(allNodes, predecessorVersion),
+		startVersionStep(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
 		preventAutoUpgradeStep(h.nodeIDs[0]),
 
@@ -248,20 +248,28 @@ func checkAllMembership(from int, membership string) versionStep {
 	}
 }
 
-// uploadVersion uploads the specified cockroach binary version on the specified
+// uploadVersionStep uploads the specified cockroach binary version on the specified
 // nodes.
-func uploadVersion(nodes nodeListOption, version string) versionStep {
+func uploadVersionStep(nodes nodeListOption, version string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
 		// Put the binary.
 		u.uploadVersion(ctx, t, nodes, version)
 	}
 }
 
-// startVersion starts the specified cockroach binary version on the specified
+// startVersionStep starts the specified cockroach binary version on the specified
 // nodes.
-func startVersion(nodes nodeListOption, version string) versionStep {
+func startVersionStep(nodes nodeListOption, version string, extraArgs ...string) versionStep {
 	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		args := startArgs("--binary=" + cockroachBinaryPath(version))
-		u.c.Start(ctx, t, nodes, args, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"})
+		binaryArg := startArgs("--binary=" + cockroachBinaryPath(version))
+		extra := startArgs(extraArgs...)
+		u.c.Start(ctx, t, nodes, binaryArg, startArgsDontEncrypt, roachprodArgOption{"--sequential=false"}, extra)
+	}
+}
+
+// stopStep stops specified cockroach node
+func stopStep(nodes nodeListOption) versionStep {
+	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+		u.c.Stop(ctx, nodes)
 	}
 }
