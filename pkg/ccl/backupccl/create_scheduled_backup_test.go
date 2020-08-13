@@ -481,6 +481,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 			schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
 			require.NoError(t, err)
 			require.EqualValues(t, 1, len(schedules))
+			defer th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[0].ScheduleID())
 
 			// Force the schedule to execute.
 			th.env.SetTime(schedules[0].NextRun().Add(time.Second))
