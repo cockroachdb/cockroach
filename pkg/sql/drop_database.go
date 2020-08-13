@@ -41,10 +41,6 @@ type dropDatabaseNode struct {
 // Privileges: DROP on database and DROP on all tables in the database.
 //   Notes: postgres allows only the database owner to DROP a database.
 //          mysql requires the DROP privileges on the database.
-// TODO(XisiHuang): our DROP DATABASE is like the postgres DROP SCHEMA
-// (cockroach database == postgres schema). the postgres default of not
-// dropping the schema if there are dependent objects is more sensible
-// (see the RESTRICT and CASCADE options).
 func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
@@ -58,10 +54,6 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), !n.IfExists)
 	if err != nil {
 		return nil, err
-	}
-	if dbDesc == nil {
-		// IfExists was specified and database was not found.
-		return newZeroNode(nil /* columns */), nil
 	}
 
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
@@ -122,8 +114,41 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 
+	var schemasIDsToDelete []descpb.ID
+	for _, schemaToDelete := range n.d.schemasToDelete {
+		switch schemaToDelete.Kind {
+		case sqlbase.SchemaTemporary, sqlbase.SchemaPublic:
+			// The public schema and temporary schemas are cleaned up by just removing
+			// the existing namespace entries.
+			if err := catalogkv.RemoveSchemaNamespaceEntry(
+				ctx,
+				p.txn,
+				p.ExecCfg().Codec,
+				n.dbDesc.GetID(),
+				schemaToDelete.Name,
+			); err != nil {
+				return err
+			}
+		case sqlbase.SchemaUserDefined:
+			// For user defined schemas, we have to do a bit more work.
+			schemaDesc, err := params.p.Descriptors().GetMutableSchemaDescriptorByID(ctx, schemaToDelete.ID, params.p.txn)
+			if err != nil {
+				return err
+			}
+			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, schemaDesc); err != nil {
+				return err
+			}
+			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.ID)
+		}
+	}
+
 	if err := p.createDropDatabaseJob(
-		ctx, n.dbDesc.GetID(), n.d.getDroppedTableDetails(), n.d.typesToDelete, tree.AsStringWithFQNames(n.n, params.Ann()),
+		ctx,
+		n.dbDesc.GetID(),
+		schemasIDsToDelete,
+		n.d.getDroppedTableDetails(),
+		n.d.typesToDelete,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
@@ -179,22 +204,6 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
-	}
-
-	for _, schemaToDelete := range n.d.schemasToDelete {
-		// Drop any schemas that only have namespace entries -- public and any
-		// temporary schemas.
-		if schemaToDelete.Kind == sqlbase.SchemaTemporary || schemaToDelete.Kind == sqlbase.SchemaPublic {
-			if err := catalogkv.RemoveSchemaNamespaceEntry(
-				ctx,
-				p.txn,
-				p.ExecCfg().Codec,
-				n.dbDesc.GetID(),
-				schemaToDelete.Name,
-			); err != nil {
-				return err
-			}
-		}
 	}
 
 	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {

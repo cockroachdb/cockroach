@@ -339,3 +339,26 @@ query I
 SELECT count(*) FROM system.namespace WHERE name LIKE 'w_51782'
 ----
 0
+
+subtest schemas
+
+# Ensure that user defined schemas are dropped when dropping the parent database.
+statement ok
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+CREATE DATABASE with_schemas;
+USE with_schemas;
+CREATE SCHEMA myschema1;
+CREATE SCHEMA myschema2;
+CREATE TABLE myschema1.myschema1_tb (x INT);
+CREATE TYPE myschema1.myschema1_typ AS ENUM ('schema');
+CREATE TABLE myschema2.myschema2_tb (y INT);
+USE test
+
+statement ok
+DROP DATABASE with_schemas CASCADE
+
+# There shouldn't be any left over namespace entries from the schemas
+# or elements within the schemas.
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'myschema%'
