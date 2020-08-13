@@ -284,3 +284,41 @@ func TestShowBackup(t *testing.T) {
 func eqWhitespace(a, b string) bool {
 	return strings.Replace(a, "\t", "", -1) == strings.Replace(b, "\t", "", -1)
 }
+
+func TestShowBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitNone)
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	const full = LocalFoo + "/full"
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	// Add Incremental changes to it 3 times.
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	// Make a second full backup, add changes to it twice.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	// Make a third full backup, add changes to it.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+
+	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
+
+	// assert that we see the three, and only the three, full backups.
+	require.Equal(t, 3, len(rows))
+
+	// check that we can show the inc layers in the individual full backups.
+	b1 := sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[0][0], full)
+	require.Equal(t, 4, len(b1))
+	b2 := sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[1][0], full)
+	require.Equal(t, 3, len(b2))
+}
