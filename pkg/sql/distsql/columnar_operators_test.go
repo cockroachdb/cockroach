@@ -13,6 +13,7 @@ package distsql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"math/rand"
 	"sort"
 	"strings"
@@ -83,6 +84,8 @@ func TestAggregateFuncToNumArguments(t *testing.T) {
 
 func TestAggregatorAgainstProcessor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 52742)
+
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
