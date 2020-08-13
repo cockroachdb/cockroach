@@ -17,3 +17,8 @@ export BUILDER_HIDE_GOPATH_SRC=0
 run_json_test build/builder.sh \
   stdbuf -oL -eL \
   make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/sql/logictest' TESTS='^TestSqlLiteLogic$$'
+
+# Run the tests with a multitenant configuration.
+run_json_test build/builder.sh \
+  stdbuf -oL -eL \
+  make test GOTESTFLAGS=-json TESTFLAGS="-v -bigtest -flex-types" TESTTIMEOUT='24h' PKG='./pkg/ccl/logictestccl' TESTS='^TestTenantSQLLiteLogic$$'
