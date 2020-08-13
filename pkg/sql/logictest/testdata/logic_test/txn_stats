@@ -1,5 +1,3 @@
-# LogicTest: local
-
 # Some sanity checks for node_txn_stats virtual table.
 
 statement ok

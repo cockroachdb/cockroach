@@ -1,4 +1,6 @@
-# LogicTest: local
+# 3node-tenant is blocked from running this file because of the absence of
+# the tenant table for tenants.
+# LogicTest: !3node-tenant
 
 # Verify information_schema database handles mutation statements correctly.
 
