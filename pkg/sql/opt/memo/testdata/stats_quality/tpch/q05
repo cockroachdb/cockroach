@@ -75,15 +75,15 @@ sort
       │    │    │    ├── save-table-name: q5_lookup_join_5
       │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) l_orderkey:20(int!null) l_suppkey:22(int!null) l_extendedprice:25(float!null) l_discount:26(float!null) n_nationkey:45(int!null) n_name:46(char!null) n_regionkey:47(int!null) r_regionkey:50(int!null) r_name:51(char!null)
       │    │    │    ├── key columns: [10] = [20]
-      │    │    │    ├── stats: [rows=296134.9, distinct(1)=27671.7064, null(1)=0, distinct(4)=5, null(4)=0, distinct(10)=64276.6285, null(10)=0, distinct(11)=27671.7064, null(11)=0, distinct(14)=365, null(14)=0, distinct(20)=64276.6285, null(20)=0, distinct(22)=9920, null(22)=0, distinct(25)=253449.774, null(25)=0, distinct(26)=11, null(26)=0, distinct(45)=5, null(45)=0, distinct(46)=5, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=0.996222107, null(51)=0]
-      │    │    │    ├── fd: ()-->(51), (10)-->(11,14), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (10)==(20), (20)==(10)
+      │    │    │    ├── stats: [rows=296150.194, distinct(1)=27672.3293, null(1)=0, distinct(4)=5, null(4)=0, distinct(10)=166658.512, null(10)=0, distinct(11)=27672.3293, null(11)=0, distinct(14)=365, null(14)=0, distinct(20)=166658.512, null(20)=0, distinct(22)=9920, null(22)=0, distinct(25)=231693.035, null(25)=0, distinct(26)=11, null(26)=0, distinct(45)=5, null(45)=0, distinct(46)=5, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=0.996222107, null(51)=0]
+      │    │    │    ├── fd: ()-->(51), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (10)-->(11,14), (10)==(20), (20)==(10), (1)==(11), (11)==(1)
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── save-table-name: q5_inner_join_6
       │    │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null) n_nationkey:45(int!null) n_name:46(char!null) n_regionkey:47(int!null) r_regionkey:50(int!null) r_name:51(char!null)
       │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    │    │    ├── stats: [rows=75364.3969, distinct(1)=27672.3293, null(1)=0, distinct(4)=5, null(4)=0, distinct(10)=64276.6285, null(10)=0, distinct(11)=27672.3293, null(11)=0, distinct(14)=365, null(14)=0, distinct(45)=5, null(45)=0, distinct(46)=5, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=0.996222107, null(51)=0]
+      │    │    │    │    ├── stats: [rows=72267.3647, distinct(1)=53634.1183, null(1)=0, distinct(4)=25, null(4)=0, distinct(10)=65164.9394, null(10)=0, distinct(11)=53634.1183, null(11)=0, distinct(14)=365, null(14)=0, distinct(45)=25, null(45)=0, distinct(46)=25, null(46)=0, distinct(47)=1, null(47)=0, distinct(50)=1, null(50)=0, distinct(51)=1, null(51)=0]
       │    │    │    │    ├── key: (10)
-      │    │    │    │    ├── fd: ()-->(51), (10)-->(11,14), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (1)==(11), (11)==(1)
+      │    │    │    │    ├── fd: ()-->(51), (1)-->(4), (45)-->(46,47), (4)==(45), (45)==(4), (10)-->(11,14), (1)==(11), (11)==(1), (47)==(50), (50)==(47)
       │    │    │    │    ├── index-join orders
       │    │    │    │    │    ├── save-table-name: q5_index_join_7
       │    │    │    │    │    ├── columns: o_orderkey:10(int!null) o_custkey:11(int!null) o_orderdate:14(date!null)
@@ -255,20 +255,20 @@ column_names       row_count  distinct_count  null_count
 {r_regionkey}      184082     1               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}        296135.00      1.61           27672.00            1.60                0.00            1.00
-{c_nationkey}      296135.00      1.61           5.00                1.00                0.00            1.00
-{l_discount}       296135.00      1.61           11.00               1.00                0.00            1.00
-{l_extendedprice}  296135.00      1.61           253450.00           1.53                0.00            1.00
-{l_orderkey}       296135.00      1.61           64277.00            1.40                0.00            1.00
-{l_suppkey}        296135.00      1.61           9920.00             1.00                0.00            1.00
-{n_name}           296135.00      1.61           5.00                1.00                0.00            1.00
-{n_nationkey}      296135.00      1.61           5.00                1.00                0.00            1.00
-{n_regionkey}      296135.00      1.61           1.00                1.00                0.00            1.00
-{o_custkey}        296135.00      1.61           27672.00            1.60                0.00            1.00
-{o_orderdate}      296135.00      1.61           365.00              1.00                0.00            1.00
-{o_orderkey}       296135.00      1.61           64277.00            1.40                0.00            1.00
-{r_name}           296135.00      1.61           1.00                1.00                0.00            1.00
-{r_regionkey}      296135.00      1.61           1.00                1.00                0.00            1.00
+{c_custkey}        296150.00      1.61           27672.00            1.60                0.00            1.00
+{c_nationkey}      296150.00      1.61           5.00                1.00                0.00            1.00
+{l_discount}       296150.00      1.61           11.00               1.00                0.00            1.00
+{l_extendedprice}  296150.00      1.61           231693.00           1.40                0.00            1.00
+{l_orderkey}       296150.00      1.61           166659.00           3.63 <==            0.00            1.00
+{l_suppkey}        296150.00      1.61           9920.00             1.00                0.00            1.00
+{n_name}           296150.00      1.61           5.00                1.00                0.00            1.00
+{n_nationkey}      296150.00      1.61           5.00                1.00                0.00            1.00
+{n_regionkey}      296150.00      1.61           1.00                1.00                0.00            1.00
+{o_custkey}        296150.00      1.61           27672.00            1.60                0.00            1.00
+{o_orderdate}      296150.00      1.61           365.00              1.00                0.00            1.00
+{o_orderkey}       296150.00      1.61           166659.00           3.63 <==            0.00            1.00
+{r_name}           296150.00      1.61           1.00                1.00                0.00            1.00
+{r_regionkey}      296150.00      1.61           1.00                1.00                0.00            1.00
 
 stats table=q5_inner_join_6
 ----
@@ -285,16 +285,16 @@ column_names   row_count  distinct_count  null_count
 {r_regionkey}  46008      1               0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_custkey}    75364.00       1.64           27672.00            1.60                0.00            1.00
-{c_nationkey}  75364.00       1.64           5.00                1.00                0.00            1.00
-{n_name}       75364.00       1.64           5.00                1.00                0.00            1.00
-{n_nationkey}  75364.00       1.64           5.00                1.00                0.00            1.00
-{n_regionkey}  75364.00       1.64           1.00                1.00                0.00            1.00
-{o_custkey}    75364.00       1.64           27672.00            1.60                0.00            1.00
-{o_orderdate}  75364.00       1.64           365.00              1.00                0.00            1.00
-{o_orderkey}   75364.00       1.64           64277.00            1.40                0.00            1.00
-{r_name}       75364.00       1.64           1.00                1.00                0.00            1.00
-{r_regionkey}  75364.00       1.64           1.00                1.00                0.00            1.00
+{c_custkey}    72267.00       1.57           53634.00            3.10 <==            0.00            1.00
+{c_nationkey}  72267.00       1.57           25.00               5.00 <==            0.00            1.00
+{n_name}       72267.00       1.57           25.00               5.00 <==            0.00            1.00
+{n_nationkey}  72267.00       1.57           25.00               5.00 <==            0.00            1.00
+{n_regionkey}  72267.00       1.57           1.00                1.00                0.00            1.00
+{o_custkey}    72267.00       1.57           53634.00            3.10 <==            0.00            1.00
+{o_orderdate}  72267.00       1.57           365.00              1.00                0.00            1.00
+{o_orderkey}   72267.00       1.57           65165.00            1.42                0.00            1.00
+{r_name}       72267.00       1.57           1.00                1.00                0.00            1.00
+{r_regionkey}  72267.00       1.57           1.00                1.00                0.00            1.00
 
 stats table=q5_index_join_7
 ----

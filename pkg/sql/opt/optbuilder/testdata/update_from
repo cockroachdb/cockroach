@@ -214,16 +214,16 @@ update abc
       ├── grouping columns: abc.a:5!null
       ├── inner-join (hash)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12 ac.a:13!null ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
-      │    ├── scan ab
-      │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12
+      │    ├── scan ac
+      │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12
       │    │    ├── scan abc
       │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
-      │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null ac.crdb_internal_mvcc_timestamp:16
+      │    │    ├── scan ab
+      │    │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null ab.crdb_internal_mvcc_timestamp:12
       │    │    └── filters
-      │    │         └── abc.a:5 = ac.a:13
+      │    │         └── abc.a:5 = ab.a:9
       │    └── filters
       │         └── ab.a:9 = ac.a:13
       └── aggregations
@@ -272,16 +272,16 @@ update abc
       ├── grouping columns: abc.a:5!null
       ├── inner-join (hash)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ac.a:13!null ac.c:14
-      │    ├── scan ab
-      │    │    └── columns: ab.a:9 ab.b:10
+      │    ├── scan ac
+      │    │    └── columns: ac.a:13 ac.c:14
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10
       │    │    ├── scan abc
       │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
-      │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:13 ac.c:14
+      │    │    ├── scan ab
+      │    │    │    └── columns: ab.a:9 ab.b:10
       │    │    └── filters
-      │    │         └── abc.a:5 = ac.a:13
+      │    │         └── abc.a:5 = ab.a:9
       │    └── filters
       │         └── ab.a:9 = ac.a:13
       └── aggregations
@@ -321,16 +321,16 @@ update abc
       ├── grouping columns: abc.a:5!null
       ├── inner-join (hash)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null ac.a:13!null ac.c:14 ac.rowid:15!null
-      │    ├── scan ab
-      │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null
+      │    ├── scan ac
+      │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null
       │    ├── inner-join (hash)
-      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ac.a:13!null ac.c:14 ac.rowid:15!null
+      │    │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 ab.a:9!null ab.b:10 ab.rowid:11!null
       │    │    ├── scan abc
       │    │    │    └── columns: abc.a:5!null abc.b:6 abc.c:7
-      │    │    ├── scan ac
-      │    │    │    └── columns: ac.a:13 ac.c:14 ac.rowid:15!null
+      │    │    ├── scan ab
+      │    │    │    └── columns: ab.a:9 ab.b:10 ab.rowid:11!null
       │    │    └── filters
-      │    │         └── abc.a:5 = ac.a:13
+      │    │         └── abc.a:5 = ab.a:9
       │    └── filters
       │         └── ab.a:9 = ac.a:13
       └── aggregations

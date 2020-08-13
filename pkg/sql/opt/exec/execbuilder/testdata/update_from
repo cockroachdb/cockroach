@@ -176,7 +176,7 @@ count                               ·                  ·
                      │              type               inner
                      │              equality           (a) = (a)
                      ├── scan       ·                  ·
-                     │              table              ab@primary
+                     │              table              ac@primary
                      │              spans              FULL SCAN
                      └── hash join  ·                  ·
                           │         type               inner
@@ -186,7 +186,7 @@ count                               ·                  ·
                           │         table              abc@primary
                           │         spans              FULL SCAN
                           └── scan  ·                  ·
-·                                   table              ac@primary
+·                                   table              ab@primary
 ·                                   spans              FULL SCAN
 
 # Make sure UPDATE ... FROM works with LATERAL.
@@ -217,7 +217,7 @@ run                                 ·                  ·
                      │              type               inner
                      │              equality           (a) = (a)
                      ├── scan       ·                  ·
-                     │              table              ab@primary
+                     │              table              ac@primary
                      │              spans              FULL SCAN
                      └── hash join  ·                  ·
                           │         type               inner
@@ -227,5 +227,5 @@ run                                 ·                  ·
                           │         table              abc@primary
                           │         spans              FULL SCAN
                           └── scan  ·                  ·
-·                                   table              ac@primary
+·                                   table              ab@primary
 ·                                   spans              FULL SCAN

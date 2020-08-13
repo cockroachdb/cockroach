@@ -177,7 +177,7 @@ project
       │         │    │    │    ├── columns: p_partkey:1!null p_mfgr:3!null p_type:5!null p_size:6!null s_suppkey:11!null s_name:12!null s_address:13!null s_nationkey:14!null s_phone:15!null s_acctbal:16!null s_comment:17!null ps_partkey:19!null ps_suppkey:20!null ps_supplycost:22!null n_nationkey:25!null n_name:26!null n_regionkey:27!null r_regionkey:30!null r_name:31!null ps_partkey:34!null ps_suppkey:35!null ps_supplycost:37!null
       │         │    │    │    ├── key columns: [1] = [34]
       │         │    │    │    ├── key: (20,34,35)
-      │         │    │    │    ├── fd: ()-->(6,31), (1)-->(3,5), (25)-->(26,27), (11)-->(12-17), (19,20)-->(22), (34,35)-->(37), (19)==(1,34), (34)==(1,19), (11)==(20), (20)==(11), (14)==(25), (25)==(14), (27)==(30), (30)==(27), (1)==(19,34)
+      │         │    │    │    ├── fd: ()-->(6,31), (1)-->(3,5), (11)-->(12-17), (19,20)-->(22), (34,35)-->(37), (19)==(1,34), (34)==(1,19), (11)==(20), (20)==(11), (25)-->(26,27), (27)==(30), (30)==(27), (14)==(25), (25)==(14), (1)==(19,34)
       │         │    │    │    ├── inner-join (hash)
       │         │    │    │    │    ├── columns: p_partkey:1!null p_mfgr:3!null p_type:5!null p_size:6!null s_suppkey:11!null s_name:12!null s_address:13!null s_nationkey:14!null s_phone:15!null s_acctbal:16!null s_comment:17!null ps_partkey:19!null ps_suppkey:20!null ps_supplycost:22!null n_nationkey:25!null n_name:26!null n_regionkey:27!null r_regionkey:30!null r_name:31!null
       │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -522,12 +522,12 @@ sort
       │    │    ├── inner-join (lookup lineitem)
       │    │    │    ├── columns: c_custkey:1!null c_nationkey:4!null o_orderkey:10!null o_custkey:11!null o_orderdate:14!null l_orderkey:20!null l_suppkey:22!null l_extendedprice:25!null l_discount:26!null n_nationkey:45!null n_name:46!null n_regionkey:47!null r_regionkey:50!null r_name:51!null
       │    │    │    ├── key columns: [10] = [20]
-      │    │    │    ├── fd: ()-->(51), (10)-->(11,14), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (10)==(20), (20)==(10)
+      │    │    │    ├── fd: ()-->(51), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (10)-->(11,14), (10)==(20), (20)==(10), (1)==(11), (11)==(1)
       │    │    │    ├── inner-join (hash)
       │    │    │    │    ├── columns: c_custkey:1!null c_nationkey:4!null o_orderkey:10!null o_custkey:11!null o_orderdate:14!null n_nationkey:45!null n_name:46!null n_regionkey:47!null r_regionkey:50!null r_name:51!null
       │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       │    │    │    │    ├── key: (10)
-      │    │    │    │    ├── fd: ()-->(51), (10)-->(11,14), (1)-->(4), (45)-->(46,47), (47)==(50), (50)==(47), (4)==(45), (45)==(4), (1)==(11), (11)==(1)
+      │    │    │    │    ├── fd: ()-->(51), (1)-->(4), (45)-->(46,47), (4)==(45), (45)==(4), (10)-->(11,14), (1)==(11), (11)==(1), (47)==(50), (50)==(47)
       │    │    │    │    ├── index-join orders
       │    │    │    │    │    ├── columns: o_orderkey:10!null o_custkey:11!null o_orderdate:14!null
       │    │    │    │    │    ├── key: (10)
@@ -712,12 +712,12 @@ sort
       │    │    │    ├── columns: s_suppkey:1!null s_nationkey:4!null l_orderkey:9!null l_suppkey:11!null l_extendedprice:14!null l_discount:15!null l_shipdate:19!null o_orderkey:26!null o_custkey:27!null n1.n_nationkey:45!null n1.n_name:46!null n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    ├── key columns: [9] = [26]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── fd: (26)-->(27), (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (9)==(26), (26)==(9)
+      │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (26)-->(27), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
       │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    ├── columns: s_suppkey:1!null s_nationkey:4!null l_orderkey:9!null l_suppkey:11!null l_extendedprice:14!null l_discount:15!null l_shipdate:19!null n1.n_nationkey:45!null n1.n_name:46!null n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    ├── key columns: [9 12] = [9 12]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1)
+      │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (50)-->(51)
       │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
       │    │    │    │    │    ├── columns: s_suppkey:1!null s_nationkey:4!null l_orderkey:9!null l_suppkey:11!null l_linenumber:12!null n1.n_nationkey:45!null n1.n_name:46!null n2.n_nationkey:50!null n2.n_name:51!null
       │    │    │    │    │    ├── key columns: [1] = [11]
@@ -2330,24 +2330,24 @@ limit
  │         ├── grouping columns: s_name:2!null
  │         ├── key: (2)
  │         ├── fd: (2)-->(75)
- │         ├── inner-join (lookup orders)
+ │         ├── anti-join (lookup lineitem)
  │         │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null n_nationkey:36!null n_name:37!null
- │         │    ├── key columns: [9] = [26]
- │         │    ├── lookup columns are key
+ │         │    ├── key columns: [9] = [58]
  │         │    ├── fd: ()-->(28,37), (1)-->(2,4), (9)==(26), (26)==(9), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
- │         │    ├── anti-join (lookup lineitem)
- │         │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
- │         │    │    ├── key columns: [9] = [58]
- │         │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
- │         │    │    ├── semi-join (lookup lineitem)
- │         │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
- │         │    │    │    ├── key columns: [9] = [41]
- │         │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
+ │         │    ├── semi-join (lookup lineitem)
+ │         │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null n_nationkey:36!null n_name:37!null
+ │         │    │    ├── key columns: [9] = [41]
+ │         │    │    ├── fd: ()-->(28,37), (1)-->(2,4), (4)==(36), (36)==(4), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
+ │         │    │    ├── inner-join (lookup orders)
+ │         │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null o_orderkey:26!null o_orderstatus:28!null n_nationkey:36!null n_name:37!null
+ │         │    │    │    ├── key columns: [9] = [26]
+ │         │    │    │    ├── lookup columns are key
+ │         │    │    │    ├── fd: ()-->(28,37), (1)-->(2,4), (4)==(36), (36)==(4), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
  │         │    │    │    ├── inner-join (lookup lineitem)
  │         │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_commitdate:20!null l1.l_receiptdate:21!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    ├── key columns: [9 12] = [9 12]
  │         │    │    │    │    ├── lookup columns are key
- │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (4)==(36), (36)==(4), (1)==(11), (11)==(1)
+ │         │    │    │    │    ├── fd: ()-->(37), (1)-->(2,4), (1)==(11), (11)==(1), (4)==(36), (36)==(4)
  │         │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
  │         │    │    │    │    │    ├── columns: s_suppkey:1!null s_name:2!null s_nationkey:4!null l1.l_orderkey:9!null l1.l_suppkey:11!null l1.l_linenumber:12!null n_nationkey:36!null n_name:37!null
  │         │    │    │    │    │    ├── key columns: [1] = [11]
@@ -2380,12 +2380,12 @@ limit
  │         │    │    │    │    └── filters
  │         │    │    │    │         └── l1.l_receiptdate:21 > l1.l_commitdate:20 [outer=(20,21), constraints=(/20: (/NULL - ]; /21: (/NULL - ])]
  │         │    │    │    └── filters
- │         │    │    │         └── l2.l_suppkey:43 != l1.l_suppkey:11 [outer=(11,43), constraints=(/11: (/NULL - ]; /43: (/NULL - ])]
+ │         │    │    │         └── o_orderstatus:28 = 'F' [outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
  │         │    │    └── filters
- │         │    │         ├── l3.l_suppkey:60 != l1.l_suppkey:11 [outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
- │         │    │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
+ │         │    │         └── l2.l_suppkey:43 != l1.l_suppkey:11 [outer=(11,43), constraints=(/11: (/NULL - ]; /43: (/NULL - ])]
  │         │    └── filters
- │         │         └── o_orderstatus:28 = 'F' [outer=(28), constraints=(/28: [/'F' - /'F']; tight), fd=()-->(28)]
+ │         │         ├── l3.l_suppkey:60 != l1.l_suppkey:11 [outer=(11,60), constraints=(/11: (/NULL - ]; /60: (/NULL - ])]
+ │         │         └── l3.l_receiptdate:70 > l3.l_commitdate:69 [outer=(69,70), constraints=(/69: (/NULL - ]; /70: (/NULL - ])]
  │         └── aggregations
  │              └── count-rows [as=count_rows:75]
  └── 100

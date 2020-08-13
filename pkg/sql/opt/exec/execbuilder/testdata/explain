@@ -392,21 +392,21 @@ render                                            ·             ·
       └── render                                  ·             ·
            └── hash join                          ·             ·
                 │                                 type          inner
-                │                                 equality      (oid) = (relnamespace)
-                ├── filter                        ·             ·
-                │    │                            filter        nspname = 'public'
-                │    └── render                   ·             ·
-                │         └── virtual table       ·             ·
-                │                                 source        pg_namespace@primary
-                └── virtual table lookup join     ·             ·
-                     │                            table         pg_constraint@pg_constraint_conrelid_idx
-                     │                            type          inner
-                     │                            equality      (oid) = (conrelid)
-                     └── filter                   ·             ·
-                          │                       filter        relname = 'foo'
-                          └── render              ·             ·
-                               └── virtual table  ·             ·
-·                                                 source        pg_class@primary
+                │                                 equality      (relnamespace) = (oid)
+                ├── virtual table lookup join     ·             ·
+                │    │                            table         pg_constraint@pg_constraint_conrelid_idx
+                │    │                            type          inner
+                │    │                            equality      (oid) = (conrelid)
+                │    └── filter                   ·             ·
+                │         │                       filter        relname = 'foo'
+                │         └── render              ·             ·
+                │              └── virtual table  ·             ·
+                │                                 source        pg_class@primary
+                └── filter                        ·             ·
+                     │                            filter        nspname = 'public'
+                     └── render                   ·             ·
+                          └── virtual table       ·             ·
+·                                                 source        pg_namespace@primary
 
 query TTT
 EXPLAIN SHOW USERS

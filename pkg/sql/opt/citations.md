@@ -40,3 +40,9 @@ further information, and in some cases proofs, can be found.
     Proceedings of the ACM SIGMOD International Conference on Management of Data. 
     493-504. 10.1145/2463676.2465314. 
     https://www.researchgate.net/publication/262216932_On_the_correct_and_complete_enumeration_of_the_core_search_space
+    
+[9] Moerkotte, Guido & Neumann, Thomas. (2008). 
+    Dynamic Programming Strikes Back. 
+    Shasha, Dennis; Wang, Jason T. L.: Proceedings of the ACM SIGMOD 2008 International Conference on Management of Data, ACM, 539-552 (2008). 
+    10.1145/1376616.1376672. 
+    https://www.researchgate.net/publication/47862092_Dynamic_Programming_Strikes_Back

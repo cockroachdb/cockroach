@@ -371,13 +371,13 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   ·                          type                inner
 7   ·                          equality            (oid) = (attrelid)
 8   virtual table lookup join  ·                   ·
-8   ·                          table               pg_class@pg_class_oid_idx
+8   ·                          table               pg_attribute@pg_attribute_attrelid_idx
 8   ·                          type                inner
-8   ·                          equality            (attrelid) = (oid)
+8   ·                          equality            (oid) = (attrelid)
 9   virtual table lookup join  ·                   ·
-9   ·                          table               pg_attribute@pg_attribute_attrelid_idx
+9   ·                          table               pg_class@pg_class_oid_idx
 9   ·                          type                inner
-9   ·                          equality            (confrelid) = (attrelid)
+9   ·                          equality            (confrelid) = (oid)
 10  virtual table lookup join  ·                   ·
 10  ·                          table               pg_constraint@pg_constraint_conrelid_idx
 10  ·                          type                inner

@@ -98,15 +98,15 @@ sort
       │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_extendedprice:14(float!null) l_discount:15(float!null) l_shipdate:19(date!null) o_orderkey:26(int!null) o_custkey:27(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
       │    │    │    ├── key columns: [9] = [26]
       │    │    │    ├── lookup columns are key
-      │    │    │    ├── stats: [rows=101372.546, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=97145.926, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(14)=62473.272, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(26)=97145.926, null(26)=0, distinct(27)=63672.0351, null(27)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    ├── fd: (26)-->(27), (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (9)==(26), (26)==(9)
+      │    │    │    ├── stats: [rows=101372.546, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=97145.926, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(14)=94863.2685, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(26)=97145.926, null(26)=0, distinct(27)=63673.8739, null(27)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
+      │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (26)-->(27), (9)==(26), (26)==(9), (1)==(11), (11)==(1)
       │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    ├── save-table-name: q7_lookup_join_7
       │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_extendedprice:14(float!null) l_discount:15(float!null) l_shipdate:19(date!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
       │    │    │    │    ├── key columns: [9 12] = [9 12]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── stats: [rows=101372.546, distinct(1)=529.630441, null(1)=0, distinct(4)=1.29975178, null(4)=0, distinct(9)=97145.926, null(9)=0, distinct(11)=529.630441, null(11)=0, distinct(14)=95536.4092, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(45)=1.29975178, null(45)=0, distinct(46)=1.33333333, null(46)=0, distinct(50)=1.29975178, null(50)=0, distinct(51)=1.33333333, null(51)=0]
-      │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (50)-->(51), (4)==(45), (45)==(4), (1)==(11), (11)==(1)
+      │    │    │    │    ├── stats: [rows=101372.546, distinct(1)=6374.16727, null(1)=0, distinct(4)=25, null(4)=0, distinct(9)=96219.0928, null(9)=0, distinct(11)=6374.16727, null(11)=0, distinct(14)=94966.9274, null(14)=0, distinct(15)=11, null(15)=0, distinct(19)=731, null(19)=0, distinct(45)=25, null(45)=0, distinct(46)=2, null(46)=0, distinct(50)=25, null(50)=0, distinct(51)=2, null(51)=0]
+      │    │    │    │    ├── fd: (1)-->(4), (45)-->(46), (4)==(45), (45)==(4), (1)==(11), (11)==(1), (50)-->(51)
       │    │    │    │    ├── inner-join (lookup lineitem@l_sk)
       │    │    │    │    │    ├── save-table-name: q7_lookup_join_8
       │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:9(int!null) l_suppkey:11(int!null) l_linenumber:12(int!null) n1.n_nationkey:45(int!null) n1.n_name:46(char!null) n2.n_nationkey:50(int!null) n2.n_name:51(char!null)
@@ -267,7 +267,7 @@ column_names       row_count  distinct_count  null_count
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_discount}       101373.00      1.44           11.00               1.00                0.00            1.00
-{l_extendedprice}  101373.00      1.44           62473.00            2.09 <==            0.00            1.00
+{l_extendedprice}  101373.00      1.44           94863.00            1.38                0.00            1.00
 {l_orderkey}       101373.00      1.44           97146.00            1.30                0.00            1.00
 {l_shipdate}       101373.00      1.44           731.00              1.00                0.00            1.00
 {l_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
@@ -275,7 +275,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {n_name_1}         101373.00      1.44           1.00                2.00 <==            0.00            1.00
 {n_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
 {n_nationkey_1}    101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{o_custkey}        101373.00      1.44           63672.00            1.07                0.00            1.00
+{o_custkey}        101373.00      1.44           63674.00            1.07                0.00            1.00
 {o_orderkey}       101373.00      1.44           97146.00            1.30                0.00            1.00
 {s_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
 {s_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
@@ -297,16 +297,16 @@ column_names       row_count  distinct_count  null_count
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {l_discount}       101373.00      1.44           11.00               1.00                0.00            1.00
-{l_extendedprice}  101373.00      1.44           95536.00            1.37                0.00            1.00
-{l_orderkey}       101373.00      1.44           97146.00            1.30                0.00            1.00
+{l_extendedprice}  101373.00      1.44           94967.00            1.37                0.00            1.00
+{l_orderkey}       101373.00      1.44           96219.00            1.31                0.00            1.00
 {l_shipdate}       101373.00      1.44           731.00              1.00                0.00            1.00
-{l_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
-{n_name}           101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{n_name_1}         101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{n_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{n_nationkey_1}    101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{s_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
-{s_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
+{l_suppkey}        101373.00      1.44           6374.00             7.99 <==            0.00            1.00
+{n_name}           101373.00      1.44           2.00                1.00                0.00            1.00
+{n_name_1}         101373.00      1.44           2.00                1.00                0.00            1.00
+{n_nationkey}      101373.00      1.44           25.00               12.50 <==           0.00            1.00
+{n_nationkey_1}    101373.00      1.44           25.00               12.50 <==           0.00            1.00
+{s_nationkey}      101373.00      1.44           25.00               12.50 <==           0.00            1.00
+{s_suppkey}        101373.00      1.44           6374.00             7.99 <==            0.00            1.00
 
 stats table=q7_lookup_join_8
 ----
