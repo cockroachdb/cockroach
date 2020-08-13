@@ -471,6 +471,32 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "cz")
 }
 
+// Test that cache lookups by RKeyMin and derivate keys work fine.
+func TestLookupByKeyMin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	startToMeta2Desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
+	}
+	cache.Insert(ctx, roachpb.RangeInfo{Desc: startToMeta2Desc})
+	entMin := cache.GetCached(ctx, roachpb.RKeyMin, false /* inverted */)
+	require.NotNil(t, entMin)
+	require.NotNil(t, entMin.Desc())
+	require.Equal(t, startToMeta2Desc, *entMin.Desc())
+
+	entNext := cache.GetCached(ctx, roachpb.RKeyMin.Next(), false /* inverted */)
+	require.True(t, entMin == entNext)
+	entNext = cache.GetCached(ctx, roachpb.RKeyMin.Next().Next(), false /* inverted */)
+	require.True(t, entMin == entNext)
+}
+
 // TestRangeCacheCoalescedRequests verifies that concurrent lookups for
 // the same key will be coalesced onto the same database lookup.
 func TestRangeCacheCoalescedRequests(t *testing.T) {
@@ -1229,9 +1255,11 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	ctx := context.Background()
 
 	testData := []roachpb.RangeDescriptor{
+		{StartKey: roachpb.RKeyMin, EndKey: roachpb.RKey("a")},
 		{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
 		{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
-		{StartKey: roachpb.RKey("g"), EndKey: roachpb.RKey("z")},
+		{StartKey: roachpb.RKey("l"), EndKey: roachpb.RKey("m")},
+		{StartKey: roachpb.RKey("m"), EndKey: roachpb.RKey("z")},
 	}
 
 	st := cluster.MakeTestingClusterSettings()
@@ -1239,65 +1267,65 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
 	for _, rd := range testData {
-		cache.rangeCache.cache.Add(
-			rangeCacheKey(keys.RangeMetaKey(rd.EndKey)), &rangeCacheEntry{desc: rd})
+		cache.Insert(ctx, roachpb.RangeInfo{
+			Desc: rd,
+		})
 	}
 
 	testCases := []struct {
 		queryKey roachpb.RKey
-		cacheKey rangeCacheKey
 		rng      *roachpb.RangeDescriptor
 	}{
 		{
 			// Check range start key.
-			queryKey: roachpb.RKey("a"),
-			cacheKey: nil,
+			queryKey: roachpb.RKey("l"),
 			rng:      nil,
+		},
+		{
+			// Check some key in first range.
+			queryKey: roachpb.RKey("0"),
+			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: roachpb.RKey("a")},
+		},
+		{
+			// Check end key of first range.
+			queryKey: roachpb.RKey("a"),
+			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.RKeyMin, EndKey: roachpb.RKey("a")},
 		},
 		{
 			// Check range end key.
 			queryKey: roachpb.RKey("c"),
-			cacheKey: rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("c"))),
 			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
 		},
 		{
 			// Check range middle key.
 			queryKey: roachpb.RKey("d"),
-			cacheKey: rangeCacheKey(keys.RangeMetaKey(roachpb.RKey("e"))),
 			rng:      &roachpb.RangeDescriptor{StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("e")},
 		},
 		{
 			// Check miss range key.
 			queryKey: roachpb.RKey("f"),
-			cacheKey: nil,
 			rng:      nil,
 		},
 		{
 			// Check range start key with previous range miss.
-			queryKey: roachpb.RKey("g"),
-			cacheKey: nil,
+			queryKey: roachpb.RKey("l"),
 			rng:      nil,
 		},
 	}
 
 	for _, test := range testCases {
-		cache.rangeCache.RLock()
-		targetRange, entry := cache.getCachedRLocked(ctx, test.queryKey, true /* inverted */)
-		cache.rangeCache.RUnlock()
+		t.Run("", func(t *testing.T) {
+			cache.rangeCache.RLock()
+			targetRange, _ := cache.getCachedRLocked(ctx, test.queryKey, true /* inverted */)
+			cache.rangeCache.RUnlock()
 
-		if test.rng == nil {
-			require.Nil(t, targetRange)
-		} else {
-			require.NotNil(t, targetRange)
-			require.Equal(t, test.rng, targetRange.Desc())
-		}
-		var cacheKey rangeCacheKey
-		if entry != nil {
-			cacheKey = entry.Key.(rangeCacheKey)
-		}
-		if !reflect.DeepEqual(cacheKey, test.cacheKey) {
-			t.Fatalf("expect cache key %v, actual get %v", test.cacheKey, cacheKey)
-		}
+			if test.rng == nil {
+				require.Nil(t, targetRange)
+			} else {
+				require.NotNil(t, targetRange)
+				require.Equal(t, test.rng, targetRange.Desc())
+			}
+		})
 	}
 }
 

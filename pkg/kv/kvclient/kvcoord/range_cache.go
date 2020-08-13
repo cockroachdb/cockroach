@@ -552,23 +552,19 @@ func (rdc *RangeDescriptorCache) GetCachedOverlapping(
 func (rdc *RangeDescriptorCache) getCachedOverlappingRLocked(
 	ctx context.Context, span roachpb.RSpan,
 ) []*cache.Entry {
-	start := rangeCacheKey(keys.RangeMetaKey(span.Key).Next())
+	start := rangeCacheKey(span.Key)
+	end := rangeCacheKey(span.EndKey)
+	// Align the span's start on a range boundary.
+	floor, _ /* rawEntry */ := rdc.getCachedRLocked(ctx, span.Key, false /* inverted */)
+	if floor != nil {
+		start = rangeCacheKey(floor.Desc().StartKey)
+	}
+
 	var res []*cache.Entry
-	// We iterate from the range meta key after RangeMetaKey(desc.StartKey) to the
-	// end of the key space and we stop when we hit a descriptor to the right of
-	// span. Notice the Next() we use for the start key to avoid clearing the
-	// descriptor that ends where span starts: for example, if we are inserting
-	// ["b", "c"), we should not evict ["a", "b").
 	rdc.rangeCache.cache.DoRangeEntry(func(e *cache.Entry) (exit bool) {
-		cached := rdc.getValue(e)
-		// Stop when we hit a descriptor to the right of span. The end key is
-		// exclusive, so if span is [a,b) and we hit [b,c), we stop.
-		if span.EndKey.Compare(cached.Desc().StartKey) <= 0 {
-			return true
-		}
 		res = append(res, e)
 		return false // continue iterating
-	}, start, maxCacheKey)
+	}, start, end)
 	return res
 }
 
@@ -889,21 +885,38 @@ func (rdc *RangeDescriptorCache) GetCached(
 func (rdc *RangeDescriptorCache) getCachedRLocked(
 	ctx context.Context, key roachpb.RKey, inverted bool,
 ) (*rangeCacheEntry, *cache.Entry) {
-	// The cache is indexed using the end-key of the range, but the
-	// end-key is non-inverted by default.
-	var metaKey roachpb.RKey
+	// rawEntry will be the range containing key, or the first cached entry around
+	// key, in the direction indicated by inverted.
+	var rawEntry *cache.Entry
 	if !inverted {
-		metaKey = keys.RangeMetaKey(key.Next())
+		var ok bool
+		rawEntry, ok = rdc.rangeCache.cache.FloorEntry(rangeCacheKey(key))
+		if !ok {
+			return nil, nil
+		}
 	} else {
-		metaKey = keys.RangeMetaKey(key)
+		rdc.rangeCache.cache.DoRangeEntryReverse(func(e *cache.Entry) bool {
+			if key.Equal(rdc.getValue(e).Desc().StartKey) {
+				// DoRangeEntryReverse is inclusive on the "from". We're iterating
+				// backwards and we got a range that starts at key. We're not interested
+				// in this range; we're interested in the range before it that ends at
+				// key.
+				return false // continue iterating
+			}
+			rawEntry = e
+			return true
+		}, rangeCacheKey(key), rangeCacheKey(roachpb.RKeyMin))
+		// DoRangeEntryReverse is exclusive on the "to" part, so we need to check
+		// manually if there's an entry for RKeyMin.
+		if rawEntry == nil {
+			rawEntry, _ = rdc.rangeCache.cache.FloorEntry(rangeCacheKey(roachpb.RKeyMin))
+		}
 	}
 
-	rawEntry, ok := rdc.rangeCache.cache.CeilEntry(rangeCacheKey(metaKey))
-	if !ok {
+	if rawEntry == nil {
 		return nil, nil
 	}
 	entry := rdc.getValue(rawEntry)
-	desc := &entry.desc
 
 	containsFn := (*roachpb.RangeDescriptor).ContainsKey
 	if inverted {
@@ -911,7 +924,7 @@ func (rdc *RangeDescriptorCache) getCachedRLocked(
 	}
 
 	// Return nil if the key does not belong to the range.
-	if !containsFn(desc, key) {
+	if !containsFn(entry.Desc(), key) {
 		return nil, nil
 	}
 	return entry, rawEntry
@@ -990,7 +1003,7 @@ func (rdc *RangeDescriptorCache) insertLockedInner(
 			entries[i] = newerEntry
 			continue
 		}
-		rangeKey := keys.RangeMetaKey(ent.Desc().EndKey)
+		rangeKey := ent.Desc().StartKey
 		if log.V(2) {
 			log.Infof(ctx, "adding cache entry: key=%s value=%s", rangeKey, ent)
 		}
