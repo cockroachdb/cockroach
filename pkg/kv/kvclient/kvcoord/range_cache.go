@@ -622,7 +622,7 @@ func (rdc *RangeDescriptorCache) tryLookup(
 	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
 ) (EvictionToken, error) {
 	rdc.rangeCache.RLock()
-	if entry, _ := rdc.getCachedLocked(key, useReverseScan); entry != nil {
+	if entry, _ := rdc.getCachedRLocked(key, useReverseScan); entry != nil {
 		rdc.rangeCache.RUnlock()
 		returnToken := rdc.makeEvictionToken(entry, nil /* nextDesc */)
 		return returnToken, nil
@@ -817,7 +817,7 @@ func (rdc *RangeDescriptorCache) EvictByKey(ctx context.Context, descKey roachpb
 	rdc.rangeCache.Lock()
 	defer rdc.rangeCache.Unlock()
 
-	cachedDesc, entry := rdc.getCachedLocked(descKey, false /* inverted */)
+	cachedDesc, entry := rdc.getCachedRLocked(descKey, false /* inverted */)
 	if cachedDesc == nil {
 		return false
 	}
@@ -839,7 +839,7 @@ func (rdc *RangeDescriptorCache) EvictByKey(ctx context.Context, descKey roachpb
 func (rdc *RangeDescriptorCache) evictLocked(
 	ctx context.Context, entry *rangeCacheEntry,
 ) (ok bool, updatedEntry *rangeCacheEntry) {
-	cachedEntry, rawEntry := rdc.getCachedLocked(entry.desc.StartKey, false /* inverted */)
+	cachedEntry, rawEntry := rdc.getCachedRLocked(entry.desc.StartKey, false /* inverted */)
 	if cachedEntry != entry {
 		if cachedEntry != nil && descsCompatible(cachedEntry.Desc(), entry.Desc()) {
 			return false, cachedEntry
@@ -871,7 +871,7 @@ func (rdc *RangeDescriptorCache) mustEvictLocked(ctx context.Context, entry *ran
 func (rdc *RangeDescriptorCache) GetCached(key roachpb.RKey, inverted bool) kvbase.RangeCacheEntry {
 	rdc.rangeCache.RLock()
 	defer rdc.rangeCache.RUnlock()
-	entry, _ := rdc.getCachedLocked(key, inverted)
+	entry, _ := rdc.getCachedRLocked(key, inverted)
 	if entry == nil {
 		// This return avoids boxing a nil into a non-nil iface.
 		return nil
@@ -879,12 +879,12 @@ func (rdc *RangeDescriptorCache) GetCached(key roachpb.RKey, inverted bool) kvba
 	return kvbase.RangeCacheEntry(entry)
 }
 
-// getCachedLocked is like GetCached, but it assumes that the caller holds a
+// getCachedRLocked is like GetCached, but it assumes that the caller holds a
 // read lock on rdc.rangeCache.
 //
 // In addition to GetCached, it also returns an internal cache Entry that can be
 // used for descriptor eviction.
-func (rdc *RangeDescriptorCache) getCachedLocked(
+func (rdc *RangeDescriptorCache) getCachedRLocked(
 	key roachpb.RKey, inverted bool,
 ) (*rangeCacheEntry, *cache.Entry) {
 	// The cache is indexed using the end-key of the range, but the

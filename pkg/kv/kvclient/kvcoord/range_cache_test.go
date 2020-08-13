@@ -1281,7 +1281,7 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 
 	for _, test := range testCases {
 		cache.rangeCache.RLock()
-		targetRange, entry := cache.getCachedLocked(test.queryKey, true /* inverted */)
+		targetRange, entry := cache.getCachedRLocked(test.queryKey, true /* inverted */)
 		cache.rangeCache.RUnlock()
 
 		if test.rng == nil {
