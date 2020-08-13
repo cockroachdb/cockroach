@@ -271,6 +271,15 @@ message SchemaChangeGCDetails {
   // Indexes to GC.
   repeated DroppedIndex indexes = 1 [(gogoproto.nullable) = false];
 
+  // The below two fields are used only in the case of TRUNCATE operating on
+  // tables with interleaved indexes. They are only set together.
+  
+  // InterleavedTable is the table being truncated. In particular, it is the
+  // TableDescriptor before any of the truncate modifications have been applied.
+  sqlbase.TableDescriptor interleaved_table = 4;
+  // InterleavedIndexes is the set of interleaved indexes to truncate.
+  repeated sqlbase.IndexDescriptor interleaved_indexes = 5 [(gogoproto.nullable) = false];
+
   // Entire tables to GC.
   repeated DroppedID tables = 2 [(gogoproto.nullable) = false];
 

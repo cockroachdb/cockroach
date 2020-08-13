@@ -620,6 +620,59 @@ func (sc *SchemaChanger) getTableVersion(
 	return tableDesc, nil
 }
 
+// TruncateInterleavedIndexes truncates the input set of indexes from the given
+// table. It is used in the schema change GC job to delete interleaved index
+// data as part of a TRUNCATE statement. Note that we cannot use
+// SchemaChanger.truncateIndexes instead because that accesses the most recent
+// version of the table when deleting. In this case, we need to use the version
+// of the table before truncation, which is passed in.
+func TruncateInterleavedIndexes(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	table *sqlbase.ImmutableTableDescriptor,
+	indexes []descpb.IndexDescriptor,
+) error {
+	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
+	chunkSize := int64(indexTruncateChunkSize)
+	alloc := &sqlbase.DatumAlloc{}
+	codec, db := execCfg.Codec, execCfg.DB
+	for _, desc := range indexes {
+		var resume roachpb.Span
+		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
+			log.VEventf(ctx, 2, "truncate interleaved index (%d) at row: %d, span: %s", table.ID, rowIdx, resume)
+			resumeAt := resume
+			// Make a new txn just to drop this chunk.
+			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				rd := row.MakeDeleter(codec, table, nil)
+				td := tableDeleter{rd: rd, alloc: alloc}
+				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
+					return err
+				}
+				resume, err := td.deleteIndex(
+					ctx,
+					&desc,
+					resumeAt,
+					chunkSize,
+					false, /* traceKV */
+				)
+				done = resume.Key == nil
+				return err
+			}); err != nil {
+				return err
+			}
+		}
+		// All the data chunks have been removed. Now also removed the
+		// zone configs for the dropped indexes, if any.
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.ParentID, indexes)
+		}); err != nil {
+			return err
+		}
+	}
+	log.Infof(ctx, "finished truncating interleaved indexes")
+	return nil
+}
+
 // truncateIndexes truncate the KV ranges corresponding to dropped indexes.
 //
 // The indexes are dropped chunk by chunk, each chunk being deleted in
@@ -661,17 +714,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err != nil {
 					return err
 				}
-				rd, err := row.MakeDeleter(
-					ctx,
-					txn,
-					sc.execCfg.Codec,
-					tableDesc,
-					nil,
-					alloc,
-				)
-				if err != nil {
-					return err
-				}
+				rd := row.MakeDeleter(sc.execCfg.Codec, tableDesc, nil)
 				td := tableDeleter{rd: rd, alloc: alloc}
 				if err := td.init(ctx, txn, nil /* *tree.EvalContext */); err != nil {
 					return err
@@ -1817,16 +1860,12 @@ func indexTruncateInTxn(
 	alloc := &sqlbase.DatumAlloc{}
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		rd, err := row.MakeDeleter(
-			ctx, txn, execCfg.Codec, tableDesc, nil, alloc,
-		)
-		if err != nil {
-			return err
-		}
+		rd := row.MakeDeleter(execCfg.Codec, tableDesc, nil)
 		td := tableDeleter{rd: rd, alloc: alloc}
 		if err := td.init(ctx, txn, evalCtx); err != nil {
 			return err
 		}
+		var err error
 		sp, err = td.deleteIndex(
 			ctx, idx, sp, indexTruncateChunkSize, traceKV,
 		)

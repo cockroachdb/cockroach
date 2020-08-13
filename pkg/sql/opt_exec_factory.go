@@ -1551,8 +1551,6 @@ func (ef *execFactory) ConstructDelete(
 	returnColOrdSet exec.TableColumnOrdinalSet,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Context
-
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1566,17 +1564,7 @@ func (ef *execFactory) ConstructDelete(
 	// the deleter derives the columns that need to be fetched. By contrast, the
 	// CBO will have already determined the set of fetch columns, and passes
 	// those sets into the deleter (which will basically be a no-op).
-	rd, err := row.MakeDeleter(
-		ctx,
-		ef.planner.txn,
-		ef.planner.ExecCfg().Codec,
-		tabDesc,
-		fetchColDescs,
-		ef.planner.alloc,
-	)
-	if err != nil {
-		return nil, err
-	}
+	rd := row.MakeDeleter(ef.planner.ExecCfg().Codec, tabDesc, fetchColDescs)
 
 	// Truncate any FetchCols added by MakeUpdater. The optimizer has already
 	// computed a correct set that can sometimes be smaller.
