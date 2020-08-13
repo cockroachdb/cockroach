@@ -717,3 +717,11 @@ at or near "skip_missing_sequences": syntax error: skip_missing_sequences specif
 DETAIL: source SQL:
 RESTORE foo FROM 'bar' WITH skip_missing_sequences, skip_missing_views, skip_missing_sequences
                                                                         ^
+
+error
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+----
+at or near "detached": syntax error: detached option specified multiple times
+DETAIL: source SQL:
+RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
+                                                          ^
