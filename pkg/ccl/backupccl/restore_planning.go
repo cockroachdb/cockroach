@@ -142,15 +142,16 @@ func maybeFilterMissingViews(
 	return filteredTablesByID, nil
 }
 
-// allocateDescriptorRewrites determines the new ID and parentID (a "TableRewrite")
+// allocateDescriptorRewrites determines the new ID and parentID (a "DescriptorRewrite")
 // for each table in sqlDescs and returns a mapping from old ID to said
-// TableRewrite. It first validates that the provided sqlDescs can be restored
+// DescriptorRewrite. It first validates that the provided sqlDescs can be restored
 // into their original database (or the database specified in opts) to avoid
 // leaking table IDs if we can be sure the restore would fail.
 func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*sqlbase.MutableDatabaseDescriptor,
+	schemasByID map[descpb.ID]*sqlbase.MutableSchemaDescriptor,
 	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
 	typesByID map[descpb.ID]*sqlbase.MutableTypeDescriptor,
 	restoreDBs []sqlbase.DatabaseDescriptor,
@@ -262,6 +263,13 @@ func allocateDescriptorRewrites(
 		}
 	}
 
+	// Include the schema descriptors when calculating the max ID.
+	for _, sc := range schemasByID {
+		if int64(sc.ID) > maxDescIDInBackup {
+			maxDescIDInBackup = int64(sc.ID)
+		}
+	}
+
 	needsNewParentIDs := make(map[string][]descpb.ID)
 
 	// Increment the DescIDSequenceKey so that it is higher than the max desc ID
@@ -302,6 +310,68 @@ func allocateDescriptorRewrites(
 			}
 			if found {
 				return errors.Errorf("database %q already exists", name)
+			}
+		}
+
+		// TODO (rohany, pbardea): This method is becoming too large. We should
+		//  split the individual components out into helper methods.
+		// Construct rewrites for any user defined schemas.
+		for _, sc := range schemasByID {
+			var targetDB string
+			if renaming {
+				targetDB = overrideDB
+			} else {
+				database, ok := databasesByID[sc.ParentID]
+				if !ok {
+					return errors.Errorf("no database with ID %d in backup for schema %q",
+						sc.ParentID, sc.Name)
+				}
+				targetDB = database.Name
+			}
+
+			if _, ok := restoreDBNames[targetDB]; ok {
+				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], sc.ID)
+			} else {
+				// Look up the parent database's ID.
+				found, parentID, err := catalogkv.LookupDatabaseID(ctx, txn, p.ExecCfg().Codec, targetDB)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return errors.Errorf("a database named %q needs to exist to restore schema %q",
+						targetDB, sc.Name)
+				}
+				// Check privileges on the parent DB.
+				parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, p.ExecCfg().Codec, parentID)
+				if err != nil {
+					return errors.Wrapf(err,
+						"failed to lookup parent DB %d", errors.Safe(parentID))
+				}
+				if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
+					return err
+				}
+
+				// See if there is an existing schema with the same name.
+				found, id, err := catalogkv.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, keys.RootNamespaceID, sc.Name)
+				if err != nil {
+					return err
+				}
+				if !found {
+					// If we didn't find a matching schema, then we'll restore this schema.
+					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: parentID}
+				} else {
+					// If we found an existing schema, then we need to remap all references
+					// to this schema to the existing one.
+					desc, err := catalogkv.MustGetSchemaDescByID(ctx, txn, p.ExecCfg().Codec, id)
+					if err != nil {
+						return err
+					}
+					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
+						ParentID:   desc.ParentID,
+						ID:         desc.ID,
+						ToExisting: true,
+					}
+				}
 			}
 		}
 
@@ -363,9 +433,7 @@ func allocateDescriptorRewrites(
 				}
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
-				//  support user defined schemas.
-				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, table.Name); err != nil {
+				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, table.GetParentSchemaID(), table.Name); err != nil {
 					return err
 				}
 
@@ -432,7 +500,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing type with the same name.
-				found, id, err := catalogkv.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, typ.Name)
+				found, id, err := catalogkv.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typ.Name)
 				if err != nil {
 					return err
 				}
@@ -450,7 +518,7 @@ func allocateDescriptorRewrites(
 
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
-					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, keys.PublicSchemaID, arrTyp.Name); err != nil {
+					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), arrTyp.Name); err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
 					// Create the rewrite entry for the array type as well.
@@ -565,6 +633,20 @@ func allocateDescriptorRewrites(
 		}
 	}
 
+	// Update remapping information for schema descriptors.
+	for _, sc := range schemasByID {
+		if descriptorCoverage == tree.AllDescriptors {
+			// The schema doesn't need to be remapped.
+			descriptorRewrites[sc.ID].ID = sc.ID
+		} else {
+			// If this schema isn't being remapped to an existing schema, then
+			// request to generate an ID for it.
+			if !descriptorRewrites[sc.ID].ToExisting {
+				descriptorsToRemap = append(descriptorsToRemap, sc)
+			}
+		}
+	}
+
 	sort.Sort(sqlbase.DescriptorInterfaces(descriptorsToRemap))
 
 	// Generate new IDs for the tables that need to be remapped.
@@ -660,6 +742,7 @@ func rewriteTypeDescs(
 			return errors.Errorf("missing rewrite for type %d", typ.ID)
 		}
 		typ.ID = rewrite.ID
+		typ.ParentSchemaID = maybeRewriteSchemaID(typ.ParentSchemaID, descriptorRewrites)
 		typ.ParentID = rewrite.ParentID
 		for i := range typ.ReferencingDescriptorIDs {
 			id := typ.ReferencingDescriptorIDs[i]
@@ -680,6 +763,35 @@ func rewriteTypeDescs(
 		}
 	}
 	return nil
+}
+
+// rewriteSchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
+// using the input ID rewrite mapping.
+func rewriteSchemaDescs(
+	schemas []*sqlbase.MutableSchemaDescriptor, descriptorRewrites DescRewriteMap,
+) error {
+	for _, sc := range schemas {
+		rewrite, ok := descriptorRewrites[sc.ID]
+		if !ok {
+			return errors.Errorf("missing rewrite for schema %d", sc.ID)
+		}
+		sc.ID = rewrite.ID
+		sc.ParentID = rewrite.ParentID
+	}
+	return nil
+}
+
+func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteMap) descpb.ID {
+	// If the current schema is the public schema, then don't attempt to
+	// do any rewriting.
+	if curSchemaID == keys.PublicSchemaID {
+		return curSchemaID
+	}
+	rw, ok := descriptorRewrites[curSchemaID]
+	if !ok {
+		return curSchemaID
+	}
+	return rw.ID
 }
 
 // RewriteTableDescs mutates tables to match the ID and privilege specified
@@ -706,6 +818,7 @@ func RewriteTableDescs(
 		}
 
 		table.ID = tableRewrite.ID
+		table.UnexposedParentSchemaID = maybeRewriteSchemaID(table.GetParentSchemaID(), descriptorRewrites)
 		table.ParentID = tableRewrite.ParentID
 
 		// Remap type IDs in all serialized expressions within the TableDescriptor.
@@ -1193,12 +1306,15 @@ func doRestorePlan(
 	}
 
 	databasesByID := make(map[descpb.ID]*sqlbase.MutableDatabaseDescriptor)
+	schemasByID := make(map[descpb.ID]*sqlbase.MutableSchemaDescriptor)
 	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 	typesByID := make(map[descpb.ID]*sqlbase.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *sqlbase.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
+		case *sqlbase.MutableSchemaDescriptor:
+			schemasByID[desc.ID] = desc
 		case *sqlbase.MutableTableDescriptor:
 			tablesByID[desc.ID] = desc
 		case *sqlbase.MutableTypeDescriptor:
@@ -1214,6 +1330,7 @@ func doRestorePlan(
 		ctx,
 		p,
 		databasesByID,
+		schemasByID,
 		filteredTablesByID,
 		typesByID,
 		restoreDBs,
@@ -1229,6 +1346,10 @@ func doRestorePlan(
 		return err
 	}
 
+	var schemas []*sqlbase.MutableSchemaDescriptor
+	for i := range schemasByID {
+		schemas = append(schemas, schemasByID[i])
+	}
 	var tables []*sqlbase.MutableTableDescriptor
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
@@ -1241,6 +1362,9 @@ func doRestorePlan(
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
 	if err := RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
+		return err
+	}
+	if err := rewriteSchemaDescs(schemas, descriptorRewrites); err != nil {
 		return err
 	}
 	if err := rewriteTypeDescs(types, descriptorRewrites); err != nil {

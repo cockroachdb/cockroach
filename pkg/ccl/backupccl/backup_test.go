@@ -1386,6 +1386,8 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// Create a user defined type and check that it is cleaned up after the
 	// failed restore.
 	sqlDB.Exec(t, `SET experimental_enable_enums = true; CREATE TYPE data.myenum AS ENUM ('hello')`)
+	// Do the same with a user defined schema.
+	sqlDB.Exec(t, `SET experimental_enable_user_defined_schemas = true; USE data; CREATE SCHEMA myschema`)
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo)
 	// Bugger the backup by removing the SST files.
@@ -1413,6 +1415,8 @@ func TestRestoreFailCleanup(t *testing.T) {
 	// Verify that `myenum` was cleaned out from the failed restore. There should
 	// only be one namespace entry (data.myenum).
 	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'myenum'`, [][]string{{"1"}})
+	// Check the same for data.myschema.
+	sqlDB.CheckQueryResults(t, `SELECT count(*) FROM system.namespace WHERE name = 'myschema'`, [][]string{{"1"}})
 }
 
 // TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
@@ -1458,6 +1462,165 @@ func TestRestoreFailDatabaseCleanup(t *testing.T) {
 		`DROP DATABASE data`,
 	)
 	close(blockGC)
+}
+
+func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Tests full cluster backup/restore with user defined schemas.
+	t.Run("full-cluster", func(t *testing.T) {
+		_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb1 (x INT);
+INSERT INTO sc.tb1 VALUES (1);
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb2 (x sc.typ1);
+INSERT INTO sc.tb2 VALUES ('hello');
+`)
+		// Now backup the full cluster.
+		sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/test/'`)
+		// Start a new server that shares the data directory.
+		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone)
+		defer cleanupRestore()
+
+		// Restore into the new cluster.
+		sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/test/'`)
+
+		// Check that we can resolve all names through the user defined schema.
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.sc.tb1`, [][]string{{"1"}})
+		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.sc.tb2`, [][]string{{"hello"}})
+		sqlDBRestore.CheckQueryResults(t, `SELECT 'hello'::d.sc.typ1`, [][]string{{"hello"}})
+
+		// We shouldn't be able to create a new schema with the same name.
+		sqlDBRestore.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+	})
+
+	// Tests restoring databases with user defined schemas.
+	t.Run("database", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TABLE sc.tb1 (x INT);
+INSERT INTO sc.tb1 VALUES (1);
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb2 (x sc.typ1);
+INSERT INTO sc.tb2 VALUES ('hello');
+`)
+		// Backup the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+		sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+
+		// Check that we can resolve all names through the user defined schema.
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.sc.tb1`, [][]string{{"1"}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.sc.tb2`, [][]string{{"hello"}})
+		sqlDB.CheckQueryResults(t, `SELECT 'hello'::d.sc.typ1`, [][]string{{"hello"}})
+
+		// We shouldn't be able to create a new schema with the same name.
+		sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+	})
+
+	// Test restoring tables with user defined schemas when restore schemas are
+	// not being remapped.
+	t.Run("no-remap", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb1 (x sc.typ1);
+INSERT INTO sc.tb1 VALUES ('hello');
+CREATE TABLE sc.tb2 (x INT);
+INSERT INTO sc.tb2 VALUES (1);
+`)
+		{
+			// We have to qualify the table correctly to back it up. d.tb1 resolves
+			// to d.public.tb1.
+			sqlDB.ExpectErr(t, `pq: table "d.tb1" does not exist`, `BACKUP TABLE d.tb1 TO 'nodelocal://0/test/'`)
+			// Backup tb1.
+			sqlDB.Exec(t, `BACKUP TABLE d.sc.tb1 TO 'nodelocal://0/test/'`)
+			// Create a new database to restore into. This restore should restore the
+			// schema sc into the new database.
+			sqlDB.Exec(t, `CREATE DATABASE d2`)
+
+			// We must properly qualify the table name when restoring as well.
+			sqlDB.ExpectErr(t, `pq: table "d.tb1" does not exist`, `RESTORE TABLE d.tb1 FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+
+			sqlDB.Exec(t, `RESTORE TABLE d.sc.tb1 FROM 'nodelocal://0/test/' WITH into_db = 'd2'`)
+
+			// Check that we can resolve all names through the user defined schema.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d2.sc.tb1`, [][]string{{"hello"}})
+			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d2.sc.typ1`, [][]string{{"hello"}})
+
+			// We shouldn't be able to create a new schema with the same name.
+			sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d2; CREATE SCHEMA sc`)
+		}
+
+		{
+			// Test that we can * expand schema prefixed names. Create a new backup
+			// with all the tables in d.sc.
+			sqlDB.Exec(t, `BACKUP TABLE d.sc.* TO 'nodelocal://0/test2/'`)
+			// Create a new database to restore into.
+			sqlDB.Exec(t, `CREATE DATABASE d3`)
+			sqlDB.Exec(t, `RESTORE TABLE d.sc.* FROM 'nodelocal://0/test2/' WITH into_db = 'd3'`)
+
+			// Check that we can resolve all names through the user defined schema.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d3.sc.tb1`, [][]string{{"hello"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM d3.sc.tb2`, [][]string{{"1"}})
+			sqlDB.CheckQueryResults(t, `SELECT 'hello'::d3.sc.typ1`, [][]string{{"hello"}})
+
+			// We shouldn't be able to create a new schema with the same name.
+			sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d3; CREATE SCHEMA sc`)
+		}
+	})
+
+	// Test when we remap schemas to existing schemas in the cluster.
+	t.Run("remap", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+USE d;
+CREATE SCHEMA sc;
+CREATE TYPE sc.typ1 AS ENUM ('hello');
+CREATE TABLE sc.tb1 (x sc.typ1);
+INSERT INTO sc.tb1 VALUES ('hello');
+`)
+		// Take a backup.
+		sqlDB.Exec(t, `BACKUP TABLE d.sc.tb1 TO 'nodelocal://0/test/'`)
+		// Now drop the table.
+		sqlDB.Exec(t, `DROP TABLE d.sc.tb1`)
+		// Restoring the table should restore into d.sc.
+		sqlDB.Exec(t, `RESTORE TABLE d.sc.tb1 FROM 'nodelocal://0/test/'`)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.sc.tb1`, [][]string{{"hello"}})
+	})
 }
 
 func TestBackupRestoreUserDefinedTypes(t *testing.T) {
