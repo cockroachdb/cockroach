@@ -528,6 +528,12 @@ define DeleteRange {
 
 # CreateTable implements a CREATE TABLE statement.
 define CreateTable {
+    Schema cat.Schema
+    Ct *tree.CreateTable
+}
+
+# CreateTableAs implements a CREATE TABLE AS statement.
+define CreateTableAs {
     Input exec.Node
     Schema cat.Schema
     Ct *tree.CreateTable

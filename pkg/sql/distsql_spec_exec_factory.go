@@ -854,6 +854,12 @@ func (e *distSQLSpecExecFactory) ConstructDeleteRange(
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateTable(
+	schema cat.Schema, ct *tree.CreateTable,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create table")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create table")
