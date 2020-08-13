@@ -471,6 +471,39 @@ func TestRangeCache(t *testing.T) {
 	db.assertLookupCountEq(t, 1, "cz")
 }
 
+// Test that cache lookups by RKeyMin and derivate keys work fine. These keys
+// are special because cache entries are addressed by RangeMetaKey(key), and
+// RangeMetaKey(RKeyMin) is a special case.
+func TestLookupByKeyMin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	cache := NewRangeDescriptorCache(st, nil, staticSize(2<<10), stopper)
+	startToMeta2Desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKeyMin,
+		// It's important to end this descriptor in the Meta2 range: doing so makes
+		// its cache entry be keyed on a Meta1 key (i.e.
+		// RangeMetaKey(RangeMetaKey("a"))), and this catches wrong handling of
+		// cache lookups by RKeyMin (we used to have a bug where that would result
+		// in a cache lookup by a Meta2 key instead of a Meta1 key).
+		EndKey: keys.RangeMetaKey(roachpb.RKey("a")),
+	}
+	cache.Insert(ctx, roachpb.RangeInfo{Desc: startToMeta2Desc})
+	entMin := cache.GetCached(roachpb.RKeyMin, false /* inverted */)
+	require.NotNil(t, entMin)
+	require.NotNil(t, entMin.Desc())
+	require.Equal(t, startToMeta2Desc, *entMin.Desc())
+
+	entNext := cache.GetCached(roachpb.RKeyMin.Next(), false /* inverted */)
+	require.True(t, entMin == entNext)
+	entNext = cache.GetCached(roachpb.RKeyMin.Next().Next(), false /* inverted */)
+	require.True(t, entMin == entNext)
+}
+
 // TestRangeCacheCoalescedRequests verifies that concurrent lookups for
 // the same key will be coalesced onto the same database lookup.
 func TestRangeCacheCoalescedRequests(t *testing.T) {

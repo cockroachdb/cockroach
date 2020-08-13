@@ -517,12 +517,13 @@ func SpanAddr(span roachpb.Span) (roachpb.RSpan, error) {
 // RangeMetaKey returns a range metadata (meta1, meta2) indexing key for the
 // given key.
 //
-// - For RKeyMin, KeyMin is returned.
-// - For a meta1 key, KeyMin is returned.
+// - For RKeyMin, or RKeyMin.Next(), RKeyMin is returned.
+// - For a meta1 key, RKeyMin is returned.
 // - For a meta2 key, a meta1 key is returned.
 // - For an ordinary key, a meta2 key is returned.
 func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
-	if len(key) == 0 { // key.Equal(roachpb.RKeyMin)
+	// RKeyMin or RKeyMin.Next()(.Next()...)
+	if len(key) == 0 || key[0] == '\x00' {
 		return roachpb.RKeyMin
 	}
 	var prefix roachpb.Key

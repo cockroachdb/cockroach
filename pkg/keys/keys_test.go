@@ -242,6 +242,14 @@ func TestRangeMetaKey(t *testing.T) {
 			expKey: roachpb.RKeyMin,
 		},
 		{
+			key:    roachpb.RKey{}.Next(),
+			expKey: roachpb.RKeyMin,
+		},
+		{
+			key:    roachpb.RKey{}.Next().Next(),
+			expKey: roachpb.RKeyMin,
+		},
+		{
 			key:    roachpb.RKey("\x03\x04zonefoo"),
 			expKey: roachpb.RKey("\x02\x04zonefoo"),
 		},
