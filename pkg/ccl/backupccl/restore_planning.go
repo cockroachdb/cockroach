@@ -890,6 +890,7 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingSequences:      opts.SkipMissingSequences,
 		SkipMissingSequenceOwners: opts.SkipMissingSequenceOwners,
 		SkipMissingViews:          opts.SkipMissingViews,
+		Detached:                  opts.Detached,
 	}
 
 	if opts.EncryptionPassphrase != nil {

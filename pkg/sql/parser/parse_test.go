@@ -1542,7 +1542,7 @@ func TestParse(t *testing.T) {
 		{`RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'`},
 
 		{`BACKUP TABLE foo TO 'bar' WITH revision_history, detached`},
-		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences`},
+		{`RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached`},
 
 		{`IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal://0/some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
@@ -2243,8 +2243,8 @@ $function$`,
 			`BACKUP TABLE foo TO 'bar' WITH revision_history, detached, kms=('foo', 'bar')`},
 
 		{`RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz', 
-skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views)`,
-			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
+skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached)`,
+			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached`},
 		{`RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, 
 SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS`,
 			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
