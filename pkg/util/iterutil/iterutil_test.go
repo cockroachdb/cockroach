@@ -46,6 +46,21 @@ func TestIter(t *testing.T) {
 	require.NoError(t, sampleIter(input, fn))
 	require.Len(t, output, stopAt)
 	require.ElementsMatch(t, input[:stopAt], output)
+
+	output = []string{}
+	stopAt = 4
+	err := errors.New("test error")
+	fn = func(c Cur) error {
+		str := c.Elem.(*string)
+		if c.Index == stopAt {
+			return c.StopE(err)
+		}
+		output = append(output, *str)
+		return nil
+	}
+	require.EqualError(t, sampleIter(input, fn), err.Error())
+	require.Len(t, output, stopAt)
+	require.ElementsMatch(t, input[:stopAt], output)
 }
 
 // sampleIter iterates over the slice and applies the closure.

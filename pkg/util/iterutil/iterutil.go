@@ -17,10 +17,16 @@ type Cur struct {
 	done  *bool
 }
 
-// Stop halts the iteration, i.e., sets the `done` flag to true.
-func (c *Cur) Stop() error {
+// StopE halts the iteration, i.e., sets the `done` flag to true.
+// It returns the error provided to it.
+func (c *Cur) StopE(err error) error {
 	*c.done = true
-	return nil
+	return err
+}
+
+// Stop halts the iteration. It is equivalent to `StopE(nil)`.
+func (c *Cur) Stop() error {
+	return c.StopE(nil)
 }
 
 // State iterates over the values.
