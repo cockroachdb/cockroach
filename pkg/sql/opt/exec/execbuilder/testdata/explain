@@ -1115,3 +1115,19 @@ NULL  ·     vectorized    true
 NULL  scan  ·             ·
 NULL  ·     table         t@primary
 NULL  ·     spans         FULL SCAN
+
+# Tests with EXPLAIN inside EXPLAIN.
+query TTT
+EXPLAIN EXPLAIN SELECT 1
+----
+·        distribution  local
+·        vectorized    false
+explain  ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) EXPLAIN ANALYZE SELECT 1
+----
+·             distribution  local  ·                       ·
+·             vectorized    false  ·                       ·
+project       ·             ·      (automatic, url)        ·
+ └── explain  ·             ·      (automatic, url, json)  ·

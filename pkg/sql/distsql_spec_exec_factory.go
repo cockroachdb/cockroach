@@ -609,10 +609,10 @@ func (e *distSQLSpecExecFactory) ConstructSetOp(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSort(
-	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
+	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
-	e.dsp.addSorters(physPlan, ordering, alreadyOrderedPrefix)
+	e.dsp.addSorters(physPlan, sqlbase.ColumnOrdering(ordering), alreadyOrderedPrefix)
 	// Since addition of sorters doesn't change any properties of the physical
 	// plan, we don't need to update any of those.
 	return plan, nil
@@ -775,6 +775,12 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// subqueries and postqueries.
 	physPlan.Distribution = p.main.physPlan.Distribution
 	return makePlanMaybePhysical(physPlan, []planNode{explainNode}), nil
+}
+
+func (e *distSQLSpecExecFactory) ConstructExplainPlan(
+	options *tree.ExplainOptions, buildFn exec.BuildPlanForExplainFn,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain plan")
 }
 
 func (e *distSQLSpecExecFactory) ConstructShowTrace(
