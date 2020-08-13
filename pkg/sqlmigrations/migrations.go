@@ -1120,8 +1120,8 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 				if details.FormatVersion < jobspb.JobResumerFormatVersion {
 					continue
 				}
-				if details.TableID != descpb.InvalidID {
-					schemaChangeJobsForDesc[details.TableID] = append(schemaChangeJobsForDesc[details.TableID], jobID)
+				if details.DescID != descpb.InvalidID {
+					schemaChangeJobsForDesc[details.DescID] = append(schemaChangeJobsForDesc[details.DescID], jobID)
 				} else {
 					for _, t := range details.DroppedTables {
 						schemaChangeJobsForDesc[t.ID] = append(schemaChangeJobsForDesc[t.ID], jobID)
@@ -1159,7 +1159,7 @@ func migrateSchemaChangeJobs(ctx context.Context, r runner, registry *jobs.Regis
 			Username:      security.NodeUser,
 			DescriptorIDs: descpb.IDs{desc.ID},
 			Details: jobspb.SchemaChangeDetails{
-				TableID:       desc.ID,
+				DescID:        desc.ID,
 				FormatVersion: jobspb.JobResumerFormatVersion,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
@@ -1291,8 +1291,8 @@ func migrateMutationJobForTable(
 		if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// Update the job details with the table and mutation IDs.
 			details := md.Payload.GetSchemaChange()
-			details.TableID = tableDesc.ID
-			details.MutationID = mutationJob.MutationID
+			details.DescID = tableDesc.ID
+			details.TableMutationID = mutationJob.MutationID
 			details.FormatVersion = jobspb.JobResumerFormatVersion
 			md.Payload.Details = jobspb.WrapPayloadDetails(*details)
 
@@ -1405,7 +1405,7 @@ func migrateDropTablesOrDatabaseJob(
 		// it. Just update the job details.
 		if err := job.WithTxn(txn).Update(ctx, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if len(details.DroppedTables) == 1 {
-				details.TableID = details.DroppedTables[0].ID
+				details.DescID = details.DroppedTables[0].ID
 			}
 			details.FormatVersion = jobspb.JobResumerFormatVersion
 			md.Payload.Details = jobspb.WrapPayloadDetails(*details)

@@ -212,16 +212,17 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool) { // */}}
 // projection operator for the given left and right column types and operation.
 func GetProjection_CONST_SIDEConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -231,11 +232,11 @@ func GetProjection_CONST_SIDEConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
+	c := GetDatumToPhysicalFn(constType)(constArg)
 	// {{if _IS_CONST_LEFT}}
-	c = GetDatumToPhysicalFn(leftType)(constArg)
+	leftType, rightType := constType, inputTypes[colIdx]
 	// {{else}}
-	c = GetDatumToPhysicalFn(rightType)(constArg)
+	leftType, rightType := inputTypes[colIdx], constType
 	// {{end}}
 	switch op.(type) {
 	case tree.BinaryOperator:
@@ -293,26 +294,32 @@ func GetProjection_CONST_SIDEConstOperator(
 	//     the left.
 	// */}}
 	case tree.ComparisonOperator:
-		switch op {
-		// {{range .CmpOps}}
-		case tree._NAME:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			// {{range .LeftFamilies}}
-			// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
-			case _LEFT_CANONICAL_TYPE_FAMILY:
-				switch leftType.Width() {
-				// {{range .LeftWidths}}
-				case _LEFT_TYPE_WIDTH:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					// {{range .RightFamilies}}
-					case _RIGHT_CANONICAL_TYPE_FAMILY:
-						switch rightType.Width() {
-						// {{range .RightWidths}}
-						case _RIGHT_TYPE_WIDTH:
-							return &_OP_CONST_NAME{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(_R_GO_TYPE),
-							}, nil
+		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+			// Tuple comparison has special null-handling semantics, so we will
+			// fallback to the default comparison operator if either of the
+			// input vectors is of a tuple type.
+			switch op {
+			// {{range .CmpOps}}
+			case tree._NAME:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				// {{range .LeftFamilies}}
+				// {{$leftFamilyStr := .LeftCanonicalFamilyStr}}
+				case _LEFT_CANONICAL_TYPE_FAMILY:
+					switch leftType.Width() {
+					// {{range .LeftWidths}}
+					case _LEFT_TYPE_WIDTH:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						// {{range .RightFamilies}}
+						case _RIGHT_CANONICAL_TYPE_FAMILY:
+							switch rightType.Width() {
+							// {{range .RightWidths}}
+							case _RIGHT_TYPE_WIDTH:
+								return &_OP_CONST_NAME{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(_R_GO_TYPE),
+								}, nil
+								// {{end}}
+							}
 							// {{end}}
 						}
 						// {{end}}
@@ -321,8 +328,14 @@ func GetProjection_CONST_SIDEConstOperator(
 				}
 				// {{end}}
 			}
-			// {{end}}
 		}
+		return &defaultCmp_CONST_SIDEConstProjOp{
+			projConstOpBase:     projConstOpBase,
+			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+			constArg:            constArg,
+			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+		}, nil
 		// {{end}}
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())

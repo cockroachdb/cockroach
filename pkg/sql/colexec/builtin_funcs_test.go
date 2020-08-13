@@ -155,7 +155,8 @@ func BenchmarkBuiltinFunctions(b *testing.B) {
 // and the specialized operator.
 func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	ctx := context.Background()
-	tctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
 
 	typs := []*types.T{types.String, types.Int, types.Int}
 	batch := testAllocator.NewMemBatch(typs)
@@ -189,7 +190,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 	defaultOp := &defaultBuiltinFuncOperator{
 		OneInputNode:        NewOneInputNode(source),
 		allocator:           testAllocator,
-		evalCtx:             tctx,
+		evalCtx:             evalCtx,
 		funcExpr:            typedExpr.(*tree.FuncExpr),
 		outputIdx:           outputIdx,
 		columnTypes:         typs,

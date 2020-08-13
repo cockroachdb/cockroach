@@ -49125,16 +49125,17 @@ func (p projGEDatumDatumConstOp) Init() {
 // projection operator for the given left and right column types and operation.
 func GetProjectionRConstOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
+	constType *types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	colIdx int,
 	constArg tree.Datum,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
@@ -49144,8 +49145,8 @@ func GetProjectionRConstOperator(
 		outputIdx:      outputIdx,
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
-	var c interface{}
-	c = GetDatumToPhysicalFn(rightType)(constArg)
+	c := GetDatumToPhysicalFn(constType)(constArg)
+	leftType, rightType := inputTypes[colIdx], constType
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
@@ -51102,1778 +51103,1790 @@ func GetProjectionRConstOperator(
 			}
 		}
 	case tree.ComparisonOperator:
-		switch op {
-		case tree.EQ:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
+		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+			// Tuple comparison has special null-handling semantics, so we will
+			// fallback to the default comparison operator if either of the
+			// input vectors is of a tuple type.
+			switch op {
+			case tree.EQ:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
+						}
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
+						}
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projEQDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projEQDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projEQInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projEQInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projEQInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projEQInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projEQInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projEQInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projEQFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projEQFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQTimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
+			case tree.NE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
+						}
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
+						}
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projNEDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projNEDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projNEInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projNEInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projNEInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projNEInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projNEInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projNEInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projNEFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projNEFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNETimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projEQDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projEQDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
+			case tree.LT:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
 						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
 						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLTDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLTDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLTInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLTInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLTInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLTInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLTInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLTInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLTFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLTFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTTimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projEQInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projEQInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+			case tree.LE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
 						}
 					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projEQInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projEQInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
 						}
 					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projEQInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projEQInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projEQFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projEQFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLEDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLEDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQTimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLEInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLEInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLEInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLEInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLEInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLEInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projLEFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projLEFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLETimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
 						}
 					}
-				}
-			}
-		case tree.NE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projNEDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projNEDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projNEInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projNEInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projNEInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projNEInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projNEInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projNEInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projNEFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projNEFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
+			case tree.GT:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
 						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
 						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGTDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGTDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGTInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGTInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGTInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGTInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGTInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGTInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGTFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGTFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTTimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNETimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
+			case tree.GE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEBoolBoolConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(bool),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEBytesBytesConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.([]byte),
+								}, nil
+							}
 						}
 					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEDecimalInt16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGEDecimalInt32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGEDecimalInt64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDecimalFloat64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDecimalDecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			}
-		case tree.LT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt16Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGEInt16Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGEInt16Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt16Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt16DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt32Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGEInt32Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGEInt32Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt32Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt32DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGEInt64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGEInt64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEFloat64Int16ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int16),
+								}, nil
+							case 32:
+								return &projGEFloat64Int32ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int32),
+								}, nil
+							case -1:
+							default:
+								return &projGEFloat64Int64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(int64),
+								}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEFloat64Float64ConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(float64),
+								}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEFloat64DecimalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(apd.Decimal),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLTDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLTDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGETimestampTimestampConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(time.Time),
+								}, nil
+							}
 						}
 					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLTInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLTInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEIntervalIntervalConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(duration.Duration),
+								}, nil
+							}
 						}
 					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLTInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLTInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLTInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLTInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLTFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLTFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTTimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
-						}
-					}
-				}
-			}
-		case tree.LE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLEDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLEDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLEInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLEInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLEInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLEInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLEInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLEInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projLEFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projLEFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLETimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
-						}
-					}
-				}
-			}
-		case tree.GT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGTDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGTDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGTInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGTInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGTInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGTInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGTInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGTInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGTFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGTFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTTimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
-						}
-					}
-				}
-			}
-		case tree.GE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEBoolBoolConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(bool),
-							}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEBytesBytesConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.([]byte),
-							}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEDecimalInt16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGEDecimalInt32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGEDecimalInt64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDecimalFloat64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDecimalDecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt16Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGEInt16Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGEInt16Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt16Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt16DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt32Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGEInt32Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGEInt32Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt32Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt32DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGEInt64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGEInt64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEFloat64Int16ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int16),
-							}, nil
-						case 32:
-							return &projGEFloat64Int32ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int32),
-							}, nil
-						case -1:
-						default:
-							return &projGEFloat64Int64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(int64),
-							}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEFloat64Float64ConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(float64),
-							}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEFloat64DecimalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(apd.Decimal),
-							}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGETimestampTimestampConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(time.Time),
-							}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEIntervalIntervalConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(duration.Duration),
-							}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDatumDatumConstOp{
-								projConstOpBase: projConstOpBase,
-								constArg:        c.(interface{}),
-							}, nil
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDatumDatumConstOp{
+									projConstOpBase: projConstOpBase,
+									constArg:        c.(interface{}),
+								}, nil
+							}
 						}
 					}
 				}
 			}
 		}
+		return &defaultCmpRConstProjOp{
+			projConstOpBase:     projConstOpBase,
+			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+			constArg:            constArg,
+			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
 }

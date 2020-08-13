@@ -53407,16 +53407,16 @@ func (p projGEDatumDatumOp) Init() {
 // given left and right column types and operation.
 func GetProjectionOperator(
 	allocator *colmem.Allocator,
-	leftType *types.T,
-	rightType *types.T,
+	inputTypes []*types.T,
 	outputType *types.T,
 	op tree.Operator,
 	input colexecbase.Operator,
 	col1Idx int,
 	col2Idx int,
 	outputIdx int,
-	binFn *tree.BinOp,
 	evalCtx *tree.EvalContext,
+	binFn tree.TwoArgFn,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
 	input = newVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
@@ -53428,6 +53428,7 @@ func GetProjectionOperator(
 		overloadHelper: overloadHelper{binFn: binFn, evalCtx: evalCtx},
 	}
 
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op.(type) {
 	case tree.BinaryOperator:
 		switch op {
@@ -54739,1238 +54740,1249 @@ func GetProjectionOperator(
 			}
 		}
 	case tree.ComparisonOperator:
-		switch op {
-		case tree.EQ:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQBoolBoolOp{projOpBase: projOpBase}, nil
+		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+			// Tuple comparison has special null-handling semantics, so we will
+			// fallback to the default comparison operator if either of the
+			// input vectors is of a tuple type.
+			switch op {
+			case tree.EQ:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQBoolBoolOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQBytesBytesOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projEQDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projEQDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projEQInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projEQInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projEQInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projEQInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projEQInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projEQInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projEQFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projEQFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projEQFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQTimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projEQDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQBytesBytesOp{projOpBase: projOpBase}, nil
+			case tree.NE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEBoolBoolOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEBytesBytesOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projNEDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projNEDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projNEInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projNEInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projNEInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projNEInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projNEInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projNEInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projNEFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projNEFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projNEFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNETimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projNEDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projEQDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projEQDecimalInt64Op{projOpBase: projOpBase}, nil
+			case tree.LT:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTBoolBoolOp{projOpBase: projOpBase}, nil
+							}
 						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDecimalFloat64Op{projOpBase: projOpBase}, nil
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTBytesBytesOp{projOpBase: projOpBase}, nil
+							}
 						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDecimalDecimalOp{projOpBase: projOpBase}, nil
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLTDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLTDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLTInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLTInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLTInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLTInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLTInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLTInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLTFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLTFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLTFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTTimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLTDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projEQInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projEQInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt16DecimalOp{projOpBase: projOpBase}, nil
+			case tree.LE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEBoolBoolOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projEQInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projEQInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt32DecimalOp{projOpBase: projOpBase}, nil
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEBytesBytesOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projEQInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projEQInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQInt64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projEQFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projEQFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projEQFloat64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQFloat64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQFloat64DecimalOp{projOpBase: projOpBase}, nil
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLEDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLEDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQTimestampTimestampOp{projOpBase: projOpBase}, nil
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLEInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLEInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLEInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLEInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLEInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLEInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQIntervalIntervalOp{projOpBase: projOpBase}, nil
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projLEFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projLEFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projLEFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projEQDatumDatumOp{projOpBase: projOpBase}, nil
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLETimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			}
-		case tree.NE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEBoolBoolOp{projOpBase: projOpBase}, nil
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEBytesBytesOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projNEDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projNEDecimalInt64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDecimalFloat64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDecimalDecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projNEInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projNEInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt16DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projNEInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projNEInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt32DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projNEInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projNEInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEInt64DecimalOp{projOpBase: projOpBase}, nil
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projLEDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projNEFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projNEFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projNEFloat64Int64Op{projOpBase: projOpBase}, nil
+			case tree.GT:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTBoolBoolOp{projOpBase: projOpBase}, nil
+							}
 						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEFloat64Float64Op{projOpBase: projOpBase}, nil
+					}
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTBytesBytesOp{projOpBase: projOpBase}, nil
+							}
 						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEFloat64DecimalOp{projOpBase: projOpBase}, nil
+					}
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGTDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGTDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGTInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGTInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGTInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGTInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGTInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGTInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGTFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGTFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGTFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTTimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					}
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGTDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNETimestampTimestampOp{projOpBase: projOpBase}, nil
+			case tree.GE:
+				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+				case types.BoolFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BoolFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEBoolBoolOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEIntervalIntervalOp{projOpBase: projOpBase}, nil
+				case types.BytesFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.BytesFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEBytesBytesOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projNEDatumDatumOp{projOpBase: projOpBase}, nil
+				case types.DecimalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEDecimalInt16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGEDecimalInt32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGEDecimalInt64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDecimalFloat64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDecimalDecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			}
-		case tree.LT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTBoolBoolOp{projOpBase: projOpBase}, nil
+				case types.IntFamily:
+					switch leftType.Width() {
+					case 16:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt16Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGEInt16Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGEInt16Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt16Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt16DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case 32:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt32Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGEInt32Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGEInt32Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt32Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt32DecimalOp{projOpBase: projOpBase}, nil
+							}
+						}
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEInt64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGEInt64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGEInt64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEInt64DecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTBytesBytesOp{projOpBase: projOpBase}, nil
+				case types.FloatFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntFamily:
+							switch rightType.Width() {
+							case 16:
+								return &projGEFloat64Int16Op{projOpBase: projOpBase}, nil
+							case 32:
+								return &projGEFloat64Int32Op{projOpBase: projOpBase}, nil
+							case -1:
+							default:
+								return &projGEFloat64Int64Op{projOpBase: projOpBase}, nil
+							}
+						case types.FloatFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEFloat64Float64Op{projOpBase: projOpBase}, nil
+							}
+						case types.DecimalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEFloat64DecimalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLTDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLTDecimalInt64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDecimalFloat64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDecimalDecimalOp{projOpBase: projOpBase}, nil
+				case types.TimestampTZFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.TimestampTZFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGETimestampTimestampOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLTInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLTInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt16DecimalOp{projOpBase: projOpBase}, nil
+				case types.IntervalFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case types.IntervalFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEIntervalIntervalOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLTInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLTInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt32DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLTInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLTInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTInt64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLTFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLTFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLTFloat64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTFloat64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTFloat64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTTimestampTimestampOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTIntervalIntervalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLTDatumDatumOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			}
-		case tree.LE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEBoolBoolOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEBytesBytesOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLEDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLEDecimalInt64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDecimalFloat64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDecimalDecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLEInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLEInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt16DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLEInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLEInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt32DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLEInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLEInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEInt64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projLEFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projLEFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projLEFloat64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEFloat64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEFloat64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLETimestampTimestampOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEIntervalIntervalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projLEDatumDatumOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			}
-		case tree.GT:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTBoolBoolOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTBytesBytesOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGTDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGTDecimalInt64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDecimalFloat64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDecimalDecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGTInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGTInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt16DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGTInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGTInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt32DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGTInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGTInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTInt64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGTFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGTFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGTFloat64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTFloat64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTFloat64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTTimestampTimestampOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTIntervalIntervalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGTDatumDatumOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			}
-		case tree.GE:
-			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-			case types.BoolFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BoolFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEBoolBoolOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.BytesFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.BytesFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEBytesBytesOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.DecimalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEDecimalInt16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGEDecimalInt32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGEDecimalInt64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDecimalFloat64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDecimalDecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntFamily:
-				switch leftType.Width() {
-				case 16:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt16Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGEInt16Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGEInt16Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt16Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt16DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case 32:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt32Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGEInt32Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGEInt32Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt32Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt32DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEInt64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGEInt64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGEInt64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEInt64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.FloatFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntFamily:
-						switch rightType.Width() {
-						case 16:
-							return &projGEFloat64Int16Op{projOpBase: projOpBase}, nil
-						case 32:
-							return &projGEFloat64Int32Op{projOpBase: projOpBase}, nil
-						case -1:
-						default:
-							return &projGEFloat64Int64Op{projOpBase: projOpBase}, nil
-						}
-					case types.FloatFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEFloat64Float64Op{projOpBase: projOpBase}, nil
-						}
-					case types.DecimalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEFloat64DecimalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.TimestampTZFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.TimestampTZFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGETimestampTimestampOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case types.IntervalFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case types.IntervalFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEIntervalIntervalOp{projOpBase: projOpBase}, nil
-						}
-					}
-				}
-			case typeconv.DatumVecCanonicalTypeFamily:
-				switch leftType.Width() {
-				case -1:
-				default:
-					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-					case typeconv.DatumVecCanonicalTypeFamily:
-						switch rightType.Width() {
-						case -1:
-						default:
-							return &projGEDatumDatumOp{projOpBase: projOpBase}, nil
+				case typeconv.DatumVecCanonicalTypeFamily:
+					switch leftType.Width() {
+					case -1:
+					default:
+						switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+						case typeconv.DatumVecCanonicalTypeFamily:
+							switch rightType.Width() {
+							case -1:
+							default:
+								return &projGEDatumDatumOp{projOpBase: projOpBase}, nil
+							}
 						}
 					}
 				}
 			}
 		}
+		return &defaultCmpProjOp{
+			projOpBase:          projOpBase,
+			adapter:             newComparisonExprAdapter(cmpExpr, evalCtx),
+			toDatumConverter:    newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+			datumToVecConverter: GetDatumToPhysicalFn(outputType),
+		}, nil
 	}
 	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), op, rightType.Name())
 }

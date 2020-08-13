@@ -295,8 +295,16 @@ message SchemaChangeDetails {
     (gogoproto.customname) = "DroppedDatabaseID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
-  uint32 table_id = 5 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
-  uint32 mutation_id = 6 [(gogoproto.customname) = "MutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.MutationID"];
+  // desc_id is the target descriptor for this schema change. Note that this ID
+  // is not always a table ID! We allow referencing any descriptor here to allow
+  // generic schema changes on descriptors whose schema change process involves
+  // only draining names and existing leases. This allows us to implement the
+  // simple schema changes on SchemaDescriptors and DatabaseDescriptors without
+  // implementing a new job for each.
+  uint32 desc_id = 5 [(gogoproto.customname) = "DescID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  // table_mutation_id is the mutation ID that the schema changer is to process. It is
+  // only set when desc_id references a TableDescriptor.
+  uint32 table_mutation_id = 6 [(gogoproto.customname) = "TableMutationID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.MutationID"];
   // The format version of the schema change job details. This is used to
   // distinguish between jobs as they existed in 19.2 and earlier versions
   // (controlled and updated by a SchemaChanger) and jobs as they exist in 20.1

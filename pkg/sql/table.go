@@ -116,10 +116,10 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{tableDesc.GetID()},
 			Details: jobspb.SchemaChangeDetails{
-				TableID:        tableDesc.ID,
-				MutationID:     mutationID,
-				ResumeSpanList: spanList,
-				FormatVersion:  jobspb.JobResumerFormatVersion,
+				DescID:          tableDesc.ID,
+				TableMutationID: mutationID,
+				ResumeSpanList:  spanList,
+				FormatVersion:   jobspb.JobResumerFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
@@ -140,24 +140,24 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		// Update the existing job.
 		oldDetails := job.Details().(jobspb.SchemaChangeDetails)
 		newDetails := jobspb.SchemaChangeDetails{
-			TableID:        tableDesc.ID,
-			MutationID:     oldDetails.MutationID,
-			ResumeSpanList: spanList,
-			FormatVersion:  jobspb.JobResumerFormatVersion,
+			DescID:          tableDesc.ID,
+			TableMutationID: oldDetails.TableMutationID,
+			ResumeSpanList:  spanList,
+			FormatVersion:   jobspb.JobResumerFormatVersion,
 		}
-		if oldDetails.MutationID != descpb.InvalidMutationID {
+		if oldDetails.TableMutationID != descpb.InvalidMutationID {
 			// The previous queued schema change job was associated with a mutation,
 			// which must have the same mutation ID as this schema change, so just
 			// check for consistency.
-			if mutationID != descpb.InvalidMutationID && mutationID != oldDetails.MutationID {
+			if mutationID != descpb.InvalidMutationID && mutationID != oldDetails.TableMutationID {
 				return errors.AssertionFailedf(
 					"attempted to update job for mutation %d, but job already exists with mutation %d",
-					mutationID, oldDetails.MutationID)
+					mutationID, oldDetails.TableMutationID)
 			}
 		} else {
 			// The previous queued schema change job didn't have a mutation.
 			if mutationID != descpb.InvalidMutationID {
-				newDetails.MutationID = mutationID
+				newDetails.TableMutationID = mutationID
 				// Also add a MutationJob on the table descriptor.
 				// TODO (lucy): get rid of this when we get rid of MutationJobs.
 				tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{

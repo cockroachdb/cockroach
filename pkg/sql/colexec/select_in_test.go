@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -219,46 +216,10 @@ func TestProjectInInt64(t *testing.T) {
 		log.Infof(ctx, "%s", c.desc)
 		runTests(t, []tuples{c.inputTuples}, c.outputTuples, orderedVerifier,
 			func(input []colexecbase.Operator) (colexecbase.Operator, error) {
-				expr, err := parser.ParseExpr(fmt.Sprintf("@1 %s", c.inClause))
-				if err != nil {
-					return nil, err
-				}
-				p := &mockTypeContext{typs: []*types.T{types.Int, types.MakeTuple([]*types.T{types.Int})}}
-				semaCtx := tree.MakeSemaContext()
-				semaCtx.IVarContainer = p
-				typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
-				if err != nil {
-					return nil, err
-				}
-				spec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: []*types.T{types.Int}}},
-					Core: execinfrapb.ProcessorCoreUnion{
-						Noop: &execinfrapb.NoopCoreSpec{},
-					},
-					Post: execinfrapb.PostProcessSpec{
-						RenderExprs: []execinfrapb.Expression{
-							{Expr: "@1"},
-							{LocalExpr: typedExpr},
-						},
-					},
-				}
-				args := &NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              input,
-					StreamingMemAccount: testMemAcc,
-					// TODO(yuzefovich): figure out how to make the second
-					// argument of IN comparison as DTuple not Tuple.
-					// TODO(yuzefovich): reuse createTestProjectingOperator
-					// once we don't need to provide the processor
-					// constructor.
-					ProcessorConstructor: rowexec.NewProcessor,
-				}
-				args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-				result, err := TestNewColOperator(ctx, flowCtx, args)
-				if err != nil {
-					return nil, err
-				}
-				return result.Op, nil
+				return createTestProjectingOperator(
+					ctx, flowCtx, input[0], []*types.T{types.Int},
+					fmt.Sprintf("@1 %s", c.inClause), false, /* canFallbackToRowexec */
+				)
 			})
 	}
 }

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // {{/*
@@ -269,36 +268,42 @@ func (p *_OP_NAME) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	leftType *types.T,
-	constType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	colIdx int,
 	constArg tree.Datum,
-	binFn *tree.BinOp,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, constType := inputTypes[colIdx], constArg.ResolvedType()
 	c := GetDatumToPhysicalFn(constType)(constArg)
 	selConstOpBase := selConstOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		colIdx:         colIdx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		colIdx:       colIdx,
 	}
-	switch cmpOp {
-	// {{range .CmpOps}}
-	case tree._NAME:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-		// {{range .LeftFamilies}}
-		case _LEFT_CANONICAL_TYPE_FAMILY:
-			switch leftType.Width() {
-			// {{range .LeftWidths}}
-			case _LEFT_TYPE_WIDTH:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
-				// {{range .RightFamilies}}
-				case _RIGHT_CANONICAL_TYPE_FAMILY:
-					switch constType.Width() {
-					// {{range .RightWidths}}
-					case _RIGHT_TYPE_WIDTH:
-						return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+	if leftType.Family() != types.TupleFamily && constType.Family() != types.TupleFamily {
+		// Tuple comparison has special null-handling semantics, so we will
+		// fallback to the default comparison operator if either of the
+		// input vectors is of a tuple type.
+		switch cmpOp {
+		// {{range .CmpOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(constType.Family()) {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch constType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_CONST_NAME{selConstOpBase: selConstOpBase, constArg: c.(_R_GO_TYPE)}, nil
+							// {{end}}
+						}
 						// {{end}}
 					}
 					// {{end}}
@@ -307,44 +312,54 @@ func GetSelectionConstOperator(
 			}
 			// {{end}}
 		}
-		// {{end}}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, constType.Name())
+	return &defaultCmpConstSelOp{
+		selConstOpBase:   selConstOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		constArg:         constArg,
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+	}, nil
 }
 
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	leftType *types.T,
-	rightType *types.T,
 	cmpOp tree.ComparisonOperator,
 	input colexecbase.Operator,
+	inputTypes []*types.T,
 	col1Idx int,
 	col2Idx int,
-	binFn *tree.BinOp,
+	evalCtx *tree.EvalContext,
+	cmpExpr *tree.ComparisonExpr,
 ) (colexecbase.Operator, error) {
+	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	selOpBase := selOpBase{
-		OneInputNode:   NewOneInputNode(input),
-		col1Idx:        col1Idx,
-		col2Idx:        col2Idx,
-		overloadHelper: overloadHelper{binFn: binFn},
+		OneInputNode: NewOneInputNode(input),
+		col1Idx:      col1Idx,
+		col2Idx:      col2Idx,
 	}
-	switch cmpOp {
-	// {{range .CmpOps}}
-	case tree._NAME:
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
-		// {{range .LeftFamilies}}
-		case _LEFT_CANONICAL_TYPE_FAMILY:
-			switch leftType.Width() {
-			// {{range .LeftWidths}}
-			case _LEFT_TYPE_WIDTH:
-				switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
-				// {{range .RightFamilies}}
-				case _RIGHT_CANONICAL_TYPE_FAMILY:
-					switch rightType.Width() {
-					// {{range .RightWidths}}
-					case _RIGHT_TYPE_WIDTH:
-						return &_OP_NAME{selOpBase: selOpBase}, nil
+	if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
+		// Tuple comparison has special null-handling semantics, so we will
+		// fallback to the default comparison operator if either of the
+		// input vectors is of a tuple type.
+		switch cmpOp {
+		// {{range .CmpOps}}
+		case tree._NAME:
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
+			// {{range .LeftFamilies}}
+			case _LEFT_CANONICAL_TYPE_FAMILY:
+				switch leftType.Width() {
+				// {{range .LeftWidths}}
+				case _LEFT_TYPE_WIDTH:
+					switch typeconv.TypeFamilyToCanonicalTypeFamily(rightType.Family()) {
+					// {{range .RightFamilies}}
+					case _RIGHT_CANONICAL_TYPE_FAMILY:
+						switch rightType.Width() {
+						// {{range .RightWidths}}
+						case _RIGHT_TYPE_WIDTH:
+							return &_OP_NAME{selOpBase: selOpBase}, nil
+							// {{end}}
+						}
 						// {{end}}
 					}
 					// {{end}}
@@ -353,7 +368,10 @@ func GetSelectionOperator(
 			}
 			// {{end}}
 		}
-		// {{end}}
 	}
-	return nil, errors.Errorf("couldn't find overload for %s %s %s", leftType.Name(), cmpOp, rightType.Name())
+	return &defaultCmpSelOp{
+		selOpBase:        selOpBase,
+		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
+		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+	}, nil
 }

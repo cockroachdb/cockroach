@@ -155,7 +155,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if len(typeDesc.DrainingNames) > 0 {
 		if err := drainNamesForDescriptor(
 			ctx,
-			t.typeID,
+			typeDesc,
 			leaseMgr,
 			codec,
 			nil, /* beforeDrainNames */
@@ -297,7 +297,7 @@ func (t *typeChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{})
 	if len(typeDesc.DrainingNames) > 0 {
 		if err := drainNamesForDescriptor(
 			ctx,
-			tc.typeID,
+			typeDesc,
 			tc.execCfg.LeaseManager,
 			tc.execCfg.Codec,
 			nil, /* beforeDrainNames */
