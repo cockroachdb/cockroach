@@ -20,7 +20,7 @@ import file=tpch_stats
 #  nations in ascending alphabetical order and, for each nation, the year and
 #  profit in descending order by year (most recent first).
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q9
+stats-quality database=tpch stats-quality-prefix=q9
 SELECT
     nation,
     o_year,
@@ -52,6 +52,7 @@ GROUP BY
 ORDER BY
     nation,
     o_year DESC;
+----
 ----
 sort
  ├── save-table-name: q9_sort_1
@@ -177,8 +178,7 @@ sort
            └── sum [as=sum:59, type=float, outer=(58)]
                 └── amount:58 [type=float]
 
-stats table=q9_sort_1
-----
+----Stats for q9_sort_1----
 column_names  row_count  distinct_count  null_count
 {nation}      175        25              0
 {o_year}      175        7               0
@@ -189,8 +189,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_year}      1548.00        8.85 <==       957.00              136.71 <==          0.00            1.00
 {sum_profit}  1548.00        8.85 <==       1548.00             8.85 <==            0.00            1.00
 
-stats table=q9_group_by_2
-----
+----Stats for q9_group_by_2----
 column_names  row_count  distinct_count  null_count
 {n_name}      175        25              0
 {o_year}      175        7               0
@@ -201,8 +200,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {o_year}      1548.00        8.85 <==       957.00              136.71 <==          0.00            1.00
 {sum}         1548.00        8.85 <==       1548.00             8.85 <==            0.00            1.00
 
-stats table=q9_project_3
-----
+----Stats for q9_project_3----
 column_names  row_count  distinct_count  null_count
 {amount}      319404     315234          0
 {n_name}      319404     25              0
@@ -213,8 +211,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
 {o_year}      2450.00        130.37 <==     957.00              136.71 <==          0.00            1.00
 
-stats table=q9_inner_join_4
-----
+----Stats for q9_inner_join_4----
 column_names       row_count  distinct_count  null_count
 {l_discount}       319404     11              0
 {l_extendedprice}  319404     212580          0
@@ -253,8 +250,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
 {s_suppkey}        2450.00        130.37 <==     1065.00             9.20 <==            0.00            1.00
 
-stats table=q9_inner_join_5
-----
+----Stats for q9_inner_join_5----
 column_names       row_count  distinct_count  null_count
 {l_discount}       319404     11              0
 {l_extendedprice}  319404     212580          0
@@ -289,8 +285,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      2450.00        130.37 <==     25.00               1.00                0.00            1.00
 {s_suppkey}        2450.00        130.37 <==     1224.00             8.01 <==            0.00            1.00
 
-stats table=q9_scan_6
-----
+----Stats for q9_scan_6----
 column_names   row_count  distinct_count  null_count
 {s_nationkey}  10000      25              0
 {s_suppkey}    10000      9920            0
@@ -299,8 +294,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  10000.00       1.00           25.00               1.00                0.00            1.00
 {s_suppkey}    10000.00       1.00           9920.00             1.00                0.00            1.00
 
-stats table=q9_lookup_join_7
-----
+----Stats for q9_lookup_join_7----
 column_names       row_count  distinct_count  null_count
 {l_discount}       319404     11              0
 {l_extendedprice}  319404     212580          0
@@ -331,8 +325,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {ps_suppkey}       2431.00        131.39 <==     1220.00             8.03 <==            0.00            1.00
 {ps_supplycost}    2431.00        131.39 <==     1217.00             28.63 <==           0.00            1.00
 
-stats table=q9_lookup_join_8
-----
+----Stats for q9_lookup_join_8----
 column_names       row_count  distinct_count  null_count
 {l_discount}       319404     11              0
 {l_extendedprice}  319404     212580          0
@@ -359,8 +352,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {ps_suppkey}       2431.00        131.39 <==     1536.00             6.38 <==            0.00            1.00
 {ps_supplycost}    2431.00        131.39 <==     1528.00             22.80 <==           0.00            1.00
 
-stats table=q9_lookup_join_9
-----
+----Stats for q9_lookup_join_9----
 column_names     row_count  distinct_count  null_count
 {l_linenumber}   319404     7               0
 {l_orderkey}     319404     288573          0
@@ -383,8 +375,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_suppkey}     813.00         392.87 <==     813.00              12.05 <==           0.00            1.00
 {ps_supplycost}  813.00         392.87 <==     809.00              43.06 <==           0.00            1.00
 
-stats table=q9_merge_join_10
-----
+----Stats for q9_merge_join_10----
 column_names     row_count  distinct_count  null_count
 {p_name}         42656      10680           0
 {p_partkey}      42656      10632           0
@@ -399,8 +390,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_suppkey}     267683.00      6.28 <==       9920.00             1.01                0.00            1.00
 {ps_supplycost}  267683.00      6.28 <==       93405.00            2.68 <==            0.00            1.00
 
-stats table=q9_select_11
-----
+----Stats for q9_select_11----
 column_names  row_count  distinct_count  null_count
 {p_name}      10664      10680           0
 {p_partkey}   10664      10632           0
@@ -409,8 +399,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_name}      66667.00       6.25 <==       66667.00            6.24 <==            0.00            1.00
 {p_partkey}   66667.00       6.25 <==       66619.00            6.27 <==            0.00            1.00
 
-stats table=q9_scan_12
-----
+----Stats for q9_scan_12----
 column_names  row_count  distinct_count  null_count
 {p_name}      200000     198131          0
 {p_partkey}   200000     199241          0
@@ -419,8 +408,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_name}      200000.00      1.00           198131.00           1.00                0.00            1.00
 {p_partkey}   200000.00      1.00           199241.00           1.00                0.00            1.00
 
-stats table=q9_scan_13
-----
+----Stats for q9_scan_13----
 column_names     row_count  distinct_count  null_count
 {ps_partkey}     800000     199241          0
 {ps_suppkey}     800000     9920            0
@@ -431,8 +419,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {ps_suppkey}     800000.00      1.00           9920.00             1.00                0.00            1.00
 {ps_supplycost}  800000.00      1.00           100379.00           1.00                0.00            1.00
 
-stats table=q9_scan_14
-----
+----Stats for q9_scan_14----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -440,3 +427,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----

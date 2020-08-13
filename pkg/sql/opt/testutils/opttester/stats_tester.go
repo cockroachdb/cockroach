@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,7 +51,7 @@ type statsTester struct {
 //
 // testStats expects that a table with the given tableName representing the
 // relational expression has already been created (e.g., by a previous
-// invocation of save-tables in the test file). The table should exist in the
+// invocation of stats-quality in the test file). The table should exist in the
 // test catalog with estimated stats already injected.
 //
 // If rewriteActualStats=true, the table should also exist in the savetables
@@ -63,7 +62,7 @@ type statsTester struct {
 // the estimated stats.
 //
 func (st statsTester) testStats(
-	catalog *testcat.Catalog, d *datadriven.TestData, tableName string,
+	catalog *testcat.Catalog, prevOutputs []string, tableName, headingSep string,
 ) (_ string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -71,9 +70,27 @@ func (st statsTester) testStats(
 		}
 	}()
 
+	// Attempt to find a previous stats output corresponding to this table name.
+	var prevOutput string
+	for i := range prevOutputs {
+		split := strings.Split(prevOutputs[i], headingSep)
+		if len(split) == 2 && split[0] == tableName {
+			prevOutput = split[1]
+			break
+		}
+	}
+
+	const warning = "WARNING: No previous statistics output was found. " +
+		"To collect actual statistics,\nrun with the rewrite-actual-stats flag set to true."
+	if !*rewriteActualStats &&
+		(prevOutput == "" || strings.TrimSuffix(prevOutput, "\n") == warning) {
+		// No previous stats output was found.
+		return warning + "\n", nil
+	}
+
 	// Get the actual stats.
 	const sep = "~~~~"
-	actualStats, actualStatsMap, err := st.getActualStats(d, tableName, sep)
+	actualStats, actualStatsMap, err := st.getActualStats(prevOutput, tableName, sep)
 	if err != nil {
 		return "", err
 	}
@@ -153,9 +170,9 @@ func (st statsTester) testStats(
 // 2. A map from column names to statistic for comparison with the estimated
 //    stats.
 func (st statsTester) getActualStats(
-	d *datadriven.TestData, tableName string, sep string,
+	prevOutput string, tableName string, sep string,
 ) ([]string, map[string]statistic, error) {
-	expected := strings.Split(d.Expected, sep)
+	expected := strings.Split(prevOutput, sep)
 	if len(expected) < 2 && !*rewriteActualStats {
 		return nil, nil, fmt.Errorf(
 			"must run with -%s=true to calculate actual stats first", rewriteActualFlag,

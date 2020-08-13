@@ -17,7 +17,7 @@ import file=tpch_stats
 # that took place in that year. The query orders the answer by Supplier nation,
 # Customer nation, and year (all ascending).
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q7
+stats-quality database=tpch stats-quality-prefix=q7
 SELECT
     supp_nation,
     cust_nation,
@@ -55,6 +55,7 @@ ORDER BY
     supp_nation,
     cust_nation,
     l_year;
+----
 ----
 sort
  ├── save-table-name: q7_sort_1
@@ -160,8 +161,7 @@ sort
            └── sum [as=sum:57, type=float, outer=(56)]
                 └── volume:56 [type=float]
 
-stats table=q7_sort_1
-----
+----Stats for q7_sort_1----
 column_names   row_count  distinct_count  null_count
 {cust_nation}  4          2               0
 {l_year}       4          2               0
@@ -174,8 +174,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {revenue}      974.00         243.50 <==     974.00              243.50 <==          0.00            1.00
 {supp_nation}  974.00         243.50 <==     1.00                2.00 <==            0.00            1.00
 
-stats table=q7_group_by_2
-----
+----Stats for q7_group_by_2----
 column_names  row_count  distinct_count  null_count
 {l_year}      4          2               0
 {n_name_1}    4          2               0
@@ -188,8 +187,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name_1}    974.00         243.50 <==     1.00                2.00 <==            0.00            1.00
 {sum}         974.00         243.50 <==     974.00              243.50 <==          0.00            1.00
 
-stats table=q7_project_3
-----
+----Stats for q7_project_3----
 column_names  row_count  distinct_count  null_count
 {l_year}      5924       2               0
 {n_name_1}    5924       2               0
@@ -202,8 +200,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {n_name_1}    7742.00        1.31           1.00                2.00 <==            0.00            1.00
 {volume}      7742.00        1.31           7580.00             1.28                0.00            1.00
 
-stats table=q7_inner_join_4
-----
+----Stats for q7_inner_join_4----
 column_names       row_count  distinct_count  null_count
 {c_custkey}        5924       3902            0
 {c_nationkey}      5924       2               0
@@ -238,8 +235,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      7742.00        1.31           1.00                2.00 <==            0.00            1.00
 {s_suppkey}        7742.00        1.31           7742.00             9.73 <==            0.00            1.00
 
-stats table=q7_scan_5
-----
+----Stats for q7_scan_5----
 column_names   row_count  distinct_count  null_count
 {c_custkey}    150000     148813          0
 {c_nationkey}  150000     25              0
@@ -248,8 +244,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {c_custkey}    150000.00      1.00           148813.00           1.00                0.00            1.00
 {c_nationkey}  150000.00      1.00           25.00               1.00                0.00            1.00
 
-stats table=q7_lookup_join_6
-----
+----Stats for q7_lookup_join_6----
 column_names       row_count  distinct_count  null_count
 {l_discount}       145703     11              0
 {l_extendedprice}  145703     130516          0
@@ -280,8 +275,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
 {s_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
 
-stats table=q7_lookup_join_7
-----
+----Stats for q7_lookup_join_7----
 column_names       row_count  distinct_count  null_count
 {l_discount}       145703     11              0
 {l_extendedprice}  145703     130516          0
@@ -308,8 +302,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {s_nationkey}      101373.00      1.44           1.00                2.00 <==            0.00            1.00
 {s_suppkey}        101373.00      1.44           530.00              1.51                0.00            1.00
 
-stats table=q7_lookup_join_8
-----
+----Stats for q7_lookup_join_8----
 column_names     row_count  distinct_count  null_count
 {l_linenumber}   478523     7               0
 {l_orderkey}     478523     411655          0
@@ -332,8 +325,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    322646.00      1.48           1.00                2.00 <==            0.00            1.00
 {s_suppkey}      322646.00      1.48           530.00              1.51                0.00            1.00
 
-stats table=q7_lookup_join_9
-----
+----Stats for q7_lookup_join_9----
 column_names     row_count  distinct_count  null_count
 {n_name_1}       798        2               0
 {n_name}         798        2               0
@@ -350,8 +342,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    533.00         1.50           1.00                2.00 <==            0.00            1.00
 {s_suppkey}      533.00         1.50           530.00              1.51                0.00            1.00
 
-stats table=q7_inner_join_10
-----
+----Stats for q7_inner_join_10----
 column_names     row_count  distinct_count  null_count
 {n_name_1}       2          2               0
 {n_name}         2          2               0
@@ -364,8 +355,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {n_nationkey}    1.00           2.00 <==       1.00                2.00 <==            0.00            1.00
 {n_nationkey_1}  1.00           2.00 <==       1.00                2.00 <==            0.00            1.00
 
-stats table=q7_scan_11
-----
+----Stats for q7_scan_11----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -374,8 +364,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
 
-stats table=q7_scan_12
-----
+----Stats for q7_scan_12----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -383,3 +372,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----

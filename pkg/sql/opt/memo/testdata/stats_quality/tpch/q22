@@ -15,7 +15,7 @@ import file=tpch_stats
 # “positive” account balance. It also reflects the magnitude of that balance.
 # Country code is defined as the first two characters of c_phone.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q22
+stats-quality database=tpch stats-quality-prefix=q22
 SELECT
     cntrycode,
     count(*) AS numcust,
@@ -52,6 +52,7 @@ GROUP BY
     cntrycode
 ORDER BY
     cntrycode;
+----
 ----
 sort
  ├── save-table-name: q22_sort_1
@@ -133,8 +134,7 @@ sort
            └── sum [as=sum:32, type=float, outer=(6)]
                 └── c_acctbal:6 [type=float]
 
-stats table=q22_sort_1
-----
+----Stats for q22_sort_1----
 column_names  row_count  distinct_count  null_count
 {cntrycode}   7          7               0
 {numcust}     7          7               0
@@ -145,8 +145,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {numcust}     0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 {totacctbal}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
-stats table=q22_group_by_2
-----
+----Stats for q22_group_by_2----
 column_names  row_count  distinct_count  null_count
 {cntrycode}   7          7               0
 {count_rows}  7          7               0
@@ -157,8 +156,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {count_rows}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 {sum}         0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
-stats table=q22_project_3
-----
+----Stats for q22_project_3----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   6384       6304            0
 {cntrycode}   6384       7               0
@@ -167,8 +165,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_acctbal}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 {cntrycode}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
-stats table=q22_lookup_join_4
-----
+----Stats for q22_lookup_join_4----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   6384       6304            0
 {c_custkey}   6384       6359            0
@@ -179,8 +176,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_custkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 {c_phone}     0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
 
-stats table=q22_select_5
-----
+----Stats for q22_select_5----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   19000      18527           0
 {c_custkey}   19000      19097           0
@@ -191,8 +187,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_custkey}   16667.00       1.14           16659.00            1.15                0.00            1.00
 {c_phone}     16667.00       1.14           16667.00            1.15                0.00            1.00
 
-stats table=q22_scan_6
-----
+----Stats for q22_scan_6----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   150000     140628          0
 {c_custkey}   150000     148813          0
@@ -203,16 +198,14 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_custkey}   150000.00      1.00           148813.00           1.00                0.00            1.00
 {c_phone}     150000.00      1.00           150000.00           1.01                0.00            1.00
 
-stats table=q22_scalar_group_by_7
-----
+----Stats for q22_scalar_group_by_7----
 column_names  row_count  distinct_count  null_count
 {avg}         1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {avg}         1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q22_select_8
-----
+----Stats for q22_select_8----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   38120      37172           0
 {c_phone}     38120      38046           0
@@ -221,8 +214,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {c_acctbal}   16667.00       2.29 <==       16667.00            2.23 <==            0.00            1.00
 {c_phone}     16667.00       2.29 <==       16667.00            2.28 <==            0.00            1.00
 
-stats table=q22_scan_9
-----
+----Stats for q22_scan_9----
 column_names  row_count  distinct_count  null_count
 {c_acctbal}   150000     140628          0
 {c_phone}     150000     150872          0
@@ -230,3 +222,5 @@ column_names  row_count  distinct_count  null_count
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {c_acctbal}   150000.00      1.00           140628.00           1.00                0.00            1.00
 {c_phone}     150000.00      1.00           150000.00           1.01                0.00            1.00
+----
+----

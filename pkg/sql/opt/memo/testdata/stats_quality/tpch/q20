@@ -18,7 +18,7 @@ import file=tpch_stats
 # TODO:
 #   1. Push 'forest%' prefix filter down into Scan
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q20
+stats-quality database=tpch stats-quality-prefix=q20
 SELECT
     s_name,
     s_address
@@ -56,6 +56,7 @@ WHERE
     AND n_name = 'CANADA'
 ORDER BY
     s_name;
+----
 ----
 sort
  ├── save-table-name: q20_sort_1
@@ -192,8 +193,7 @@ sort
                 └── filters
                      └── s_nationkey:4 = n_nationkey:9 [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
 
-stats table=q20_sort_1
-----
+----Stats for q20_sort_1----
 column_names  row_count  distinct_count  null_count
 {s_address}   186        186             0
 {s_name}      186        186             0
@@ -202,8 +202,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_address}   5.00           37.20 <==      5.00                37.20 <==           0.00            1.00
 {s_name}      5.00           37.20 <==      5.00                37.20 <==           0.00            1.00
 
-stats table=q20_project_2
-----
+----Stats for q20_project_2----
 column_names  row_count  distinct_count  null_count
 {s_address}   186        186             0
 {s_name}      186        186             0
@@ -212,8 +211,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_address}   5.00           37.20 <==      5.00                37.20 <==           0.00            1.00
 {s_name}      5.00           37.20 <==      5.00                37.20 <==           0.00            1.00
 
-stats table=q20_project_3
-----
+----Stats for q20_project_3----
 column_names   row_count  distinct_count  null_count
 {n_name}       186        1               0
 {n_nationkey}  186        1               0
@@ -230,8 +228,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  5.00           37.20 <==      1.00                1.00                0.00            1.00
 {s_suppkey}    5.00           37.20 <==      5.00                37.20 <==           0.00            1.00
 
-stats table=q20_inner_join_4
-----
+----Stats for q20_inner_join_4----
 column_names   row_count  distinct_count  null_count
 {n_name}       186        1               0
 {n_nationkey}  186        1               0
@@ -250,8 +247,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  127.00         1.46           1.00                1.00                0.00            1.00
 {s_suppkey}    127.00         1.46           127.00              1.46                0.00            1.00
 
-stats table=q20_lookup_join_5
-----
+----Stats for q20_lookup_join_5----
 column_names   row_count  distinct_count  null_count
 {ps_suppkey}   4397       4434            0
 {s_address}    4397       4369            0
@@ -266,16 +262,14 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  128.00         34.35 <==      25.00               1.00                0.00            1.00
 {s_suppkey}    128.00         34.35 <==      127.00              34.91 <==           0.00            1.00
 
-stats table=q20_distinct_on_6
-----
+----Stats for q20_distinct_on_6----
 column_names  row_count  distinct_count  null_count
 {ps_suppkey}  4397       4434            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {ps_suppkey}  127.00         34.62 <==      127.00              34.91 <==           0.00            1.00
 
-stats table=q20_lookup_join_7
-----
+----Stats for q20_lookup_join_7----
 column_names  row_count  distinct_count  null_count
 {ps_partkey}  5833       2106            0
 {ps_suppkey}  5833       4434            0
@@ -284,8 +278,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  127.00         45.93 <==      127.00              16.58 <==           0.00            1.00
 {ps_suppkey}  127.00         45.93 <==      127.00              34.91 <==           0.00            1.00
 
-stats table=q20_project_8
-----
+----Stats for q20_project_8----
 column_names  row_count  distinct_count  null_count
 {ps_partkey}  542095     197197          0
 {ps_suppkey}  542095     9920            0
@@ -294,8 +287,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  127.00         4268.46 <==    127.00              1552.73 <==         0.00            1.00
 {ps_suppkey}  127.00         4268.46 <==    127.00              78.11 <==           0.00            1.00
 
-stats table=q20_select_9
-----
+----Stats for q20_select_9----
 column_names   row_count  distinct_count  null_count
 {ps_availqty}  542095     9920            0
 {ps_partkey}   542095     197197          0
@@ -308,8 +300,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {ps_suppkey}   127.00         4268.46 <==    127.00              78.11 <==           0.00            1.00
 {sum}          127.00         4268.46 <==    127.00              1.94 <==            0.00            1.00
 
-stats table=q20_group_by_10
-----
+----Stats for q20_group_by_10----
 column_names   row_count  distinct_count  null_count
 {ps_availqty}  543210     9920            0
 {ps_partkey}   543210     197252          0
@@ -322,8 +313,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {ps_suppkey}   380.00         1429.50 <==    380.00              26.11 <==           0.00            1.00
 {sum}          380.00         1429.50 <==    380.00              1.54                0.00            1.00
 
-stats table=q20_inner_join_11
-----
+----Stats for q20_inner_join_11----
 column_names   row_count  distinct_count  null_count
 {l_partkey}    909455     197252          0
 {l_quantity}   909455     50              0
@@ -342,8 +332,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {ps_partkey}   380.00         2393.30 <==    380.00              519.08 <==          0.00            1.00
 {ps_suppkey}   380.00         2393.30 <==    380.00              26.11 <==           0.00            1.00
 
-stats table=q20_index_join_12
-----
+----Stats for q20_index_join_12----
 column_names  row_count  distinct_count  null_count
 {l_partkey}   909455     197252          0
 {l_quantity}  909455     50              0
@@ -356,8 +345,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {l_shipdate}  938138.00      1.03           365.00              1.00                0.00            1.00
 {l_suppkey}   938138.00      1.03           9920.00             1.00                0.00            1.00
 
-stats table=q20_scan_13
-----
+----Stats for q20_scan_13----
 column_names    row_count  distinct_count  null_count
 {l_linenumber}  909455     7               0
 {l_orderkey}    909455     266035          0
@@ -368,8 +356,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {l_orderkey}    938138.00      1.03           744145.00           2.80 <==            0.00            1.00
 {l_shipdate}    938138.00      1.03           365.00              1.00                0.00            1.00
 
-stats table=q20_scan_14
-----
+----Stats for q20_scan_14----
 column_names   row_count  distinct_count  null_count
 {ps_availqty}  800000     9920            0
 {ps_partkey}   800000     199241          0
@@ -380,8 +367,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {ps_partkey}   800000.00      1.00           199241.00           1.00                0.00            1.00
 {ps_suppkey}   800000.00      1.00           9920.00             1.00                0.00            1.00
 
-stats table=q20_select_15
-----
+----Stats for q20_select_15----
 column_names   row_count  distinct_count  null_count
 {n_name}       1          1               0
 {n_nationkey}  1          1               0
@@ -390,8 +376,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {n_nationkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q20_scan_16
-----
+----Stats for q20_scan_16----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -399,3 +384,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----

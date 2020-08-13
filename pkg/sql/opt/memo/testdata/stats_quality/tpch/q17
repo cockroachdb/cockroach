@@ -20,7 +20,7 @@ import file=tpch_stats
 # TODO:
 #   1. Allow Select to be pushed below Ordinality used to add key column
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q17
+stats-quality database=tpch stats-quality-prefix=q17
 SELECT
     sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM
@@ -38,6 +38,7 @@ WHERE
         WHERE
             l_partkey = p_partkey
     );
+----
 ----
 project
  ├── save-table-name: q17_project_1
@@ -137,24 +138,21 @@ project
  └── projections
       └── sum:47 / 7.0 [as=avg_yearly:48, type=float, outer=(47)]
 
-stats table=q17_project_1
-----
+----Stats for q17_project_1----
 column_names  row_count  distinct_count  null_count
 {avg_yearly}  1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {avg_yearly}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q17_scalar_group_by_2
-----
+----Stats for q17_scalar_group_by_2----
 column_names  row_count  distinct_count  null_count
 {sum}         1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {sum}         1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q17_lookup_join_3
-----
+----Stats for q17_lookup_join_3----
 column_names       row_count  distinct_count  null_count
 {?column?}         587        185             0
 {l_extendedprice}  587        430             0
@@ -169,8 +167,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_quantity}       2008.00        3.42 <==       50.00               8.33 <==            0.00            1.00
 {p_partkey}        2008.00        3.42 <==       200.00              1.03                0.00            1.00
 
-stats table=q17_lookup_join_4
-----
+----Stats for q17_lookup_join_4----
 column_names    row_count  distinct_count  null_count
 {?column?}      6088       194             0
 {l_linenumber}  6088       7               0
@@ -185,8 +182,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {l_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
 {p_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
 
-stats table=q17_project_5
-----
+----Stats for q17_project_5----
 column_names  row_count  distinct_count  null_count
 {?column?}    204        194             0
 {p_partkey}   204        204             0
@@ -195,8 +191,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {?column?}    200.00         1.02           200.00              1.03                0.00            1.00
 {p_partkey}   200.00         1.02           200.00              1.02                0.00            1.00
 
-stats table=q17_group_by_6
-----
+----Stats for q17_group_by_6----
 column_names  row_count  distinct_count  null_count
 {avg}         204        194             0
 {p_partkey}   204        204             0
@@ -205,8 +200,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {avg}         200.00         1.02           200.00              1.03                0.00            1.00
 {p_partkey}   200.00         1.02           200.00              1.02                0.00            1.00
 
-stats table=q17_lookup_join_7
-----
+----Stats for q17_lookup_join_7----
 column_names   row_count  distinct_count  null_count
 {l_partkey}    6088       204             0
 {l_quantity}   6088       50              0
@@ -221,8 +215,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {p_container}  6024.00        1.01           1.00                1.00                0.00            1.00
 {p_partkey}    6024.00        1.01           200.00              1.02                0.00            1.00
 
-stats table=q17_lookup_join_8
-----
+----Stats for q17_lookup_join_8----
 column_names    row_count  distinct_count  null_count
 {l_linenumber}  6088       7               0
 {l_orderkey}    6088       6116            0
@@ -239,8 +232,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {p_container}   6024.00        1.01           1.00                1.00                0.00            1.00
 {p_partkey}     6024.00        1.01           200.00              1.02                0.00            1.00
 
-stats table=q17_select_9
-----
+----Stats for q17_select_9----
 column_names   row_count  distinct_count  null_count
 {p_brand}      204        1               0
 {p_container}  204        1               0
@@ -251,8 +243,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {p_container}  200.00         1.02           1.00                1.00                0.00            1.00
 {p_partkey}    200.00         1.02           200.00              1.02                0.00            1.00
 
-stats table=q17_scan_10
-----
+----Stats for q17_scan_10----
 column_names   row_count  distinct_count  null_count
 {p_brand}      200000     25              0
 {p_container}  200000     40              0
@@ -262,3 +253,5 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {p_brand}      200000.00      1.00           25.00               1.00                0.00            1.00
 {p_container}  200000.00      1.00           40.00               1.00                0.00            1.00
 {p_partkey}    200000.00      1.00           199241.00           1.00                0.00            1.00
+----
+----

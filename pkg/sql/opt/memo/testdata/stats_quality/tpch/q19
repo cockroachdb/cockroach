@@ -16,7 +16,7 @@ import file=tpch_stats
 # person. Parts are selected based on the combination of specific brands, a list
 # of containers, and a range of sizes.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q19
+stats-quality database=tpch stats-quality-prefix=q19
 SELECT
     sum(l_extendedprice* (1 - l_discount)) AS revenue
 FROM
@@ -52,6 +52,7 @@ WHERE
         AND l_shipmode IN ('AIR', 'AIR REG')
         AND l_shipinstruct = 'DELIVER IN PERSON'
     );
+----
 ----
 scalar-group-by
  ├── save-table-name: q19_scalar_group_by_1
@@ -111,24 +112,21 @@ scalar-group-by
       └── sum [as=sum:29, type=float, outer=(28)]
            └── column28:28 [type=float]
 
-stats table=q19_scalar_group_by_1
-----
+----Stats for q19_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
 {revenue}     1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {revenue}     1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q19_project_2
-----
+----Stats for q19_project_2----
 column_names  row_count  distinct_count  null_count
 {column28}    121        121             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {column28}    71.00          1.70           71.00               1.70                0.00            1.00
 
-stats table=q19_inner_join_3
-----
+----Stats for q19_inner_join_3----
 column_names       row_count  distinct_count  null_count
 {l_discount}       121        11              0
 {l_extendedprice}  121        118             0
@@ -153,8 +151,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {p_partkey}        71.00          1.70           71.00               1.45                0.00            1.00
 {p_size}           71.00          1.70           6.00                2.33 <==            0.00            1.00
 
-stats table=q19_select_4
-----
+----Stats for q19_select_4----
 column_names       row_count  distinct_count  null_count
 {l_discount}       214377     11              0
 {l_extendedprice}  214377     188952          0
@@ -171,8 +168,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_shipinstruct}   428658.00      2.00 <==       1.00                1.00                0.00            1.00
 {l_shipmode}       428658.00      2.00 <==       2.00                2.00 <==            0.00            1.00
 
-stats table=q19_scan_5
-----
+----Stats for q19_scan_5----
 column_names       row_count  distinct_count  null_count
 {l_discount}       6001215    11              0
 {l_extendedprice}  6001215    925955          0
@@ -189,8 +185,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_shipinstruct}   6001215.00     1.00           4.00                1.00                0.00            1.00
 {l_shipmode}       6001215.00     1.00           7.00                1.00                0.00            1.00
 
-stats table=q19_select_6
-----
+----Stats for q19_select_6----
 column_names   row_count  distinct_count  null_count
 {p_brand}      200000     25              0
 {p_container}  200000     40              0
@@ -203,8 +198,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {p_partkey}    66667.00       3.00 <==       66619.00            2.99 <==            0.00            1.00
 {p_size}       66667.00       3.00 <==       17.00               2.94 <==            0.00            1.00
 
-stats table=q19_scan_7
-----
+----Stats for q19_scan_7----
 column_names   row_count  distinct_count  null_count
 {p_brand}      200000     25              0
 {p_container}  200000     40              0
@@ -216,3 +210,5 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {p_container}  200000.00      1.00           40.00               1.00                0.00            1.00
 {p_partkey}    200000.00      1.00           199241.00           1.00                0.00            1.00
 {p_size}       200000.00      1.00           50.00               1.00                0.00            1.00
+----
+----
