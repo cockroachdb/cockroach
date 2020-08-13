@@ -38,6 +38,17 @@ type Processor interface {
 	Run(context.Context)
 }
 
+// DoesNotUseTxn is an interface implemented by some processors to mark that
+// they do not use a txn. The DistSQLPlanner forbids multiple processors in a
+// local flow from running in parallel if this is unknown since concurrent use
+// of the RootTxn is forbidden (in a distributed flow these are leaf txns, so
+// it doesn't matter).
+// Implementing this interface lets the DistSQLPlanner know that it is ok to
+// run this processor in an additional goroutine.
+type DoesNotUseTxn interface {
+	DoesNotUseTxn() bool
+}
+
 // ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
 type ProcOutputHelper struct {

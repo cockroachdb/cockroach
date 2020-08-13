@@ -382,7 +382,7 @@ func (ds *ServerImpl) setupFlow(
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
 	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentExecution() {
+	if localState.IsLocal && !f.ConcurrentTxnUse() {
 		txn = localState.Txn
 	} else {
 		// If I haven't created the leaf already, do it now.
