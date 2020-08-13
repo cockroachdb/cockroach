@@ -84,6 +84,7 @@ const (
 // ShowBackup represents a SHOW BACKUP statement.
 type ShowBackup struct {
 	Path                 Expr
+	InCollection         Expr
 	Details              BackupDetails
 	ShouldIncludeSchemas bool
 	Options              KVOptions
@@ -91,6 +92,11 @@ type ShowBackup struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowBackup) Format(ctx *FmtCtx) {
+	if node.InCollection != nil && node.Path == nil {
+		ctx.WriteString("SHOW BACKUPS IN ")
+		ctx.FormatNode(node.InCollection)
+		return
+	}
 	ctx.WriteString("SHOW BACKUP ")
 	if node.Details == BackupRangeDetails {
 		ctx.WriteString("RANGES ")
@@ -101,6 +107,10 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.WriteString("SCHEMAS ")
 	}
 	ctx.FormatNode(node.Path)
+	if node.InCollection != nil {
+		ctx.WriteString(" IN ")
+		ctx.FormatNode(node.InCollection)
+	}
 	if len(node.Options) > 0 {
 		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
