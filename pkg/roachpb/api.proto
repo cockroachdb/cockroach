@@ -320,11 +320,20 @@ message DeleteRangeResponse {
 //
 // NOTE: it is important that this method only be invoked on a key
 // range which is guaranteed to be both inactive and not see future
-// writes. Ignoring this warning may result in data loss.
+// writes (until Deadline, if set, below).
+// Ignoring this warning may result in data loss.
 message ClearRangeRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Deadline can be set to a time at or after which the server will refuse to
+  // execute this ClearRange request, providing a form of replay protection:
+  // if a caller sets this to a time in the near future, they can then wait for
+  // that time (plus max offset) to have passed at which point they can reuse
+  // the span they cleared without fear of this request being replayed later and
+  // clearing subsequent writes.
+  util.hlc.Timestamp deadline = 2 [(gogoproto.nullable) = false];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.

@@ -2722,11 +2722,23 @@ class ClearRangeRequest : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
 
+  bool has_deadline() const;
+  void clear_deadline();
+  static const int kDeadlineFieldNumber = 2;
+  private:
+  const ::cockroach::util::hlc::Timestamp& _internal_deadline() const;
+  public:
+  const ::cockroach::util::hlc::Timestamp& deadline() const;
+  ::cockroach::util::hlc::Timestamp* release_deadline();
+  ::cockroach::util::hlc::Timestamp* mutable_deadline();
+  void set_allocated_deadline(::cockroach::util::hlc::Timestamp* deadline);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ClearRangeRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::cockroach::util::hlc::Timestamp* deadline_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -19260,6 +19272,53 @@ inline void ClearRangeRequest::set_allocated_header(::cockroach::roachpb::Reques
   }
   header_ = header;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ClearRangeRequest.header)
+}
+
+inline bool ClearRangeRequest::has_deadline() const {
+  return this != internal_default_instance() && deadline_ != NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& ClearRangeRequest::_internal_deadline() const {
+  return *deadline_;
+}
+inline const ::cockroach::util::hlc::Timestamp& ClearRangeRequest::deadline() const {
+  const ::cockroach::util::hlc::Timestamp* p = deadline_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ClearRangeRequest.deadline)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* ClearRangeRequest::release_deadline() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ClearRangeRequest.deadline)
+  
+  ::cockroach::util::hlc::Timestamp* temp = deadline_;
+  deadline_ = NULL;
+  return temp;
+}
+inline ::cockroach::util::hlc::Timestamp* ClearRangeRequest::mutable_deadline() {
+  
+  if (deadline_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::util::hlc::Timestamp>(GetArenaNoVirtual());
+    deadline_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ClearRangeRequest.deadline)
+  return deadline_;
+}
+inline void ClearRangeRequest::set_allocated_deadline(::cockroach::util::hlc::Timestamp* deadline) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(deadline_);
+  }
+  if (deadline) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      deadline = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, deadline, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  deadline_ = deadline;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ClearRangeRequest.deadline)
 }
 
 // -------------------------------------------------------------------

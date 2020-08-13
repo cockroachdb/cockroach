@@ -69,6 +69,12 @@ func ClearRange(
 	to := args.EndKey
 	var pd result.Result
 
+	if !args.Deadline.IsEmpty() {
+		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(now) {
+			return result.Result{}, errors.Errorf("ClearRange has deadline %s <= %s", args.Deadline, now)
+		}
+	}
+
 	// Before clearing, compute the delta in MVCCStats.
 	statsDelta, err := computeStatsDelta(ctx, readWriter, cArgs, from, to)
 	if err != nil {
