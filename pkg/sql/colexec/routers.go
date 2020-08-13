@@ -505,8 +505,6 @@ const (
 // returned by the constructor.
 type HashRouter struct {
 	OneInputNode
-	// types are the input types.
-	types []*types.T
 	// hashCols is a slice of indices of the columns used for hashing.
 	hashCols []uint32
 
@@ -596,12 +594,11 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, types, hashCols, unblockEventsChan, outputs, toDrain, toClose), outputsAsOps
+	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, toDrain, toClose), outputsAsOps
 }
 
 func newHashRouterWithOutputs(
 	input colexecbase.Operator,
-	types []*types.T,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
@@ -610,7 +607,6 @@ func newHashRouterWithOutputs(
 ) *HashRouter {
 	r := &HashRouter{
 		OneInputNode:        NewOneInputNode(input),
-		types:               types,
 		hashCols:            hashCols,
 		outputs:             outputs,
 		closers:             toClose,
@@ -739,7 +735,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		return true
 	}
 
-	selections := r.tupleDistributor.distribute(ctx, b, r.types, r.hashCols)
+	selections := r.tupleDistributor.distribute(ctx, b, r.hashCols)
 	for i, o := range r.outputs {
 		if o.addBatch(ctx, b, selections[i]) {
 			// This batch blocked the output.
