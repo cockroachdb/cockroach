@@ -72,19 +72,18 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
-	const expSafeRedactedMessage = `...conn_executor_test.go:NN: <*errors.errorString>
-wrapper: <*withstack.withStack>
-(more details:)
-github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
-	...conn_executor_test.go:NN
-testing.tRunner
-	...testing.go:NN
-runtime.goexit
-	...asm_amd64.s:NN
-wrapper: <*safedetails.withSafeDetails>
-(more details:)
-while executing: %s
--- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
+	const expSafeRedactedMessage = `...conn_executor_test.go:NN: *errors.errorString: <redacted>
+*withstack.withStack
+  (more details:)
+  github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
+  	...conn_executor_test.go:NN
+  testing.tRunner
+  	...testing.go:NN
+  runtime.goexit
+  	...asm_amd64.s:NN
+*safedetails.withSafeDetails: format: "while executing: %s"
+  (more details:)
+  -- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
 
 	// Edit non-determinstic stack trace filenames from the message.
 	actSafeRedactedMessage := fileref.ReplaceAllString(
