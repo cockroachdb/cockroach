@@ -88,7 +88,7 @@ func (rk RKey) AsRawKey() Key {
 
 // Less returns true if receiver < otherRK.
 func (rk RKey) Less(otherRK RKey) bool {
-	return bytes.Compare(rk, otherRK) < 0
+	return rk.Compare(otherRK) < 0
 }
 
 // Compare compares the two RKeys.
