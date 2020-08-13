@@ -45,28 +45,24 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (INSERT INTO x VALUES (1) RETURNING a) SELECT * FROM t
 ----
-·                                          distribution   local                                 ·                   ·
-·                                          vectorized     false                                 ·                   ·
-root                                       ·              ·                                     (a)                 ·
- ├── scan buffer                           ·              ·                                     (a)                 ·
- │                                         label          buffer 1 (t)                          ·                   ·
- └── subquery                              ·              ·                                     ·                   ·
-      │                                    id             @S1                                   ·                   ·
-      │                                    original sql   INSERT INTO x VALUES (1) RETURNING a  ·                   ·
-      │                                    exec mode      all rows                              ·                   ·
-      └── buffer                           ·              ·                                     (a)                 ·
-           │                               label          buffer 1 (t)                          ·                   ·
-           └── spool                       ·              ·                                     (a)                 ·
-                └── render                 ·              ·                                     (a)                 ·
-                     │                     render 0       a                                     ·                   ·
-                     └── run               ·              ·                                     (a, rowid)          ·
-                          └── insert       ·              ·                                     (a, rowid)          ·
-                               │           into           x(a, rowid)                           ·                   ·
-                               │           strategy       inserter                              ·                   ·
-                               └── values  ·              ·                                     (column1, column5)  ·
-·                                          size           2 columns, 1 row                      ·                   ·
-·                                          row 0, expr 0  1                                     ·                   ·
-·                                          row 0, expr 1  unique_rowid()                        ·                   ·
+·                                distribution   local                                 ·                   ·
+·                                vectorized     false                                 ·                   ·
+root                             ·              ·                                     (a)                 ·
+ ├── scan buffer                 ·              ·                                     (a)                 ·
+ │                               label          buffer 1 (t)                          ·                   ·
+ └── subquery                    ·              ·                                     ·                   ·
+      │                          id             @S1                                   ·                   ·
+      │                          original sql   INSERT INTO x VALUES (1) RETURNING a  ·                   ·
+      │                          exec mode      all rows                              ·                   ·
+      └── buffer                 ·              ·                                     (a)                 ·
+           │                     label          buffer 1 (t)                          ·                   ·
+           └── project           ·              ·                                     (a)                 ·
+                └── insert       ·              ·                                     (a, rowid)          ·
+                     │           into           x(a, rowid)                           ·                   ·
+                     └── values  ·              ·                                     (column1, column5)  ·
+·                                size           2 columns, 1 row                      ·                   ·
+·                                row 0, expr 0  1                                     ·                   ·
+·                                row 0, expr 1  unique_rowid()                        ·                   ·
 
 # Regression test for #39010.
 
@@ -102,15 +98,14 @@ EXPLAIN (VERBOSE)
   )
   SELECT sum(n) FROM t
 ----
-·                        distribution   local               ·          ·
-·                        vectorized     false               ·          ·
-group                    ·              ·                   (sum)      ·
- │                       aggregate 0    sum(n)              ·          ·
- │                       scalar         ·                   ·          ·
- └── render              ·              ·                   (n)        ·
-      │                  render 0       column1             ·          ·
-      └── recursive cte  ·              ·                   (column1)  ·
-           │             label          working buffer (t)  ·          ·
-           └── values    ·              ·                   (column1)  ·
-·                        size           1 column, 1 row     ·          ·
-·                        row 0, expr 0  1                   ·          ·
+·                        distribution   local            ·          ·
+·                        vectorized     false            ·          ·
+group                    ·              ·                (sum)      ·
+ │                       aggregate 0    sum(n)           ·          ·
+ │                       scalar         ·                ·          ·
+ └── render              ·              ·                (n)        ·
+      │                  render 0       column1          ·          ·
+      └── recursive cte  ·              ·                (column1)  ·
+           └── values    ·              ·                (column1)  ·
+·                        size           1 column, 1 row  ·          ·
+·                        row 0, expr 0  1                ·          ·
