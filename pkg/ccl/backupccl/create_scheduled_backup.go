@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -93,35 +94,35 @@ func parseWaitBehavior(wait string, details *jobspb.ScheduleDetails) error {
 	return nil
 }
 
-func setScheduleOptions(
-	evalCtx *tree.EvalContext, opts map[string]string, sj *jobs.ScheduledJob,
-) error {
-	if v, ok := opts[optFirstRun]; ok {
-		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
-		if err != nil {
-			return err
-		}
-		sj.SetNextRun(firstRun.Time)
-	}
-
+func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
 		if err := parseOnError(v, &details); err != nil {
-			return err
+			return details, err
 		}
 	}
+
 	if v, ok := opts[optOnPreviousRunning]; ok {
 		if err := parseWaitBehavior(v, &details); err != nil {
-			return err
+			return details, err
 		}
 	}
+	return details, nil
+}
 
-	var defaultDetails jobspb.ScheduleDetails
-	if details != defaultDetails {
-		sj.SetScheduleDetails(details)
+// A sentinel value indicating the schedule should execute based on its
+// schedule default.
+var defaultFirstRun *time.Time
+
+func scheduleFirstRun(evalCtx *tree.EvalContext, opts map[string]string) (*time.Time, error) {
+	if v, ok := opts[optFirstRun]; ok {
+		firstRun, _, err := tree.ParseDTimestampTZ(evalCtx, v, time.Microsecond)
+		if err != nil {
+			return nil, err
+		}
+		return &firstRun.Time, nil
 	}
-
-	return nil
+	return defaultFirstRun, nil
 }
 
 type scheduleRecurrence struct {
@@ -129,6 +130,7 @@ type scheduleRecurrence struct {
 	frequency time.Duration
 }
 
+// A sentinel value indicating the schedule never recurs.
 var neverRecurs *scheduleRecurrence
 
 func computeScheduleRecurrence(
@@ -215,10 +217,12 @@ func doCreateBackupSchedules(
 		return err
 	}
 
+	fullRecurrencePicked := false
 	if incRecurrence != nil && fullRecurrence == nil {
 		// It's an enterprise user; let's see if we can pick a reasonable
 		// full  backup recurrence based on requested incremental recurrence.
 		fullRecurrence = pickFullRecurrenceFromIncremental(incRecurrence)
+		fullRecurrencePicked = true
 
 		if fullRecurrence == forceFullBackup {
 			fullRecurrence = incRecurrence
@@ -302,11 +306,34 @@ func doCreateBackupSchedules(
 		return err
 	}
 
+	evalCtx := &p.ExtendedEvalContext().EvalContext
+	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
+	if err != nil {
+		return err
+	}
+
+	details, err := makeScheduleDetails(scheduleOptions)
+	if err != nil {
+		return err
+	}
+
+	ex := p.ExecCfg().InternalExecutor
 	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Create FULL backup schedule.
+		fullFirstRun := firstRun
+		if eval.isEnterpriseUser && fullFirstRun == defaultFirstRun && fullRecurrencePicked {
+			// The enterprise user did not indicate preference when to run full backups,
+			// and we picked the schedule ourselves.
+			// Run full backup immediately so that we do not wind up waiting for a long
+			// time before the first full backup runs.  Without full backup, we can't
+			// execute incrementals.
+			now := env.Now()
+			fullFirstRun = &now
+		}
+
 		if err := createBackupSchedule(
-			ctx, p, env, fullScheduleName, fullRecurrence,
-			scheduleOptions, backupNode, resultsCh, txn,
+			ctx, env, fullScheduleName, fullRecurrence,
+			fullFirstRun, details, backupNode, resultsCh, ex, txn,
 		); err != nil {
 			return err
 		}
@@ -316,8 +343,8 @@ func doCreateBackupSchedules(
 			backupNode.AppendToLatest = true
 
 			if err := createBackupSchedule(
-				ctx, p, env, fullScheduleName+": CHANGES", incRecurrence,
-				scheduleOptions, backupNode, resultsCh, txn,
+				ctx, env, fullScheduleName+": INCREMENTAL", incRecurrence,
+				firstRun, details, backupNode, resultsCh, ex, txn,
 			); err != nil {
 				return err
 			}
@@ -330,13 +357,14 @@ func doCreateBackupSchedules(
 
 func createBackupSchedule(
 	ctx context.Context,
-	p sql.PlanHookState,
 	env scheduledjobs.JobSchedulerEnv,
 	name string,
 	recurrence *scheduleRecurrence,
-	scheduleOpts map[string]string,
+	firstRun *time.Time,
+	details jobspb.ScheduleDetails,
 	backupNode *tree.Backup,
 	resultsCh chan<- tree.Datums,
+	ex sqlutil.InternalExecutor,
 	txn *kv.Txn,
 ) error {
 	sj := jobs.NewScheduledJob(env)
@@ -354,8 +382,9 @@ func createBackupSchedule(
 		return err
 	}
 
-	if err := setScheduleOptions(&p.ExtendedEvalContext().EvalContext, scheduleOpts, sj); err != nil {
-		return err
+	sj.SetScheduleDetails(details)
+	if firstRun != defaultFirstRun {
+		sj.SetNextRun(*firstRun)
 	}
 
 	// TODO(yevgeniy): Validate backup schedule:
@@ -375,7 +404,7 @@ func createBackupSchedule(
 	)
 
 	// Create the schedule.
-	if err := sj.Create(ctx, p.ExecCfg().InternalExecutor, txn); err != nil {
+	if err := sj.Create(ctx, ex, txn); err != nil {
 		return err
 	}
 
