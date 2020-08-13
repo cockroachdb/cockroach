@@ -166,18 +166,22 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						for j := range aggFnInputTypes {
 							aggFnInputTypes[j] = sqlbase.RandType(rng)
 						}
-						// There is a special case for string_agg when at least
-						// one of the arguments is an empty tuple. Such case
-						// passes GetAggregateInfo check below, but it is
-						// actually invalid, and during normal execution it is
-						// caught during type-checking. However, we don't want
-						// to do fully-fledged type checking, so we hard-code
-						// an exception here.
+						// There is a special case for concat_agg, string_agg,
+						// and st_makeline when at least one argument is a
+						// tuple. Such cases pass GetAggregateInfo check below,
+						// but they are actually invalid, and during normal
+						// execution it is caught during type-checking.
+						// However, we don't want to do fully-fledged type
+						// checking, so we hard-code an exception here.
 						invalid := false
-						if aggFn == execinfrapb.AggregatorSpec_STRING_AGG {
+						switch aggFn {
+						case execinfrapb.AggregatorSpec_CONCAT_AGG,
+							execinfrapb.AggregatorSpec_STRING_AGG,
+							execinfrapb.AggregatorSpec_ST_MAKELINE:
 							for _, typ := range aggFnInputTypes {
-								if typ.Family() == types.TupleFamily && len(typ.TupleContents()) == 0 {
+								if typ.Family() == types.TupleFamily {
 									invalid = true
+									break
 								}
 							}
 						}
