@@ -98,7 +98,7 @@ func (g *optgen) run(args ...string) bool {
 	case "ops":
 	case "rulenames":
 
-	case "execfactory":
+	case "execfactory", "execexplain":
 		runValidate = false
 
 	default:
@@ -184,6 +184,10 @@ func (g *optgen) run(args ...string) bool {
 
 	case "execfactory":
 		var gen execFactoryGen
+		err = g.generate(compiled, gen.generate)
+
+	case "execexplain":
+		var gen execExplainGen
 		err = g.generate(compiled, gen.generate)
 	}
 

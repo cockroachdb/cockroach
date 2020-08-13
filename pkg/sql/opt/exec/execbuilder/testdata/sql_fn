@@ -171,11 +171,12 @@ FROM other_table
 ·                           distribution  local                                                               ·                                          ·
 ·                           vectorized    true                                                                ·                                          ·
 root                        ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
- ├── render                 ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
- │    │                     render 0      k                                                                   ·                                          ·
- │    │                     render 1      addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)    ·                                          ·
- │    │                     render 2      addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)    ·                                          ·
- │    └── scan              ·             ·                                                                   (k)                                        ·
+ ├── project                ·             ·                                                                   (k, addgeometrycolumn, addgeometrycolumn)  ·
+ │    └── render            ·             ·                                                                   (addgeometrycolumn, addgeometrycolumn, k)  ·
+ │         │                render 0      addgeometrycolumn('my_spatial_table', 'geom7', 4326, 'POINT', 2)    ·                                          ·
+ │         │                render 1      addgeometrycolumn('my_spatial_table', 'geom8', 4326, 'POINT', 2)    ·                                          ·
+ │         │                render 2      k                                                                   ·                                          ·
+ │         └── scan         ·             ·                                                                   (k)                                        ·
  │                          table         other_table@primary                                                 ·                                          ·
  │                          spans         FULL SCAN                                                           ·                                          ·
  ├── subquery               ·             ·                                                                   ·                                          ·

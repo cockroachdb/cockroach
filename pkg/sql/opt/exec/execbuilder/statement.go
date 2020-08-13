@@ -25,25 +25,25 @@ import (
 )
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
-	var root exec.Node
-	if ct.Syntax.As() {
-		// Construct AS input to CREATE TABLE.
-		input, err := b.buildRelational(ct.Input)
-		if err != nil {
-			return execPlan{}, err
-		}
-		// Impose ordering and naming on input columns, so that they match the
-		// order and names of the table columns into which values will be
-		// inserted.
-		input, err = b.applyPresentation(input, ct.InputCols)
-		if err != nil {
-			return execPlan{}, err
-		}
-		root = input.root
+	schema := b.mem.Metadata().Schema(ct.Schema)
+	if !ct.Syntax.As() {
+		root, err := b.factory.ConstructCreateTable(schema, ct.Syntax)
+		return execPlan{root: root}, err
 	}
 
-	schema := b.mem.Metadata().Schema(ct.Schema)
-	root, err := b.factory.ConstructCreateTable(root, schema, ct.Syntax)
+	// Construct AS input to CREATE TABLE.
+	input, err := b.buildRelational(ct.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+	// Impose ordering and naming on input columns, so that they match the
+	// order and names of the table columns into which values will be
+	// inserted.
+	input, err = b.applyPresentation(input, ct.InputCols)
+	if err != nil {
+		return execPlan{}, err
+	}
+	root, err := b.factory.ConstructCreateTableAs(input.root, schema, ct.Syntax)
 	return execPlan{root: root}, err
 }
 
@@ -114,6 +114,22 @@ func (b *Builder) buildExplainOpt(explain *memo.ExplainExpr) (execPlan, error) {
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 	if explain.Options.Mode == tree.ExplainOpt {
 		return b.buildExplainOpt(explain)
+	}
+
+	if explain.Options.Mode == tree.ExplainPlan {
+		node, err := b.factory.ConstructExplainPlan(
+			&explain.Options,
+			func(ef exec.ExplainFactory) (exec.Plan, error) {
+				// Create a separate builder for the explain query.
+				explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
+				explainBld.disableTelemetry = true
+				return explainBld.Build()
+			},
+		)
+		if err != nil {
+			return execPlan{}, err
+		}
+		return planWithColumns(node, explain.ColList), nil
 	}
 
 	// Create a separate builder for the explain query.

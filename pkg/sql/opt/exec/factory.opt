@@ -148,13 +148,16 @@ define InterleavedJoin {
 
 # GroupBy runs an aggregation. A set of aggregations is performed for each group
 # of values on the groupCols.
-#
-# If the input is guaranteed to have an ordering on grouping columns, a
-# "streaming" aggregation is performed (i.e. aggregation happens separately
-# for each distinct set of values on the set of columns in the ordering).
+# A row is produced for each set of distinct values on the group columns. The
+# row contains the values of the grouping columns, followed by one value for
+# each aggregation.
 define GroupBy {
     Input exec.Node
     GroupCols []exec.NodeColumnOrdinal
+
+    # If set, the input is guaranteed to have this ordering and a "streaming"
+    # aggregation is performed (i.e. aggregation happens separately for each
+    # distinct set of values on the set of columns in the ordering).
     GroupColOrdering sqlbase.ColumnOrdering
     Aggregations []exec.AggInfo
     ReqOrdering exec.OutputOrdering
@@ -162,7 +165,8 @@ define GroupBy {
 
 # ScalarGroupBy runs a scalar aggregation, i.e.  one which performs a set of
 # aggregations on all the input rows (as a single group) and has exactly one
-# result row (even when there are no input rows).
+# result row (even when there are no input rows). The output row has one value
+# for each aggregation.
 define ScalarGroupBy {
     Input exec.Node
     Aggregations []exec.AggInfo
@@ -199,7 +203,7 @@ define SetOp {
 # ordering[:alreadyOrderedPrefix].
 define Sort {
     Input exec.Node
-    Ordering sqlbase.ColumnOrdering
+    Ordering exec.OutputOrdering
     AlreadyOrderedPrefix int
 }
 
@@ -346,6 +350,15 @@ define Explain {
     Options *tree.ExplainOptions
     StmtType tree.StatementType
     Plan exec.Plan
+}
+
+# ExplainPlan implements EXPLAIN (PLAN).
+#
+# When the operator is created, it creates an ExplainFactory and calls BuildFn
+# to construct the plan against that factory.
+define ExplainPlan {
+    Options *tree.ExplainOptions
+    BuildFn exec.BuildPlanForExplainFn
 }
 
 # ShowTrace implements a SHOW TRACE FOR SESSION statement.
@@ -528,6 +541,12 @@ define DeleteRange {
 
 # CreateTable implements a CREATE TABLE statement.
 define CreateTable {
+    Schema cat.Schema
+    Ct *tree.CreateTable
+}
+
+# CreateTableAs implements a CREATE TABLE AS statement.
+define CreateTableAs {
     Input exec.Node
     Schema cat.Schema
     Ct *tree.CreateTable

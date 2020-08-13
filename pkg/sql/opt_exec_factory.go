@@ -19,11 +19,13 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -80,8 +82,6 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	sb := span.MakeBuilder(ef.planner.ExecCfg().Codec, tabDesc, indexDesc)
-
 	// initTable checks that the current user has the correct privilege to access
 	// the table. However, the privilege has already been checked in optbuilder,
 	// and does not need to be rechecked. In fact, it's an error to check the
@@ -104,11 +104,7 @@ func (ef *execFactory) ConstructScan(
 	scan.reverse = params.Reverse
 	scan.parallelize = params.Parallelize
 	var err error
-	if params.InvertedConstraint != nil {
-		scan.spans, err = GenerateInvertedSpans(params.InvertedConstraint, sb)
-	} else {
-		scan.spans, err = sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
-	}
+	scan.spans, err = generateScanSpans(ef.planner, tabDesc, indexDesc, params)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +122,19 @@ func (ef *execFactory) ConstructScan(
 		scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	}
 	return scan, nil
+}
+
+func generateScanSpans(
+	planner *planner,
+	tabDesc *sqlbase.ImmutableTableDescriptor,
+	indexDesc *descpb.IndexDescriptor,
+	params exec.ScanParams,
+) (roachpb.Spans, error) {
+	sb := span.MakeBuilder(planner.ExecCfg().Codec, tabDesc, indexDesc)
+	if params.InvertedConstraint != nil {
+		return GenerateInvertedSpans(params.InvertedConstraint, sb)
+	}
+	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
 }
 
 func (ef *execFactory) constructVirtualScan(
@@ -540,11 +549,11 @@ func (ef *execFactory) ConstructSetOp(
 
 // ConstructSort is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSort(
-	input exec.Node, ordering sqlbase.ColumnOrdering, alreadyOrderedPrefix int,
+	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
 ) (exec.Node, error) {
 	return &sortNode{
 		plan:                 input.(planNode),
-		ordering:             ordering,
+		ordering:             sqlbase.ColumnOrdering(ordering),
 		alreadyOrderedPrefix: alreadyOrderedPrefix,
 	}, nil
 }
@@ -1651,13 +1660,23 @@ func (ef *execFactory) ConstructDeleteRange(
 
 // ConstructCreateTable is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateTable(
+	schema cat.Schema, ct *tree.CreateTable,
+) (exec.Node, error) {
+	return &createTableNode{
+		n:      ct,
+		dbDesc: schema.(*optSchema).database,
+	}, nil
+}
+
+// ConstructCreateTableAs is part of the exec.Factory interface.
+func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
-	nd := &createTableNode{n: ct, dbDesc: schema.(*optSchema).database}
-	if input != nil {
-		nd.sourcePlan = input.(planNode)
-	}
-	return nd, nil
+	return &createTableNode{
+		n:          ct,
+		dbDesc:     schema.(*optSchema).database,
+		sourcePlan: input.(planNode),
+	}, nil
 }
 
 // ConstructCreateView is part of the exec.Factory interface.
@@ -1832,6 +1851,32 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 		rows:     input.(planNode),
 		ifExists: ifExists,
 	}, nil
+}
+
+func (ef *execFactory) ConstructExplainPlan(
+	options *tree.ExplainOptions, buildFn exec.BuildPlanForExplainFn,
+) (exec.Node, error) {
+	if options.Flags[tree.ExplainFlagEnv] {
+		return nil, errors.New("ENV only supported with (OPT) option")
+	}
+
+	flags := explain.MakeFlags(options)
+
+	explainFactory := explain.NewFactory(ef)
+	plan, err := buildFn(explainFactory)
+	if err != nil {
+		return nil, err
+	}
+	n := &explainNewPlanNode{
+		flags: flags,
+		plan:  plan.(*explain.Plan),
+	}
+	if flags.Verbose {
+		n.columns = sqlbase.ExplainPlanVerboseColumns
+	} else {
+		n.columns = sqlbase.ExplainPlanColumns
+	}
+	return n, nil
 }
 
 // renderBuilder encapsulates the code to build a renderNode.

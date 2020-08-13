@@ -34,9 +34,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b
 ----
 ·                distribution    full               ·             ·
 ·                vectorized      true               ·             ·
-render           ·               ·                  (a, b)        ·
- │               render 0        a                  ·             ·
- │               render 1        b                  ·             ·
+project          ·               ·                  (a, b)        ·
  └── merge join  ·               ·                  (a, b, a, b)  ·
       │          type            inner              ·             ·
       │          equality        (a, b) = (a, b)    ·             ·
