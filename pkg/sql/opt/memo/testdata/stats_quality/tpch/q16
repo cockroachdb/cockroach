@@ -18,7 +18,7 @@ import file=tpch_stats
 # Business Bureau. Results must be presented in descending count and ascending
 # brand, type, and size.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q16
+stats-quality database=tpch stats-quality-prefix=q16
 SELECT
     p_brand,
     p_type,
@@ -49,6 +49,7 @@ ORDER BY
     p_brand,
     p_type,
     p_size;
+----
 ----
 sort
  ├── save-table-name: q16_sort_1
@@ -123,8 +124,7 @@ sort
       └── aggregations
            └── count-rows [as=count:25, type=int]
 
-stats table=q16_sort_1
-----
+----Stats for q16_sort_1----
 column_names    row_count  distinct_count  null_count
 {p_brand}       18314      24              0
 {p_size}        18314      8               0
@@ -137,8 +137,7 @@ column_names    row_count_est  row_count_err  distinct_count_est  distinct_count
 {p_type}        3315.00        5.52 <==       150.00              1.03                0.00            1.00
 {supplier_cnt}  3315.00        5.52 <==       3315.00             221.00 <==          0.00            1.00
 
-stats table=q16_group_by_2
-----
+----Stats for q16_group_by_2----
 column_names  row_count  distinct_count  null_count
 {count}       18314      15              0
 {p_brand}     18314      24              0
@@ -151,8 +150,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      3315.00        5.52 <==       8.00                1.00                0.00            1.00
 {p_type}      3315.00        5.52 <==       150.00              1.03                0.00            1.00
 
-stats table=q16_distinct_on_3
-----
+----Stats for q16_distinct_on_3----
 column_names  row_count  distinct_count  null_count
 {p_brand}     118250     24              0
 {p_size}      118250     8               0
@@ -165,8 +163,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_type}      9606.00        12.31 <==      150.00              1.03                0.00            1.00
 {ps_suppkey}  9606.00        12.31 <==      6153.00             1.61                0.00            1.00
 
-stats table=q16_anti_join_4
-----
+----Stats for q16_anti_join_4----
 column_names  row_count  distinct_count  null_count
 {p_brand}     118274     24              0
 {p_partkey}   118274     29433           0
@@ -183,8 +180,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  9606.00        12.31 <==      3555.00             8.28 <==            0.00            1.00
 {ps_suppkey}  9606.00        12.31 <==      6153.00             1.61                0.00            1.00
 
-stats table=q16_lookup_join_5
-----
+----Stats for q16_lookup_join_5----
 column_names  row_count  distinct_count  null_count
 {p_brand}     118324     24              0
 {p_partkey}   118324     29433           0
@@ -201,8 +197,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  14276.00       8.29 <==       3555.00             8.28 <==            0.00            1.00
 {ps_suppkey}  14276.00       8.29 <==       7568.00             1.31                0.00            1.00
 
-stats table=q16_select_6
-----
+----Stats for q16_select_6----
 column_names  row_count  distinct_count  null_count
 {p_brand}     29581      24              0
 {p_partkey}   29581      29433           0
@@ -215,8 +210,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      3556.00        8.32 <==       8.00                1.00                0.00            1.00
 {p_type}      3556.00        8.32 <==       150.00              1.03                0.00            1.00
 
-stats table=q16_scan_7
-----
+----Stats for q16_scan_7----
 column_names  row_count  distinct_count  null_count
 {p_brand}     200000     25              0
 {p_partkey}   200000     199241          0
@@ -229,8 +223,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {p_size}      200000.00      1.00           50.00               1.00                0.00            1.00
 {p_type}      200000.00      1.00           150.00              1.00                0.00            1.00
 
-stats table=q16_select_8
-----
+----Stats for q16_select_8----
 column_names  row_count  distinct_count  null_count
 {s_comment}   4          4               0
 {s_suppkey}   4          4               0
@@ -239,8 +232,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {s_comment}   3333.00        833.25 <==     3333.00             833.25 <==          0.00            1.00
 {s_suppkey}   3333.00        833.25 <==     3328.00             832.00 <==          0.00            1.00
 
-stats table=q16_scan_9
-----
+----Stats for q16_scan_9----
 column_names  row_count  distinct_count  null_count
 {s_comment}   10000      9934            0
 {s_suppkey}   10000      9920            0
@@ -248,3 +240,5 @@ column_names  row_count  distinct_count  null_count
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {s_comment}   10000.00       1.00           9934.00             1.00                0.00            1.00
 {s_suppkey}   10000.00       1.00           9920.00             1.00                0.00            1.00
+----
+----

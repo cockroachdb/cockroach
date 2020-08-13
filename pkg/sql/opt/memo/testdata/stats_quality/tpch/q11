@@ -14,7 +14,7 @@ import file=tpch_stats
 # available parts. The query displays the part number and the value of those
 # parts in descending order of value.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q11
+stats-quality database=tpch stats-quality-prefix=q11
 SELECT
     ps_partkey,
     sum(ps_supplycost * ps_availqty::float) AS value
@@ -42,6 +42,7 @@ GROUP BY
         )
 ORDER BY
     value DESC;
+----
 ----
 sort
  ├── save-table-name: q11_sort_1
@@ -190,8 +191,7 @@ sort
                           └── projections
                                └── sum:42 * 0.0001 [as="?column?":43, type=float, outer=(42), immutable]
 
-stats table=q11_sort_1
-----
+----Stats for q11_sort_1----
 column_names  row_count  distinct_count  null_count
 {ps_partkey}  1048       1048            0
 {value}       1048       1048            0
@@ -200,8 +200,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
 {value}       9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
 
-stats table=q11_select_2
-----
+----Stats for q11_select_2----
 column_names  row_count  distinct_count  null_count
 {ps_partkey}  1048       1048            0
 {sum}         1048       1048            0
@@ -210,8 +209,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
 {sum}         9928.00        9.47 <==       9928.00             9.47 <==            0.00            1.00
 
-stats table=q11_group_by_3
-----
+----Stats for q11_group_by_3----
 column_names  row_count  distinct_count  null_count
 {ps_partkey}  29818      29669           0
 {sum}         29818      29969           0
@@ -220,8 +218,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {ps_partkey}  29783.00       1.00           29783.00            1.00                0.00            1.00
 {sum}         29783.00       1.00           29783.00            1.01                0.00            1.00
 
-stats table=q11_project_4
-----
+----Stats for q11_project_4----
 column_names  row_count  distinct_count  null_count
 {column20}    31680      31888           0
 {ps_partkey}  31680      29669           0
@@ -230,8 +227,7 @@ column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_e
 {column20}    32258.00       1.02           31618.00            1.01                0.00            1.00
 {ps_partkey}  32258.00       1.02           29783.00            1.00                0.00            1.00
 
-stats table=q11_lookup_join_5
-----
+----Stats for q11_lookup_join_5----
 column_names     row_count  distinct_count  null_count
 {n_name}         31680      1               0
 {n_nationkey}    31680      1               0
@@ -252,8 +248,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
-stats table=q11_lookup_join_6
-----
+----Stats for q11_lookup_join_6----
 column_names   row_count  distinct_count  null_count
 {n_name}       31680      1               0
 {n_nationkey}  31680      1               0
@@ -270,8 +265,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}    32258.00       1.02           400.00              1.01                0.00            1.00
 
-stats table=q11_lookup_join_7
-----
+----Stats for q11_lookup_join_7----
 column_names   row_count  distinct_count  null_count
 {n_name}       396        1               0
 {n_nationkey}  396        1               0
@@ -284,8 +278,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  400.00         1.01           1.00                1.00                0.00            1.00
 {s_suppkey}    400.00         1.01           400.00              1.01                0.00            1.00
 
-stats table=q11_select_8
-----
+----Stats for q11_select_8----
 column_names   row_count  distinct_count  null_count
 {n_name}       1          1               0
 {n_nationkey}  1          1               0
@@ -294,8 +287,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {n_nationkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q11_scan_9
-----
+----Stats for q11_scan_9----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -304,32 +296,28 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
 
-stats table=q11_project_10
-----
+----Stats for q11_project_10----
 column_names  row_count  distinct_count  null_count
 {?column?}    1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {?column?}    1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q11_scalar_group_by_11
-----
+----Stats for q11_scalar_group_by_11----
 column_names  row_count  distinct_count  null_count
 {sum}         1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {sum}         1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q11_project_12
-----
+----Stats for q11_project_12----
 column_names  row_count  distinct_count  null_count
 {column41}    31680      31888           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {column41}    32258.00       1.02           31618.00            1.01                0.00            1.00
 
-stats table=q11_lookup_join_13
-----
+----Stats for q11_lookup_join_13----
 column_names     row_count  distinct_count  null_count
 {n_name}         31680      1               0
 {n_nationkey}    31680      1               0
@@ -348,8 +336,7 @@ column_names     row_count_est  row_count_err  distinct_count_est  distinct_coun
 {s_nationkey}    32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}      32258.00       1.02           400.00              1.01                0.00            1.00
 
-stats table=q11_lookup_join_14
-----
+----Stats for q11_lookup_join_14----
 column_names   row_count  distinct_count  null_count
 {n_name}       31680      1               0
 {n_nationkey}  31680      1               0
@@ -366,8 +353,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  32258.00       1.02           1.00                1.00                0.00            1.00
 {s_suppkey}    32258.00       1.02           400.00              1.01                0.00            1.00
 
-stats table=q11_lookup_join_15
-----
+----Stats for q11_lookup_join_15----
 column_names   row_count  distinct_count  null_count
 {n_name}       396        1               0
 {n_nationkey}  396        1               0
@@ -380,8 +366,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {s_nationkey}  400.00         1.01           1.00                1.00                0.00            1.00
 {s_suppkey}    400.00         1.01           400.00              1.01                0.00            1.00
 
-stats table=q11_select_16
-----
+----Stats for q11_select_16----
 column_names   row_count  distinct_count  null_count
 {n_name}       1          1               0
 {n_nationkey}  1          1               0
@@ -390,8 +375,7 @@ column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_
 {n_name}       1.00           1.00           1.00                1.00                0.00            1.00
 {n_nationkey}  1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q11_scan_17
-----
+----Stats for q11_scan_17----
 column_names   row_count  distinct_count  null_count
 {n_name}       25         25              0
 {n_nationkey}  25         25              0
@@ -399,3 +383,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {n_name}       25.00          1.00           25.00               1.00                0.00            1.00
 {n_nationkey}  25.00          1.00           25.00               1.00                0.00            1.00
+----
+----

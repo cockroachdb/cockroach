@@ -15,7 +15,7 @@ import file=tpch_stats
 # committed date. The query lists the count of such orders for each order
 # priority sorted in ascending priority order.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q4
+stats-quality database=tpch stats-quality-prefix=q4
 SELECT
     o_orderpriority,
     count(*) AS order_count
@@ -37,6 +37,7 @@ GROUP BY
     o_orderpriority
 ORDER BY
     o_orderpriority;
+----
 ----
 sort
  ├── save-table-name: q4_sort_1
@@ -83,8 +84,7 @@ sort
       └── aggregations
            └── count-rows [as=count_rows:28, type=int]
 
-stats table=q4_sort_1
-----
+----Stats for q4_sort_1----
 column_names       row_count  distinct_count  null_count
 {o_orderpriority}  5          5               0
 {order_count}      5          5               0
@@ -93,8 +93,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderpriority}  5.00           1.00           5.00                1.00                0.00            1.00
 {order_count}      5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q4_group_by_2
-----
+----Stats for q4_group_by_2----
 column_names       row_count  distinct_count  null_count
 {count_rows}       5          5               0
 {o_orderpriority}  5          5               0
@@ -103,8 +102,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {count_rows}       5.00           1.00           5.00                1.00                0.00            1.00
 {o_orderpriority}  5.00           1.00           5.00                1.00                0.00            1.00
 
-stats table=q4_lookup_join_3
-----
+----Stats for q4_lookup_join_3----
 column_names       row_count  distinct_count  null_count
 {o_orderdate}      52523      92              0
 {o_orderkey}       52523      52442           0
@@ -115,8 +113,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderkey}       61200.00       1.17           61200.00            1.17                0.00            1.00
 {o_orderpriority}  61200.00       1.17           5.00                1.00                0.00            1.00
 
-stats table=q4_index_join_4
-----
+----Stats for q4_index_join_4----
 column_names       row_count  distinct_count  null_count
 {o_orderdate}      57218      92              0
 {o_orderkey}       57218      57392           0
@@ -127,8 +124,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {o_orderkey}       61200.00       1.07           61200.00            1.07                0.00            1.00
 {o_orderpriority}  61200.00       1.07           5.00                1.00                0.00            1.00
 
-stats table=q4_scan_5
-----
+----Stats for q4_scan_5----
 column_names   row_count  distinct_count  null_count
 {o_orderdate}  57218      92              0
 {o_orderkey}   57218      57392           0
@@ -136,3 +132,5 @@ column_names   row_count  distinct_count  null_count
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {o_orderdate}  61200.00       1.07           92.00               1.00                0.00            1.00
 {o_orderkey}   61200.00       1.07           61200.00            1.07                0.00            1.00
+----
+----

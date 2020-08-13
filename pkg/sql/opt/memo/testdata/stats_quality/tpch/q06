@@ -19,7 +19,7 @@ import file=tpch_stats
 # increase is equal to the sum of [l_extendedprice * l_discount] for all
 # lineitems with discounts and quantities in the qualifying range.
 # --------------------------------------------------
-save-tables database=tpch save-tables-prefix=q6
+stats-quality database=tpch stats-quality-prefix=q6
 SELECT
     sum(l_extendedprice * l_discount) AS revenue
 FROM
@@ -29,6 +29,7 @@ WHERE
     AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR
     AND l_discount BETWEEN 0.06 - 0.01 AND 0.06 + 0.01
     AND l_quantity < 24;
+----
 ----
 scalar-group-by
  ├── save-table-name: q6_scalar_group_by_1
@@ -73,24 +74,21 @@ scalar-group-by
       └── sum [as=sum:19, type=float, outer=(18)]
            └── column18:18 [type=float]
 
-stats table=q6_scalar_group_by_1
-----
+----Stats for q6_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count
 {revenue}     1          1               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {revenue}     1.00           1.00           1.00                1.00                0.00            1.00
 
-stats table=q6_project_2
-----
+----Stats for q6_project_2----
 column_names  row_count  distinct_count  null_count
 {column18}    114160     108866          0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
 {column18}    34746.00       3.29 <==       34746.00            3.13 <==            0.00            1.00
 
-stats table=q6_select_3
-----
+----Stats for q6_select_3----
 column_names       row_count  distinct_count  null_count
 {l_discount}       114160     3               0
 {l_extendedprice}  114160     98751           0
@@ -103,8 +101,7 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_quantity}       34746.00       3.29 <==       17.00               1.35                0.00            1.00
 {l_shipdate}       34746.00       3.29 <==       365.00              1.00                0.00            1.00
 
-stats table=q6_index_join_4
-----
+----Stats for q6_index_join_4----
 column_names       row_count  distinct_count  null_count
 {l_discount}       909455     11              0
 {l_extendedprice}  909455     565291          0
@@ -116,3 +113,16 @@ column_names       row_count_est  row_count_err  distinct_count_est  distinct_co
 {l_extendedprice}  938138.00      1.03           618257.00           1.09                0.00            1.00
 {l_quantity}       938138.00      1.03           50.00               1.00                0.00            1.00
 {l_shipdate}       938138.00      1.03           365.00              1.00                0.00            1.00
+
+----Stats for q6_scan_5----
+column_names    row_count  distinct_count  null_count
+{l_linenumber}  909455     7               0
+{l_orderkey}    909455     266035          0
+{l_shipdate}    909455     365             0
+~~~~
+column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
+{l_linenumber}  938138.00      1.03           7.00                1.00                0.00            1.00
+{l_orderkey}    938138.00      1.03           744145.00           2.80 <==            0.00            1.00
+{l_shipdate}    938138.00      1.03           365.00              1.00                0.00            1.00
+----
+----
