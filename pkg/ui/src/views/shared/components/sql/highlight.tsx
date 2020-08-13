@@ -48,9 +48,13 @@ export class Highlight extends React.Component<SqlBoxProps> {
         <span className="hljs-label">range_max_bytes = </span>
         <span className="hljs-built_in">{`${String(zoneConfig.range_max_bytes)},`}</span>
         <br />
-        <span className="hljs-label">gc.ttlseconds = </span>
-        <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
-        <br />
+        {zoneConfig.gc?.ttl_seconds && (
+          <>
+            <span className="hljs-label">gc.ttlseconds = </span>
+            <span className="hljs-built_in">{`${zoneConfig.gc.ttl_seconds},`}</span>
+            <br />
+          </>
+        )}
         <span className="hljs-label">num_replicas = </span>
         <span className="hljs-built_in">{`${zoneConfig.num_replicas},`}</span>
         <br />
