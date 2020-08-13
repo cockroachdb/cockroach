@@ -1,6 +1,6 @@
 # TODO(mjibson): The fakedist-disk config produces an error. When fixed,
 # remove this config line. See #38985.
-# LogicTest: local fakedist fakedist-metadata
+# LogicTest: local fakedist fakedist-metadata 3node-tenant
 
 ## This test file contains various complex queries that ORMs issue during
 ## startup or general use.
