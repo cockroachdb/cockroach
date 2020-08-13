@@ -90,6 +90,17 @@ SELECT z = ($update_ts + 1.0)::INT FROM t WHERE x = 1
 ----
 true
 
+let $update_ts
+SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 1
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3) ON CONFLICT (x) DO UPDATE SET z = (crdb_internal_mvcc_timestamp + 1.0)::INT
+
+query B
+SELECT z = ($update_ts + 1.0)::INT FROM t WHERE x = 1
+----
+true
+
 query IIB
 SELECT x, y, crdb_internal_mvcc_timestamp IS NOT NULL AS foo FROM t ORDER BY foo
 ----

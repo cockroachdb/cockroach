@@ -653,7 +653,6 @@ func (h *fkCheckHelper) buildOtherTableScan() (outScope *scope, tabMeta *opt.Tab
 		h.otherTabOrdinals,
 		&tree.IndexFlags{IgnoreForeignKeys: true},
 		noRowLocking,
-		excludeMutations,
 		h.mb.b.allocScope(),
 	), otherTabMeta
 }

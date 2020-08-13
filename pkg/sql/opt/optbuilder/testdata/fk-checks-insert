@@ -47,15 +47,15 @@ insert child
  │    ├── project
  │    │    ├── columns: column1:4!null column2:5!null
  │    │    └── select
- │    │         ├── columns: column1:4!null column2:5!null c:6 child.p:7 child.crdb_internal_mvcc_timestamp:8
+ │    │         ├── columns: column1:4!null column2:5!null c:6 child.p:7
  │    │         ├── left-join (hash)
- │    │         │    ├── columns: column1:4!null column2:5!null c:6 child.p:7 child.crdb_internal_mvcc_timestamp:8
+ │    │         │    ├── columns: column1:4!null column2:5!null c:6 child.p:7
  │    │         │    ├── values
  │    │         │    │    ├── columns: column1:4!null column2:5!null
  │    │         │    │    ├── (100, 1)
  │    │         │    │    └── (200, 1)
  │    │         │    ├── scan child
- │    │         │    │    └── columns: c:6!null child.p:7!null child.crdb_internal_mvcc_timestamp:8
+ │    │         │    │    └── columns: c:6!null child.p:7!null
  │    │         │    └── filters
  │    │         │         └── column1:4 = c:6
  │    │         └── filters
