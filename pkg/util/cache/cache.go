@@ -459,6 +459,17 @@ func (oc *OrderedCache) DoRangeEntry(f func(e *Entry) bool, from, to interface{}
 	}, &Entry{Key: from}, &Entry{Key: to})
 }
 
+// DoRangeReverseEntry invokes f on all cache entries in the range (to, from]. from
+// should be higher than to.
+// f returns a boolean indicating the traversal is done. If f returns true, the
+// DoRangeReverseEntry loop will exit; false, it will continue.
+// DoRangeReverseEntry returns whether the iteration exited early.
+func (oc *OrderedCache) DoRangeReverseEntry(f func(e *Entry) bool, from, to interface{}) bool {
+	return oc.llrb.DoRangeReverse(func(e llrb.Comparable) bool {
+		return f(e.(*Entry))
+	}, &Entry{Key: from}, &Entry{Key: to})
+}
+
 // DoRange invokes f on all key-value pairs in the range of from -> to. f
 // returns a boolean indicating the traversal is done. If f returns true, the
 // DoRange loop will exit; false, it will continue. DoRange returns whether the
