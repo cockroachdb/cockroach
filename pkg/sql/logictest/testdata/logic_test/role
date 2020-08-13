@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local 3node-tenant
 
 statement error a role/user named admin already exists
 CREATE ROLE admin
