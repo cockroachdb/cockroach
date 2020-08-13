@@ -15,6 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -38,6 +41,26 @@ func (n *controlJobsNode) FastPathResults() (int, bool) {
 }
 
 func (n *controlJobsNode) startExec(params runParams) error {
+	userIsAdmin, err := params.p.HasAdminRole(params.ctx)
+	if err != nil {
+		return err
+	}
+
+	// users can pause/resume/cancel jobs owned by non-admin users
+	// if they have CONTROLJOBS privilege.
+	if !userIsAdmin {
+		hasControlJob, err := params.p.HasRoleOption(params.ctx, roleoption.CONTROLJOB)
+		if err != nil {
+			return err
+		}
+
+		if !hasControlJob {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s does not have %s privilege",
+				params.p.User(), roleoption.CONTROLJOB)
+		}
+	}
+
 	reg := params.p.ExecCfg().JobRegistry
 	for {
 		ok, err := n.rows.Next(params)
@@ -56,6 +79,28 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		jobID, ok := tree.AsDInt(jobIDDatum)
 		if !ok {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
+		}
+
+		job, err := reg.LoadJobWithTxn(params.ctx, int64(jobID), params.p.Txn())
+		if err != nil {
+			return err
+		}
+
+		if job != nil {
+			owner := job.Payload().Username
+
+			if !userIsAdmin {
+				ok, err := params.p.UserHasAdminRole(params.ctx, owner)
+				if err != nil {
+					return err
+				}
+
+				// Owner is an admin but user executing the statement is not.
+				if ok {
+					return pgerror.Newf(pgcode.InsufficientPrivilege,
+						"only admins can control jobs owned by other admins")
+				}
+			}
 		}
 
 		switch n.desiredStatus {

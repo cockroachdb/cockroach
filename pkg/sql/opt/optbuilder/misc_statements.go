@@ -19,10 +19,6 @@ import (
 )
 
 func (b *Builder) buildControlJobs(n *tree.ControlJobs, inScope *scope) (outScope *scope) {
-	if err := b.catalog.RequireAdminRole(b.ctx, n.StatementTag()); err != nil {
-		panic(err)
-	}
-
 	// We don't allow the input statement to reference outer columns, so we
 	// pass a "blank" scope rather than inScope.
 	emptyScope := b.allocScope()
