@@ -862,6 +862,7 @@ func benchmarkAggregateFunction(
 	aggInputTypes []*types.T,
 	groupSize int,
 	nullProb float64,
+	numInputBatches int,
 ) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
@@ -870,7 +871,6 @@ func benchmarkAggregateFunction(
 	aggMemAcc := evalCtx.Mon.MakeBoundAccount()
 	defer aggMemAcc.Close(ctx)
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
-	const numInputBatches = 64
 	const bytesFixedLength = 8
 	typs := append([]*types.T{types.Int}, aggInputTypes...)
 	nTuples := numInputBatches * coldata.BatchSize()
@@ -879,12 +879,19 @@ func benchmarkAggregateFunction(
 		cols[i] = testAllocator.NewMemColumn(typs[i], nTuples)
 	}
 	groups := cols[0].Int64()
-	curGroup := -1
-	for i := 0; i < nTuples; i++ {
-		if groupSize == 1 || i%groupSize == 0 {
-			curGroup++
+	if agg.name == "hash" {
+		numGroups := nTuples / groupSize
+		for i := 0; i < nTuples; i++ {
+			groups[i] = int64(rng.Intn(numGroups))
 		}
-		groups[i] = int64(curGroup)
+	} else {
+		curGroup := -1
+		for i := 0; i < nTuples; i++ {
+			if groupSize == 1 || i%groupSize == 0 {
+				curGroup++
+			}
+			groups[i] = int64(curGroup)
+		}
 	}
 	for _, col := range cols[1:] {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
@@ -970,9 +977,13 @@ func benchmarkAggregateFunction(
 func BenchmarkAggregator(b *testing.B) {
 	aggFn := execinfrapb.AggregatorSpec_MIN
 	for _, agg := range aggTypes {
-		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
-			for _, nullProb := range []float64{0.0, nullProbability} {
-				benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, groupSize, nullProb)
+		for _, numInputBatches := range []int{4, 64, 1024} {
+			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
+				for _, nullProb := range []float64{0.0, nullProbability} {
+					benchmarkAggregateFunction(
+						b, agg, aggFn, []*types.T{types.Int}, groupSize, nullProb, numInputBatches,
+					)
+				}
 			}
 		}
 	}
@@ -984,6 +995,7 @@ func BenchmarkAggregator(b *testing.B) {
 // enough signal on the speeds of aggregate functions. For more diverse
 // configurations look at BenchmarkAggregator.
 func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
+	const numInputBatches = 64
 	for aggFnNumber := 0; aggFnNumber < len(execinfrapb.AggregatorSpec_Func_name); aggFnNumber++ {
 		aggFn := execinfrapb.AggregatorSpec_Func(aggFnNumber)
 		if !isAggOptimized(aggFn) {
@@ -1001,7 +1013,9 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 				aggInputTypes = []*types.T{types.Int}
 			}
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
-				benchmarkAggregateFunction(b, agg, aggFn, aggInputTypes, groupSize, nullProbability)
+				benchmarkAggregateFunction(
+					b, agg, aggFn, aggInputTypes, groupSize, nullProbability, numInputBatches,
+				)
 			}
 		}
 	}

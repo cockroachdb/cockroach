@@ -642,7 +642,6 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		expectedNumVals = []int{273, 252, 287, 212}
 		numOutputs      = 4
 		valsPushed      = make([]int, numOutputs)
-		typs            = []*types.T{types.Int}
 	)
 
 	outputs := make([]routerOutput, numOutputs)
@@ -669,7 +668,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, typs, []uint32{0}, nil /* ch */, outputs, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(in, []uint32{0}, nil /* ch */, outputs, nil /* toDrain */, nil /* toClose */)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -710,7 +709,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, typs, []uint32{0}, unbufferedCh, routerOutputs, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(in, []uint32{0}, unbufferedCh, routerOutputs, nil /* toDrain */, nil /* toClose */)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -1000,7 +999,6 @@ func TestHashRouterRandom(t *testing.T) {
 				const hashRouterMetadataMsg = "hash router test metadata"
 				r := newHashRouterWithOutputs(
 					inputs[0],
-					typs,
 					hashCols,
 					unblockEventsChan,
 					outputs,
