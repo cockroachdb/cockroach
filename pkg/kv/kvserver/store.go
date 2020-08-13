@@ -1311,35 +1311,40 @@ func IterateIDPrefixKeys(
 // from the provided Engine. The return values of this method and fn have
 // semantics similar to engine.MVCCIterate.
 func IterateRangeDescriptors(
-	ctx context.Context,
-	reader storage.Reader,
-	fn func(desc roachpb.RangeDescriptor) (done bool, err error),
+	ctx context.Context, reader storage.Reader, fn func(cur iterutil.Cur) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
-
+	iterState := iterutil.NewState()
+	iterState.Elem = new(roachpb.RangeDescriptor)
 	allCount := 0
 	matchCount := 0
 	bySuffix := make(map[string]int)
-	kvToDesc := func(kv roachpb.KeyValue) (bool, error) {
+	kvToDesc := func(cur iterutil.Cur) error {
+		kv := *cur.Elem.(*roachpb.KeyValue)
 		allCount++
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 		if err != nil {
-			return false, err
+			return err
 		}
 		bySuffix[string(suffix)]++
 		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-			return false, nil
+			return nil
 		}
 		var desc roachpb.RangeDescriptor
 		if err := kv.Value.GetProto(&desc); err != nil {
-			return false, err
+			return err
 		}
 		matchCount++
-		return fn(desc)
+		*iterState.Elem.(*roachpb.RangeDescriptor) = desc
+		err = fn(iterState.Current())
+		if iterState.Done() {
+			return cur.StopE(err)
+		}
+		return err
 	}
 
 	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
@@ -1445,9 +1450,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
 	err = IterateRangeDescriptors(ctx, s.engine,
-		func(desc roachpb.RangeDescriptor) (bool, error) {
+		func(cur iterutil.Cur) error {
+			desc := *cur.Elem.(*roachpb.RangeDescriptor)
 			if !desc.IsInitialized() {
-				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 			replicaDesc, found := desc.GetReplicaDescriptor(s.StoreID())
 			if !found {
@@ -1459,7 +1465,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// 20.2 or after as there was a migration in 20.1 to remove them and
 				// no pre-emptive snapshot should have been sent since 19.2 was
 				// finalized.
-				return false /* done */, errors.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"found RangeDescriptor for range %d at generation %d which does not"+
 						" contain this store %d",
 					log.Safe(desc.RangeID),
@@ -1469,7 +1475,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			// We can't lock s.mu across NewReplica due to the lock ordering
@@ -1479,7 +1485,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			err = s.addReplicaInternalLocked(rep)
 			s.mu.Unlock()
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			// Add this range and its stats to our counter.
@@ -1487,7 +1493,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if tenantID, ok := rep.TenantID(); ok {
 				s.metrics.addMVCCStats(ctx, tenantID, rep.GetMVCCStats())
 			} else {
-				return false, errors.AssertionFailedf("found newly constructed replica"+
+				return errors.AssertionFailedf("found newly constructed replica"+
 					" for range %d at generation %d with an invalid tenant ID in store %d",
 					log.Safe(desc.RangeID),
 					log.Safe(desc.Generation),
@@ -1508,7 +1514,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
 			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
 			// and initialize those groups.
-			return false, nil
+			return nil
 		})
 	if err != nil {
 		return err

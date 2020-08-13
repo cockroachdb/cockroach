@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1874,9 +1875,10 @@ func TestMVCCDeleteRange(t *testing.T) {
 			kvs := []roachpb.KeyValue{}
 			if _, err = MVCCIterate(
 				ctx, engine, keyMin, keyMax, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{Tombstones: true},
-				func(kv roachpb.KeyValue) (bool, error) {
+				func(cur iterutil.Cur) error {
+					kv := *cur.Elem.(*roachpb.KeyValue)
 					kvs = append(kvs, kv)
-					return false, nil
+					return nil
 				},
 			); err != nil {
 				t.Fatal(err)

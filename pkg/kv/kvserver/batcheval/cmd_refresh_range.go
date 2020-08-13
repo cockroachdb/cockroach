@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -63,11 +64,14 @@ func RefreshRange(
 			Inconsistent: true,
 			Tombstones:   true,
 		},
-		func(kv roachpb.KeyValue) (bool, error) {
+		func(cur iterutil.Cur) error {
+			kv := *cur.Elem.(*roachpb.KeyValue)
 			if ts := kv.Value.Timestamp; refreshFrom.LessEq(ts) {
-				return true, errors.Errorf("encountered recently written key %s @%s", kv.Key, ts)
+				return cur.StopE(
+					errors.Errorf("encountered recently written key %s @%s", kv.Key, ts),
+				)
 			}
-			return false, nil
+			return nil
 		})
 	if err != nil {
 		return result.Result{}, err

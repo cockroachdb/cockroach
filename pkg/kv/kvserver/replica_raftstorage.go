@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -130,13 +131,14 @@ func entries(
 	canCache := true
 
 	var ent raftpb.Entry
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+	scanFunc := func(cur iterutil.Cur) error {
+		kv := *cur.Elem.(*roachpb.KeyValue)
 		if err := kv.Value.GetProto(&ent); err != nil {
-			return false, err
+			return err
 		}
 		// Exit early if we have any gaps or it has been compacted.
 		if ent.Index != expectedIndex {
-			return true, nil
+			return cur.Stop()
 		}
 		expectedIndex++
 
@@ -147,7 +149,7 @@ func entries(
 					ctx, rangeID, ent, sideloaded, eCache,
 				)
 				if err != nil {
-					return true, err
+					return cur.StopE(err)
 				}
 				if newEnt != nil {
 					ent = *newEnt
@@ -160,11 +162,17 @@ func entries(
 		if size > maxBytes {
 			exceededMaxBytes = true
 			if len(ents) > 0 {
-				return exceededMaxBytes, nil
+				if exceededMaxBytes {
+					return cur.Stop()
+				}
+				return nil
 			}
 		}
 		ents = append(ents, ent)
-		return exceededMaxBytes, nil
+		if exceededMaxBytes {
+			return cur.Stop()
+		}
+		return nil
 	}
 
 	if err := iterateEntries(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
@@ -223,7 +231,7 @@ func iterateEntries(
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	lo, hi uint64,
-	scanFunc func(roachpb.KeyValue) (bool, error),
+	scanFunc func(iterutil.Cur) error,
 ) error {
 	_, err := storage.MVCCIterate(
 		ctx, reader,

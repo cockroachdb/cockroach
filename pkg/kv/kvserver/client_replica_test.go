@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -1769,15 +1770,16 @@ func TestSystemZoneConfigs(t *testing.T) {
 	waitForReplicas := func() error {
 		replicas := make(map[roachpb.RangeID]roachpb.RangeDescriptor)
 		for _, s := range tc.Servers {
-			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(desc roachpb.RangeDescriptor) (bool, error) {
+			if err := kvserver.IterateRangeDescriptors(ctx, s.Engines()[0], func(cur iterutil.Cur) error {
+				desc := *cur.Elem.(*roachpb.RangeDescriptor)
 				if len(desc.Replicas().Learners()) > 0 {
-					return false, fmt.Errorf("descriptor contains learners: %v", desc)
+					return fmt.Errorf("descriptor contains learners: %v", desc)
 				}
 				if existing, ok := replicas[desc.RangeID]; ok && !existing.Equal(desc) {
-					return false, fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
+					return fmt.Errorf("mismatch between\n%s\n%s", &existing, &desc)
 				}
 				replicas[desc.RangeID] = desc
-				return false, nil
+				return nil
 			}); err != nil {
 				return err
 			}
