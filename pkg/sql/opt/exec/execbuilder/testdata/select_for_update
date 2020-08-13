@@ -527,7 +527,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
 ·                    distribution           local
 ·                    vectorized             true
-render               ·                      ·
+project              ·                      ·
  └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
@@ -545,7 +545,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
 ·                    distribution           local
 ·                    vectorized             true
-render               ·                      ·
+project              ·                      ·
  └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
@@ -564,7 +564,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
 ·                    distribution           local
 ·                    vectorized             true
-render               ·                      ·
+project              ·                      ·
  └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
@@ -582,7 +582,7 @@ EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
 ·                    distribution           local
 ·                    vectorized             true
-render               ·                      ·
+project              ·                      ·
  └── lookup join     ·                      ·
       │              table                  t@primary
       │              type                   inner
@@ -697,7 +697,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -718,7 +718,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -738,7 +738,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -758,7 +758,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -779,7 +779,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -803,7 +803,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE 
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -824,7 +824,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -845,7 +845,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -866,7 +866,7 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UP
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -891,7 +891,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -921,7 +921,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -941,7 +941,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -961,7 +961,7 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -986,7 +986,7 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)
@@ -1016,7 +1016,7 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 ·                distribution        local
 ·                vectorized          true
-render           ·                   ·
+project          ·                   ·
  └── merge join  ·                   ·
       │          type                inner
       │          equality            (a) = (a)

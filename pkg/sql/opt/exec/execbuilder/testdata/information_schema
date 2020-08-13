@@ -6,7 +6,7 @@ EXPLAIN (VERBOSE) SELECT * FROM system.information_schema.schemata
 ·              distribution  local             ·                                                                                        ·
 ·              vectorized    false             ·                                                                                        ·
 virtual table  ·             ·                 (catalog_name, schema_name, default_character_set_name, sql_path, crdb_is_user_defined)  ·
-·              source        schemata@primary  ·                                                                                        ·
+·              table         schemata@primary  ·                                                                                        ·
 
 query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
@@ -14,8 +14,8 @@ EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ·              distribution  local
 ·              vectorized    false
 virtual table  ·             ·
-·              source        tables@tables_table_name_idx
-·              constraint    /4: [/'foo' - /'foo']
+·              table         tables@tables_table_name_idx
+·              spans         /"foo"-/"foo"/PrefixEnd
 
 statement error use of crdb_internal_vtable_pk column not allowed
 SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata

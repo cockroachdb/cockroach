@@ -49,10 +49,8 @@ EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
 ·                         distribution  local      ·       ·
 ·                         vectorized    true       ·       ·
-render                    ·             ·          (c, b)  ·
- │                        render 0      c          ·       ·
- │                        render 1      b          ·       ·
- └── limit                ·             ·          (b, c)  +b
+project                   ·             ·          (c, b)  ·
+ └── limit                ·             ·          (b, c)  ·
       │                   count         2          ·       ·
       └── sort            ·             ·          (b, c)  +b
            │              order         +b         ·       ·
@@ -67,7 +65,7 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 ·             distribution  local
 ·             vectorized    true
-render        ·             ·
+project       ·             ·
  └── revscan  ·             ·
 ·             table         t@primary
 ·             spans         FULL SCAN
@@ -78,7 +76,7 @@ EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t@primary
 ·          spans         LIMITED SCAN
@@ -89,7 +87,7 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 ·             distribution  local
 ·             vectorized    true
-render        ·             ·
+project       ·             ·
  └── revscan  ·             ·
 ·             table         t@primary
 ·             spans         FULL SCAN
@@ -99,7 +97,7 @@ EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 ·             distribution  local
 ·             vectorized    true
-render        ·             ·
+project       ·             ·
  └── revscan  ·             ·
 ·             table         t@primary
 ·             spans         FULL SCAN
@@ -266,7 +264,7 @@ EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 30 ORDER BY b, a, d
 ----
 ·                     distribution     local
 ·                     vectorized       true
-render                ·                ·
+project               ·                ·
  └── sort             ·                ·
       │               order            +b,+a,+d
       │               already ordered  +b,+a
@@ -283,7 +281,7 @@ EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 ·                    distribution  local
 ·                    vectorized    true
-render               ·             ·
+project              ·             ·
  └── sort            ·             ·
       │              order         +b,+a,+d
       └── filter     ·             ·
@@ -322,7 +320,7 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         abc@bc
 ·          spans         FULL SCAN
@@ -332,9 +330,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 ·          distribution  local      ·          ·
 ·          vectorized    true       ·          ·
-render     ·             ·          (a, b)     ·
- │         render 0      a          ·          ·
- │         render 1      b          ·          ·
+project    ·             ·          (a, b)     ·
  └── scan  ·             ·          (a, b, c)  +b,+c
 ·          table         abc@bc     ·          ·
 ·          spans         FULL SCAN  ·          ·
@@ -344,7 +340,7 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         abc@bc
 ·          spans         FULL SCAN
@@ -354,7 +350,7 @@ EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         abc@bc
 ·          spans         FULL SCAN
@@ -414,7 +410,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         abc@bc
 ·          spans         /2-/3
@@ -424,7 +420,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 ·             distribution  local
 ·             vectorized    true
-render        ·             ·
+project       ·             ·
  └── revscan  ·             ·
 ·             table         abc@bc
 ·             spans         /2-/3
@@ -435,9 +431,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) OR
 ----
 ·          distribution  local        ·          ·
 ·          vectorized    true         ·          ·
-render     ·             ·            (b, c)     +b,+c
- │         render 0      b            ·          ·
- │         render 1      c            ·          ·
+project    ·             ·            (b, c)     +b,+c
  └── scan  ·             ·            (a, b, c)  +b,+c
 ·          table         abc@primary  ·          ·
 ·          spans         /1-/2        ·          ·
@@ -569,54 +563,46 @@ ordinality        ·              ·                 (x, "ordinality")  ·
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-·                           distribution   local               ·       ·
-·                           vectorized     false               ·       ·
-render                      ·              ·                   (b)     ·
- │                          render 0       b                   ·       ·
- └── run                    ·              ·                   (a, b)  ·
-      └── insert fast path  ·              ·                   (a, b)  ·
-·                           into           t(a, b, c)          ·       ·
-·                           strategy       inserter            ·       ·
-·                           auto commit    ·                   ·       ·
-·                           size           3 columns, 1 row    ·       ·
-·                           row 0, expr 0  1                   ·       ·
-·                           row 0, expr 1  2                   ·       ·
-·                           row 0, expr 2  CAST(NULL AS BOOL)  ·       ·
+·                      distribution   local               ·       ·
+·                      vectorized     false               ·       ·
+project                ·              ·                   (b)     ·
+ └── insert fast path  ·              ·                   (a, b)  ·
+·                      into           t(a, b, c)          ·       ·
+·                      auto commit    ·                   ·       ·
+·                      size           3 columns, 1 row    ·       ·
+·                      row 0, expr 0  1                   ·       ·
+·                      row 0, expr 1  2                   ·       ·
+·                      row 0, expr 2  CAST(NULL AS BOOL)  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-·                    distribution  local      ·       ·
-·                    vectorized    false      ·       ·
-render               ·             ·          (b)     ·
- │                   render 0      b          ·       ·
- └── run             ·             ·          (a, b)  ·
-      └── delete     ·             ·          (a, b)  ·
-           │         from          t          ·       ·
-           │         strategy      deleter    ·       ·
-           │         auto commit   ·          ·       ·
-           └── scan  ·             ·          (a, b)  ·
-·                    table         t@primary  ·       ·
-·                    spans         /3-/3/#    ·       ·
+·               distribution  local      ·       ·
+·               vectorized    false      ·       ·
+project         ·             ·          (b)     ·
+ └── delete     ·             ·          (a, b)  ·
+      │         from          t          ·       ·
+      │         auto commit   ·          ·       ·
+      └── scan  ·             ·          (a, b)  ·
+·               table         t@primary  ·       ·
+·               spans         /3-/3/#    ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
 ·                         distribution      local       ·                 ·
 ·                         vectorized        false       ·                 ·
-render                    ·                 ·           (b)               ·
- │                        render 0          b           ·                 ·
- └── run                  ·                 ·           (a, b)            ·
-      └── update          ·                 ·           (a, b)            ·
-           │              table             t           ·                 ·
-           │              set               c           ·                 ·
-           │              strategy          updater     ·                 ·
-           │              auto commit       ·           ·                 ·
-           └── render     ·                 ·           (a, b, c, c_new)  ·
-                │         render 0          a           ·                 ·
-                │         render 1          b           ·                 ·
-                │         render 2          c           ·                 ·
-                │         render 3          true        ·                 ·
+project                   ·                 ·           (b)               ·
+ └── update               ·                 ·           (a, b)            ·
+      │                   table             t           ·                 ·
+      │                   set               c           ·                 ·
+      │                   auto commit       ·           ·                 ·
+      └── project         ·                 ·           (a, b, c, c_new)  ·
+           └── render     ·                 ·           (c_new, a, b, c)  ·
+                │         render 0          true        ·                 ·
+                │         render 1          a           ·                 ·
+                │         render 2          b           ·                 ·
+                │         render 3          c           ·                 ·
                 └── scan  ·                 ·           (a, b, c)         ·
 ·                         table             t@primary   ·                 ·
 ·                         spans             FULL SCAN   ·                 ·
@@ -641,10 +627,7 @@ EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY
 ----
 ·          distribution  local        ·          ·
 ·          vectorized    true         ·          ·
-render     ·             ·            (y, w, x)  ·
- │         render 0      y            ·          ·
- │         render 1      w            ·          ·
- │         render 2      x            ·          ·
+project    ·             ·            (y, w, x)  ·
  └── scan  ·             ·            (w, x, y)  +w,+x
 ·          table         uvwxyz@ywxz  ·          ·
 ·          spans         /1-/2        ·          ·
@@ -670,11 +653,7 @@ EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER
 ----
 ·          distribution  local           ·                                           ·
 ·          vectorized    true            ·                                           ·
-render     ·             ·               (block_id, writer_id, block_num, block_id)  ·
- │         render 0      block_id        ·                                           ·
- │         render 1      writer_id       ·                                           ·
- │         render 2      block_num       ·                                           ·
- │         render 3      block_id        ·                                           ·
+project    ·             ·               (block_id, writer_id, block_num, block_id)  ·
  └── scan  ·             ·               (block_id, writer_id, block_num)            ·
 ·          table         blocks@primary  ·                                           ·
 ·          spans         LIMITED SCAN    ·                                           ·
@@ -689,9 +668,7 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
 ·                    distribution  local        ·                ·
 ·                    vectorized    true         ·                ·
-render               ·             ·            (b, a)           ·
- │                   render 0      b            ·                ·
- │                   render 1      a            ·                ·
+project              ·             ·            (b, a)           ·
  └── sort            ·             ·            (column5, a, b)  +a
       │              order         +a           ·                ·
       └── render     ·             ·            (column5, a, b)  ·
@@ -707,9 +684,7 @@ EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
 ·                    distribution  local        ·                ·
 ·                    vectorized    true         ·                ·
-render               ·             ·            (b, a)           ·
- │                   render 0      b            ·                ·
- │                   render 1      a            ·                ·
+project              ·             ·            (b, a)           ·
  └── sort            ·             ·            (column5, a, b)  +b
       │              order         +b           ·                ·
       └── render     ·             ·            (column5, a, b)  ·
@@ -765,8 +740,7 @@ EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
 ·          distribution  local       ·       ·
 ·          vectorized    true        ·       ·
-render     ·             ·           (v)     ·
- │         render 0      v           ·       ·
+project    ·             ·           (v)     ·
  └── scan  ·             ·           (k, v)  +k
 ·          table         kv@primary  ·       ·
 ·          spans         FULL SCAN   ·       ·
@@ -776,8 +750,7 @@ EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
 ·          distribution  local       ·       ·
 ·          vectorized    true        ·       ·
-render     ·             ·           (v)     ·
- │         render 0      v           ·       ·
+project    ·             ·           (v)     ·
  └── scan  ·             ·           (k, v)  +k
 ·          table         kv@primary  ·       ·
 ·          spans         FULL SCAN   ·       ·
@@ -787,8 +760,7 @@ EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
 ·             distribution  local       ·       ·
 ·             vectorized    true        ·       ·
-render        ·             ·           (v)     ·
- │            render 0      v           ·       ·
+project       ·             ·           (v)     ·
  └── revscan  ·             ·           (k, v)  -k
 ·             table         kv@primary  ·       ·
 ·             spans         FULL SCAN   ·       ·
@@ -798,8 +770,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
 ·               distribution  local       ·       ·
 ·               vectorized    true        ·       ·
-render          ·             ·           (k)     ·
- │              render 0      k           ·       ·
+project         ·             ·           (k)     ·
  └── sort       ·             ·           (k, v)  +v,+k
       │         order         +v,+k       ·       ·
       └── scan  ·             ·           (k, v)  ·
@@ -811,8 +782,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
- │         render 0      k          ·       ·
+project    ·             ·          (k)     ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
 ·          spans         FULL SCAN  ·       ·
@@ -822,8 +792,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
- │         render 0      k          ·       ·
+project    ·             ·          (k)     ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
 ·          spans         FULL SCAN  ·       ·
@@ -833,8 +802,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
 ·             distribution  local      ·       ·
 ·             vectorized    true       ·       ·
-render        ·             ·          (k)     ·
- │            render 0      k          ·       ·
+project       ·             ·          (k)     ·
  └── revscan  ·             ·          (k, v)  +v,-k
 ·             table         kv@foo     ·       ·
 ·             spans         FULL SCAN  ·       ·
@@ -844,8 +812,7 @@ EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (k)     ·
- │         render 0      k          ·       ·
+project    ·             ·          (k)     ·
  └── scan  ·             ·          (k, v)  -v,+k
 ·          table         kv@foo     ·       ·
 ·          spans         FULL SCAN  ·       ·
@@ -862,13 +829,10 @@ SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY IND
 ----
 ·                           distribution           local             ·                ·
 ·                           vectorized             false             ·                ·
-render                      ·                      ·                 (k)              ·
- │                          render 0               k                 ·                ·
+project                     ·                      ·                 (k)              ·
  └── sort                   ·                      ·                 (k, v)           -v,+k
       │                     order                  -v,+k             ·                ·
-      └── render            ·                      ·                 (k, v)           ·
-           │                render 0               k                 ·                ·
-           │                render 1               v                 ·                ·
+      └── project           ·                      ·                 (k, v)           ·
            └── lookup join  ·                      ·                 (column1, k, v)  ·
                 │           table                  kv@primary        ·                ·
                 │           type                   inner             ·                ·
@@ -883,22 +847,22 @@ render                      ·                      ·                 (k)      
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-·                distribution        local              ·             ·
-·                vectorized          true               ·             ·
-render           ·                   ·                  (k)           ·
- │               render 0            k                  ·             ·
- └── merge join  ·                   ·                  (k, v, k, v)  -v,+k
-      │          type                inner              ·             ·
-      │          equality            (v, k) = (v, k)    ·             ·
-      │          left cols are key   ·                  ·             ·
-      │          right cols are key  ·                  ·             ·
-      │          mergeJoinOrder      -"(v=v)",+"(k=k)"  ·             ·
-      ├── scan   ·                   ·                  (k, v)        -v,+k
-      │          table               kv@foo             ·             ·
-      │          spans               FULL SCAN          ·             ·
-      └── scan   ·                   ·                  (k, v)        -v,+k
-·                table               kv@foo             ·             ·
-·                spans               FULL SCAN          ·             ·
+·                     distribution        local              ·             ·
+·                     vectorized          true               ·             ·
+project               ·                   ·                  (k)           ·
+ └── project          ·                   ·                  (k, k, v)     -v,+k
+      └── merge join  ·                   ·                  (k, v, k, v)  -v,+k
+           │          type                inner              ·             ·
+           │          equality            (v, k) = (v, k)    ·             ·
+           │          left cols are key   ·                  ·             ·
+           │          right cols are key  ·                  ·             ·
+           │          mergeJoinOrder      -"(v=v)",+"(k=k)"  ·             ·
+           ├── scan   ·                   ·                  (k, v)        -v,+k
+           │          table               kv@foo             ·             ·
+           │          spans               FULL SCAN          ·             ·
+           └── scan   ·                   ·                  (k, v)        -v,+k
+·                     table               kv@foo             ·             ·
+·                     spans               FULL SCAN          ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

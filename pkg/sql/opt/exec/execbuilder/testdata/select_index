@@ -195,32 +195,26 @@ output row: [2]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-·                     distribution    local                ·                         ·
-·                     vectorized      true                 ·                         ·
-render                ·               ·                    (b, a, c, d, a, c, d)     ·
- │                    render 0        b                    ·                         ·
- │                    render 1        a                    ·                         ·
- │                    render 2        c                    ·                         ·
- │                    render 3        d                    ·                         ·
- │                    render 4        a                    ·                         ·
- │                    render 5        c                    ·                         ·
- │                    render 6        d                    ·                         ·
- └── merge join       ·               ·                    (a, b, c, d, a, b, c, d)  ·
-      │               type            inner                ·                         ·
-      │               equality        (b) = (b)            ·                         ·
-      │               mergeJoinOrder  +"(b=b)"             ·                         ·
-      ├── index join  ·               ·                    (a, b, c, d)              ·
-      │    │          table           t@primary            ·                         ·
-      │    │          key columns     a, b                 ·                         ·
-      │    └── scan   ·               ·                    (a, b, c)                 ·
-      │               table           t@bc                 ·                         ·
-      │               spans           /"3"-/"3"/PrefixEnd  ·                         ·
-      └── index join  ·               ·                    (a, b, c, d)              ·
-           │          table           t@primary            ·                         ·
-           │          key columns     a, b                 ·                         ·
-           └── scan   ·               ·                    (a, b, c)                 ·
-·                     table           t@bc                 ·                         ·
-·                     spans           /"3"-/"3"/PrefixEnd  ·                         ·
+·                          distribution    local                ·                         ·
+·                          vectorized      true                 ·                         ·
+project                    ·               ·                    (b, a, c, d, a, c, d)     ·
+ └── project               ·               ·                    (a, b, c, d, a, c, d)     ·
+      └── merge join       ·               ·                    (a, b, c, d, a, b, c, d)  ·
+           │               type            inner                ·                         ·
+           │               equality        (b) = (b)            ·                         ·
+           │               mergeJoinOrder  +"(b=b)"             ·                         ·
+           ├── index join  ·               ·                    (a, b, c, d)              ·
+           │    │          table           t@primary            ·                         ·
+           │    │          key columns     a, b                 ·                         ·
+           │    └── scan   ·               ·                    (a, b, c)                 ·
+           │               table           t@bc                 ·                         ·
+           │               spans           /"3"-/"3"/PrefixEnd  ·                         ·
+           └── index join  ·               ·                    (a, b, c, d)              ·
+                │          table           t@primary            ·                         ·
+                │          key columns     a, b                 ·                         ·
+                └── scan   ·               ·                    (a, b, c)                 ·
+·                          table           t@bc                 ·                         ·
+·                          spans           /"3"-/"3"/PrefixEnd  ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -471,8 +465,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1
 ----
 ·               distribution  local      ·       ·
 ·               vectorized    true       ·       ·
-render          ·             ·          (a)     ·
- │              render 0      a          ·       ·
+project         ·             ·          (a)     ·
  └── filter     ·             ·          (a, c)  ·
       │         filter        c > 1      ·       ·
       └── scan  ·             ·          (a, c)  ·
@@ -484,8 +477,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1 AND b < 5
 ----
 ·               distribution  local        ·          ·
 ·               vectorized    true         ·          ·
-render          ·             ·            (a)        ·
- │              render 0      a            ·          ·
+project         ·             ·            (a)        ·
  └── filter     ·             ·            (a, b, c)  ·
       │         filter        c < 1        ·          ·
       └── scan  ·             ·            (a, b, c)  ·
@@ -497,8 +489,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0
 ----
 ·               distribution  local      ·       ·
 ·               vectorized    true       ·       ·
-render          ·             ·          (a)     ·
- │              render 0      a          ·       ·
+project         ·             ·          (a)     ·
  └── filter     ·             ·          (a, c)  ·
       │         filter        c > 1      ·       ·
       └── scan  ·             ·          (a, c)  ·
@@ -510,8 +501,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE c < 1.0
 ----
 ·               distribution  local      ·       ·
 ·               vectorized    true       ·       ·
-render          ·             ·          (a)     ·
- │              render 0      a          ·       ·
+project         ·             ·          (a)     ·
  └── filter     ·             ·          (a, c)  ·
       │         filter        c < 1      ·       ·
       └── scan  ·             ·          (a, c)  ·
@@ -523,8 +513,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
 ·               distribution  local      ·          ·
 ·               vectorized    true       ·          ·
-render          ·             ·          (a)        ·
- │              render 0      a          ·          ·
+project         ·             ·          (a)        ·
  └── filter     ·             ·          (a, b, c)  ·
       │         filter        c > 1      ·          ·
       └── scan  ·             ·          (a, b, c)  ·
@@ -536,8 +525,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
 ·               distribution  local        ·          ·
 ·               vectorized    true         ·          ·
-render          ·             ·            (a)        ·
- │              render 0      a            ·          ·
+project         ·             ·            (a)        ·
  └── filter     ·             ·            (a, b, c)  ·
       │         filter        c < 1        ·          ·
       └── scan  ·             ·            (a, b, c)  ·
@@ -549,8 +537,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5, 1)
 ----
 ·          distribution  local      ·          ·
 ·          vectorized    true       ·          ·
-render     ·             ·          (a)        ·
- │         render 0      a          ·          ·
+project    ·             ·          (a)        ·
  └── scan  ·             ·          (a, b, c)  ·
 ·          table         t@bc       ·          ·
 ·          spans         /5/1-/5/2  ·          ·
@@ -560,8 +547,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.0, 1)
 ----
 ·          distribution  local      ·          ·
 ·          vectorized    true       ·          ·
-render     ·             ·          (a)        ·
- │         render 0      a          ·          ·
+project    ·             ·          (a)        ·
  └── scan  ·             ·          (a, b, c)  ·
 ·          table         t@bc       ·          ·
 ·          spans         /5/1-/5/2  ·          ·
@@ -571,8 +557,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
 ·               distribution  local                  ·          ·
 ·               vectorized    true                   ·          ·
-render          ·             ·                      (a)        ·
- │              render 0      a                      ·          ·
+project         ·             ·                      (a)        ·
  └── filter     ·             ·                      (a, b, c)  ·
       │         filter        (b = 5.1) AND (c = 1)  ·          ·
       └── scan  ·             ·                      (a, b, c)  ·
@@ -585,8 +570,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t WHERE b IN (5.0, 1)
 ----
 ·          distribution  local        ·       ·
 ·          vectorized    true         ·       ·
-render     ·             ·            (a)     ·
- │         render 0      a            ·       ·
+project    ·             ·            (a)     ·
  └── scan  ·             ·            (a, b)  ·
 ·          table         t@b_desc     ·       ·
 ·          spans         /5-/4 /1-/0  ·       ·
@@ -608,8 +592,7 @@ EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) = (1, 4)
 ----
 ·          distribution  local      ·       ·
 ·          vectorized    true       ·       ·
-render     ·             ·          (b)     ·
- │         render 0      b          ·       ·
+project    ·             ·          (b)     ·
  └── scan  ·             ·          (a, b)  ·
 ·          table         abcd@abcd  ·       ·
 ·          spans         /1/4-/1/5  ·       ·
@@ -619,8 +602,7 @@ EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
 ·          distribution  local                 ·       ·
 ·          vectorized    true                  ·       ·
-render     ·             ·                     (b)     ·
- │         render 0      b                     ·       ·
+project    ·             ·                     (b)     ·
  └── scan  ·             ·                     (a, b)  ·
 ·          table         abcd@abcd             ·       ·
 ·          spans         /1/4-/1/5 /2/9-/2/10  ·       ·
@@ -636,9 +618,7 @@ EXPLAIN (VERBOSE) SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
 ·               distribution  local              ·       ·
 ·               vectorized    true               ·       ·
-render          ·             ·                  (i, s)  ·
- │              render 0      i                  ·       ·
- │              render 1      s                  ·       ·
+project         ·             ·                  (i, s)  ·
  └── filter     ·             ·                  (s, i)  ·
       │         filter        (i, s) < (1, 'c')  ·       ·
       └── scan  ·             ·                  (s, i)  ·
@@ -653,9 +633,7 @@ EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
 ·               distribution  local              ·       ·
 ·               vectorized    true               ·       ·
-render          ·             ·                  (i, s)  ·
- │              render 0      i                  ·       ·
- │              render 1      s                  ·       ·
+project         ·             ·                  (i, s)  ·
  └── filter     ·             ·                  (s, i)  ·
       │         filter        (i, s) < (1, 'c')  ·       ·
       └── scan  ·             ·                  (s, i)  ·
@@ -708,8 +686,7 @@ EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
 ·               distribution  local                                  ·          ·
 ·               vectorized    true                                   ·          ·
-render          ·             ·                                      (k)        ·
- │              render 0      k                                      ·          ·
+project         ·             ·                                      (k)        ·
  └── filter     ·             ·                                      (k, a, b)  ·
       │         filter        ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
       └── scan  ·             ·                                      (k, a, b)  ·
@@ -794,11 +771,11 @@ ORDER BY total DESC
 ·                    distribution  local
 ·                    vectorized    true
 sort                 ·             ·
- │                   order         -total
+ │                   order         -count_rows
  └── group           ·             ·
       │              aggregate 0   count_rows()
       │              group by      resource_key
-      └── render     ·             ·
+      └── project    ·             ·
            └── scan  ·             ·
 ·                    table         favorites@favorites_glob_fav_idx
 ·                    spans         /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
@@ -868,8 +845,7 @@ EXPLAIN (VERBOSE) SELECT c FROM abc WHERE c = 1 and a = 3
 ----
 ·          distribution  local          ·       ·
 ·          vectorized    true           ·       ·
-render     ·             ·              (c)     ·
- │         render 0      c              ·       ·
+project    ·             ·              (c)     ·
  └── scan  ·             ·              (a, c)  ·
 ·          table         abc@abc_c_idx  ·       ·
 ·          spans         /1/3-/1/4      ·       ·
@@ -884,8 +860,7 @@ EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
 ·               distribution  local          ·       ·
 ·               vectorized    true           ·       ·
-render          ·             ·              (f)     ·
- │              render 0      f              ·       ·
+project         ·             ·              (f)     ·
  └── filter     ·             ·              (d, f)  ·
       │         filter        d = 3          ·       ·
       └── scan  ·             ·              (d, f)  ·
@@ -905,8 +880,7 @@ EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
 ·               distribution  local          ·       ·
 ·               vectorized    true           ·       ·
-render          ·             ·              (f)     ·
- │              render 0      f              ·       ·
+project         ·             ·              (f)     ·
  └── filter     ·             ·              (d, f)  ·
       │         filter        d = 3          ·       ·
       └── scan  ·             ·              (d, f)  ·
@@ -991,8 +965,7 @@ EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
 ·                distribution  local        ·           ·
 ·                vectorized    true         ·           ·
-render           ·             ·            (x)         ·
- │               render 0      x            ·           ·
+project          ·             ·            (x)         ·
  └── index join  ·             ·            (x, y)      ·
       │          table         xy@primary   ·           ·
       │          key columns   rowid        ·           ·
@@ -1422,8 +1395,7 @@ EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s !
 ----
 ·                distribution  local       ·          ·
 ·                vectorized    true        ·          ·
-render           ·             ·           (a)        ·
- │               render 0      a           ·          ·
+project          ·             ·           (a)        ·
  └── index join  ·             ·           (a, b, s)  ·
       │          table         t2@primary  ·          ·
       │          key columns   a           ·          ·
@@ -1439,8 +1411,7 @@ EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
 ·                distribution  local       ·       ·
 ·                vectorized    true        ·       ·
-render           ·             ·           (w)     ·
- │               render 0      w           ·       ·
+project          ·             ·           (w)     ·
  └── index join  ·             ·           (v, w)  +v
       │          table         t3@primary  ·       ·
       │          key columns   k           ·       ·
@@ -1477,7 +1448,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20/0-/10/20/1/2
@@ -1500,7 +1471,7 @@ EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
@@ -1524,7 +1495,7 @@ EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
@@ -1535,12 +1506,11 @@ EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
 ·                    distribution      local
 ·                    vectorized        false
-count                ·                 ·
- └── update          ·                 ·
-      │              table             t4
-      │              set               c
-      │              strategy          updater
-      │              auto commit       ·
+update               ·                 ·
+ │                   table             t4
+ │                   set               c
+ │                   auto commit       ·
+ └── project         ·                 ·
       └── render     ·                 ·
            └── scan  ·                 ·
 ·                    table             t4@primary
@@ -1556,7 +1526,7 @@ EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 delete range  ·             ·
 ·             from          t4
 ·             auto commit   ·
-·             spans         /10/20-/10/20/#
+·             spans         /10/20/0-/10/20/1
 
 # Optimization should not be applied for non point lookups.
 query TTT
@@ -1564,7 +1534,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10/20-/10/21/#
@@ -1576,7 +1546,7 @@ EXPLAIN SELECT c FROM t4 WHERE a = 10
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /10-/11
@@ -1588,7 +1558,7 @@ EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 ----
 ·          distribution  local
 ·          vectorized    true
-render     ·             ·
+project    ·             ·
  └── scan  ·             ·
 ·          table         t4@primary
 ·          spans         /1/1/0-/1/1/1 /1/5/0-/1/5/1 /5/1/0-/5/1/1 /5/5/0-/5/5/1
