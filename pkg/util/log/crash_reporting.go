@@ -245,6 +245,9 @@ const (
 	// ReportTypeError signifies that this is just a report of an error but it
 	// still may include an exception and stack trace.
 	ReportTypeError
+	// ReportTypeLogFatal signifies that this is an error report that
+	// was generated via a log.Fatal call.
+	ReportTypeLogFatal
 )
 
 // sendCrashReport posts to sentry.
@@ -302,6 +305,8 @@ func SendReport(
 		event.Tags["report_type"] = "panic"
 	case ReportTypeError:
 		event.Tags["report_type"] = "error"
+	case ReportTypeLogFatal:
+		event.Tags["report_type"] = "log_fatal"
 	}
 
 	for _, f := range tagFns {
