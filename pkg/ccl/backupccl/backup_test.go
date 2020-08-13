@@ -4209,7 +4209,7 @@ func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
 	})
 }
 
-func TestDetachedBackupRestore(t *testing.T) {
+func TestDetachedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -4247,6 +4247,58 @@ func TestDetachedBackupRestore(t *testing.T) {
 	tx, err = db.Begin()
 	require.NoError(t, err)
 	err = tx.QueryRow(`BACKUP DATABASE data TO $1 WITH DETACHED`, LocalFoo+"/2").Scan(&jobID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Rollback())
+	sqlDB.CheckQueryResults(t, allJobsQuery, allJobs)
+}
+
+func TestDetachedRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	defer cleanupFn()
+
+	db := sqlDB.DB.(*gosql.DB)
+
+	// Run a BACKUP.
+	sqlDB.Exec(t, `CREATE TABLE data.t (id INT, name STRING)`)
+	sqlDB.Exec(t, `INSERT INTO data.t VALUES (1, 'foo'), (2, 'bar')`)
+	sqlDB.Exec(t, `BACKUP TABLE data.t TO $1`, LocalFoo)
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+
+	// Running RESTORE under transaction requires DETACHED.
+	var jobID int64
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH INTO_DB=test`, LocalFoo).Scan(&jobID)
+	require.True(t, testutils.IsError(err,
+		"RESTORE cannot be used inside a transaction without DETACHED option"))
+	require.NoError(t, tx.Rollback())
+
+	// Okay to run DETACHED RESTORE, even w/out explicit transaction.
+	sqlDB.QueryRow(t, `RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`,
+		LocalFoo).Scan(&jobID)
+	waitForSuccessfulJob(t, tc, jobID)
+	sqlDB.Exec(t, `DROP TABLE test.t`)
+
+	// RESTORE again, under explicit transaction.
+	tx, err = db.Begin()
+	require.NoError(t, err)
+	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	waitForSuccessfulJob(t, tc, jobID)
+	sqlDB.Exec(t, `DROP TABLE test.t`)
+
+	// RESTORE again under transaction, but this time abort the transaction.
+	// No new jobs should have been created.
+	allJobsQuery := "SELECT job_id FROM [SHOW JOBS]"
+	allJobs := sqlDB.QueryStr(t, allJobsQuery)
+	tx, err = db.Begin()
+	require.NoError(t, err)
+	err = tx.QueryRow(`RESTORE TABLE t FROM $1 WITH DETACHED, INTO_DB=test`, LocalFoo).Scan(&jobID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	sqlDB.CheckQueryResults(t, allJobsQuery, allJobs)
