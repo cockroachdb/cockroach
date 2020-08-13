@@ -178,14 +178,18 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b))
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t38799@foo
 ----
-·          distribution  local       ·       ·
-·          vectorized    false       ·       ·
-delete     ·             ·           ()      ·
- │         from          t38799      ·       ·
- │         auto commit   ·           ·       ·
- └── scan  ·             ·           (a, b)  ·
-·          table         t38799@foo  ·       ·
-·          spans         FULL SCAN   ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           false                 ·       ·
+delete     ·                    ·                     ()      ·
+ │         estimated row count  0 (missing stats)     ·       ·
+ │         estimated cost       1080.03               ·       ·
+ │         from                 t38799                ·       ·
+ │         auto commit          ·                     ·       ·
+ └── scan  ·                    ·                     (a, b)  ·
+·          estimated row count  1000 (missing stats)  ·       ·
+·          estimated cost       1080.02               ·       ·
+·          table                t38799@foo            ·       ·
+·          spans                FULL SCAN             ·       ·
 
 # Tracing tests for fast delete.
 statement ok

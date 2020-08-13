@@ -13,6 +13,7 @@ package explain
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,13 +37,6 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 			return err
 		}
 		ob.EnterNode(name, columns, ordering)
-		// Emit attributes common to all nodes.
-		if estRowCount := n.annotations[exec.EstimatedRowCount]; estRowCount != nil {
-			ob.Attr("estimated rows", estRowCount)
-		}
-		if estCost := n.annotations[exec.EstimatedCost]; estCost != nil {
-			ob.VAttr("estimated cost", estCost)
-		}
 		if err := e.emitNodeAttributes(n); err != nil {
 			return err
 		}
@@ -257,6 +251,24 @@ var nodeNames = [...]string{
 }
 
 func (e *emitter) emitNodeAttributes(n *Node) error {
+	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
+		s := stats.(*exec.EstimatedStats)
+
+		// In verbose mode, we show the estimated row count for all nodes (except
+		// Values, where it is redundant). In non-verbose mode, we only show it for
+		// scans (and when it is based on real statistics), where it is most useful
+		// and accurate.
+		if n.op != valuesOp && (e.ob.flags.Verbose || (s.TableStatsAvailable && n.op == scanOp)) {
+			count := int(math.Round(s.RowCount))
+			extra := ""
+			if !s.TableStatsAvailable {
+				extra = " (missing stats)"
+			}
+			e.ob.Attrf("estimated row count", "%d%s", count, extra)
+		}
+		e.ob.VAttrf("estimated cost", "%.9g", s.Cost)
+	}
+
 	ob := e.ob
 	switch n.op {
 	case scanOp:
@@ -598,7 +610,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	default:
 		return errors.AssertionFailedf("unhandled op %d", n.op)
 	}
-
 	return nil
 }
 

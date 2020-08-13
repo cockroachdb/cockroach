@@ -4,59 +4,66 @@
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 a
 ----
-·       distribution   local            ·    ·
-·       vectorized     false            ·    ·
-values  ·              ·                (a)  ·
-·       size           1 column, 1 row  ·    ·
-·       row 0, expr 0  1                ·    ·
+·       distribution    local            ·    ·
+·       vectorized      false            ·    ·
+values  ·               ·                (a)  ·
+·       estimated cost  0.02             ·    ·
+·       size            1 column, 1 row  ·    ·
+·       row 0, expr 0   1                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 + 2 a
 ----
-·       distribution   local            ·    ·
-·       vectorized     false            ·    ·
-values  ·              ·                (a)  ·
-·       size           1 column, 1 row  ·    ·
-·       row 0, expr 0  3                ·    ·
+·       distribution    local            ·    ·
+·       vectorized      false            ·    ·
+values  ·               ·                (a)  ·
+·       estimated cost  0.02             ·    ·
+·       size            1 column, 1 row  ·    ·
+·       row 0, expr 0   3                ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distribution   local              ·                            ·
-·       vectorized     false              ·                            ·
-values  ·              ·                  (column1, column2, column3)  ·
-·       size           3 columns, 2 rows  ·                            ·
-·       row 0, expr 0  1                  ·                            ·
-·       row 0, expr 1  2                  ·                            ·
-·       row 0, expr 2  3                  ·                            ·
-·       row 1, expr 0  4                  ·                            ·
-·       row 1, expr 1  5                  ·                            ·
-·       row 1, expr 2  6                  ·                            ·
+·       distribution    local              ·                            ·
+·       vectorized      false              ·                            ·
+values  ·               ·                  (column1, column2, column3)  ·
+·       estimated cost  0.03               ·                            ·
+·       size            3 columns, 2 rows  ·                            ·
+·       row 0, expr 0   1                  ·                            ·
+·       row 0, expr 1   2                  ·                            ·
+·       row 0, expr 2   3                  ·                            ·
+·       row 1, expr 0   4                  ·                            ·
+·       row 1, expr 1   5                  ·                            ·
+·       row 1, expr 2   6                  ·                            ·
 
 query TTTTT
 EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
-·       distribution   local             ·          ·
-·       vectorized     false             ·          ·
-values  ·              ·                 (column1)  ·
-·       size           1 column, 4 rows  ·          ·
-·       row 0, expr 0  1                 ·          ·
-·       row 1, expr 0  2                 ·          ·
-·       row 2, expr 0  3                 ·          ·
-·       row 3, expr 0  4                 ·          ·
+·       distribution    local             ·          ·
+·       vectorized      false             ·          ·
+values  ·               ·                 (column1)  ·
+·       estimated cost  0.05              ·          ·
+·       size            1 column, 4 rows  ·          ·
+·       row 0, expr 0   1                 ·          ·
+·       row 1, expr 0   2                 ·          ·
+·       row 2, expr 0   3                 ·          ·
+·       row 3, expr 0   4                 ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-·            distribution   local              ·                   ·
-·            vectorized     false              ·                   ·
-render       ·              ·                  (r)                 ·
- │           render 0       column1 + column2  ·                   ·
- └── values  ·              ·                  (column1, column2)  ·
-·            size           2 columns, 3 rows  ·                   ·
-·            row 0, expr 0  1                  ·                   ·
-·            row 0, expr 1  2                  ·                   ·
-·            row 1, expr 0  3                  ·                   ·
-·            row 1, expr 1  4                  ·                   ·
-·            row 2, expr 0  5                  ·                   ·
-·            row 2, expr 1  6                  ·                   ·
+·            distribution         local              ·                   ·
+·            vectorized           false              ·                   ·
+render       ·                    ·                  (r)                 ·
+ │           estimated row count  3                  ·                   ·
+ │           estimated cost       0.11               ·                   ·
+ │           render 0             column1 + column2  ·                   ·
+ └── values  ·                    ·                  (column1, column2)  ·
+·            estimated cost       0.04               ·                   ·
+·            size                 2 columns, 3 rows  ·                   ·
+·            row 0, expr 0        1                  ·                   ·
+·            row 0, expr 1        2                  ·                   ·
+·            row 1, expr 0        3                  ·                   ·
+·            row 1, expr 1        4                  ·                   ·
+·            row 2, expr 0        5                  ·                   ·
+·            row 2, expr 1        6                  ·                   ·

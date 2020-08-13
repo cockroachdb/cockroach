@@ -112,6 +112,13 @@ func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
 	ob.AddField(key, fmt.Sprintf(format, args...))
 }
 
+// VAttrf is a verbose-only formatter version of Attr.
+func (ob *OutputBuilder) VAttrf(key, format string, args ...interface{}) {
+	if ob.flags.Verbose {
+		ob.AddField(key, fmt.Sprintf(format, args...))
+	}
+}
+
 // Expr adds an information field with an expression. The expression's
 // IndexedVars refer to the given columns. If the expression is nil, nothing is
 // emitted.

@@ -116,58 +116,74 @@ update          ·                 ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·                    distribution      local        ·                        ·
-·                    vectorized        false        ·                        ·
-update               ·                 ·            ()                       ·
- │                   table             xyz          ·                        ·
- │                   set               x, y         ·                        ·
- │                   auto commit       ·            ·                        ·
- └── project         ·                 ·            (x, y, z, x_new, y_new)  ·
-      └── render     ·                 ·            (x_new, y_new, x, y, z)  ·
-           │         render 0          1            ·                        ·
-           │         render 1          2            ·                        ·
-           │         render 2          x            ·                        ·
-           │         render 3          y            ·                        ·
-           │         render 4          z            ·                        ·
-           └── scan  ·                 ·            (x, y, z)                ·
-·                    table             xyz@primary  ·                        ·
-·                    spans             FULL SCAN    ·                        ·
-·                    locking strength  for update   ·                        ·
+·                    distribution         local                 ·                        ·
+·                    vectorized           false                 ·                        ·
+update               ·                    ·                     ()                       ·
+ │                   estimated row count  0 (missing stats)     ·                        ·
+ │                   estimated cost       1150.04               ·                        ·
+ │                   table                xyz                   ·                        ·
+ │                   set                  x, y                  ·                        ·
+ │                   auto commit          ·                     ·                        ·
+ └── project         ·                    ·                     (x, y, z, x_new, y_new)  ·
+      └── render     ·                    ·                     (x_new, y_new, x, y, z)  ·
+           │         estimated row count  1000 (missing stats)  ·                        ·
+           │         estimated cost       1150.03               ·                        ·
+           │         render 0             1                     ·                        ·
+           │         render 1             2                     ·                        ·
+           │         render 2             x                     ·                        ·
+           │         render 3             y                     ·                        ·
+           │         render 4             z                     ·                        ·
+           └── scan  ·                    ·                     (x, y, z)                ·
+·                    estimated row count  1000 (missing stats)  ·                        ·
+·                    estimated cost       1120.02               ·                        ·
+·                    table                xyz@primary           ·                        ·
+·                    spans                FULL SCAN             ·                        ·
+·                    locking strength     for update            ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (y, x)
 ----
-·               distribution      local        ·                ·
-·               vectorized        false        ·                ·
-update          ·                 ·            ()               ·
- │              table             xyz          ·                ·
- │              set               x, y         ·                ·
- │              auto commit       ·            ·                ·
- └── project    ·                 ·            (x, y, z, y, x)  ·
-      └── scan  ·                 ·            (x, y, z)        ·
-·               table             xyz@primary  ·                ·
-·               spans             FULL SCAN    ·                ·
-·               locking strength  for update   ·                ·
+·               distribution         local                 ·                ·
+·               vectorized           false                 ·                ·
+update          ·                    ·                     ()               ·
+ │              estimated row count  0 (missing stats)     ·                ·
+ │              estimated cost       1120.03               ·                ·
+ │              table                xyz                   ·                ·
+ │              set                  x, y                  ·                ·
+ │              auto commit          ·                     ·                ·
+ └── project    ·                    ·                     (x, y, z, y, x)  ·
+      └── scan  ·                    ·                     (x, y, z)        ·
+·               estimated row count  1000 (missing stats)  ·                ·
+·               estimated cost       1120.02               ·                ·
+·               table                xyz@primary           ·                ·
+·               spans                FULL SCAN             ·                ·
+·               locking strength     for update            ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (2, 2)
 ----
-·                    distribution      local        ·                        ·
-·                    vectorized        false        ·                        ·
-update               ·                 ·            ()                       ·
- │                   table             xyz          ·                        ·
- │                   set               x, y         ·                        ·
- │                   auto commit       ·            ·                        ·
- └── project         ·                 ·            (x, y, z, x_new, x_new)  ·
-      └── render     ·                 ·            (x_new, x, y, z)         ·
-           │         render 0          2            ·                        ·
-           │         render 1          x            ·                        ·
-           │         render 2          y            ·                        ·
-           │         render 3          z            ·                        ·
-           └── scan  ·                 ·            (x, y, z)                ·
-·                    table             xyz@primary  ·                        ·
-·                    spans             FULL SCAN    ·                        ·
-·                    locking strength  for update   ·                        ·
+·                    distribution         local                 ·                        ·
+·                    vectorized           false                 ·                        ·
+update               ·                    ·                     ()                       ·
+ │                   estimated row count  0 (missing stats)     ·                        ·
+ │                   estimated cost       1140.04               ·                        ·
+ │                   table                xyz                   ·                        ·
+ │                   set                  x, y                  ·                        ·
+ │                   auto commit          ·                     ·                        ·
+ └── project         ·                    ·                     (x, y, z, x_new, x_new)  ·
+      └── render     ·                    ·                     (x_new, x, y, z)         ·
+           │         estimated row count  1000 (missing stats)  ·                        ·
+           │         estimated cost       1140.03               ·                        ·
+           │         render 0             2                     ·                        ·
+           │         render 1             x                     ·                        ·
+           │         render 2             y                     ·                        ·
+           │         render 3             z                     ·                        ·
+           └── scan  ·                    ·                     (x, y, z)                ·
+·                    estimated row count  1000 (missing stats)  ·                        ·
+·                    estimated cost       1120.02               ·                        ·
+·                    table                xyz@primary           ·                        ·
+·                    spans                FULL SCAN             ·                        ·
+·                    locking strength     for update            ·                        ·
 
 statement ok
 CREATE TABLE pks (
@@ -262,22 +278,28 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPDATE tu SET c=c+1
 ]
 ----
-·                    distribution      local
-·                    vectorized        false
-update               ·                 ·
- │                   table             tu
- │                   set               c
- │                   auto commit       ·
- └── project         ·                 ·
-      └── render     ·                 ·
-           │         render 0          c + 1
-           │         render 1          a
-           │         render 2          c
-           │         render 3          d
-           └── scan  ·                 ·
-·                    table             tu@primary
-·                    spans             FULL SCAN
-·                    locking strength  for update
+·                    distribution         local
+·                    vectorized           false
+update               ·                    ·
+ │                   estimated row count  0 (missing stats)
+ │                   estimated cost       1160.04
+ │                   table                tu
+ │                   set                  c
+ │                   auto commit          ·
+ └── project         ·                    ·
+      └── render     ·                    ·
+           │         estimated row count  1000 (missing stats)
+           │         estimated cost       1160.03
+           │         render 0             c + 1
+           │         render 1             a
+           │         render 2             c
+           │         render 3             d
+           └── scan  ·                    ·
+·                    estimated row count  1000 (missing stats)
+·                    estimated cost       1140.02
+·                    table                tu@primary
+·                    spans                FULL SCAN
+·                    locking strength     for update
 
 statement ok
 SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
@@ -319,28 +341,38 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
 ----
-·                                   distribution      local                             ·                    ·
-·                                   vectorized        false                             ·                    ·
-root                                ·                 ·                                 (a)                  ·
- ├── sort                           ·                 ·                                 (a)                  +a
- │    │                             order             +a                                ·                    ·
- │    └── scan buffer               ·                 ·                                 (a)                  ·
- │                                  label             buffer 1                          ·                    ·
- └── subquery                       ·                 ·                                 ·                    ·
-      │                             id                @S1                               ·                    ·
-      │                             original sql      UPDATE abc SET a = c RETURNING a  ·                    ·
-      │                             exec mode         all rows                          ·                    ·
-      └── buffer                    ·                 ·                                 (a)                  ·
-           │                        label             buffer 1                          ·                    ·
-           └── project              ·                 ·                                 (a)                  ·
-                └── update          ·                 ·                                 (a, rowid)           ·
-                     │              table             abc                               ·                    ·
-                     │              set               a                                 ·                    ·
-                     └── project    ·                 ·                                 (a, b, c, rowid, c)  ·
-                          └── scan  ·                 ·                                 (a, b, c, rowid)     ·
-·                                   table             abc@primary                       ·                    ·
-·                                   spans             FULL SCAN                         ·                    ·
-·                                   locking strength  for update                        ·                    ·
+·                                   distribution         local                             ·                    ·
+·                                   vectorized           false                             ·                    ·
+root                                ·                    ·                                 (a)                  ·
+ ├── sort                           ·                    ·                                 (a)                  +a
+ │    │                             estimated row count  1000 (missing stats)              ·                    ·
+ │    │                             estimated cost       1389.38569                        ·                    ·
+ │    │                             order                +a                                ·                    ·
+ │    └── scan buffer               ·                    ·                                 (a)                  ·
+ │                                  estimated row count  1000 (missing stats)              ·                    ·
+ │                                  estimated cost       1170.06                           ·                    ·
+ │                                  label                buffer 1                          ·                    ·
+ └── subquery                       ·                    ·                                 ·                    ·
+      │                             id                   @S1                               ·                    ·
+      │                             original sql         UPDATE abc SET a = c RETURNING a  ·                    ·
+      │                             exec mode            all rows                          ·                    ·
+      └── buffer                    ·                    ·                                 (a)                  ·
+           │                        label                buffer 1                          ·                    ·
+           └── project              ·                    ·                                 (a)                  ·
+                │                   estimated row count  1000 (missing stats)              ·                    ·
+                │                   estimated cost       1170.04                           ·                    ·
+                └── update          ·                    ·                                 (a, rowid)           ·
+                     │              estimated row count  1000 (missing stats)              ·                    ·
+                     │              estimated cost       1160.03                           ·                    ·
+                     │              table                abc                               ·                    ·
+                     │              set                  a                                 ·                    ·
+                     └── project    ·                    ·                                 (a, b, c, rowid, c)  ·
+                          └── scan  ·                    ·                                 (a, b, c, rowid)     ·
+·                                   estimated row count  1000 (missing stats)              ·                    ·
+·                                   estimated cost       1160.02                           ·                    ·
+·                                   table                abc@primary                       ·                    ·
+·                                   spans                FULL SCAN                         ·                    ·
+·                                   locking strength     for update                        ·                    ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
@@ -373,26 +405,36 @@ CREATE TABLE t38799 (a INT PRIMARY KEY, b INT, c INT, INDEX foo(b), FAMILY "prim
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t38799@foo SET c=2 WHERE a=1
 ----
-·                               distribution  local           ·                 ·
-·                               vectorized    false           ·                 ·
-update                          ·             ·               ()                ·
- │                              table         t38799          ·                 ·
- │                              set           c               ·                 ·
- │                              auto commit   ·               ·                 ·
- └── project                    ·             ·               (a, b, c, c_new)  ·
-      └── render                ·             ·               (c_new, a, b, c)  ·
-           │                    render 0      2               ·                 ·
-           │                    render 1      a               ·                 ·
-           │                    render 2      b               ·                 ·
-           │                    render 3      c               ·                 ·
-           └── filter           ·             ·               (a, b, c)         ·
-                │               filter        a = 1           ·                 ·
-                └── index join  ·             ·               (a, b, c)         ·
-                     │          table         t38799@primary  ·                 ·
-                     │          key columns   a               ·                 ·
-                     └── scan   ·             ·               (a, b)            ·
-·                               table         t38799@foo      ·                 ·
-·                               spans         FULL SCAN       ·                 ·
+·                               distribution         local                 ·                 ·
+·                               vectorized           false                 ·                 ·
+update                          ·                    ·                     ()                ·
+ │                              estimated row count  0 (missing stats)     ·                 ·
+ │                              estimated cost       5220.09               ·                 ·
+ │                              table                t38799                ·                 ·
+ │                              set                  c                     ·                 ·
+ │                              auto commit          ·                     ·                 ·
+ └── project                    ·                    ·                     (a, b, c, c_new)  ·
+      └── render                ·                    ·                     (c_new, a, b, c)  ·
+           │                    estimated row count  1 (missing stats)     ·                 ·
+           │                    estimated cost       5220.08               ·                 ·
+           │                    render 0             2                     ·                 ·
+           │                    render 1             a                     ·                 ·
+           │                    render 2             b                     ·                 ·
+           │                    render 3             c                     ·                 ·
+           └── filter           ·                    ·                     (a, b, c)         ·
+                │               estimated row count  1 (missing stats)     ·                 ·
+                │               estimated cost       5220.05               ·                 ·
+                │               filter               a = 1                 ·                 ·
+                └── index join  ·                    ·                     (a, b, c)         ·
+                     │          estimated row count  1000 (missing stats)  ·                 ·
+                     │          estimated cost       5210.03               ·                 ·
+                     │          table                t38799@primary        ·                 ·
+                     │          key columns          a                     ·                 ·
+                     └── scan   ·                    ·                     (a, b)            ·
+·                               estimated row count  1000 (missing stats)  ·                 ·
+·                               estimated cost       1080.02               ·                 ·
+·                               table                t38799@foo            ·                 ·
+·                               spans                FULL SCAN             ·                 ·
 
 # ------------------------------------------------------------------------------
 # Test without implicit SELECT FOR UPDATE.
@@ -544,22 +586,28 @@ update               ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
 ----
-·                    distribution  local        ·                        ·
-·                    vectorized    false        ·                        ·
-update               ·             ·            ()                       ·
- │                   table         xyz          ·                        ·
- │                   set           x, y         ·                        ·
- │                   auto commit   ·            ·                        ·
- └── project         ·             ·            (x, y, z, x_new, y_new)  ·
-      └── render     ·             ·            (x_new, y_new, x, y, z)  ·
-           │         render 0      1            ·                        ·
-           │         render 1      2            ·                        ·
-           │         render 2      x            ·                        ·
-           │         render 3      y            ·                        ·
-           │         render 4      z            ·                        ·
-           └── scan  ·             ·            (x, y, z)                ·
-·                    table         xyz@primary  ·                        ·
-·                    spans         FULL SCAN    ·                        ·
+·                    distribution         local                 ·                        ·
+·                    vectorized           false                 ·                        ·
+update               ·                    ·                     ()                       ·
+ │                   estimated row count  0 (missing stats)     ·                        ·
+ │                   estimated cost       1150.04               ·                        ·
+ │                   table                xyz                   ·                        ·
+ │                   set                  x, y                  ·                        ·
+ │                   auto commit          ·                     ·                        ·
+ └── project         ·                    ·                     (x, y, z, x_new, y_new)  ·
+      └── render     ·                    ·                     (x_new, y_new, x, y, z)  ·
+           │         estimated row count  1000 (missing stats)  ·                        ·
+           │         estimated cost       1150.03               ·                        ·
+           │         render 0             1                     ·                        ·
+           │         render 1             2                     ·                        ·
+           │         render 2             x                     ·                        ·
+           │         render 3             y                     ·                        ·
+           │         render 4             z                     ·                        ·
+           └── scan  ·                    ·                     (x, y, z)                ·
+·                    estimated row count  1000 (missing stats)  ·                        ·
+·                    estimated cost       1120.02               ·                        ·
+·                    table                xyz@primary           ·                        ·
+·                    spans                FULL SCAN             ·                        ·
 
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1

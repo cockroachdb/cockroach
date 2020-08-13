@@ -93,34 +93,44 @@ project                         ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
-·                          distribution        local        ·                                 ·
-·                          vectorized          false        ·                                 ·
-update                     ·                   ·            (a, b, c, a, b, c)                ·
- │                         table               abc          ·                                 ·
- │                         set                 b, c         ·                                 ·
- │                         auto commit         ·            ·                                 ·
- └── project               ·                   ·            (a, b, c, b_new, c_new, a, b, c)  ·
-      └── render           ·                   ·            (b_new, c_new, a, b, c, a, b, c)  ·
-           │               render 0            b + 1        ·                                 ·
-           │               render 1            c + 2        ·                                 ·
-           │               render 2            a            ·                                 ·
-           │               render 3            b            ·                                 ·
-           │               render 4            c            ·                                 ·
-           │               render 5            a            ·                                 ·
-           │               render 6            b            ·                                 ·
-           │               render 7            c            ·                                 ·
-           └── merge join  ·                   ·            (a, b, c, a, b, c)                ·
-                │          type                inner        ·                                 ·
-                │          equality            (a) = (a)    ·                                 ·
-                │          left cols are key   ·            ·                                 ·
-                │          right cols are key  ·            ·                                 ·
-                │          mergeJoinOrder      +"(a=a)"     ·                                 ·
-                ├── scan   ·                   ·            (a, b, c)                         +a
-                │          table               abc@primary  ·                                 ·
-                │          spans               FULL SCAN    ·                                 ·
-                └── scan   ·                   ·            (a, b, c)                         +a
-·                          table               abc@primary  ·                                 ·
-·                          spans               FULL SCAN    ·                                 ·
+·                          distribution         local                 ·                                 ·
+·                          vectorized           false                 ·                                 ·
+update                     ·                    ·                     (a, b, c, a, b, c)                ·
+ │                         estimated row count  1000 (missing stats)  ·                                 ·
+ │                         estimated cost       2300.07               ·                                 ·
+ │                         table                abc                   ·                                 ·
+ │                         set                  b, c                  ·                                 ·
+ │                         auto commit          ·                     ·                                 ·
+ └── project               ·                    ·                     (a, b, c, b_new, c_new, a, b, c)  ·
+      └── render           ·                    ·                     (b_new, c_new, a, b, c, a, b, c)  ·
+           │               estimated row count  1000 (missing stats)  ·                                 ·
+           │               estimated cost       2300.06               ·                                 ·
+           │               render 0             b + 1                 ·                                 ·
+           │               render 1             c + 2                 ·                                 ·
+           │               render 2             a                     ·                                 ·
+           │               render 3             b                     ·                                 ·
+           │               render 4             c                     ·                                 ·
+           │               render 5             a                     ·                                 ·
+           │               render 6             b                     ·                                 ·
+           │               render 7             c                     ·                                 ·
+           └── merge join  ·                    ·                     (a, b, c, a, b, c)                ·
+                │          estimated row count  1000 (missing stats)  ·                                 ·
+                │          estimated cost       2270.05               ·                                 ·
+                │          type                 inner                 ·                                 ·
+                │          equality             (a) = (a)             ·                                 ·
+                │          left cols are key    ·                     ·                                 ·
+                │          right cols are key   ·                     ·                                 ·
+                │          mergeJoinOrder       +"(a=a)"              ·                                 ·
+                ├── scan   ·                    ·                     (a, b, c)                         +a
+                │          estimated row count  1000 (missing stats)  ·                                 ·
+                │          estimated cost       1120.02               ·                                 ·
+                │          table                abc@primary           ·                                 ·
+                │          spans                FULL SCAN             ·                                 ·
+                └── scan   ·                    ·                     (a, b, c)                         +a
+·                          estimated row count  1000 (missing stats)  ·                                 ·
+·                          estimated cost       1120.02               ·                                 ·
+·                          table                abc@primary           ·                                 ·
+·                          spans                FULL SCAN             ·                                 ·
 
 # Update values of table from values expression
 query TTT

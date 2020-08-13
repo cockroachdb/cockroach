@@ -33,12 +33,16 @@ NULL       /2       {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY
 ----
-·           distribution  local        ·                        ·
-·           vectorized    true         ·                        ·
-ordinality  ·             ·            (x, y, z, "ordinality")  ·
- └── scan   ·             ·            (x, y, z)                ·
-·           table         xyz@primary  ·                        ·
-·           spans         FULL SCAN    ·                        ·
+·           distribution         local                 ·                        ·
+·           vectorized           true                  ·                        ·
+ordinality  ·                    ·                     (x, y, z, "ordinality")  ·
+ │          estimated row count  1000 (missing stats)  ·                        ·
+ │          estimated cost       1150.03               ·                        ·
+ └── scan   ·                    ·                     (x, y, z)                ·
+·           estimated row count  1000 (missing stats)  ·                        ·
+·           estimated cost       1140.02               ·                        ·
+·           table                xyz@primary           ·                        ·
+·           spans                FULL SCAN             ·                        ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, y, z, ordinality FROM xyz WITH ORDINALITY]

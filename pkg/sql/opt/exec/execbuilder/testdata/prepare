@@ -88,5 +88,6 @@ lookup join  ·                      ·
  │           equality cols are key  ·
  │           parallel               ·
  └── scan    ·                      ·
+·            estimated row count    1
 ·            table                  ab@primary
 ·            spans                  FULL SCAN

@@ -6,63 +6,93 @@ CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 query TTTTT
 EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
-·                distribution  local            ·               ·
-·                vectorized    true             ·               ·
-group            ·             ·                (max)           ·
- │               aggregate 0   max(ordinality)  ·               ·
- │               scalar        ·                ·               ·
- └── ordinality  ·             ·                ("ordinality")  ·
-      └── scan   ·             ·                ()              ·
-·                table         foo@primary      ·               ·
-·                spans         FULL SCAN        ·               ·
+·                distribution         local                 ·               ·
+·                vectorized           true                  ·               ·
+group            ·                    ·                     (max)           ·
+ │               estimated row count  1 (missing stats)     ·               ·
+ │               estimated cost       1040.06               ·               ·
+ │               aggregate 0          max(ordinality)       ·               ·
+ │               scalar               ·                     ·               ·
+ └── ordinality  ·                    ·                     ("ordinality")  ·
+      │          estimated row count  1000 (missing stats)  ·               ·
+      │          estimated cost       1030.03               ·               ·
+      └── scan   ·                    ·                     ()              ·
+·                estimated row count  1000 (missing stats)  ·               ·
+·                estimated cost       1020.02               ·               ·
+·                table                foo@primary           ·               ·
+·                spans                FULL SCAN             ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
 ----
-·                distribution  local             ·                  ·
-·                vectorized    true              ·                  ·
-filter           ·             ·                 (x, "ordinality")  +"ordinality"
- │               filter        "ordinality" > 1  ·                  ·
- └── ordinality  ·             ·                 (x, "ordinality")  ·
-      └── scan   ·             ·                 (x)                ·
-·                table         foo@primary       ·                  ·
-·                spans         FULL SCAN         ·                  ·
+·                distribution         local                 ·                  ·
+·                vectorized           true                  ·                  ·
+filter           ·                    ·                     (x, "ordinality")  +"ordinality"
+ │               estimated row count  333 (missing stats)   ·                  ·
+ │               estimated cost       1060.05               ·                  ·
+ │               filter               "ordinality" > 1      ·                  ·
+ └── ordinality  ·                    ·                     (x, "ordinality")  ·
+      │          estimated row count  1000 (missing stats)  ·                  ·
+      │          estimated cost       1050.03               ·                  ·
+      └── scan   ·                    ·                     (x)                ·
+·                estimated row count  1000 (missing stats)  ·                  ·
+·                estimated cost       1040.02               ·                  ·
+·                table                foo@primary           ·                  ·
+·                spans                FULL SCAN             ·                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
-·                     distribution  local             ·                  ·
-·                     vectorized    true              ·                  ·
-sort                  ·             ·                 (x, "ordinality")  -"ordinality"
- │                    order         -"ordinality"     ·                  ·
- └── filter           ·             ·                 (x, "ordinality")  ·
-      │               filter        "ordinality" > 1  ·                  ·
-      └── ordinality  ·             ·                 (x, "ordinality")  ·
-           └── scan   ·             ·                 (x)                ·
-·                     table         foo@primary       ·                  ·
-·                     spans         FULL SCAN         ·                  ·
+·                     distribution         local                 ·                  ·
+·                     vectorized           true                  ·                  ·
+sort                  ·                    ·                     (x, "ordinality")  -"ordinality"
+ │                    estimated row count  333 (missing stats)   ·                  ·
+ │                    estimated cost       1122.59881            ·                  ·
+ │                    order                -"ordinality"         ·                  ·
+ └── filter           ·                    ·                     (x, "ordinality")  ·
+      │               estimated row count  333 (missing stats)   ·                  ·
+      │               estimated cost       1060.05               ·                  ·
+      │               filter               "ordinality" > 1      ·                  ·
+      └── ordinality  ·                    ·                     (x, "ordinality")  ·
+           │          estimated row count  1000 (missing stats)  ·                  ·
+           │          estimated cost       1050.03               ·                  ·
+           └── scan   ·                    ·                     (x)                ·
+·                     estimated row count  1000 (missing stats)  ·                  ·
+·                     estimated cost       1040.02               ·                  ·
+·                     table                foo@primary           ·                  ·
+·                     spans                FULL SCAN             ·                  ·
 
 # Show that the primary key is used under ordinalityNode.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM foo WHERE x > 'a') WITH ORDINALITY
 ----
-·           distribution  local        ·                  ·
-·           vectorized    true         ·                  ·
-ordinality  ·             ·            (x, "ordinality")  ·
- └── scan   ·             ·            (x)                ·
-·           table         foo@primary  ·                  ·
-·           spans         /"a\x00"-    ·                  ·
+·           distribution         local                ·                  ·
+·           vectorized           true                 ·                  ·
+ordinality  ·                    ·                    (x, "ordinality")  ·
+ │          estimated row count  333 (missing stats)  ·                  ·
+ │          estimated cost       350.02               ·                  ·
+ └── scan   ·                    ·                    (x)                ·
+·           estimated row count  333 (missing stats)  ·                  ·
+·           estimated cost       346.676667           ·                  ·
+·           table                foo@primary          ·                  ·
+·           spans                /"a\x00"-            ·                  ·
 
 # Show that the primary key cannot be used with a PK predicate
 # outside of ordinalityNode.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE x > 'a'
 ----
-·                distribution  local        ·                  ·
-·                vectorized    true         ·                  ·
-filter           ·             ·            (x, "ordinality")  ·
- │               filter        x > 'a'      ·                  ·
- └── ordinality  ·             ·            (x, "ordinality")  ·
-      └── scan   ·             ·            (x)                ·
-·                table         foo@primary  ·                  ·
-·                spans         FULL SCAN    ·                  ·
+·                distribution         local                 ·                  ·
+·                vectorized           true                  ·                  ·
+filter           ·                    ·                     (x, "ordinality")  ·
+ │               estimated row count  333 (missing stats)   ·                  ·
+ │               estimated cost       1060.05               ·                  ·
+ │               filter               x > 'a'               ·                  ·
+ └── ordinality  ·                    ·                     (x, "ordinality")  ·
+      │          estimated row count  1000 (missing stats)  ·                  ·
+      │          estimated cost       1050.03               ·                  ·
+      └── scan   ·                    ·                     (x)                ·
+·                estimated row count  1000 (missing stats)  ·                  ·
+·                estimated cost       1040.02               ·                  ·
+·                table                foo@primary           ·                  ·
+·                spans                FULL SCAN             ·                  ·

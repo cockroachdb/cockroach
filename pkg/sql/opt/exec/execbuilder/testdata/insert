@@ -307,23 +307,33 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ]
 ----
-·                              distribution  local
-·                              vectorized    false
-insert                         ·             ·
- │                             into          insert_t(x, v, rowid)
- │                             auto commit   ·
- └── project                   ·             ·
-      └── render               ·             ·
-           │                   render 0      unique_rowid()
-           │                   render 1      x
-           │                   render 2      v
-           └── limit           ·             ·
-                │              count         10
-                └── sort       ·             ·
-                     │         order         -v
-                     └── scan  ·             ·
-·                              table         select_t@primary
-·                              spans         FULL SCAN
+·                              distribution         local
+·                              vectorized           false
+insert                         ·                    ·
+ │                             estimated row count  0 (missing stats)
+ │                             estimated cost       1319.67569
+ │                             into                 insert_t(x, v, rowid)
+ │                             auto commit          ·
+ └── project                   ·                    ·
+      └── render               ·                    ·
+           │                   estimated row count  10 (missing stats)
+           │                   estimated cost       1319.66569
+           │                   render 0             unique_rowid()
+           │                   render 1             x
+           │                   render 2             v
+           └── limit           ·                    ·
+                │              estimated row count  10 (missing stats)
+                │              estimated cost       1319.45569
+                │              count                10
+                └── sort       ·                    ·
+                     │         estimated row count  1000 (missing stats)
+                     │         estimated cost       1319.34569
+                     │         order                -v
+                     └── scan  ·                    ·
+·                              estimated row count  1000 (missing stats)
+·                              estimated cost       1100.02
+·                              table                select_t@primary
+·                              spans                FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -331,20 +341,26 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
-·                    distribution  local
-·                    vectorized    false
-insert               ·             ·
- │                   into          insert_t(x, v, rowid)
- │                   auto commit   ·
- └── project         ·             ·
-      └── render     ·             ·
-           │         render 0      unique_rowid()
-           │         render 1      x
-           │         render 2      v
-           └── scan  ·             ·
-·                    table         select_t@primary
-·                    spans         LIMITED SCAN
-·                    limit         1
+·                    distribution         local
+·                    vectorized           false
+insert               ·                    ·
+ │                   estimated row count  0 (missing stats)
+ │                   estimated cost       1.15
+ │                   into                 insert_t(x, v, rowid)
+ │                   auto commit          ·
+ └── project         ·                    ·
+      └── render     ·                    ·
+           │         estimated row count  1 (missing stats)
+           │         estimated cost       1.14
+           │         render 0             unique_rowid()
+           │         render 1             x
+           │         render 2             v
+           └── scan  ·                    ·
+·                    estimated row count  1 (missing stats)
+·                    estimated cost       1.11
+·                    table                select_t@primary
+·                    spans                LIMITED SCAN
+·                    limit                1
 
 # Check the grouping of LIMIT and ORDER BY
 query TTT
@@ -418,28 +434,42 @@ query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-·                                        distribution  local                   ·                               ·
-·                                        vectorized    false                   ·                               ·
-render                                   ·             ·                       ("?column?")                    ·
- │                                       render 0      x + v                   ·                               ·
- └── insert                              ·             ·                       (x, v, rowid)                   ·
-      │                                  into          insert_t(x, v, rowid)   ·                               ·
-      └── project                        ·             ·                       (length, "?column?", column11)  ·
-           └── render                    ·             ·                       (column11, length, "?column?")  ·
-                │                        render 0      unique_rowid()          ·                               ·
-                │                        render 1      length                  ·                               ·
-                │                        render 2      "?column?"              ·                               ·
-                └── limit                ·             ·                       (length, "?column?", column10)  ·
-                     │                   count         10                      ·                               ·
-                     └── sort            ·             ·                       (length, "?column?", column10)  +column10
-                          │              order         +column10               ·                               ·
-                          └── render     ·             ·                       (length, "?column?", column10)  ·
-                               │         render 0      length(k)               ·                               ·
-                               │         render 1      2                       ·                               ·
-                               │         render 2      k::STRING || v::STRING  ·                               ·
-                               └── scan  ·             ·                       (k, v)                          ·
-·                                        table         kv@primary              ·                               ·
-·                                        spans         FULL SCAN               ·                               ·
+·                                        distribution         local                   ·                               ·
+·                                        vectorized           false                   ·                               ·
+render                                   ·                    ·                       ("?column?")                    ·
+ │                                       estimated row count  10 (missing stats)      ·                               ·
+ │                                       estimated cost       1339.89569              ·                               ·
+ │                                       render 0             x + v                   ·                               ·
+ └── insert                              ·                    ·                       (x, v, rowid)                   ·
+      │                                  estimated row count  10 (missing stats)      ·                               ·
+      │                                  estimated cost       1339.68569              ·                               ·
+      │                                  into                 insert_t(x, v, rowid)   ·                               ·
+      └── project                        ·                    ·                       (length, "?column?", column11)  ·
+           └── render                    ·                    ·                       (column11, length, "?column?")  ·
+                │                        estimated row count  10 (missing stats)      ·                               ·
+                │                        estimated cost       1339.67569              ·                               ·
+                │                        render 0             unique_rowid()          ·                               ·
+                │                        render 1             length                  ·                               ·
+                │                        render 2             "?column?"              ·                               ·
+                └── limit                ·                    ·                       (length, "?column?", column10)  ·
+                     │                   estimated row count  10 (missing stats)      ·                               ·
+                     │                   estimated cost       1339.46569              ·                               ·
+                     │                   count                10                      ·                               ·
+                     └── sort            ·                    ·                       (length, "?column?", column10)  +column10
+                          │              estimated row count  1000 (missing stats)    ·                               ·
+                          │              estimated cost       1339.35569              ·                               ·
+                          │              order                +column10               ·                               ·
+                          └── render     ·                    ·                       (length, "?column?", column10)  ·
+                               │         estimated row count  1000 (missing stats)    ·                               ·
+                               │         estimated cost       1120.03                 ·                               ·
+                               │         render 0             length(k)               ·                               ·
+                               │         render 1             2                       ·                               ·
+                               │         render 2             k::STRING || v::STRING  ·                               ·
+                               └── scan  ·                    ·                       (k, v)                          ·
+·                                        estimated row count  1000 (missing stats)    ·                               ·
+·                                        estimated cost       1080.02                 ·                               ·
+·                                        table                kv@primary              ·                               ·
+·                                        spans                FULL SCAN               ·                               ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
@@ -455,15 +485,19 @@ BEGIN; ALTER TABLE mutation DROP COLUMN y
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x) VALUES (2) RETURNING *
 ----
-·                      distribution   local                  ·           ·
-·                      vectorized     false                  ·           ·
-project                ·              ·                      (x)         ·
- └── insert fast path  ·              ·                      (x, rowid)  ·
-·                      into           mutation(x, rowid, y)  ·           ·
-·                      size           3 columns, 1 row       ·           ·
-·                      row 0, expr 0  2                      ·           ·
-·                      row 0, expr 1  unique_rowid()         ·           ·
-·                      row 0, expr 2  10                     ·           ·
+·                      distribution         local                  ·           ·
+·                      vectorized           false                  ·           ·
+project                ·                    ·                      (x)         ·
+ │                     estimated row count  1                      ·           ·
+ │                     estimated cost       0.05                   ·           ·
+ └── insert fast path  ·                    ·                      (x, rowid)  ·
+·                      estimated row count  1                      ·           ·
+·                      estimated cost       0.03                   ·           ·
+·                      into                 mutation(x, rowid, y)  ·           ·
+·                      size                 3 columns, 1 row       ·           ·
+·                      row 0, expr 0        2                      ·           ·
+·                      row 0, expr 1        unique_rowid()         ·           ·
+·                      row 0, expr 2        10                     ·           ·
 
 statement ok
 ROLLBACK
@@ -475,14 +509,16 @@ BEGIN; ALTER TABLE mutation ADD COLUMN z INT AS (x + y) STORED
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO mutation(x, y) VALUES (2, 2)
 ----
-·                 distribution   local                  ·   ·
-·                 vectorized     false                  ·   ·
-insert fast path  ·              ·                      ()  ·
-·                 into           mutation(x, y, rowid)  ·   ·
-·                 size           3 columns, 1 row       ·   ·
-·                 row 0, expr 0  2                      ·   ·
-·                 row 0, expr 1  2                      ·   ·
-·                 row 0, expr 2  unique_rowid()         ·   ·
+·                 distribution         local                  ·   ·
+·                 vectorized           false                  ·   ·
+insert fast path  ·                    ·                      ()  ·
+·                 estimated row count  0 (missing stats)      ·   ·
+·                 estimated cost       0.03                   ·   ·
+·                 into                 mutation(x, y, rowid)  ·   ·
+·                 size                 3 columns, 1 row       ·   ·
+·                 row 0, expr 0        2                      ·   ·
+·                 row 0, expr 1        2                      ·   ·
+·                 row 0, expr 2        unique_rowid()         ·   ·
 
 statement ok
 ROLLBACK
@@ -499,31 +535,43 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                        distribution  local                                                ·                    ·
-·                                        vectorized    false                                                ·                    ·
-root                                     ·             ·                                                    (z)                  ·
- ├── sort                                ·             ·                                                    (z)                  +z
- │    │                                  order         +z                                                   ·                    ·
- │    └── scan buffer                    ·             ·                                                    (z)                  ·
- │                                       label         buffer 1                                             ·                    ·
- └── subquery                            ·             ·                                                    ·                    ·
-      │                                  id            @S1                                                  ·                    ·
-      │                                  original sql  INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
-      │                                  exec mode     all rows                                             ·                    ·
-      └── buffer                         ·             ·                                                    (z)                  ·
-           │                             label         buffer 1                                             ·                    ·
-           └── project                   ·             ·                                                    (z)                  ·
-                └── insert               ·             ·                                                    (z, rowid)           ·
-                     │                   into          xyz(x, y, z, rowid)                                  ·                    ·
-                     └── project         ·             ·                                                    (a, b, c, column11)  ·
-                          └── render     ·             ·                                                    (column11, a, b, c)  ·
-                               │         render 0      unique_rowid()                                       ·                    ·
-                               │         render 1      a                                                    ·                    ·
-                               │         render 2      b                                                    ·                    ·
-                               │         render 3      c                                                    ·                    ·
-                               └── scan  ·             ·                                                    (a, b, c)            ·
-·                                        table         abc@primary                                          ·                    ·
-·                                        spans         FULL SCAN                                            ·                    ·
+·                                        distribution         local                                                ·                    ·
+·                                        vectorized           false                                                ·                    ·
+root                                     ·                    ·                                                    (z)                  ·
+ ├── sort                                ·                    ·                                                    (z)                  +z
+ │    │                                  estimated row count  1000 (missing stats)                                 ·                    ·
+ │    │                                  estimated cost       1389.39569                                           ·                    ·
+ │    │                                  order                +z                                                   ·                    ·
+ │    └── scan buffer                    ·                    ·                                                    (z)                  ·
+ │                                       estimated row count  1000 (missing stats)                                 ·                    ·
+ │                                       estimated cost       1170.07                                              ·                    ·
+ │                                       label                buffer 1                                             ·                    ·
+ └── subquery                            ·                    ·                                                    ·                    ·
+      │                                  id                   @S1                                                  ·                    ·
+      │                                  original sql         INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
+      │                                  exec mode            all rows                                             ·                    ·
+      └── buffer                         ·                    ·                                                    (z)                  ·
+           │                             label                buffer 1                                             ·                    ·
+           └── project                   ·                    ·                                                    (z)                  ·
+                │                        estimated row count  1000 (missing stats)                                 ·                    ·
+                │                        estimated cost       1170.05                                              ·                    ·
+                └── insert               ·                    ·                                                    (z, rowid)           ·
+                     │                   estimated row count  1000 (missing stats)                                 ·                    ·
+                     │                   estimated cost       1160.04                                              ·                    ·
+                     │                   into                 xyz(x, y, z, rowid)                                  ·                    ·
+                     └── project         ·                    ·                                                    (a, b, c, column11)  ·
+                          └── render     ·                    ·                                                    (column11, a, b, c)  ·
+                               │         estimated row count  1000 (missing stats)                                 ·                    ·
+                               │         estimated cost       1160.03                                              ·                    ·
+                               │         render 0             unique_rowid()                                       ·                    ·
+                               │         render 1             a                                                    ·                    ·
+                               │         render 2             b                                                    ·                    ·
+                               │         render 3             c                                                    ·                    ·
+                               └── scan  ·                    ·                                                    (a, b, c)            ·
+·                                        estimated row count  1000 (missing stats)                                 ·                    ·
+·                                        estimated cost       1140.02                                              ·                    ·
+·                                        table                abc@primary                                          ·                    ·
+·                                        spans                FULL SCAN                                            ·                    ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO

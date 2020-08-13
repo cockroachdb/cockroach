@@ -30,33 +30,36 @@ render     ·             ·
 query TTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a)      ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  1                ·        ·
+tree    field           description      columns  ordering
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (a)      ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   1                ·        ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a)      ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  1                ·        ·
+tree    field           description      columns  ordering
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (a)      ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   1                ·        ·
 
 
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT 1 a
 ----
-tree    field          description      columns  ordering
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+tree    field           description      columns  ordering
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (a int)  ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   (1)[int]         ·        ·
 
 statement error cannot set EXPLAIN mode more than once
 EXPLAIN (PLAN,PLAN) SELECT 1
@@ -151,12 +154,15 @@ alter table  ·             ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
 ----
-·            distribution   local
-·            vectorized     false
-split        ·              ·
- └── values  ·              ·
-·            size           1 column, 1 row
-·            row 0, expr 0  42
+·            distribution         local
+·            vectorized           false
+split        ·                    ·
+ │           estimated row count  10 (missing stats)
+ │           estimated cost       0.03
+ └── values  ·                    ·
+·            estimated cost       0.02
+·            size                 1 column, 1 row
+·            row 0, expr 0        42
 
 query TTT
 EXPLAIN DROP TABLE foo
@@ -440,20 +446,26 @@ CREATE SEQUENCE select_test
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
-tree             field         description  columns                           ordering
-·                distribution  local        ·                                 ·
-·                vectorized    false        ·                                 ·
-sequence select  ·             ·            (last_value, log_cnt, is_called)  ·
+tree             field                description  columns                           ordering
+·                distribution         local        ·                                 ·
+·                vectorized           false        ·                                 ·
+sequence select  ·                    ·            (last_value, log_cnt, is_called)  ·
+·                estimated row count  1            ·                                 ·
+·                estimated cost       0.01         ·                                 ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT @1 FROM select_test
 ----
-tree                  field         description  columns                           ordering
-·                     distribution  local        ·                                 ·
-·                     vectorized    false        ·                                 ·
-render                ·             ·            ("?column?")                      ·
- │                    render 0      last_value   ·                                 ·
- └── sequence select  ·             ·            (last_value, log_cnt, is_called)  ·
+tree                  field                description  columns                           ordering
+·                     distribution         local        ·                                 ·
+·                     vectorized           false        ·                                 ·
+render                ·                    ·            ("?column?")                      ·
+ │                    estimated row count  1            ·                                 ·
+ │                    estimated cost       0.04         ·                                 ·
+ │                    render 0             last_value   ·                                 ·
+ └── sequence select  ·                    ·            (last_value, log_cnt, is_called)  ·
+·                     estimated row count  1            ·                                 ·
+·                     estimated cost       0.01         ·                                 ·
 
 statement ok
 CREATE TABLE t (
@@ -492,11 +504,13 @@ scan  ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-·     distribution  local      ·       ·
-·     vectorized    true       ·       ·
-scan  ·             ·          (k, v)  ·
-·     table         t@primary  ·       ·
-·     spans         FULL SCAN  ·       ·
+·     distribution         local                 ·       ·
+·     vectorized           true                  ·       ·
+scan  ·                    ·                     (k, v)  ·
+·     estimated row count  1000 (missing stats)  ·       ·
+·     estimated cost       1080.02               ·       ·
+·     table                t@primary             ·       ·
+·     spans                FULL SCAN             ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -529,13 +543,17 @@ lookup join  ·                      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-·          distribution  local        ·       ·
-·          vectorized    true         ·       ·
-filter     ·             ·            (k, v)  ·
- │         filter        (k % 2) = 0  ·       ·
- └── scan  ·             ·            (k, v)  ·
-·          table         t@primary    ·       ·
-·          spans         FULL SCAN    ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+filter     ·                    ·                     (k, v)  ·
+ │         estimated row count  333 (missing stats)   ·       ·
+ │         estimated cost       1090.04               ·       ·
+ │         filter               (k % 2) = 0           ·       ·
+ └── scan  ·                    ·                     (k, v)  ·
+·          estimated row count  1000 (missing stats)  ·       ·
+·          estimated cost       1080.02               ·       ·
+·          table                t@primary             ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
@@ -556,15 +574,21 @@ values  ·             ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
-·                distribution  local
-·                vectorized    true
-limit            ·             ·
- │               offset        1
- └── ordinality  ·             ·
-      └── scan   ·             ·
-·                table         t@primary
-·                spans         LIMITED SCAN
-·                limit         2
+·                distribution         local
+·                vectorized           true
+limit            ·                    ·
+ │               estimated row count  1 (missing stats)
+ │               estimated cost       2.22
+ │               offset               1
+ └── ordinality  ·                    ·
+      │          estimated row count  2 (missing stats)
+      │          estimated cost       2.2
+      └── scan   ·                    ·
+·                estimated row count  2 (missing stats)
+·                estimated cost       2.17
+·                table                t@primary
+·                spans                LIMITED SCAN
+·                limit                2
 
 query TTT
 EXPLAIN SELECT DISTINCT v FROM t
@@ -580,17 +604,25 @@ distinct   ·             ·
 query TTT
 SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
-·                    distribution  local
-·                    vectorized    true
-limit                ·             ·
- │                   offset        1
- └── limit           ·             ·
-      │              count         2
-      └── distinct   ·             ·
-           │         distinct on   v
-           └── scan  ·             ·
-·                    table         t@primary
-·                    spans         FULL SCAN
+·                    distribution         local
+·                    vectorized           true
+limit                ·                    ·
+ │                   estimated row count  1 (missing stats)
+ │                   estimated cost       26.2166545
+ │                   offset               1
+ └── limit           ·                    ·
+      │              estimated row count  2 (missing stats)
+      │              estimated cost       26.1966545
+      │              count                2
+      └── distinct   ·                    ·
+           │         estimated row count  100 (missing stats)
+           │         estimated cost       26.1666545
+           │         distinct on          v
+           └── scan  ·                    ·
+·                    estimated row count  1000 (missing stats)
+·                    estimated cost       5.14665448
+·                    table                t@primary
+·                    spans                FULL SCAN
 
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
@@ -598,169 +630,216 @@ CREATE TABLE tc (a INT, b INT, INDEX c(a), FAMILY "primary" (a, b, rowid))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-·                distribution  local       ·           ·
-·                vectorized    true        ·           ·
-sort             ·             ·           (a, b)      +b
- │               order         +b          ·           ·
- └── index join  ·             ·           (a, b)      ·
-      │          table         tc@primary  ·           ·
-      │          key columns   rowid       ·           ·
-      └── scan   ·             ·           (a, rowid)  ·
-·                table         tc@c        ·           ·
-·                spans         /10-/11     ·           ·
+·                distribution         local               ·           ·
+·                vectorized           true                ·           ·
+sort             ·                    ·                   (a, b)      +b
+ │               estimated row count  10 (missing stats)  ·           ·
+ │               estimated cost       52.7943856          ·           ·
+ │               order                +b                  ·           ·
+ └── index join  ·                    ·                   (a, b)      ·
+      │          estimated row count  10 (missing stats)  ·           ·
+      │          estimated cost       51.92               ·           ·
+      │          table                tc@primary          ·           ·
+      │          key columns          rowid               ·           ·
+      └── scan   ·                    ·                   (a, rowid)  ·
+·                estimated row count  10 (missing stats)  ·           ·
+·                estimated cost       10.81               ·           ·
+·                table                tc@c                ·           ·
+·                spans                /10-/11             ·           ·
 
 query TTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-tree              field          description       columns  ordering
-·                 distribution   local             ·        ·
-·                 vectorized     false             ·        ·
-insert fast path  ·              ·                 ()       ·
-·                 into           t(k, v)           ·        ·
-·                 auto commit    ·                 ·        ·
-·                 size           2 columns, 1 row  ·        ·
-·                 row 0, expr 0  (1)[int]          ·        ·
-·                 row 0, expr 1  (2)[int]          ·        ·
+tree              field                description        columns  ordering
+·                 distribution         local              ·        ·
+·                 vectorized           false              ·        ·
+insert fast path  ·                    ·                  ()       ·
+·                 estimated row count  0 (missing stats)  ·        ·
+·                 estimated cost       0.03               ·        ·
+·                 into                 t(k, v)            ·        ·
+·                 auto commit          ·                  ·        ·
+·                 size                 2 columns, 1 row   ·        ·
+·                 row 0, expr 0        (1)[int]           ·        ·
+·                 row 0, expr 1        (2)[int]           ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT 42 AS a
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (42)[int]        ·        ·
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (a int)  ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   (42)[int]        ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t
 ----
-·     distribution  local      ·               ·
-·     vectorized    true       ·               ·
-scan  ·             ·          (k int, v int)  ·
-·     table         t@primary  ·               ·
-·     spans         FULL SCAN  ·               ·
+·     distribution         local                 ·               ·
+·     vectorized           true                  ·               ·
+scan  ·                    ·                     (k int, v int)  ·
+·     estimated row count  1000 (missing stats)  ·               ·
+·     estimated cost       1080.02               ·               ·
+·     table                t@primary             ·               ·
+·     spans                FULL SCAN             ·               ·
 
 query TTTTT
 EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
-·     distribution  local      ·        ·
-·     vectorized    true       ·        ·
-scan  ·             ·          (k int)  ·
-·     table         t@primary  ·        ·
-·     spans         FULL SCAN  ·        ·
+·     distribution         local                 ·        ·
+·     vectorized           true                  ·        ·
+scan  ·                    ·                     (k int)  ·
+·     estimated row count  1000 (missing stats)  ·        ·
+·     estimated cost       1060.02               ·        ·
+·     table                t@primary             ·        ·
+·     spans                FULL SCAN             ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM t WHERE v > 123
 ----
-·          distribution  local                          ·               ·
-·          vectorized    true                           ·               ·
-filter     ·             ·                              (k int, v int)  ·
- │         filter        ((v)[int] > (123)[int])[bool]  ·               ·
- └── scan  ·             ·                              (k int, v int)  ·
-·          table         t@primary                      ·               ·
-·          spans         FULL SCAN                      ·               ·
+·          distribution         local                          ·               ·
+·          vectorized           true                           ·               ·
+filter     ·                    ·                              (k int, v int)  ·
+ │         estimated row count  333 (missing stats)            ·               ·
+ │         estimated cost       1090.04                        ·               ·
+ │         filter               ((v)[int] > (123)[int])[bool]  ·               ·
+ └── scan  ·                    ·                              (k int, v int)  ·
+·          estimated row count  1000 (missing stats)           ·               ·
+·          estimated cost       1080.02                        ·               ·
+·          table                t@primary                      ·               ·
+·          spans                FULL SCAN                      ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1, 2, 3), (4, 5, 6)
 ----
-·       distribution   local              ·                                        ·
-·       vectorized     false              ·                                        ·
-values  ·              ·                  (column1 int, column2 int, column3 int)  ·
-·       size           3 columns, 2 rows  ·                                        ·
-·       row 0, expr 0  (1)[int]           ·                                        ·
-·       row 0, expr 1  (2)[int]           ·                                        ·
-·       row 0, expr 2  (3)[int]           ·                                        ·
-·       row 1, expr 0  (4)[int]           ·                                        ·
-·       row 1, expr 1  (5)[int]           ·                                        ·
-·       row 1, expr 2  (6)[int]           ·                                        ·
+·       distribution    local              ·                                        ·
+·       vectorized      false              ·                                        ·
+values  ·               ·                  (column1 int, column2 int, column3 int)  ·
+·       estimated cost  0.03               ·                                        ·
+·       size            3 columns, 2 rows  ·                                        ·
+·       row 0, expr 0   (1)[int]           ·                                        ·
+·       row 0, expr 1   (2)[int]           ·                                        ·
+·       row 0, expr 2   (3)[int]           ·                                        ·
+·       row 1, expr 0   (4)[int]           ·                                        ·
+·       row 1, expr 1   (5)[int]           ·                                        ·
+·       row 1, expr 2   (6)[int]           ·                                        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-·            distribution  local                           ·                   ·
-·            vectorized    true                            ·                   ·
-render       ·             ·                               (z int, v int)      ·
- │           render 0      ((count)[int] * (2)[int])[int]  ·                   ·
- │           render 1      (v)[int]                        ·                   ·
- └── norows  ·             ·                               (v int, count int)  ·
+·            distribution         local                           ·                   ·
+·            vectorized           true                            ·                   ·
+render       ·                    ·                               (z int, v int)      ·
+ │           estimated row count  0                               ·                   ·
+ │           estimated cost       0.02                            ·                   ·
+ │           render 0             ((count)[int] * (2)[int])[int]  ·                   ·
+ │           render 1             (v)[int]                        ·                   ·
+ └── norows  ·                    ·                               (v int, count int)  ·
+·            estimated cost       0.01                            ·                   ·
 
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-·                    distribution  local                        ·               ·
-·                    vectorized    false                        ·               ·
-delete               ·             ·                            ()              ·
- │                   from          t                            ·               ·
- │                   auto commit   ·                            ·               ·
- └── project         ·             ·                            (k int)         ·
-      └── filter     ·             ·                            (k int, v int)  ·
-           │         filter        ((v)[int] > (1)[int])[bool]  ·               ·
-           └── scan  ·             ·                            (k int, v int)  ·
-·                    table         t@primary                    ·               ·
-·                    spans         FULL SCAN                    ·               ·
+·                    distribution         local                        ·               ·
+·                    vectorized           false                        ·               ·
+delete               ·                    ·                            ()              ·
+ │                   estimated row count  0 (missing stats)            ·               ·
+ │                   estimated cost       1090.05                      ·               ·
+ │                   from                 t                            ·               ·
+ │                   auto commit          ·                            ·               ·
+ └── project         ·                    ·                            (k int)         ·
+      └── filter     ·                    ·                            (k int, v int)  ·
+           │         estimated row count  333 (missing stats)          ·               ·
+           │         estimated cost       1090.04                      ·               ·
+           │         filter               ((v)[int] > (1)[int])[bool]  ·               ·
+           └── scan  ·                    ·                            (k int, v int)  ·
+·                    estimated row count  1000 (missing stats)         ·               ·
+·                    estimated cost       1080.02                      ·               ·
+·                    table                t@primary                    ·               ·
+·                    spans                FULL SCAN                    ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-·                         distribution  local                          ·                          ·
-·                         vectorized    false                          ·                          ·
-update                    ·             ·                              ()                         ·
- │                        table         t                              ·                          ·
- │                        set           v                              ·                          ·
- │                        auto commit   ·                              ·                          ·
- └── project              ·             ·                              (k int, v int, v_new int)  ·
-      └── render          ·             ·                              (v_new int, k int, v int)  ·
-           │              render 0      ((k)[int] + (1)[int])[int]     ·                          ·
-           │              render 1      (k)[int]                       ·                          ·
-           │              render 2      (v)[int]                       ·                          ·
-           └── filter     ·             ·                              (k int, v int)             ·
-                │         filter        ((v)[int] > (123)[int])[bool]  ·                          ·
-                └── scan  ·             ·                              (k int, v int)             ·
-·                         table         t@primary                      ·                          ·
-·                         spans         FULL SCAN                      ·                          ·
+·                         distribution         local                          ·                          ·
+·                         vectorized           false                          ·                          ·
+update                    ·                    ·                              ()                         ·
+ │                        estimated row count  0 (missing stats)              ·                          ·
+ │                        estimated cost       1096.72667                     ·                          ·
+ │                        table                t                              ·                          ·
+ │                        set                  v                              ·                          ·
+ │                        auto commit          ·                              ·                          ·
+ └── project              ·                    ·                              (k int, v int, v_new int)  ·
+      └── render          ·                    ·                              (v_new int, k int, v int)  ·
+           │              estimated row count  333 (missing stats)            ·                          ·
+           │              estimated cost       1096.71667                     ·                          ·
+           │              render 0             ((k)[int] + (1)[int])[int]     ·                          ·
+           │              render 1             (k)[int]                       ·                          ·
+           │              render 2             (v)[int]                       ·                          ·
+           └── filter     ·                    ·                              (k int, v int)             ·
+                │         estimated row count  333 (missing stats)            ·                          ·
+                │         estimated cost       1090.04                        ·                          ·
+                │         filter               ((v)[int] > (123)[int])[bool]  ·                          ·
+                └── scan  ·                    ·                              (k int, v int)             ·
+·                         estimated row count  1000 (missing stats)           ·                          ·
+·                         estimated cost       1080.02                        ·                          ·
+·                         table                t@primary                      ·                          ·
+·                         spans                FULL SCAN                      ·                          ·
 
 query TTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)
 ----
-·            distribution   local            ·              ·
-·            vectorized     false            ·              ·
-union        ·              ·                (column1 int)  ·
- ├── values  ·              ·                (column1 int)  ·
- │           size           1 column, 1 row  ·              ·
- │           row 0, expr 0  (1)[int]         ·              ·
- └── values  ·              ·                (column1 int)  ·
-·            size           1 column, 1 row  ·              ·
-·            row 0, expr 0  (2)[int]         ·              ·
+·            distribution         local            ·              ·
+·            vectorized           false            ·              ·
+union        ·                    ·                (column1 int)  ·
+ │           estimated row count  2                ·              ·
+ │           estimated cost       0.09             ·              ·
+ ├── values  ·                    ·                (column1 int)  ·
+ │           estimated cost       0.02             ·              ·
+ │           size                 1 column, 1 row  ·              ·
+ │           row 0, expr 0        (1)[int]         ·              ·
+ └── values  ·                    ·                (column1 int)  ·
+·            estimated cost       0.02             ·              ·
+·            size                 1 column, 1 row  ·              ·
+·            row 0, expr 0        (2)[int]         ·              ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT DISTINCT k FROM t
 ----
-·     distribution  local      ·        ·
-·     vectorized    true       ·        ·
-scan  ·             ·          (k int)  ·
-·     table         t@primary  ·        ·
-·     spans         FULL SCAN  ·        ·
+·     distribution         local                 ·        ·
+·     vectorized           true                  ·        ·
+scan  ·                    ·                     (k int)  ·
+·     estimated row count  1000 (missing stats)  ·        ·
+·     estimated cost       1060.02               ·        ·
+·     table                t@primary             ·        ·
+·     spans                FULL SCAN             ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t ORDER BY v
 ----
-·          distribution  local      ·        ·
-·          vectorized    true       ·        ·
-sort       ·             ·          (v int)  +v
- │         order         +v         ·        ·
- └── scan  ·             ·          (v int)  ·
-·          table         t@primary  ·        ·
-·          spans         FULL SCAN  ·        ·
+·          distribution         local                 ·        ·
+·          vectorized           true                  ·        ·
+sort       ·                    ·                     (v int)  +v
+ │         estimated row count  1000 (missing stats)  ·        ·
+ │         estimated cost       1279.34569            ·        ·
+ │         order                +v                    ·        ·
+ └── scan  ·                    ·                     (v int)  ·
+·          estimated row count  1000 (missing stats)  ·        ·
+·          estimated cost       1060.02               ·        ·
+·          table                t@primary             ·        ·
+·          spans                FULL SCAN             ·        ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT v FROM t LIMIT 1
 ----
-·     distribution  local         ·        ·
-·     vectorized    true          ·        ·
-scan  ·             ·             (v int)  ·
-·     table         t@primary     ·        ·
-·     spans         LIMITED SCAN  ·        ·
-·     limit         1             ·        ·
+·     distribution         local              ·        ·
+·     vectorized           true               ·        ·
+scan  ·                    ·                  (v int)  ·
+·     estimated row count  1 (missing stats)  ·        ·
+·     estimated cost       1.07               ·        ·
+·     table                t@primary          ·        ·
+·     spans                LIMITED SCAN       ·        ·
+·     limit                1                  ·        ·
 
 statement ok
 CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
@@ -768,13 +847,17 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-·          distribution  local                                                                      ·               ·
-·          vectorized    true                                                                       ·               ·
-filter     ·             ·                                                                          (x int, y int)  ·
- │         filter        ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
- └── scan  ·             ·                                                                          (x int, y int)  ·
-·          table         tt@primary                                                                 ·               ·
-·          spans         FULL SCAN                                                                  ·               ·
+·          distribution         local                                                                      ·               ·
+·          vectorized           true                                                                       ·               ·
+filter     ·                    ·                                                                          (x int, y int)  ·
+ │         estimated row count  311 (missing stats)                                                        ·               ·
+ │         estimated cost       1110.05                                                                    ·               ·
+ │         filter               ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]  ·               ·
+ └── scan  ·                    ·                                                                          (x int, y int)  ·
+·          estimated row count  1000 (missing stats)                                                       ·               ·
+·          estimated cost       1100.02                                                                    ·               ·
+·          table                tt@primary                                                                 ·               ·
+·          spans                FULL SCAN                                                                  ·               ·
 
 # TODO(radu): we don't support placeholders with no values.
 #query TTTTT
@@ -787,21 +870,23 @@ filter     ·             ·                                                    
 query TTTTT
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (a int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (a int)  ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   (1)[int]         ·        ·
 
 # Check array subscripts (#13811)
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-·       distribution   local            ·        ·
-·       vectorized     false            ·        ·
-values  ·              ·                (x int)  ·
-·       size           1 column, 1 row  ·        ·
-·       row 0, expr 0  (1)[int]         ·        ·
+·       distribution    local            ·        ·
+·       vectorized      false            ·        ·
+values  ·               ·                (x int)  ·
+·       estimated cost  0.02             ·        ·
+·       size            1 column, 1 row  ·        ·
+·       row 0, expr 0   (1)[int]         ·        ·
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r
@@ -1102,7 +1187,9 @@ explain  ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) EXPLAIN ANALYZE SELECT 1
 ----
-·             distribution  local  ·                       ·
-·             vectorized    false  ·                       ·
-project       ·             ·      (automatic, url)        ·
- └── explain  ·             ·      (automatic, url, json)  ·
+·             distribution         local               ·                       ·
+·             vectorized           false               ·                       ·
+project       ·                    ·                   (automatic, url)        ·
+ └── explain  ·                    ·                   (automatic, url, json)  ·
+·             estimated row count  10 (missing stats)  ·                       ·
+·             estimated cost       0.03                ·                       ·

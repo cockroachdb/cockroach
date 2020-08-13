@@ -743,17 +743,19 @@ SET enable_insert_fast_path = true
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
-·                 distribution   local              ·   ·
-·                 vectorized     false              ·   ·
-insert fast path  ·              ·                  ()  ·
-·                 into           child(c, p)        ·   ·
-·                 auto commit    ·                  ·   ·
-·                 FK check       parent@primary     ·   ·
-·                 size           2 columns, 2 rows  ·   ·
-·                 row 0, expr 0  1                  ·   ·
-·                 row 0, expr 1  1                  ·   ·
-·                 row 1, expr 0  2                  ·   ·
-·                 row 1, expr 1  2                  ·   ·
+·                 distribution         local              ·   ·
+·                 vectorized           false              ·   ·
+insert fast path  ·                    ·                  ()  ·
+·                 estimated row count  0 (missing stats)  ·   ·
+·                 estimated cost       12.2               ·   ·
+·                 into                 child(c, p)        ·   ·
+·                 auto commit          ·                  ·   ·
+·                 FK check             parent@primary     ·   ·
+·                 size                 2 columns, 2 rows  ·   ·
+·                 row 0, expr 0        1                  ·   ·
+·                 row 0, expr 1        1                  ·   ·
+·                 row 1, expr 0        2                  ·   ·
+·                 row 1, expr 1        2                  ·   ·
 
 # We shouldn't use the fast path if the VALUES columns are not in order.
 query B 
@@ -865,19 +867,23 @@ CREATE TABLE cascadechild (
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
 ----
-·                    distribution  local                   ·    ·
-·                    vectorized    false                   ·    ·
-root                 ·             ·                       ()   ·
- ├── delete          ·             ·                       ()   ·
- │    │              from          cascadeparent           ·    ·
- │    └── buffer     ·             ·                       (p)  ·
- │         │         label         buffer 1                ·    ·
- │         └── scan  ·             ·                       (p)  ·
- │                   table         cascadeparent@primary   ·    ·
- │                   spans         /2-                     ·    ·
- └── fk-cascade      ·             ·                       ·    ·
-·                    fk            fk_p_ref_cascadeparent  ·    ·
-·                    input         buffer 1                ·    ·
+·                    distribution         local                   ·    ·
+·                    vectorized           false                   ·    ·
+root                 ·                    ·                       ()   ·
+ ├── delete          ·                    ·                       ()   ·
+ │    │              estimated row count  0 (missing stats)       ·    ·
+ │    │              estimated cost       346.686667              ·    ·
+ │    │              from                 cascadeparent           ·    ·
+ │    └── buffer     ·                    ·                       (p)  ·
+ │         │         label                buffer 1                ·    ·
+ │         └── scan  ·                    ·                       (p)  ·
+ │                   estimated row count  333 (missing stats)     ·    ·
+ │                   estimated cost       346.676667              ·    ·
+ │                   table                cascadeparent@primary   ·    ·
+ │                   spans                /2-                     ·    ·
+ └── fk-cascade      ·                    ·                       ·    ·
+·                    fk                   fk_p_ref_cascadeparent  ·    ·
+·                    input                buffer 1                ·    ·
 
 statement ok
 CREATE TABLE a (
