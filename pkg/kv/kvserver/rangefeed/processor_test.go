@@ -152,8 +152,15 @@ func newTestProcessorWithTxnPusher(
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
 	})
-	p.Start(stopper, rtsIter)
+	p.Start(stopper, makeIteratorConstructor(rtsIter))
 	return p, stopper
+}
+
+func makeIteratorConstructor(rtsIter storage.SimpleIterator) IteratorConstructor {
+	if rtsIter == nil {
+		return nil
+	}
+	return func() storage.SimpleIterator { return rtsIter }
 }
 
 func newTestProcessor(rtsIter storage.SimpleIterator) (*Processor, *stop.Stopper) {
