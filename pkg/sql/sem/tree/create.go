@@ -647,14 +647,15 @@ type ColumnFamilyConstraint struct {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name        Name
-	Columns     IndexElemList
-	Sharded     *ShardedIndexDef
-	Storing     NameList
-	Interleave  *InterleaveDef
-	Inverted    bool
-	PartitionBy *PartitionBy
-	Predicate   Expr
+	Name          Name
+	Columns       IndexElemList
+	Sharded       *ShardedIndexDef
+	Storing       NameList
+	Interleave    *InterleaveDef
+	Inverted      bool
+	PartitionBy   *PartitionBy
+	StorageParams StorageParams
+	Predicate     Expr
 }
 
 // Format implements the NodeFormatter interface.
@@ -683,6 +684,11 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
+	}
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
 	}
 	if node.Predicate != nil {
 		ctx.WriteString(" WHERE ")
