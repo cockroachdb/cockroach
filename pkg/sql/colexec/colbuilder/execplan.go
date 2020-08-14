@@ -742,7 +742,7 @@ func NewColOperator(
 				// input is about 0.01 or less.
 				result.Op = colexec.NewUnorderedDistinct(
 					colmem.NewAllocator(ctx, distinctMemAccount, factory), inputs[0],
-					core.Distinct.DistinctColumns, result.ColumnTypes, colexec.HashTableNumBuckets,
+					core.Distinct.DistinctColumns, result.ColumnTypes,
 				)
 			}
 
