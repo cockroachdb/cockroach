@@ -1060,7 +1060,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 // be different (eg. TEXT and VARCHAR will fit the same scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
+func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 	if typ.Equivalent(col.DatumType()) {
 		return
 	}

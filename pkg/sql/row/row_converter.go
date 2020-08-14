@@ -289,7 +289,7 @@ func NewDatumRowConverter(
 	c.VisibleCols = targetColDescriptors
 	c.VisibleColTypes = make([]*types.T, len(c.VisibleCols))
 	for i := range c.VisibleCols {
-		c.VisibleColTypes[i] = c.VisibleCols[i].DatumType()
+		c.VisibleColTypes[i] = c.VisibleCols[i].Type
 	}
 
 	c.Datums = make([]tree.Datum, len(targetColDescriptors), len(cols))
@@ -375,7 +375,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			if !isTargetCol(i) {
 				if err != nil {
 					return errors.Wrapf(
-						err, "error evaluating default expression %q", col.DefaultExprStr())
+						err, "error evaluating default expression %q", *col.DefaultExpr)
 				}
 				c.Datums[i] = datum
 			}

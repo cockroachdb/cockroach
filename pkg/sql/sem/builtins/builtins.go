@@ -3527,7 +3527,7 @@ may increase either contention or retry errors, or both.`,
 						}
 						newDatum = tree.DNull
 					} else {
-						expectedTyp := col.DatumType()
+						expectedTyp := col.Type
 						newDatum, err = tree.PerformCast(ctx, d, expectedTyp)
 						if err != nil {
 							return nil, errors.WithHint(err, "try to explicitly cast each value to the corresponding column type")
