@@ -63,18 +63,16 @@ func (c *rowFetcherCache) TableDescForKey(
 		}
 		// No caching of these are attempted, since the lease manager does its
 		// own caching.
-		desc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		desc, err := c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
-		tableDesc = desc.(*sqlbase.ImmutableTableDescriptor)
+		tableDesc = desc.Desc().(*sqlbase.ImmutableTableDescriptor)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
-		if err := c.leaseMgr.Release(tableDesc); err != nil {
-			return nil, err
-		}
+		desc.Release(ctx)
 
 		// Skip over the column data.
 		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
