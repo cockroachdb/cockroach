@@ -3420,15 +3420,15 @@ func TestCanSendToFollower(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var sentTo ReplicaInfo
+	var sentTo roachpb.ReplicaDescriptor
 	var testFn simpleSendFn = func(
 		_ context.Context,
 		_ SendOptions,
-		r ReplicaSlice,
-		args roachpb.BatchRequest,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		sentTo = r[0]
-		return args.CreateReply(), nil
+		sentTo = ba.Replica
+		return ba.CreateReply(), nil
 	}
 	cfg := DistSenderConfig{
 		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
@@ -3482,7 +3482,7 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			sentTo = ReplicaInfo{}
+			sentTo = roachpb.ReplicaDescriptor{}
 			canSend = c.canSendToFollower
 			ds := NewDistSender(cfg)
 			ds.clusterID = &base.ClusterIDContainer{}
