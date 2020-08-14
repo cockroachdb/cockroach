@@ -739,6 +739,9 @@ func (ex *connExecutor) commitSQLTransactionInternal(
 		return err
 	}
 
+	if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline {
+		ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+	}
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return err
 	}
@@ -791,6 +794,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.phaseTimes[plannerStartLogicalPlan] = timeutil.Now()
+
+	if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline {
+		ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+	}
 
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.

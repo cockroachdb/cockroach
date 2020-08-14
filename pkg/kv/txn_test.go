@@ -497,7 +497,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	deadline := hlc.Timestamp{WallTime: 10, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(ctx, deadline) {
+	if !txn.UpdateDeadline(ctx, deadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline(); d != deadline {
@@ -505,7 +505,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	futureDeadline := hlc.Timestamp{WallTime: 11, Logical: 1}
-	if txn.UpdateDeadlineMaybe(ctx, futureDeadline) {
+	if txn.UpdateDeadline(ctx, futureDeadline) {
 		t.Errorf("expected no update, but update happened")
 	}
 	if d := *txn.deadline(); d != deadline {
@@ -513,7 +513,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 
 	pastDeadline := hlc.Timestamp{WallTime: 9, Logical: 1}
-	if !txn.UpdateDeadlineMaybe(ctx, pastDeadline) {
+	if !txn.UpdateDeadline(ctx, pastDeadline) {
 		t.Errorf("expected update, but it didn't happen")
 	}
 	if d := *txn.deadline(); d != pastDeadline {

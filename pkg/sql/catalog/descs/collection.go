@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -482,8 +483,19 @@ func (tc *Collection) getObjectVersion(
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
+
 	return desc.Desc(), nil
+}
+
+func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
+	for _, l := range tc.leasedDescriptors.descs {
+		expiration := l.Expiration()
+		if !haveDeadline || expiration.Less(deadline) {
+			haveDeadline = true
+			deadline = expiration
+		}
+	}
+	return deadline, haveDeadline
 }
 
 // GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
@@ -558,13 +570,6 @@ func (tc *Collection) getDescriptorVersionByID(
 	tc.leasedDescriptors.add(desc)
 	log.VEventf(ctx, 2, "added descriptor %q to collection", desc.Desc().GetName())
 
-	if setTxnDeadline {
-		// If the descriptor we just acquired expires before the txn's deadline,
-		// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-		// timestamp, so we need to set a deadline on the transaction to prevent it
-		// from committing beyond the version's expiration time.
-		txn.UpdateDeadlineMaybe(ctx, expiration)
-	}
 	return desc.Desc(), nil
 }
 
