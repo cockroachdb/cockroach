@@ -1756,6 +1756,8 @@ func (ds *DistSender) sendToReplicas(
 	// lease transfer is suspected.
 	inTransferRetry := retry.StartWithCtx(ctx, ds.rpcRetryOptions)
 	inTransferRetry.Next() // The first call to Next does not block.
+	var sameReplicaRetries int
+	var prevReplica roachpb.ReplicaDescriptor
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
@@ -1791,7 +1793,13 @@ func (ds *DistSender) sendToReplicas(
 			}
 		} else {
 			log.VEventf(ctx, 2, "trying next peer %s", curReplica.String())
+			if prevReplica == curReplica {
+				sameReplicaRetries++
+			} else {
+				sameReplicaRetries = 0
+			}
 		}
+		prevReplica = curReplica
 		// Communicate to the server the information our cache has about the range.
 		// If it's stale, the serve will return an update.
 		ba.ClientRangeInfo = &roachpb.ClientRangeInfo{
@@ -1935,7 +1943,9 @@ func (ds *DistSender) sendToReplicas(
 					}
 					// Move the new lease holder to the head of the queue for the next retry.
 					if lh := routing.Leaseholder(); lh != nil {
-						transport.MoveToFront(*lh)
+						if *lh != curReplica || sameReplicaRetries < 10 {
+							transport.MoveToFront(*lh)
+						}
 					}
 					// See if we want to backoff a little before the next attempt. If the lease info
 					// we got is stale, we backoff because it might be the case that there's a
