@@ -2,11 +2,10 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
-# ReorderJoins matches the first expression of an inner join group and adds to
-# the memo all valid join orderings that do not introduce cross joins. If the
-# join has join hints or is the result of a previous join reordering, the join
-# tree is not reordered. For more information, see the comment in
-# join_order_builder.go.
+# ReorderJoins matches the first expression of a join group and adds to the memo
+# all valid join orderings that do not introduce cross joins. If the join has
+# join hints or is the result of a previous join reordering, the join tree is
+# not reordered. For more information, see the comment in join_order_builder.go.
 #
 # Citations: [8]
 [ReorderJoins, Explore]
@@ -15,15 +14,6 @@
 )
 =>
 (ReorderJoins)
-
-# CommuteJoin creates a Join with the left and right inputs swapped. This is
-# useful for other rules that convert joins to other operators (like merge
-# join).
-# If any join hints are specified, we keep the order in the query.
-[CommuteJoin, Explore]
-(InnerJoin | FullJoin $left:* $right:* $on:* $private:*)
-=>
-((OpName) $right $left $on (CommuteJoinFlags $private))
 
 # CommuteLeftJoin creates a Join with the left and right inputs swapped.
 # This is symmetric with the CommuteRightJoin normalization rule.
