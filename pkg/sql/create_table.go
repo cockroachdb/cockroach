@@ -76,6 +76,7 @@ type createTableRun struct {
 // storageParamObserver applies a storage parameter to an underlying item.
 type storageParamObserver interface {
 	apply(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	runPostChecks() error
 }
 
 type tableStorageParamObserver struct{}
@@ -96,6 +97,10 @@ func applyFillFactorStorageParam(evalCtx *tree.EvalContext, key string, datum tr
 			pgnotice.Newf("storage parameter %q is ignored", key),
 		)
 	}
+	return nil
+}
+
+func (a *tableStorageParamObserver) runPostChecks() error {
 	return nil
 }
 
@@ -1542,6 +1547,15 @@ func MakeTableDesc(
 				}
 				idx.Predicate = expr
 			}
+			if err := applyStorageParameters(
+				ctx,
+				semaCtx,
+				evalCtx,
+				d.StorageParams,
+				&indexStorageParamObserver{indexDesc: &idx},
+			); err != nil {
+				return desc, err
+			}
 
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -1852,7 +1866,7 @@ func applyStorageParameters(
 			return err
 		}
 	}
-	return nil
+	return paramObserver.runPostChecks()
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.
