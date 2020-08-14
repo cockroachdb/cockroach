@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/safedetails"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -91,6 +92,12 @@ type descriptorVersionState struct {
 		// a node might not necessarily be associated with a lease.
 		lease *storedLease
 	}
+}
+
+func (s *descriptorVersionState) SafeMessage() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fmt.Sprintf("%d ver=%d:%s, refcount=%d", s.GetID(), s.GetVersion(), s.expiration, s.mu.refcount)
 }
 
 func (s *descriptorVersionState) String() string {
@@ -934,6 +941,8 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	return nil
 }
 
+var _ safedetails.SafeMessager = (*descriptorVersionState)(nil)
+
 // upsertLocked inserts a lease for a particular descriptor version.
 // If an existing lease exists for the descriptor version it replaces
 // it and returns it.
@@ -953,7 +962,7 @@ func (t *descriptorState) upsertLocked(
 	if !desc.hasValidExpiration(s) {
 		// This is a violation of an invariant and can actually not
 		// happen. We return an error here to aid in further investigations.
-		return nil, errors.Errorf("lease expiration monotonicity violation, (%s) vs (%s)", s, desc)
+		return nil, errors.AssertionFailedf("lease expiration monotonicity violation, (%s) vs (%s)", s, desc)
 	}
 
 	s.mu.Lock()
