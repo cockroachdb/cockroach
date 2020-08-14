@@ -1973,39 +1973,6 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 }
 
-func TestChangefeedPermissions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `CREATE USER testuser`)
-
-		s := f.Server()
-		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, s.ServingSQLAddr(), "TestChangefeedPermissions-testuser", url.User("testuser"),
-		)
-		defer cleanupFunc()
-		testuser, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer testuser.Close()
-
-		stmt := `EXPERIMENTAL CHANGEFEED FOR foo`
-		if strings.Contains(t.Name(), `enterprise`) {
-			stmt = `CREATE CHANGEFEED FOR foo`
-		}
-		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only users with the admin role`) {
-			t.Errorf(`expected 'only users with the admin role' error got: %+v`, err)
-		}
-	}
-
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
-}
-
 func TestChangefeedDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
