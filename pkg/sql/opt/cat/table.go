@@ -59,7 +59,7 @@ type Table interface {
 	//
 	//   cockroachdb/cockroach/docs/RFCS/20151014_online_schema_change.md
 	//
-	Column(i int) Column
+	Column(i int) *Column
 
 	// ColumnKind returns the column kind.
 	// Note: this is not a method in Column for the efficiency of the

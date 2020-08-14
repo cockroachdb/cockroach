@@ -555,7 +555,7 @@ type Table struct {
 	TabID      cat.StableID
 	TabVersion int
 	TabName    tree.TableName
-	Columns    []*Column
+	Columns    []cat.Column
 	Indexes    []*Index
 	Stats      TableStats
 	Checks     []cat.CheckConstraint
@@ -630,13 +630,13 @@ func (tt *Table) ColumnCount() int {
 }
 
 // Column is part of the cat.Table interface.
-func (tt *Table) Column(i int) cat.Column {
-	return tt.Columns[i]
+func (tt *Table) Column(i int) *cat.Column {
+	return &tt.Columns[i]
 }
 
 // ColumnKind is part of the cat.Table interface.
 func (tt *Table) ColumnKind(i int) cat.ColumnKind {
-	return tt.Columns[i].Kind
+	return tt.Columns[i].Kind()
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -712,7 +712,7 @@ func (tt *Table) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 // FindOrdinal returns the ordinal of the column with the given name.
 func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
-		if col.Name == name {
+		if col.ColName() == tree.Name(name) {
 			return i
 		}
 	}
@@ -917,77 +917,6 @@ func (ti *Index) InterleavedBy(i int) (table, index cat.StableID) {
 // GeoConfig is part of the cat.Index interface.
 func (ti *Index) GeoConfig() *geoindex.Config {
 	return ti.geoConfig
-}
-
-// Column implements the cat.Column interface for testing purposes.
-type Column struct {
-	Ordinal                  int
-	Hidden                   bool
-	Nullable                 bool
-	Name                     string
-	Type                     *types.T
-	DefaultExpr              *string
-	ComputedExpr             *string
-	Kind                     cat.ColumnKind
-	InvertedSourceColOrdinal int
-}
-
-var _ cat.Column = &Column{}
-
-// ColID is part of the cat.Index interface.
-func (tc *Column) ColID() cat.StableID {
-	if tc.Kind == cat.Virtual {
-		return 0
-	}
-	return 1 + cat.StableID(tc.Ordinal)
-}
-
-// IsNullable is part of the cat.Column interface.
-func (tc *Column) IsNullable() bool {
-	return tc.Nullable
-}
-
-// ColName is part of the cat.Column interface.
-func (tc *Column) ColName() tree.Name {
-	return tree.Name(tc.Name)
-}
-
-// DatumType is part of the cat.Column interface.
-func (tc *Column) DatumType() *types.T {
-	return tc.Type
-}
-
-// IsHidden is part of the cat.Column interface.
-func (tc *Column) IsHidden() bool {
-	return tc.Hidden
-}
-
-// HasDefault is part of the cat.Column interface.
-func (tc *Column) HasDefault() bool {
-	return tc.DefaultExpr != nil
-}
-
-// IsComputed is part of the cat.Column interface.
-func (tc *Column) IsComputed() bool {
-	return tc.ComputedExpr != nil
-}
-
-// DefaultExprStr is part of the cat.Column interface.
-func (tc *Column) DefaultExprStr() string {
-	return *tc.DefaultExpr
-}
-
-// ComputedExprStr is part of the cat.Column interface.
-func (tc *Column) ComputedExprStr() string {
-	return *tc.ComputedExpr
-}
-
-// InvertedSourceColumnOrdinal is part of the cat.Column interface.
-func (tc *Column) InvertedSourceColumnOrdinal() int {
-	if tc.InvertedSourceColOrdinal < 0 {
-		panic(errors.AssertionFailedf("InvertedSourceColumnOrdinal called on non-virtual column"))
-	}
-	return tc.InvertedSourceColOrdinal
 }
 
 // TableStat implements the cat.TableStatistic interface for testing purposes.

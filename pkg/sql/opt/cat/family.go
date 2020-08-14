@@ -39,7 +39,7 @@ type Family interface {
 type FamilyColumn struct {
 	// Column is a reference to the column returned by Table.Column, given the
 	// column ordinal.
-	Column
+	*Column
 
 	// Ordinal is the ordinal position of the family column in the table. It is
 	// always >= 0 and < Table.ColumnCount.

@@ -293,7 +293,7 @@ func alterColumnTypeGeneral(
 
 		oldColComputeExpr := tree.CastExpr{
 			Expr:       &tree.ColumnItem{ColumnName: tree.Name(col.Name)},
-			Type:       col.DatumType(),
+			Type:       col.Type,
 			SyntaxMode: tree.CastShort,
 		}
 		inverseExpr = tree.Serialize(&oldColComputeExpr)
@@ -309,7 +309,7 @@ func alterColumnTypeGeneral(
 		} else {
 			// The default expression for the new column is applying the
 			// computed expression to the previous default expression.
-			expr, err := parser.ParseExpr(col.DefaultExprStr())
+			expr, err := parser.ParseExpr(*col.DefaultExpr)
 			if err != nil {
 				return err
 			}

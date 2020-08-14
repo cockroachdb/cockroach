@@ -1993,7 +1993,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			}
 			def := tree.ColumnTableDef{
 				Name: tree.Name(c.Name),
-				Type: c.DatumType(),
+				Type: c.Type,
 			}
 			if c.Nullable {
 				def.Nullable.Nullability = tree.Null

@@ -102,13 +102,12 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 		visibility:    execinfra.ScanVisibilityPublicAndNotPublic,
 	}
-	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		ord := c
-		if cat.IsVirtualColumn(table, c) {
-			ord = table.Column(ord).InvertedSourceColumnOrdinal()
+	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
+		col := table.Column(ord)
+		if col.Kind() == cat.Virtual {
+			col = table.Column(col.InvertedSourceColumnOrdinal())
 		}
-		desc := table.Column(ord).(*descpb.ColumnDescriptor)
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
 	}
 	return colCfg
 }
