@@ -450,6 +450,46 @@ func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 	return err
 }
 
+func TestRollbackOfAddingTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Protects shouldError.
+	var mu syncutil.Mutex
+	shouldError := true
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeQueryBackfill: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if shouldError {
+					shouldError = false
+					return errors.New("boom")
+				}
+				return nil
+			},
+		},
+	}
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`CREATE DATABASE d`)
+	require.NoError(t, err)
+
+	// This view creation will fail and eventually rollback.
+	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
+	require.EqualError(t, err, "pq: boom")
+
+	// The view should be cleaned up after the failure, so we should be able
+	// to create a new view with the same name.
+	_, err = sqlDB.Exec(`CREATE MATERIALIZED VIEW d.v AS SELECT 1`)
+	require.NoError(t, err)
+}
+
 // Test schema change backfills are not affected by various operations
 // that run simultaneously.
 func TestRaceWithBackfill(t *testing.T) {
