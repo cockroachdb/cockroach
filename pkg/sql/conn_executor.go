@@ -1439,7 +1439,7 @@ func (ex *connExecutor) run(
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
-
+	var uuidTmp *kv.Txn
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -1447,6 +1447,14 @@ func (ex *connExecutor) run(
 		}
 
 		var err error
+		// Update the deadline on the transaction based on the collections
+		if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline && ex.state.mu.txn != nil {
+			err := ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+			if err != nil && uuidTmp != ex.state.mu.txn {
+				return err
+			}
+		}
+		uuidTmp = ex.state.mu.txn
 		if err = ex.execCmd(ex.Ctx()); err != nil {
 			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
