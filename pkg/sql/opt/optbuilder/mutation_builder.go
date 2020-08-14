@@ -246,6 +246,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
+			includeVirtual:   false,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -357,6 +358,7 @@ func (mb *mutationBuilder) buildInputForDelete(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
+			includeVirtual:   false,
 		}),
 		indexFlags,
 		noRowLocking,
@@ -545,18 +547,18 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 	var projectionsScope *scope
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if mb.tab.ColumnKind(i) == cat.DeleteOnly {
-			// Skip delete-only mutation columns, since they are ignored by all
-			// mutation operators that synthesize columns.
+		kind := mb.tab.ColumnKind(i)
+		// Skip delete-only mutation columns, since they are ignored by all
+		// mutation operators that synthesize columns.
+		if kind == cat.DeleteOnly {
+			continue
+		}
+		// Skip system and virtual columns.
+		if kind == cat.System || kind == cat.Virtual {
 			continue
 		}
 		// Skip columns that are already specified.
 		if colIDs[i] != 0 {
-			continue
-		}
-
-		// Skip system columns.
-		if cat.IsSystemColumn(mb.tab, i) {
 			continue
 		}
 

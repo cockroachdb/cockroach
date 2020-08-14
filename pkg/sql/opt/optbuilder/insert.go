@@ -371,8 +371,8 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if cat.IsSystemColumn(mb.tab, i) {
-			// #2: Don't consider system columns.
+		if kind := mb.tab.ColumnKind(i); kind == cat.System || kind == cat.Virtual {
+			// #2: Don't consider system or virtual columns.
 			continue
 		}
 		insertColID := mb.insertColIDs[i]
@@ -565,11 +565,8 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
-				tabCol := mb.tab.Column(i)
-				if !tabCol.IsHidden() {
-					desiredTypes = append(desiredTypes, tabCol.DatumType())
-				}
+			if tabCol := mb.tab.Column(i); !tabCol.IsHidden() && mb.tab.ColumnKind(i) == cat.Ordinary {
+				desiredTypes = append(desiredTypes, tabCol.DatumType())
 			}
 		}
 	}
@@ -704,6 +701,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			tableOrdinals(mb.tab, columnKinds{
 				includeMutations: false,
 				includeSystem:    false,
+				includeVirtual:   false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,
@@ -822,6 +820,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		tableOrdinals(mb.tab, columnKinds{
 			includeMutations: true,
 			includeSystem:    true,
+			includeVirtual:   false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,

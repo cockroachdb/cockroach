@@ -3072,39 +3072,39 @@ OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
 project
- ├── columns: name:14!null popn_per_sqkm:18
+ ├── columns: name:15!null popn_per_sqkm:20
  ├── immutable
  ├── group-by
- │    ├── columns: name:14!null n.geom:15 sum:17
- │    ├── grouping columns: name:14!null n.geom:15
+ │    ├── columns: name:15!null n.geom:16 sum:19
+ │    ├── grouping columns: name:15!null n.geom:16
  │    ├── immutable
- │    ├── key: (14,15)
- │    ├── fd: (14,15)-->(17)
+ │    ├── key: (15,16)
+ │    ├── fd: (15,16)-->(19)
  │    ├── inner-join (lookup nyc_census_blocks)
- │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10 n.boroname:13!null name:14!null n.geom:15
+ │    │    ├── columns: popn_total:3 c.boroname:9!null c.geom:10 n.boroname:14!null name:15!null n.geom:16
  │    │    ├── key columns: [1] = [1]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── fd: (9)==(13), (13)==(9)
+ │    │    ├── fd: (9)==(14), (14)==(9)
  │    │    ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
- │    │    │    ├── columns: c.gid:1!null n.boroname:13 name:14!null n.geom:15
+ │    │    │    ├── columns: c.gid:1!null n.boroname:14 name:15!null n.geom:16
  │    │    │    ├── inverted-expr
- │    │    │    │    └── st_intersects(n.geom:15, c.geom:10)
+ │    │    │    │    └── st_intersects(n.geom:16, c.geom:10)
  │    │    │    ├── select
- │    │    │    │    ├── columns: n.boroname:13 name:14!null n.geom:15
+ │    │    │    │    ├── columns: n.boroname:14 name:15!null n.geom:16
  │    │    │    │    ├── scan n
- │    │    │    │    │    └── columns: n.boroname:13 name:14 n.geom:15
+ │    │    │    │    │    └── columns: n.boroname:14 name:15 n.geom:16
  │    │    │    │    └── filters
- │    │    │    │         └── (name:14 = 'Upper West Side') OR (name:14 = 'Upper East Side') [outer=(14), constraints=(/14: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
+ │    │    │    │         └── (name:15 = 'Upper West Side') OR (name:15 = 'Upper East Side') [outer=(15), constraints=(/15: [/'Upper East Side' - /'Upper East Side'] [/'Upper West Side' - /'Upper West Side']; tight)]
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         ├── st_intersects(n.geom:15, c.geom:10) [outer=(10,15), immutable]
- │    │         └── c.boroname:9 = n.boroname:13 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
+ │    │         ├── st_intersects(n.geom:16, c.geom:10) [outer=(10,16), immutable]
+ │    │         └── c.boroname:9 = n.boroname:14 [outer=(9,14), constraints=(/9: (/NULL - ]; /14: (/NULL - ]), fd=(9)==(14), (14)==(9)]
  │    └── aggregations
- │         └── sum [as=sum:17, outer=(3)]
+ │         └── sum [as=sum:19, outer=(3)]
  │              └── popn_total:3
  └── projections
-      └── sum:17 / (st_area(n.geom:15) / 1e+06) [as=popn_per_sqkm:18, outer=(15,17), immutable]
+      └── sum:19 / (st_area(n.geom:16) / 1e+06) [as=popn_per_sqkm:20, outer=(16,19), immutable]
 
 memo expect=GenerateInvertedJoins
 SELECT
@@ -3117,19 +3117,19 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~28KB, required=[presentation: name:14,popn_per_sqkm:18])
+memo (optimized, ~28KB, required=[presentation: name:15,popn_per_sqkm:20])
  ├── G1: (project G2 G3 name)
- │    └── [presentation: name:14,popn_per_sqkm:18]
+ │    └── [presentation: name:15,popn_per_sqkm:20]
  │         ├── best: (project G2 G3 name)
  │         └── cost: 7308.28
- ├── G2: (group-by G4 G5 cols=(14,15))
+ ├── G2: (group-by G4 G5 cols=(15,16))
  │    └── []
- │         ├── best: (group-by G4 G5 cols=(14,15))
+ │         ├── best: (group-by G4 G5 cols=(15,16))
  │         └── cost: 7308.23
  ├── G3: (projections G6)
- ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods,keyCols=[12],outCols=(3,9,10,13-15)) (lookup-join G12 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,13-15))
+ ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G10 G11 nyc_neighborhoods,keyCols=[13],outCols=(3,9,10,14-16)) (lookup-join G12 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,14-16))
  │    └── []
- │         ├── best: (lookup-join G12 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,13-15))
+ │         ├── best: (lookup-join G12 G9 nyc_census_blocks,keyCols=[1],outCols=(3,9,10,14-16))
  │         └── cost: 7301.98
  ├── G5: (aggregations G13)
  ├── G6: (div G14 G15)
@@ -3154,9 +3154,9 @@ memo (optimized, ~28KB, required=[presentation: name:14,popn_per_sqkm:18])
  ├── G13: (sum G22)
  ├── G14: (variable sum)
  ├── G15: (div G23 G24)
- ├── G16: (scan n,cols=(13-15))
+ ├── G16: (scan n,cols=(14-16))
  │    └── []
- │         ├── best: (scan n,cols=(13-15))
+ │         ├── best: (scan n,cols=(14-16))
  │         └── cost: 138.05
  ├── G17: (filters G21)
  ├── G18: (function G25 st_intersects)
@@ -3186,22 +3186,22 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_DWithin(c.geom, n.geom, 50)
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(c.geom:10, n.geom:15, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithin(c.geom:10, n.geom:15, 50.0) [outer=(10,15), immutable]
+           └── st_dwithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
 
 # Same test as above, but with arguments commuted.
 opt expect=GenerateInvertedJoins
@@ -3212,22 +3212,22 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_DWithin(n.geom, c.geom, 50)
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_dwithin(c.geom:10, n.geom:15, 50.0)
+      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_dwithin(n.geom:15, c.geom:10, 50.0) [outer=(10,15), immutable]
+           └── st_dwithin(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable]
 
 opt expect=GenerateInvertedJoins
 SELECT
@@ -3237,22 +3237,22 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_Covers(c.geom, n.geom)
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:15)
+      │    │    └── st_covers(c.geom:10, n.geom:16)
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_covers(c.geom:10, n.geom:15) [outer=(10,15), immutable]
+           └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
 
 # Same test as above, but with arguments commuted.
 opt expect=GenerateInvertedJoins
@@ -3263,22 +3263,22 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_Covers(n.geom, c.geom)
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:15)
+      │    │    └── st_coveredby(c.geom:10, n.geom:16)
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           └── st_covers(n.geom:15, c.geom:10) [outer=(10,15), immutable]
+           └── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
 
 # Complex join filter.
 opt expect=GenerateInvertedJoins
@@ -3290,23 +3290,23 @@ ON ST_Covers(n.geom, c.geom)
   AND (ST_DWithin(c.geom, n.geom, 50) OR ST_Intersects(n.geom, 'LINESTRING ( 0 0, 0 2 )'::geometry))
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9 c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_coveredby(c.geom:10, n.geom:15) AND (st_dwithin(c.geom:10, n.geom:15, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:15))
+      │    │    └── st_coveredby(c.geom:10, n.geom:16) AND (st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16))
       │    ├── scan c
       │    │    └── columns: c.boroname:9 c.geom:10
       │    └── filters (true)
       └── filters
-           ├── st_covers(n.geom:15, c.geom:10) [outer=(10,15), immutable]
-           └── st_dwithin(c.geom:10, n.geom:15, 50.0) OR st_intersects(n.geom:15, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,15), immutable]
+           ├── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
+           └── st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects(n.geom:16, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,16), immutable]
 
 opt expect=GenerateInvertedJoinsFromSelect
 SELECT
@@ -3318,41 +3318,41 @@ AND ST_Covers('LINESTRING ( 0 0, 0 2 )', n.geom)
 AND ST_Covers(c.geom, 'LINESTRING ( 0 0, 0 2 )')
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (lookup nyc_census_blocks)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── immutable
       ├── inner-join (inverted-lookup nyc_census_blocks@nyc_census_blocks_geo_idx)
-      │    ├── columns: c.gid:1!null name:14 n.geom:15
+      │    ├── columns: c.gid:1!null name:15 n.geom:16
       │    ├── inverted-expr
-      │    │    └── st_coveredby(n.geom:15, c.geom:10) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:10)
+      │    │    └── st_coveredby(n.geom:16, c.geom:10) AND st_coveredby('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', c.geom:10)
       │    ├── immutable
       │    ├── select
-      │    │    ├── columns: name:14 n.geom:15
+      │    │    ├── columns: name:15 n.geom:16
       │    │    ├── immutable
       │    │    ├── index-join nyc_neighborhoods
-      │    │    │    ├── columns: name:14 n.geom:15
+      │    │    │    ├── columns: name:15 n.geom:16
       │    │    │    └── inverted-filter
-      │    │    │         ├── columns: n.gid:12!null
-      │    │    │         ├── inverted expression: /15
+      │    │    │         ├── columns: n.gid:13!null
+      │    │    │         ├── inverted expression: /18
       │    │    │         │    ├── tight: false
       │    │    │         │    └── union spans: ["\x89", "\xfd ")
-      │    │    │         ├── key: (12)
+      │    │    │         ├── key: (13)
       │    │    │         └── scan n@nyc_neighborhoods_geo_idx
-      │    │    │              ├── columns: n.gid:12!null n.geom:15
-      │    │    │              ├── inverted constraint: /15/12
+      │    │    │              ├── columns: n.gid:13!null n.geom_inverted_key:18!null
+      │    │    │              ├── inverted constraint: /18/13
       │    │    │              │    └── spans: ["\x89", "\xfd ")
       │    │    │              ├── flags: force-index=nyc_neighborhoods_geo_idx
-      │    │    │              ├── key: (12)
-      │    │    │              └── fd: (12)-->(15)
+      │    │    │              ├── key: (13)
+      │    │    │              └── fd: (13)-->(18)
       │    │    └── filters
-      │    │         └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:15) [outer=(15), immutable]
+      │    │         └── st_covers('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', n.geom:16) [outer=(16), immutable]
       │    └── filters (true)
       └── filters
-           ├── st_covers(c.geom:10, n.geom:15) [outer=(10,15), immutable]
+           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
            └── st_covers(c.geom:10, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10), immutable]
 
 opt expect=GenerateInvertedJoinsFromSelect
@@ -3363,19 +3363,19 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_Covers(c.geom, n.geom) AND c.boroname = 'Manhattan' AND n.name LIKE 'Upper%'
 ----
 project
- ├── columns: name:14!null boroname:9!null
+ ├── columns: name:15!null boroname:9!null
  ├── immutable
  ├── fd: ()-->(9)
  └── inner-join (lookup nyc_neighborhoods)
-      ├── columns: c.boroname:9!null c.geom:10 name:14!null n.geom:15
-      ├── key columns: [12] = [12]
+      ├── columns: c.boroname:9!null c.geom:10 name:15!null n.geom:16
+      ├── key columns: [13] = [13]
       ├── lookup columns are key
       ├── immutable
       ├── fd: ()-->(9)
       ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
-      │    ├── columns: c.boroname:9!null c.geom:10 n.gid:12!null
+      │    ├── columns: c.boroname:9!null c.geom:10 n.gid:13!null
       │    ├── inverted-expr
-      │    │    └── st_covers(c.geom:10, n.geom:15)
+      │    │    └── st_covers(c.geom:10, n.geom:16)
       │    ├── fd: ()-->(9)
       │    ├── select
       │    │    ├── columns: c.boroname:9!null c.geom:10
@@ -3386,8 +3386,8 @@ project
       │    │         └── c.boroname:9 = 'Manhattan' [outer=(9), constraints=(/9: [/'Manhattan' - /'Manhattan']; tight), fd=()-->(9)]
       │    └── filters (true)
       └── filters
-           ├── st_covers(c.geom:10, n.geom:15) [outer=(10,15), immutable]
-           └── name:14 LIKE 'Upper%' [outer=(14), constraints=(/14: [/'Upper' - /'Uppes'); tight)]
+           ├── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+           └── name:15 LIKE 'Upper%' [outer=(15), constraints=(/15: [/'Upper' - /'Uppes'); tight)]
 
 # It's not possible to generate an inverted join when there is an OR with a
 # non-geospatial function.
@@ -3399,18 +3399,18 @@ JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
 ON ST_Covers(c.geom, n.geom) OR n.name LIKE 'Upper%'
 ----
 project
- ├── columns: name:14 boroname:9
+ ├── columns: name:15 boroname:9
  ├── immutable
  └── inner-join (cross)
-      ├── columns: c.boroname:9 c.geom:10 name:14 n.geom:15
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
       ├── immutable
       ├── scan c
       │    └── columns: c.boroname:9 c.geom:10
       ├── scan n
-      │    ├── columns: name:14 n.geom:15
+      │    ├── columns: name:15 n.geom:16
       │    └── flags: force-index=nyc_neighborhoods_geo_idx
       └── filters
-           └── st_covers(c.geom:10, n.geom:15) OR (name:14 LIKE 'Upper%') [outer=(10,14,15), immutable]
+           └── st_covers(c.geom:10, n.geom:16) OR (name:15 LIKE 'Upper%') [outer=(10,15,16), immutable]
 
 # --------------------------------------------------
 # GenerateZigZagJoins

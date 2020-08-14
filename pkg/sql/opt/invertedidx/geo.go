@@ -400,7 +400,7 @@ func joinGeoIndexFromFunction(
 	if !ok {
 		return nil
 	}
-	if variable.Col != tabID.ColumnID(index.Column(0).Ordinal) {
+	if variable.Col != tabID.ColumnID(index.Column(0).InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return nil
 	}
@@ -533,7 +533,7 @@ func constrainGeoIndexFromFunction(
 	if !ok {
 		return invertedexpr.NonInvertedColExpression{}
 	}
-	if variable.Col != tabID.ColumnID(index.Column(0).Ordinal) {
+	if variable.Col != tabID.ColumnID(index.Column(0).InvertedSourceColumnOrdinal()) {
 		// The column in the function does not match the index column.
 		return invertedexpr.NonInvertedColExpression{}
 	}

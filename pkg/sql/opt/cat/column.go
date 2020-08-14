@@ -33,7 +33,22 @@ const (
 	// as part of mutations. They also cannot be part of the lax or key columns
 	// for indexes. System columns are not members of any column family.
 	System
+	// Virtual columns are implicit columns that are used by inverted indexes (and
+	// later, expression-based indexes).
+	Virtual
 )
+
+// IsMutation is a convenience method that returns true if the column kind is
+// a mutation column.
+func (kind ColumnKind) IsMutation() bool {
+	return kind == WriteOnly || kind == DeleteOnly
+}
+
+// IsSelectable is a convenience method that returns true if the column
+// kind is a selectable column.
+func (kind ColumnKind) IsSelectable() bool {
+	return kind == Ordinary || kind == System
+}
 
 // Column is an interface to a table column, exposing only the information
 // needed by the query optimizer.
@@ -43,6 +58,9 @@ type Column interface {
 	// than every column allocated before or after. This is true even if a column
 	// is dropped and then re-added with the same name; the new column will have
 	// a different ID. See the comment for StableID for more detail.
+	//
+	// Virtual columns don't have stable IDs; for these columns ColID() must not
+	// be called.
 	ColID() StableID
 
 	// ColName returns the name of the column.
@@ -100,17 +118,40 @@ type Column interface {
 	// computed columns, but they can depend on all other columns, including
 	// columns with default values.
 	ComputedExprStr() string
+
+	// InvertedSourceColumnOrdinal is implemented by virtual columns that are part
+	// of inverted indexes. It returns the ordinal of the table column from which
+	// the inverted column is derived.
+	//
+	// For example, if we have an inverted index on a JSON column `j`, the index
+	// is on a virtual `j_inverted` column and calling
+	// InvertedSourceColumnOrdinal() on `j_inverted` returns the ordinal of the
+	// `j` column.
+	//
+	// Must not be called if this is not a virtual column.
+	InvertedSourceColumnOrdinal() int
 }
 
 // IsMutationColumn is a convenience function that returns true if the column at
 // the given ordinal position is a mutation column.
 func IsMutationColumn(table Table, ord int) bool {
-	kind := table.ColumnKind(ord)
-	return kind == WriteOnly || kind == DeleteOnly
+	return table.ColumnKind(ord).IsMutation()
 }
 
 // IsSystemColumn is a convenience function that returns true if the column at
 // the given ordinal position is a system column.
 func IsSystemColumn(table Table, ord int) bool {
 	return table.ColumnKind(ord) == System
+}
+
+// IsSelectableColumn is a convenience function that returns true if the column
+// at the given ordinal position is a selectable column.
+func IsSelectableColumn(table Table, ord int) bool {
+	return table.ColumnKind(ord).IsSelectable()
+}
+
+// IsVirtualColumn is a convenience function that returns true if the column at
+// the given ordinal position is a virtual column.
+func IsVirtualColumn(table Table, ord int) bool {
+	return table.ColumnKind(ord) == Virtual
 }

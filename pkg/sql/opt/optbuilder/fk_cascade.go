@@ -287,6 +287,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		tableOrdinals(childTable, columnKinds{
 			includeMutations: false,
 			includeSystem:    false,
+			includeVirtual:   false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -531,6 +532,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		tableOrdinals(childTable, columnKinds{
 			includeMutations: false,
 			includeSystem:    false,
+			includeVirtual:   false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,

@@ -17,12 +17,12 @@ CREATE TABLE geo_table2(
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT k FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v2jAUhu_3K6xzA0hesRM-Wl8xbemWiQIDpG1qIpTFRyxasDPbmZgQ_31K0omWDlZyEel8PPb7Hp8d2J85CFgE4-DtkpQmJ7fz6R25D77Mxm_CCWm_CxfLxadxhzy0_Gga1qhXLvmWo0c-fwjmAbFulSmHxmLqbLs1m4aTZdu_YsS_Yp2WEO-D6V2wnH-lFbrpxEBBaYmTZIMWxD1wiCkURqdorTZValc3hHILglHIVFG6Kh1TSLVBEDtwmcsRBCwrIXNMJJouAwoSXZLl9bEHnaPq3lWmJG6BwqJIlBWky3nfu_F4n_UGbHDdG9wMB6__kRySREniM6LddzQW4j0FXbqDJOuSNYLge_py2aH6hcahvM1yhwZNlz_V_rcebAtDtCIjLoitdBPrEuNEBFHkD_tRxDwWRYz97wcElbyQ4hGQI-8UpqUTZMTpyD85CO-SQXzUmXp4Pu_k8xUm2yTmN1Bo5iWOV45xxtnz77r3LG6Jx_s48joHTycN-ZcYmqMttLL4xMypk9k-poByjc3SW12aFGdGp_U1TTituToh0bqmypsgVE2pEvgY5mdh7zzsnYX9Izjev_oTAAD__9U_U4U=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk0uP2jwUhvffr7DOBpD8DbbDZcarVG2mTcUABaS2mkQoxUc0arBT21RUiP9ehUzFXBpasoh0Lo993tf2Htz3AiTMo1H0ekG2tiC3s8kduY8-TUev4jFpv4nni_mHUYc8tHyrG9Zolj77UqAgH99Fs4g4v8y1R-tw5V27NZ3E40U7uGIkuGKdlpRvo8ldtJh9phW66aRAQRuF42yDDuQ9cEgplNas0Dljq9T-2BCrHUhGIdfl1lfplMLKWAS5B5_7AkHCohpkhplC22VAQaHP8uK47GnOsNp3mWuFO6AwLzPtJOly3hc3gvdZb8AG173BzXDw_x-SQ5JpRQJGjP-K1gGFydZLEnIaBjQUkB4omK0_jeh8tkaQ_ED_XUasf6D1qG7zwqNF2-VPtfyuR7vSEqNJKCRxlQ7ifGa9TCBJgmE_SZhgScLY335AUKsLKZ4Aafai2QhxiRHvTa4fjlM0Hmdp801mfwKF2i_5_Aoyzjh7-V33XsQt-fh-hqJz0tQoKLhE0AxdabTDJ2KaVmaHlAKqNdaPwJmtXeHUmtVxmzqcHLljQqHzdZXXQazrUjXgY5ifhcV5WJyFg2dwevjvVwAAAP__Hi5XNQ==
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v2jAUhu_3K47ODSB5xU74aH3FtKVbJgoMkLapiVBGjljUYGe2MzEh_vsU0qktHbTkItL5eOz3PT5btL9ylDgLhsH7OZQmh-vp-AZug2-T4btwBM0P4Ww--zJswX3LHYO7RZGXdqEV1c0r0guX_MjJg6-fgmkA1i0y5chYWjrbbEzG4Wje9C84-Be81ZDyYzC-CebT76xC160YGSqd0ihZk0V5iwJjhoXRS7JWmyq13TeE6QYlZ5iponRVOma41IZQbtFlLieUOK-ETClJybQ5MkzJJVm-P_ZB56C6d5GplDbIcFYkykpoC9H1rjzR5Z0e7112elf93tv_JPuQqBR8Dtr9JGMx3jHUpXuQZF2yIpRix14vO1S_yThKr7PckSHTFk-1_6sHm8KAVjAQEmylG6xLjJMRRpHf70YR93gUcf7SD4FUeiYlIoQD7wzHpZMwEGzgHx2Ed84gPutM3T-fd_T5CpOtE_MHGdbzkocrxwUX_Pl32XkWN-TjfRx4rdd58s_xNCVbaGXpiZ9jJ_NdzJDSFdV7b3VpljQxerm_pg7He26fSMm6uirqIFR1qRL4GBYnYe807J2E_QM43r35GwAA__-Cklif
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUk99v2jAQx9_3V1j3UpC8Yjv8aP2UaUu3TBQYIG1TE6EMn1jUYGe2MzEh_vcppFNLO9jIQ6T78bHve3fegvtRgIRZNIzezkllC3IzHd-Su-jLZPgmHpHWu3g2n30atslDyj0l94uyqNzCaGySV2gWPvtWoCCfP0TTiDi_yLVH63DpXetiMo5H81ZwyUhwydoXUr6PxrfRfPqV1ui6nQIFbRSOsjU6kHfAIaVQWrNE54ytXdt9Qqw2IBmFXJeVr90phaWxCHILPvcFgoR5XcgUM4W2w4CCQp_lxf7YxzrD-t5FrhVugMKszLSTpMN5T1wL3mPdPutfdfvXg_7rvzgHJNOKBIwY_x2tAwrjyksSchoGNBSQ7iiYyj-W6Hy2QpB8R_9fRqx_ovWobvLCo0Xb4Yda_sSjTWmJ0SQUkrhaB3E-s14mkCTBoJckTLAkYexfPyCo1ZkUT4Ac78XxRohzGvHR5PphnOLoOEubrzP7Cyg0_ZLPV5BxxtnL76r7wr6QT_czFO2D-R7VFJyjaYquNNrhgZ5jJ7NdSgHVCpt34ExllzixZrm_pjHHe27vUOh8E-WNEesmVBf4FOYnYXEaFifh4Bmc7l79DgAA__8eQVxP
 
 query TTT
 EXPLAIN SELECT k, k_plus_one FROM geo_table2 WHERE ST_Intersects('POINT(3.0 3.0)'::geometry, geom)
@@ -37,7 +37,7 @@ project                              ·                ·
            │                         key columns      k, k_plus_one
            └── project               ·                ·
                 └── inverted filter  ·                ·
-                     │               inverted column  geom
+                     │               inverted column  geom_inverted_key
                      │               num spans        31
                      └── scan        ·                ·
 ·                                    table            geo_table2@geom_index
@@ -56,7 +56,7 @@ project                              ·                ·
            │                         key columns      k, k_plus_one
            └── project               ·                ·
                 └── inverted filter  ·                ·
-                     │               inverted column  geom
+                     │               inverted column  geom_inverted_key
                      │               num spans        20
                      └── scan        ·                ·
 ·                                    table            geo_table2@geom_index
