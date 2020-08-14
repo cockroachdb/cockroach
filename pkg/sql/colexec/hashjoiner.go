@@ -226,9 +226,12 @@ func (hj *hashJoiner) Init() {
 		allowNullEquality = true
 		probeMode = hashTableDeletingProbeMode
 	}
+	// This number was chosen after running the micro-benchmarks and relevant
+	// TPCH queries using tpchvec/bench.
+	const hashTableLoadFactor = 8.0
 	hj.ht = newHashTable(
 		hj.allocator,
-		HashTableNumBuckets,
+		hashTableLoadFactor,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		allowNullEquality,

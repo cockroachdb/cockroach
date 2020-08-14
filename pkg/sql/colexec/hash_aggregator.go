@@ -91,13 +91,6 @@ type hashAggregator struct {
 
 	output coldata.Batch
 
-	testingKnobs struct {
-		// numOfHashBuckets is the number of hash buckets that each tuple will be
-		// assigned to. When it is 0, hash aggregator will not enforce maximum
-		// number of hash buckets. It is used to test hash collision.
-		numOfHashBuckets uint64
-	}
-
 	aggFnsAlloc *aggregateFuncsAlloc
 	hashAlloc   hashAggBucketAlloc
 	datumAlloc  sqlbase.DatumAlloc
@@ -160,14 +153,12 @@ func (op *hashAggregator) Init() {
 	op.scratch.eqChains = make([][]int, coldata.BatchSize())
 	op.scratch.intSlice = make([]int, coldata.BatchSize())
 	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
-	// TODO(yuzefovich): tune this.
-	numOfHashBuckets := uint64(HashTableNumBuckets)
-	if op.testingKnobs.numOfHashBuckets != 0 {
-		numOfHashBuckets = op.testingKnobs.numOfHashBuckets
-	}
+	// This number was chosen after running the micro-benchmarks and relevant
+	// TPCH queries using tpchvec/bench.
+	const hashTableLoadFactor = 0.25
 	op.ht = newHashTable(
 		op.allocator,
-		numOfHashBuckets,
+		hashTableLoadFactor,
 		op.inputTypes,
 		op.spec.GroupCols,
 		true, /* allowNullEquality */
