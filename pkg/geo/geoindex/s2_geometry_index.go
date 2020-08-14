@@ -72,7 +72,7 @@ func DefaultGeometryIndexConfig() *Config {
 			MaxX:     10000,
 			MinY:     -10000,
 			MaxY:     10000,
-			S2Config: defaultS2Config()},
+			S2Config: DefaultS2Config()},
 	}
 }
 
@@ -122,7 +122,7 @@ func GeometryIndexConfigForSRID(srid geopb.SRID) (*Config, error) {
 			MaxX:     maxX + deltaX,
 			MinY:     minY - deltaY,
 			MaxY:     maxY + deltaY,
-			S2Config: defaultS2Config()},
+			S2Config: DefaultS2Config()},
 	}, nil
 }
 
