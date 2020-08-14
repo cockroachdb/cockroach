@@ -305,7 +305,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		// key columns.
 		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal]
+			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal()]
 
 			// If the primary key column is hidden, then we don't need to use it
 			// for the distinct on.
@@ -1007,7 +1007,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 func getIndexLaxKeyOrdinals(index cat.Index) util.FastIntSet {
 	var keyOrds util.FastIntSet
 	for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
-		keyOrds.Add(index.Column(i).Ordinal)
+		keyOrds.Add(index.Column(i).Ordinal())
 	}
 	return keyOrds
 }
@@ -1019,7 +1019,7 @@ func findNotNullIndexCol(index cat.Index) int {
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		indexCol := index.Column(i)
 		if !indexCol.IsNullable() {
-			return indexCol.Ordinal
+			return indexCol.Ordinal()
 		}
 	}
 	panic(errors.AssertionFailedf("should have found not null column in index"))

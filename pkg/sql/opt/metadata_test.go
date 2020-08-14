@@ -183,13 +183,23 @@ func TestMetadataTables(t *testing.T) {
 	a := &testcat.Table{TabID: 1}
 	a.TabName = tree.MakeUnqualifiedTableName(tree.Name("a"))
 
-	mkCol := func(name string) cat.Column {
+	mkCol := func(ordinal int, name string) cat.Column {
 		var c cat.Column
-		c.InitNonVirtual(1, tree.Name(name), cat.Ordinary, types.Int, false, false, nil, nil)
+		c.InitNonVirtual(
+			ordinal,
+			cat.StableID(ordinal+1),
+			tree.Name(name),
+			cat.Ordinary,
+			types.Int,
+			false, /* nullable */
+			false, /* hidden */
+			nil,   /* defaultExpr */
+			nil,   /* computedExpr */
+		)
 		return c
 	}
-	x := mkCol("x")
-	y := mkCol("y")
+	x := mkCol(0, "x")
+	y := mkCol(1, "y")
 	a.Columns = append(a.Columns, x, y)
 
 	tabID := md.AddTable(a, &tree.TableName{})
@@ -215,7 +225,7 @@ func TestMetadataTables(t *testing.T) {
 	// Add another table reference to the metadata.
 	b := &testcat.Table{TabID: 1}
 	b.TabName = tree.MakeUnqualifiedTableName(tree.Name("b"))
-	b.Columns = append(b.Columns, mkCol("x"))
+	b.Columns = append(b.Columns, mkCol(0, "x"))
 
 	otherTabID := md.AddTable(b, &tree.TableName{})
 	if otherTabID == tabID {

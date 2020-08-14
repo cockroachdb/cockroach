@@ -594,10 +594,10 @@ func (b *Builder) tryBuildDeleteRangeOnInterleaving(
 				return execPlan{}, false, nil
 			}
 			for i := 0; i < numCols; i++ {
-				if fk.OriginColumnOrdinal(child, i) != childIdx.Column(i).Ordinal {
+				if fk.OriginColumnOrdinal(child, i) != childIdx.Column(i).Ordinal() {
 					return execPlan{}, false, nil
 				}
-				if fk.ReferencedColumnOrdinal(parent, i) != parentIdx.Column(i).Ordinal {
+				if fk.ReferencedColumnOrdinal(parent, i) != parentIdx.Column(i).Ordinal() {
 					return execPlan{}, false, nil
 				}
 			}

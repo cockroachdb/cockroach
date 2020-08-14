@@ -85,7 +85,7 @@ func ScanPrivateCanProvide(
 			return false, false
 		}
 		indexCol := index.Column(left)
-		indexColID := s.Table.ColumnID(indexCol.Ordinal)
+		indexColID := s.Table.ColumnID(indexCol.Ordinal())
 		if required.Optional.Contains(indexColID) {
 			left++
 			continue
@@ -130,7 +130,7 @@ func scanBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt
 	provided := make(opt.Ordering, 0, numCols)
 	for i := 0; i < numCols; i++ {
 		indexCol := index.Column(i)
-		colID := scan.Table.ColumnID(indexCol.Ordinal)
+		colID := scan.Table.ColumnID(indexCol.Ordinal())
 		if !scan.Cols.Contains(colID) {
 			// Column not in output; we are done.
 			break

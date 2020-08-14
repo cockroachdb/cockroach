@@ -228,10 +228,6 @@ type IndexColumn struct {
 	// column ordinal.
 	*Column
 
-	// Ordinal is the ordinal position of the indexed column in the table being
-	// indexed. It is always >= 0 and < Table.ColumnCount.
-	Ordinal int
-
 	// Descending is true if the index is ordered from greatest to least on
 	// this column, rather than least to greatest.
 	Descending bool

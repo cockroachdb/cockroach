@@ -74,7 +74,7 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) opt.OrderingSet {
 		var o opt.Ordering
 		for j := 0; j < numIndexCols; j++ {
 			indexCol := index.Column(j)
-			colID := scan.Table.ColumnID(indexCol.Ordinal)
+			colID := scan.Table.ColumnID(indexCol.Ordinal())
 			if !scan.Cols.Contains(colID) {
 				break
 			}

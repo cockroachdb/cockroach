@@ -383,7 +383,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			var b strings.Builder
 			for i := 0; i < idx.KeyColumnCount(); i++ {
 				b.WriteRune('/')
-				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal)))
+				b.WriteString(fmt.Sprintf("%d", t.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
 			n := tp.Childf("inverted constraint: %s", b.String())
 			ic.Format(n, "spans")
@@ -449,7 +449,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		idxCols := make(opt.ColList, len(t.KeyCols))
 		idx := md.Table(t.Table).Index(t.Index)
 		for i := range idxCols {
-			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal)
+			idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
 		}
 		if !f.HasFlags(ExprFmtHideColumns) {
 			tp.Childf("key columns: %v = %v", t.KeyCols, idxCols)

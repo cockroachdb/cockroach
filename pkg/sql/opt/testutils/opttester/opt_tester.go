@@ -1411,6 +1411,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		colName := colNameGen.GenerateName(col)
 
 		columns[i].InitNonVirtual(
+			i,
 			cat.StableID(i+1),
 			tree.Name(colName),
 			cat.Ordinary,
