@@ -15,8 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // planDependencyInfo collects the dependencies related to a single
@@ -56,4 +59,26 @@ func (d planDependencies) String() string {
 		buf.WriteByte('\n')
 	}
 	return buf.String()
+}
+
+// checkViewMatchesMaterialized ensures that if a view is required, then the view
+// is materialized or not as desired.
+func checkViewMatchesMaterialized(
+	desc sqlbase.TableDescriptor, requireView, wantMaterialized bool,
+) error {
+	if !requireView {
+		return nil
+	}
+	if !desc.IsView() {
+		return nil
+	}
+	isMaterialized := desc.MaterializedView()
+	if isMaterialized && !wantMaterialized {
+		err := pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", desc.GetName())
+		return errors.WithHint(err, "use the corresponding MATERIALIZED VIEW command")
+	}
+	if !isMaterialized && wantMaterialized {
+		return pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", desc.GetName())
+	}
+	return nil
 }

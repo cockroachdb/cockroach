@@ -50,6 +50,10 @@ func (p *planner) AlterTableSetSchema(
 		return newZeroNode(nil /* columns */), nil
 	}
 
+	if err := checkViewMatchesMaterialized(tableDesc, n.IsView, n.IsMaterialized); err != nil {
+		return nil, err
+	}
+
 	if tableDesc.Temporary {
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of temporary schemas")
