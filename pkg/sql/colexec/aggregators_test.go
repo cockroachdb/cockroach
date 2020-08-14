@@ -1068,9 +1068,9 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{0, 3},
 				{0, 4},
-				{HashTableNumBuckets, 6},
+				{coldata.BatchSize(), 6},
 				{0, 5},
-				{HashTableNumBuckets, 7},
+				{coldata.BatchSize(), 7},
 			},
 			typs:      []*types.T{types.Int, types.Int},
 			groupCols: []uint32{0},
@@ -1132,25 +1132,20 @@ func TestHashAggregator(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	for _, numOfHashBuckets := range []int{0 /* no limit */, 1, coldata.BatchSize()} {
-		for _, tc := range tcs {
-			if err := tc.init(); err != nil {
-				t.Fatal(err)
-			}
-			constructors, constArguments, outputTypes, err := ProcessAggregations(
-				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
-			)
-			require.NoError(t, err)
-			log.Infof(context.Background(), "numOfHashBuckets=%d", numOfHashBuckets)
-			runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-				a, err := NewHashAggregator(
-					testAllocator, sources[0], tc.typs, tc.spec, &evalCtx,
-					constructors, constArguments, outputTypes,
-				)
-				a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
-				return a, err
-			})
+	for _, tc := range tcs {
+		if err := tc.init(); err != nil {
+			t.Fatal(err)
 		}
+		constructors, constArguments, outputTypes, err := ProcessAggregations(
+			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+		)
+		require.NoError(t, err)
+		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+			return NewHashAggregator(
+				testAllocator, sources[0], tc.typs, tc.spec, &evalCtx,
+				constructors, constArguments, outputTypes,
+			)
+		})
 	}
 }
 

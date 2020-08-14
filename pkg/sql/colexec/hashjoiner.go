@@ -228,9 +228,10 @@ func (hj *hashJoiner) Init() {
 		allowNullEquality = true
 		probeMode = hashTableDeletingProbeMode
 	}
+	const hashTableLoadFactor = 8.0
 	hj.ht = newHashTable(
 		hj.allocator,
-		HashTableNumBuckets,
+		hashTableLoadFactor,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
 		allowNullEquality,
