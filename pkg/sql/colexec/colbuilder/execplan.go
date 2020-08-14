@@ -127,6 +127,23 @@ func (r *opResult) resetToState(ctx context.Context, arg colexec.NewColOperatorR
 	*r.NewColOperatorResult = arg
 }
 
+func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
+	var groupCols, orderedCols util.FastIntSet
+	for _, col := range aggSpec.OrderedGroupCols {
+		orderedCols.Add(int(col))
+	}
+	for _, col := range aggSpec.GroupCols {
+		if !orderedCols.Contains(int(col)) {
+			return true, nil
+		}
+		groupCols.Add(int(col))
+	}
+	if !orderedCols.SubsetOf(groupCols) {
+		return false, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
+	}
+	return false, nil
+}
+
 // isSupported checks whether we have a columnar operator equivalent to a
 // processor described by spec. Note that it doesn't perform any other checks
 // (like validity of the number of inputs).
@@ -153,12 +170,16 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 
 	case core.Aggregator != nil:
 		aggSpec := core.Aggregator
+		needHash, err := needHashAggregator(aggSpec)
+		if err != nil {
+			return err
+		}
 		for _, agg := range aggSpec.Aggregations {
-			if agg.Distinct {
-				return errors.Newf("distinct aggregation not supported")
+			if agg.Distinct && !needHash {
+				return errors.Newf("distinct ordered aggregation not supported")
 			}
-			if agg.FilterColIdx != nil {
-				return errors.Newf("filtering aggregation not supported")
+			if agg.FilterColIdx != nil && !needHash {
+				return errors.Newf("filtering ordered aggregation not supported")
 			}
 		}
 		return nil
@@ -649,21 +670,11 @@ func NewColOperator(
 				break
 			}
 
-			var groupCols, orderedCols util.FastIntSet
-			for _, col := range aggSpec.OrderedGroupCols {
-				orderedCols.Add(int(col))
+			var needHash bool
+			needHash, err = needHashAggregator(aggSpec)
+			if err != nil {
+				return r, err
 			}
-			needHash := false
-			for _, col := range aggSpec.GroupCols {
-				if !orderedCols.Contains(int(col)) {
-					needHash = true
-				}
-				groupCols.Add(int(col))
-			}
-			if !orderedCols.SubsetOf(groupCols) {
-				return r, errors.AssertionFailedf("ordered cols must be a subset of grouping cols")
-			}
-
 			inputTypes := make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(inputTypes, spec.Input[0].ColumnTypes)
 			evalCtx := flowCtx.NewEvalCtx()
@@ -691,8 +702,8 @@ func NewColOperator(
 				evalCtx.SingleDatumAggMemAccount = hashAggregatorMemAccount
 				result.Op, err = colexec.NewHashAggregator(
 					colmem.NewAllocator(ctx, hashAggregatorMemAccount, factory),
-					inputs[0], inputTypes, aggSpec, evalCtx, constructors,
-					constArguments, result.ColumnTypes,
+					hashAggregatorMemAccount, inputs[0], inputTypes, aggSpec,
+					evalCtx, constructors, constArguments, result.ColumnTypes,
 				)
 			} else {
 				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
