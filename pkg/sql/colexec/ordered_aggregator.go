@@ -102,6 +102,14 @@ func NewOrderedAggregator(
 	outputTypes []*types.T,
 	isScalar bool,
 ) (colexecbase.Operator, error) {
+	for _, aggFn := range spec.Aggregations {
+		if aggFn.Distinct {
+			return nil, errors.AssertionFailedf("distinct ordered aggregation is not supported")
+		}
+		if aggFn.FilterColIdx != nil {
+			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
+		}
+	}
 	op, groupCol, err := OrderedDistinctColsToOperators(input, spec.GroupCols, inputTypes)
 	if err != nil {
 		return nil, err
