@@ -130,6 +130,7 @@ func (r *Replica) CheckConsistency(
 
 	if minoritySHA != "" {
 		var buf bytes.Buffer
+		_, _ = fmt.Fprintf(&buf, "\n") // New line to align checksums below.
 		for sha, idxs := range shaToIdxs {
 			minority := ""
 			if sha == minoritySHA {
