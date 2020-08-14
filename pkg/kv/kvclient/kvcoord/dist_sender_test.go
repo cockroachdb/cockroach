@@ -141,21 +141,24 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 }
 
 type simpleTransportAdapter struct {
-	fn          simpleSendFn
-	opts        SendOptions
-	replicas    ReplicaSlice
-	nextReplica int
+	fn       simpleSendFn
+	opts     SendOptions
+	replicas ReplicaSlice
+
+	// nextReplicaIdx represents the index into replicas of the next replica to be
+	// tried.
+	nextReplicaIdx int
 }
 
 func (l *simpleTransportAdapter) IsExhausted() bool {
-	return l.nextReplica >= len(l.replicas)
+	return l.nextReplicaIdx >= len(l.replicas)
 }
 
 func (l *simpleTransportAdapter) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	ba.Replica = l.replicas[l.nextReplica].ReplicaDescriptor
-	l.nextReplica++
+	ba.Replica = l.replicas[l.nextReplicaIdx].ReplicaDescriptor
+	l.nextReplicaIdx++
 	return l.fn(ctx, l.opts, l.replicas, ba)
 }
 
@@ -167,7 +170,7 @@ func (l *simpleTransportAdapter) NextInternalClient(
 
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 	if !l.IsExhausted() {
-		return l.replicas[l.nextReplica].ReplicaDescriptor
+		return l.replicas[l.nextReplicaIdx].ReplicaDescriptor
 	}
 	return roachpb.ReplicaDescriptor{}
 }
@@ -176,7 +179,7 @@ func (l *simpleTransportAdapter) SkipReplica() {
 	if l.IsExhausted() {
 		return
 	}
-	l.nextReplica++
+	l.nextReplicaIdx++
 }
 
 func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
