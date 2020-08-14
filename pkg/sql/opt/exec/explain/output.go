@@ -100,13 +100,6 @@ func (ob *OutputBuilder) Attr(key string, value interface{}) {
 	ob.AddField(key, fmt.Sprint(value))
 }
 
-// VAttr is a verbose-only version of Attr.
-func (ob *OutputBuilder) VAttr(key string, value interface{}) {
-	if ob.flags.Verbose {
-		ob.AddField(key, fmt.Sprint(value))
-	}
-}
-
 // Attrf is a formatter version of Attr.
 func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
 	ob.AddField(key, fmt.Sprintf(format, args...))

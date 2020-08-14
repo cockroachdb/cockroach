@@ -9,28 +9,32 @@ CREATE TABLE uniontest (
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
-·          distribution  full
-·          vectorized    true
-union      ·             ·
- ├── scan  ·             ·
- │         table         uniontest@primary
- │         spans         FULL SCAN
- └── scan  ·             ·
-·          table         uniontest@primary
-·          spans         FULL SCAN
+·          distribution   full
+·          vectorized     true
+union      ·              ·
+ ├── scan  ·              ·
+ │         missing stats  ·
+ │         table          uniontest@primary
+ │         spans          FULL SCAN
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          uniontest@primary
+·          spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
-·          distribution  full
-·          vectorized    true
-append     ·             ·
- ├── scan  ·             ·
- │         table         uniontest@primary
- │         spans         FULL SCAN
- └── scan  ·             ·
-·          table         uniontest@primary
-·          spans         FULL SCAN
+·          distribution   full
+·          vectorized     true
+append     ·              ·
+ ├── scan  ·              ·
+ │         missing stats  ·
+ │         table          uniontest@primary
+ │         spans          FULL SCAN
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          uniontest@primary
+·          spans          FULL SCAN
 
 # Check that EXPLAIN properly releases memory for virtual tables.
 query TTT
@@ -50,58 +54,65 @@ CREATE TABLE abc (a INT, b INT, c INT)
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc ORDER BY c) ORDER BY a
 ----
-·                    distribution  full         ·       ·
-·                    vectorized    true         ·       ·
-sort                 ·             ·            (a)     +a
- │                   order         +a           ·       ·
- └── union           ·             ·            (a)     ·
-      ├── project    ·             ·            (a)     ·
-      │    └── scan  ·             ·            (a, b)  ·
-      │              table         abc@primary  ·       ·
-      │              spans         FULL SCAN    ·       ·
-      └── project    ·             ·            (a)     ·
-           └── scan  ·             ·            (a, c)  ·
-·                    table         abc@primary  ·       ·
-·                    spans         FULL SCAN    ·       ·
+·                    distribution         full                  ·       ·
+·                    vectorized           true                  ·       ·
+sort                 ·                    ·                     (a)     +a
+ │                   estimated row count  100 (missing stats)   ·       ·
+ │                   order                +a                    ·       ·
+ └── union           ·                    ·                     (a)     ·
+      │              estimated row count  100 (missing stats)   ·       ·
+      ├── project    ·                    ·                     (a)     ·
+      │    └── scan  ·                    ·                     (a, b)  ·
+      │              estimated row count  1000 (missing stats)  ·       ·
+      │              table                abc@primary           ·       ·
+      │              spans                FULL SCAN             ·       ·
+      └── project    ·                    ·                     (a)     ·
+           └── scan  ·                    ·                     (a, c)  ·
+·                    estimated row count  1000 (missing stats)  ·       ·
+·                    table                abc@primary           ·       ·
+·                    spans                FULL SCAN             ·       ·
 
 # Regression test for #32723.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''))
 ----
-·                      distribution   full             ·                         ·
-·                      vectorized     true             ·                         ·
-project                ·              ·                (a)                       ·
- └── union             ·              ·                (a, a)                    ·
-      ├── project      ·              ·                (a, a)                    ·
-      │    └── values  ·              ·                (a)                       ·
-      │                size           1 column, 1 row  ·                         ·
-      │                row 0, expr 0  ''               ·                         ·
-      └── project      ·              ·                ("?column?", "?column?")  ·
-           └── values  ·              ·                ("?column?")              ·
-·                      size           1 column, 1 row  ·                         ·
-·                      row 0, expr 0  ''               ·                         ·
+·                      distribution         full             ·                         ·
+·                      vectorized           true             ·                         ·
+project                ·                    ·                (a)                       ·
+ └── union             ·                    ·                (a, a)                    ·
+      │                estimated row count  1                ·                         ·
+      ├── project      ·                    ·                (a, a)                    ·
+      │    └── values  ·                    ·                (a)                       ·
+      │                size                 1 column, 1 row  ·                         ·
+      │                row 0, expr 0        ''               ·                         ·
+      └── project      ·                    ·                ("?column?", "?column?")  ·
+           └── values  ·                    ·                ("?column?")              ·
+·                      size                 1 column, 1 row  ·                         ·
+·                      row 0, expr 0        ''               ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) ((SELECT '', '', 'x' WHERE false))
 UNION ALL ((SELECT '', '', 'x') EXCEPT (VALUES ('', '', 'x')))
 ----
-·                      distribution   full              ·                                     ·
-·                      vectorized     true              ·                                     ·
-render                 ·              ·                 ("?column?", "?column?", "?column?")  ·
- │                     render 0       "?column?"        ·                                     ·
- │                     render 1       "?column?"        ·                                     ·
- │                     render 2       "?column?"        ·                                     ·
- └── union             ·              ·                 ("?column?", "?column?", "?column?")  ·
-      ├── project      ·              ·                 ("?column?", "?column?", "?column?")  ·
-      │    └── values  ·              ·                 ("?column?", "?column?")              ·
-      │                size           2 columns, 1 row  ·                                     ·
-      │                row 0, expr 0  ''                ·                                     ·
-      │                row 0, expr 1  'x'               ·                                     ·
-      └── values       ·              ·                 (column1, column2, column3)           ·
-·                      size           3 columns, 1 row  ·                                     ·
-·                      row 0, expr 0  ''                ·                                     ·
-·                      row 0, expr 1  ''                ·                                     ·
-·                      row 0, expr 2  'x'               ·                                     ·
+·                      distribution         full              ·                                     ·
+·                      vectorized           true              ·                                     ·
+render                 ·                    ·                 ("?column?", "?column?", "?column?")  ·
+ │                     estimated row count  1                 ·                                     ·
+ │                     render 0             "?column?"        ·                                     ·
+ │                     render 1             "?column?"        ·                                     ·
+ │                     render 2             "?column?"        ·                                     ·
+ └── union             ·                    ·                 ("?column?", "?column?", "?column?")  ·
+      │                estimated row count  1                 ·                                     ·
+      ├── project      ·                    ·                 ("?column?", "?column?", "?column?")  ·
+      │    └── values  ·                    ·                 ("?column?", "?column?")              ·
+      │                size                 2 columns, 1 row  ·                                     ·
+      │                row 0, expr 0        ''                ·                                     ·
+      │                row 0, expr 1        'x'               ·                                     ·
+      └── values       ·                    ·                 (column1, column2, column3)           ·
+·                      size                 3 columns, 1 row  ·                                     ·
+·                      row 0, expr 0        ''                ·                                     ·
+·                      row 0, expr 1        ''                ·                                     ·
+·                      row 0, expr 2        'x'               ·                                     ·
 
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY)

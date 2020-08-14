@@ -27,57 +27,65 @@ CREATE TABLE abc (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-distinct   ·             ·            (x, y, z)  ·
- │         distinct on   x, y, z      ·          ·
- └── scan  ·             ·            (x, y, z)  ·
-·          table         xyz@primary  ·          ·
-·          spans         FULL SCAN    ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+distinct   ·                    ·                     (x, y, z)  ·
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         distinct on          x, y, z               ·          ·
+ └── scan  ·                    ·                     (x, y, z)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                xyz@primary           ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
 ----
-·               distribution  local        ·          ·
-·               vectorized    true         ·          ·
-project         ·             ·            (x)        ·
- └── distinct   ·             ·            (x, y, z)  ·
-      │         distinct on   x, y, z      ·          ·
-      └── scan  ·             ·            (x, y, z)  ·
-·               table         xyz@primary  ·          ·
-·               spans         FULL SCAN    ·          ·
+·               distribution         local                 ·          ·
+·               vectorized           true                  ·          ·
+project         ·                    ·                     (x)        ·
+ └── distinct   ·                    ·                     (x, y, z)  ·
+      │         estimated row count  1000 (missing stats)  ·          ·
+      │         distinct on          x, y, z               ·          ·
+      └── scan  ·                    ·                     (x, y, z)  ·
+·               estimated row count  1000 (missing stats)  ·          ·
+·               table                xyz@primary           ·          ·
+·               spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-project    ·             ·            (a, c, b)  ·
- └── scan  ·             ·            (a, b, c)  ·
-·          table         abc@primary  ·          ·
-·          spans         FULL SCAN    ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+project    ·                    ·                     (a, c, b)  ·
+ └── scan  ·                    ·                     (a, b, c)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                abc@primary           ·          ·
+·          spans                FULL SCAN             ·          ·
 
 # Distinct node should be elided since we have a strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
-·     distribution  local        ·    ·
-·     vectorized    true         ·    ·
-scan  ·             ·            (a)  ·
-·     table         abc@primary  ·    ·
-·     spans         FULL SCAN    ·    ·
+·     distribution         local                 ·    ·
+·     vectorized           true                  ·    ·
+scan  ·                    ·                     (a)  ·
+·     estimated row count  1000 (missing stats)  ·    ·
+·     table                abc@primary           ·    ·
+·     spans                FULL SCAN             ·    ·
 
 # Distinct node should be elided since we have a strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
 ----
-·          distribution  local        ·    ·
-·          vectorized    true         ·    ·
-sort       ·             ·            (b)  +b
- │         order         +b           ·    ·
- └── scan  ·             ·            (b)  ·
-·          table         abc@primary  ·    ·
-·          spans         FULL SCAN    ·    ·
+·          distribution         local                 ·    ·
+·          vectorized           true                  ·    ·
+sort       ·                    ·                     (b)  +b
+ │         estimated row count  1000 (missing stats)  ·    ·
+ │         order                +b                    ·    ·
+ └── scan  ·                    ·                     (b)  ·
+·          estimated row count  1000 (missing stats)  ·    ·
+·          table                abc@primary           ·    ·
+·          spans                FULL SCAN             ·    ·
 
 
 # 2/3 columns
@@ -85,76 +93,88 @@ sort       ·             ·            (b)  +b
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
 ----
-·               distribution  local        ·       ·
-·               vectorized    true         ·       ·
-project         ·             ·            (y, x)  ·
- └── distinct   ·             ·            (x, y)  ·
-      │         distinct on   x, y         ·       ·
-      └── scan  ·             ·            (x, y)  ·
-·               table         xyz@primary  ·       ·
-·               spans         FULL SCAN    ·       ·
+·               distribution         local                 ·       ·
+·               vectorized           true                  ·       ·
+project         ·                    ·                     (y, x)  ·
+ └── distinct   ·                    ·                     (x, y)  ·
+      │         estimated row count  1000 (missing stats)  ·       ·
+      │         distinct on          x, y                  ·       ·
+      └── scan  ·                    ·                     (x, y)  ·
+·               estimated row count  1000 (missing stats)  ·       ·
+·               table                xyz@primary           ·       ·
+·               spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
 ----
-·               distribution  local        ·       ·
-·               vectorized    true         ·       ·
-project         ·             ·            (x)     ·
- └── distinct   ·             ·            (x, y)  ·
-      │         distinct on   x, y         ·       ·
-      └── scan  ·             ·            (x, y)  ·
-·               table         xyz@primary  ·       ·
-·               spans         FULL SCAN    ·       ·
+·               distribution         local                 ·       ·
+·               vectorized           true                  ·       ·
+project         ·                    ·                     (x)     ·
+ └── distinct   ·                    ·                     (x, y)  ·
+      │         estimated row count  1000 (missing stats)  ·       ·
+      │         distinct on          x, y                  ·       ·
+      └── scan  ·                    ·                     (x, y)  ·
+·               estimated row count  1000 (missing stats)  ·       ·
+·               table                xyz@primary           ·       ·
+·               spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
 ----
-·          distribution  local        ·       ·
-·          vectorized    true         ·       ·
-distinct   ·             ·            (x, y)  ·
- │         distinct on   x, y         ·       ·
- └── scan  ·             ·            (x, y)  ·
-·          table         xyz@primary  ·       ·
-·          spans         FULL SCAN    ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+distinct   ·                    ·                     (x, y)  ·
+ │         estimated row count  1000 (missing stats)  ·       ·
+ │         distinct on          x, y                  ·       ·
+ └── scan  ·                    ·                     (x, y)  ·
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                xyz@primary           ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, x) pk1, x FROM xyz ORDER BY pk1
 ----
-·               distribution  local        ·         ·
-·               vectorized    true         ·         ·
-project         ·             ·            (pk1, x)  ·
- └── distinct   ·             ·            (x, pk1)  +pk1
-      │         distinct on   x, pk1       ·         ·
-      │         order key     pk1          ·         ·
-      └── scan  ·             ·            (x, pk1)  +pk1
-·               table         xyz@primary  ·         ·
-·               spans         FULL SCAN    ·         ·
+·               distribution         local                 ·         ·
+·               vectorized           true                  ·         ·
+project         ·                    ·                     (pk1, x)  ·
+ └── distinct   ·                    ·                     (x, pk1)  +pk1
+      │         estimated row count  1000 (missing stats)  ·         ·
+      │         distinct on          x, pk1                ·         ·
+      │         order key            pk1                   ·         ·
+      └── scan  ·                    ·                     (x, pk1)  +pk1
+·               estimated row count  1000 (missing stats)  ·         ·
+·               table                xyz@primary           ·         ·
+·               spans                FULL SCAN             ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
 ----
-·               distribution  local        ·          ·
-·               vectorized    true         ·          ·
-project         ·             ·            (a, b)     ·
- └── distinct   ·             ·            (a, b, c)  ·
-      │         distinct on   a, c         ·          ·
-      │         order key     a            ·          ·
-      └── scan  ·             ·            (a, b, c)  +a
-·               table         abc@primary  ·          ·
-·               spans         FULL SCAN    ·          ·
+·               distribution         local                 ·          ·
+·               vectorized           true                  ·          ·
+project         ·                    ·                     (a, b)     ·
+ └── distinct   ·                    ·                     (a, b, c)  ·
+      │         estimated row count  1000 (missing stats)  ·          ·
+      │         distinct on          a, c                  ·          ·
+      │         order key            a                     ·          ·
+      └── scan  ·                    ·                     (a, b, c)  +a
+·               estimated row count  1000 (missing stats)  ·          ·
+·               table                abc@primary           ·          ·
+·               spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
 ----
-·               distribution  local        ·          ·
-·               vectorized    true         ·          ·
-project         ·             ·            (b, c, a)  ·
- └── distinct   ·             ·            (a, b, c)  ·
-      │         distinct on   a, c         ·          ·
-      │         order key     a            ·          ·
-      └── scan  ·             ·            (a, b, c)  +a
-·               table         abc@primary  ·          ·
-·               spans         FULL SCAN    ·          ·
+·               distribution         local                 ·          ·
+·               vectorized           true                  ·          ·
+project         ·                    ·                     (b, c, a)  ·
+ └── distinct   ·                    ·                     (a, b, c)  ·
+      │         estimated row count  1000 (missing stats)  ·          ·
+      │         distinct on          a, c                  ·          ·
+      │         order key            a                     ·          ·
+      └── scan  ·                    ·                     (a, b, c)  +a
+·               estimated row count  1000 (missing stats)  ·          ·
+·               table                abc@primary           ·          ·
+·               spans                FULL SCAN             ·          ·
 
 
 # 1/3 columns
@@ -164,32 +184,37 @@ project         ·             ·            (b, c, a)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (pk1) pk1, pk2 FROM xyz
 ----
-·          distribution  local        ·           ·
-·          vectorized    true         ·           ·
-distinct   ·             ·            (pk1, pk2)  ·
- │         distinct on   pk1          ·           ·
- │         order key     pk1          ·           ·
- └── scan  ·             ·            (pk1, pk2)  +pk1
-·          table         xyz@primary  ·           ·
-·          spans         FULL SCAN    ·           ·
+·          distribution         local                 ·           ·
+·          vectorized           true                  ·           ·
+distinct   ·                    ·                     (pk1, pk2)  ·
+ │         estimated row count  100 (missing stats)   ·           ·
+ │         distinct on          pk1                   ·           ·
+ │         order key            pk1                   ·           ·
+ └── scan  ·                    ·                     (pk1, pk2)  +pk1
+·          estimated row count  1000 (missing stats)  ·           ·
+·          table                xyz@primary           ·           ·
+·          spans                FULL SCAN             ·           ·
 
 # Ensure the distinctNode advertises an a+ ordering.
 # TODO(radu): set the ordering in the render node to fix this.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-·                    distribution     local        ·          ·
-·                    vectorized       true         ·          ·
-project              ·                ·            (a, c)     +a
- └── distinct        ·                ·            (a, b, c)  +a
-      │              distinct on      a            ·          ·
-      │              order key        a            ·          ·
-      └── sort       ·                ·            (a, b, c)  +a,-c,+b
-           │         order            +a,-c,+b     ·          ·
-           │         already ordered  +a           ·          ·
-           └── scan  ·                ·            (a, b, c)  +a
-·                    table            abc@primary  ·          ·
-·                    spans            FULL SCAN    ·          ·
+·                    distribution         local                 ·          ·
+·                    vectorized           true                  ·          ·
+project              ·                    ·                     (a, c)     +a
+ │                   estimated row count  100 (missing stats)   ·          ·
+ └── distinct        ·                    ·                     (a, b, c)  +a
+      │              distinct on          a                     ·          ·
+      │              order key            a                     ·          ·
+      └── sort       ·                    ·                     (a, b, c)  +a,-c,+b
+           │         estimated row count  1000 (missing stats)  ·          ·
+           │         order                +a,-c,+b              ·          ·
+           │         already ordered      +a                    ·          ·
+           └── scan  ·                    ·                     (a, b, c)  +a
+·                    estimated row count  1000 (missing stats)  ·          ·
+·                    table                abc@primary           ·          ·
+·                    spans                FULL SCAN             ·          ·
 
 #################
 # With ORDER BY #
@@ -198,45 +223,54 @@ project              ·                ·            (a, c)     +a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
 ----
-·               distribution  local        ·    ·
-·               vectorized    true         ·    ·
-sort            ·             ·            (x)  -x
- │              order         -x           ·    ·
- └── distinct   ·             ·            (x)  ·
-      │         distinct on   x            ·    ·
-      └── scan  ·             ·            (x)  ·
-·               table         xyz@primary  ·    ·
-·               spans         FULL SCAN    ·    ·
+·               distribution         local                 ·    ·
+·               vectorized           true                  ·    ·
+sort            ·                    ·                     (x)  -x
+ │              estimated row count  100 (missing stats)   ·    ·
+ │              order                -x                    ·    ·
+ └── distinct   ·                    ·                     (x)  ·
+      │         estimated row count  100 (missing stats)   ·    ·
+      │         distinct on          x                     ·    ·
+      └── scan  ·                    ·                     (x)  ·
+·               estimated row count  1000 (missing stats)  ·    ·
+·               table                xyz@primary           ·    ·
+·               spans                FULL SCAN             ·    ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
 ----
-·                    distribution  local        ·          ·
-·                    vectorized    true         ·          ·
-project              ·             ·            (y, z, x)  ·
- └── distinct        ·             ·            (x, y, z)  +z
-      │              distinct on   x, z         ·          ·
-      │              order key     z            ·          ·
-      └── sort       ·             ·            (x, y, z)  +z
-           │         order         +z           ·          ·
-           └── scan  ·             ·            (x, y, z)  ·
-·                    table         xyz@primary  ·          ·
-·                    spans         FULL SCAN    ·          ·
+·                    distribution         local                 ·          ·
+·                    vectorized           true                  ·          ·
+project              ·                    ·                     (y, z, x)  ·
+ └── distinct        ·                    ·                     (x, y, z)  +z
+      │              estimated row count  1000 (missing stats)  ·          ·
+      │              distinct on          x, z                  ·          ·
+      │              order key            z                     ·          ·
+      └── sort       ·                    ·                     (x, y, z)  +z
+           │         estimated row count  1000 (missing stats)  ·          ·
+           │         order                +z                    ·          ·
+           └── scan  ·                    ·                     (x, y, z)  ·
+·                    estimated row count  1000 (missing stats)  ·          ·
+·                    table                xyz@primary           ·          ·
+·                    spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 ----
-·                    distribution  local        ·          ·
-·                    vectorized    true         ·          ·
-project              ·             ·            (y, z, x)  ·
- └── distinct        ·             ·            (x, y, z)  +x
-      │              distinct on   x            ·          ·
-      │              order key     x            ·          ·
-      └── sort       ·             ·            (x, y, z)  +x,-z,-y
-           │         order         +x,-z,-y     ·          ·
-           └── scan  ·             ·            (x, y, z)  ·
-·                    table         xyz@primary  ·          ·
-·                    spans         FULL SCAN    ·          ·
+·                    distribution         local                 ·          ·
+·                    vectorized           true                  ·          ·
+project              ·                    ·                     (y, z, x)  ·
+ └── distinct        ·                    ·                     (x, y, z)  +x
+      │              estimated row count  100 (missing stats)   ·          ·
+      │              distinct on          x                     ·          ·
+      │              order key            x                     ·          ·
+      └── sort       ·                    ·                     (x, y, z)  +x,-z,-y
+           │         estimated row count  1000 (missing stats)  ·          ·
+           │         order                +x,-z,-y              ·          ·
+           └── scan  ·                    ·                     (x, y, z)  ·
+·                    estimated row count  1000 (missing stats)  ·          ·
+·                    table                xyz@primary           ·          ·
+·                    spans                FULL SCAN             ·          ·
 
 #####################
 # With aggregations #
@@ -245,27 +279,31 @@ project              ·             ·            (y, z, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
-·          distribution  local        ·      ·
-·          vectorized    true         ·      ·
-group      ·             ·            (max)  ·
- │         aggregate 0   max(x)       ·      ·
- │         scalar        ·            ·      ·
- └── scan  ·             ·            (x)    ·
-·          table         xyz@primary  ·      ·
-·          spans         FULL SCAN    ·      ·
+·          distribution         local                 ·      ·
+·          vectorized           true                  ·      ·
+group      ·                    ·                     (max)  ·
+ │         estimated row count  1 (missing stats)     ·      ·
+ │         aggregate 0          max(x)                ·      ·
+ │         scalar               ·                     ·      ·
+ └── scan  ·                    ·                     (x)    ·
+·          estimated row count  1000 (missing stats)  ·      ·
+·          table                xyz@primary           ·      ·
+·          spans                FULL SCAN             ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
-·             distribution  local            ·      ·
-·             vectorized    true             ·      ·
-group         ·             ·                (max)  ·
- │            aggregate 0   any_not_null(a)  ·      ·
- │            scalar        ·                ·      ·
- └── revscan  ·             ·                (a)    ·
-·             table         abc@primary      ·      ·
-·             spans         LIMITED SCAN     ·      ·
-·             limit         1                ·      ·
+·             distribution         local              ·      ·
+·             vectorized           true               ·      ·
+group         ·                    ·                  (max)  ·
+ │            estimated row count  1 (missing stats)  ·      ·
+ │            aggregate 0          any_not_null(a)    ·      ·
+ │            scalar               ·                  ·      ·
+ └── revscan  ·                    ·                  (a)    ·
+·             estimated row count  1 (missing stats)  ·      ·
+·             table                abc@primary        ·      ·
+·             spans                LIMITED SCAN       ·      ·
+·             limit                1                  ·      ·
 
 #################
 # With GROUP BY #
@@ -275,32 +313,39 @@ group         ·             ·                (max)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
-·               distribution  local        ·         ·
-·               vectorized    true         ·         ·
-project         ·             ·            (min)     ·
- └── group      ·             ·            (y, min)  ·
-      │         aggregate 0   min(x)       ·         ·
-      │         group by      y            ·         ·
-      └── scan  ·             ·            (x, y)    ·
-·               table         xyz@primary  ·         ·
-·               spans         FULL SCAN    ·         ·
+·               distribution         local                 ·         ·
+·               vectorized           true                  ·         ·
+project         ·                    ·                     (min)     ·
+ └── group      ·                    ·                     (y, min)  ·
+      │         estimated row count  100 (missing stats)   ·         ·
+      │         aggregate 0          min(x)                ·         ·
+      │         group by             y                     ·         ·
+      └── scan  ·                    ·                     (x, y)    ·
+·               estimated row count  1000 (missing stats)  ·         ·
+·               table                xyz@primary           ·         ·
+·               spans                FULL SCAN             ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
-·                         distribution  local        ·         ·
-·                         vectorized    true         ·         ·
-project                   ·             ·            (min)     ·
- └── limit                ·             ·            (y, min)  ·
-      │                   count         1            ·         ·
-      └── filter          ·             ·            (y, min)  ·
-           │              filter        min = 1      ·         ·
-           └── group      ·             ·            (y, min)  ·
-                │         aggregate 0   min(x)       ·         ·
-                │         group by      y            ·         ·
-                └── scan  ·             ·            (x, y)    ·
-·                         table         xyz@primary  ·         ·
-·                         spans         FULL SCAN    ·         ·
+·                         distribution         local                 ·         ·
+·                         vectorized           true                  ·         ·
+project                   ·                    ·                     (min)     ·
+ │                        estimated row count  1 (missing stats)     ·         ·
+ └── limit                ·                    ·                     (y, min)  ·
+      │                   estimated row count  1 (missing stats)     ·         ·
+      │                   count                1                     ·         ·
+      └── filter          ·                    ·                     (y, min)  ·
+           │              estimated row count  1 (missing stats)     ·         ·
+           │              filter               min = 1               ·         ·
+           └── group      ·                    ·                     (y, min)  ·
+                │         estimated row count  100 (missing stats)   ·         ·
+                │         aggregate 0          min(x)                ·         ·
+                │         group by             y                     ·         ·
+                └── scan  ·                    ·                     (x, y)    ·
+·                         estimated row count  1000 (missing stats)  ·         ·
+·                         table                xyz@primary           ·         ·
+·                         spans                FULL SCAN             ·         ·
 
 #########################
 # With window functions #
@@ -309,16 +354,19 @@ project                   ·             ·            (min)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
-·                    distribution  local                                                                  ·                ·
-·                    vectorized    true                                                                   ·                ·
-project              ·             ·                                                                      (y)              ·
- └── distinct        ·             ·                                                                      (y, row_number)  ·
-      │              distinct on   row_number                                                             ·                ·
-      └── window     ·             ·                                                                      (y, row_number)  ·
-           │         window 0      row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
-           └── scan  ·             ·                                                                      (y)              ·
-·                    table         xyz@primary                                                            ·                ·
-·                    spans         FULL SCAN                                                              ·                ·
+·                    distribution         local                                                                  ·                ·
+·                    vectorized           true                                                                   ·                ·
+project              ·                    ·                                                                      (y)              ·
+ └── distinct        ·                    ·                                                                      (y, row_number)  ·
+      │              estimated row count  1000 (missing stats)                                                   ·                ·
+      │              distinct on          row_number                                                             ·                ·
+      └── window     ·                    ·                                                                      (y, row_number)  ·
+           │         estimated row count  1000 (missing stats)                                                   ·                ·
+           │         window 0             row_number() OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                ·
+           └── scan  ·                    ·                                                                      (y)              ·
+·                    estimated row count  1000 (missing stats)                                                   ·                ·
+·                    table                xyz@primary                                                            ·                ·
+·                    spans                FULL SCAN                                                              ·                ·
 
 ###########################
 # With ordinal references #
@@ -327,23 +375,26 @@ project              ·             ·                                          
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-distinct   ·             ·            (x, y, z)  ·
- │         distinct on   x            ·          ·
- └── scan  ·             ·            (x, y, z)  ·
-·          table         xyz@primary  ·          ·
-·          spans         FULL SCAN    ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+distinct   ·                    ·                     (x, y, z)  ·
+ │         estimated row count  100 (missing stats)   ·          ·
+ │         distinct on          x                     ·          ·
+ └── scan  ·                    ·                     (x, y, z)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                xyz@primary           ·          ·
+·          spans                FULL SCAN             ·          ·
 
 # Distinct node elided because of strong key.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
 ----
-·     distribution  local        ·          ·
-·     vectorized    true         ·          ·
-scan  ·             ·            (a, b, c)  ·
-·     table         abc@primary  ·          ·
-·     spans         FULL SCAN    ·          ·
+·     distribution         local                 ·          ·
+·     vectorized           true                  ·          ·
+scan  ·                    ·                     (a, b, c)  ·
+·     estimated row count  1000 (missing stats)  ·          ·
+·     table                abc@primary           ·          ·
+·     spans                FULL SCAN             ·          ·
 
 #########################
 # With alias references #
@@ -353,25 +404,29 @@ scan  ·             ·            (a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
 ----
-·          distribution  local        ·       ·
-·          vectorized    true         ·       ·
-distinct   ·             ·            (y, x)  ·
- │         distinct on   x            ·       ·
- └── scan  ·             ·            (x, y)  ·
-·          table         xyz@primary  ·       ·
-·          spans         FULL SCAN    ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+distinct   ·                    ·                     (y, x)  ·
+ │         estimated row count  100 (missing stats)   ·       ·
+ │         distinct on          x                     ·       ·
+ └── scan  ·                    ·                     (x, y)  ·
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                xyz@primary           ·       ·
+·          spans                FULL SCAN             ·       ·
 
 # Ignores the alias.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
 ----
-·          distribution  local        ·    ·
-·          vectorized    true         ·    ·
-distinct   ·             ·            (y)  ·
- │         distinct on   x            ·    ·
- └── scan  ·             ·            (x)  ·
-·          table         xyz@primary  ·    ·
-·          spans         FULL SCAN    ·    ·
+·          distribution         local                 ·    ·
+·          vectorized           true                  ·    ·
+distinct   ·                    ·                     (y)  ·
+ │         estimated row count  100 (missing stats)   ·    ·
+ │         distinct on          x                     ·    ·
+ └── scan  ·                    ·                     (x)  ·
+·          estimated row count  1000 (missing stats)  ·    ·
+·          table                xyz@primary           ·    ·
+·          spans                FULL SCAN             ·    ·
 
 ##################################
 # With nested parentheses/tuples #
@@ -380,13 +435,15 @@ distinct   ·             ·            (y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
 ----
-·          distribution  local        ·       ·
-·          vectorized    true         ·       ·
-distinct   ·             ·            (x, y)  ·
- │         distinct on   x, y         ·       ·
- └── scan  ·             ·            (x, y)  ·
-·          table         xyz@primary  ·       ·
-·          spans         FULL SCAN    ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+distinct   ·                    ·                     (x, y)  ·
+ │         estimated row count  1000 (missing stats)  ·       ·
+ │         distinct on          x, y                  ·       ·
+ └── scan  ·                    ·                     (x, y)  ·
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                xyz@primary           ·       ·
+·          spans                FULL SCAN             ·       ·
 
 ################################
 # Hybrid PK and non-PK queries #
@@ -396,60 +453,74 @@ distinct   ·             ·            (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-sort       ·             ·            (x, y, z)  +x,+y
- │         order         +x,+y        ·          ·
- └── scan  ·             ·            (x, y, z)  ·
-·          table         xyz@primary  ·          ·
-·          spans         FULL SCAN    ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+sort       ·                    ·                     (x, y, z)  +x,+y
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         order                +x,+y                 ·          ·
+ └── scan  ·                    ·                     (x, y, z)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                xyz@primary           ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
 ----
-·                    distribution  local        ·               ·
-·                    vectorized    true         ·               ·
-project              ·             ·            (pk1)           ·
- └── distinct        ·             ·            (x, y, z, pk1)  +x
-      │              distinct on   x, y, z      ·               ·
-      │              order key     x            ·               ·
-      └── sort       ·             ·            (x, y, z, pk1)  +x
-           │         order         +x           ·               ·
-           └── scan  ·             ·            (x, y, z, pk1)  ·
-·                    table         xyz@primary  ·               ·
-·                    spans         FULL SCAN    ·               ·
+·                    distribution         local                 ·               ·
+·                    vectorized           true                  ·               ·
+project              ·                    ·                     (pk1)           ·
+ └── distinct        ·                    ·                     (x, y, z, pk1)  +x
+      │              estimated row count  1000 (missing stats)  ·               ·
+      │              distinct on          x, y, z               ·               ·
+      │              order key            x                     ·               ·
+      └── sort       ·                    ·                     (x, y, z, pk1)  +x
+           │         estimated row count  1000 (missing stats)  ·               ·
+           │         order                +x                    ·               ·
+           └── scan  ·                    ·                     (x, y, z, pk1)  ·
+·                    estimated row count  1000 (missing stats)  ·               ·
+·                    table                xyz@primary           ·               ·
+·                    spans                FULL SCAN             ·               ·
 
 # Regression tests for #34112: distinct on constant column.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y
 ----
-·                    distribution  local        ·       ·
-·                    vectorized    true         ·       ·
-limit                ·             ·            (x, y)  ·
- │                   count         1            ·       ·
- └── sort            ·             ·            (x, y)  +y
-      │              order         +y           ·       ·
-      └── filter     ·             ·            (x, y)  ·
-           │         filter        x = 1        ·       ·
-           └── scan  ·             ·            (x, y)  ·
-·                    table         xyz@primary  ·       ·
-·                    spans         FULL SCAN    ·       ·
+·                    distribution         local                 ·       ·
+·                    vectorized           true                  ·       ·
+limit                ·                    ·                     (x, y)  ·
+ │                   estimated row count  1 (missing stats)     ·       ·
+ │                   count                1                     ·       ·
+ └── sort            ·                    ·                     (x, y)  +y
+      │              estimated row count  10 (missing stats)    ·       ·
+      │              order                +y                    ·       ·
+      └── filter     ·                    ·                     (x, y)  ·
+           │         estimated row count  10 (missing stats)    ·       ·
+           │         filter               x = 1                 ·       ·
+           └── scan  ·                    ·                     (x, y)  ·
+·                    estimated row count  1000 (missing stats)  ·       ·
+·                    table                xyz@primary           ·       ·
+·                    spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY x, y)
 ----
-·                              distribution  local         ·        ·
-·                              vectorized    true          ·        ·
-group                          ·             ·             (count)  ·
- │                             aggregate 0   count_rows()  ·        ·
- │                             scalar        ·             ·        ·
- └── project                   ·             ·             ()       ·
-      └── limit                ·             ·             (x, y)   ·
-           │                   count         1             ·        ·
-           └── sort            ·             ·             (x, y)   +y
-                │              order         +y            ·        ·
-                └── filter     ·             ·             (x, y)   ·
-                     │         filter        x = 1         ·        ·
-                     └── scan  ·             ·             (x, y)   ·
-·                              table         xyz@primary   ·        ·
-·                              spans         FULL SCAN     ·        ·
+·                              distribution         local                 ·        ·
+·                              vectorized           true                  ·        ·
+group                          ·                    ·                     (count)  ·
+ │                             estimated row count  1 (missing stats)     ·        ·
+ │                             aggregate 0          count_rows()          ·        ·
+ │                             scalar               ·                     ·        ·
+ └── project                   ·                    ·                     ()       ·
+      └── limit                ·                    ·                     (x, y)   ·
+           │                   estimated row count  1 (missing stats)     ·        ·
+           │                   count                1                     ·        ·
+           └── sort            ·                    ·                     (x, y)   +y
+                │              estimated row count  10 (missing stats)    ·        ·
+                │              order                +y                    ·        ·
+                └── filter     ·                    ·                     (x, y)   ·
+                     │         estimated row count  10 (missing stats)    ·        ·
+                     │         filter               x = 1                 ·        ·
+                     └── scan  ·                    ·                     (x, y)   ·
+·                              estimated row count  1000 (missing stats)  ·        ·
+·                              table                xyz@primary           ·        ·
+·                              spans                FULL SCAN             ·        ·

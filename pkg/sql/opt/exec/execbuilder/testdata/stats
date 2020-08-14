@@ -37,13 +37,15 @@ set enable_zigzag_join = false
 query TTTTT retry
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·          distribution  full         ·       ·
-·          vectorized    true         ·       ·
-filter     ·             ·            (u, v)  ·
- │         filter        u = 1        ·       ·
- └── scan  ·             ·            (u, v)  ·
-·          table         uv@uv_v_idx  ·       ·
-·          spans         /1-/2        ·       ·
+·          distribution         full         ·       ·
+·          vectorized           true         ·       ·
+filter     ·                    ·            (u, v)  ·
+ │         estimated row count  1            ·       ·
+ │         filter               u = 1        ·       ·
+ └── scan  ·                    ·            (u, v)  ·
+·          estimated row count  1            ·       ·
+·          table                uv@uv_v_idx  ·       ·
+·          spans                /1-/2        ·       ·
 
 # Verify that injecting different statistics changes the plan.
 statement ok
@@ -65,13 +67,15 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·          distribution  full         ·       ·
-·          vectorized    true         ·       ·
-filter     ·             ·            (u, v)  ·
- │         filter        v = 1        ·       ·
- └── scan  ·             ·            (u, v)  ·
-·          table         uv@uv_u_idx  ·       ·
-·          spans         /1-/2        ·       ·
+·          distribution         full         ·       ·
+·          vectorized           true         ·       ·
+filter     ·                    ·            (u, v)  ·
+ │         estimated row count  1            ·       ·
+ │         filter               v = 1        ·       ·
+ └── scan  ·                    ·            (u, v)  ·
+·          estimated row count  1            ·       ·
+·          table                uv@uv_u_idx  ·       ·
+·          spans                /1-/2        ·       ·
 
 # Verify that injecting different statistics with null counts
 # changes the plan.
@@ -96,13 +100,15 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·          distribution  full         ·       ·
-·          vectorized    true         ·       ·
-filter     ·             ·            (u, v)  ·
- │         filter        v = 1        ·       ·
- └── scan  ·             ·            (u, v)  ·
-·          table         uv@uv_u_idx  ·       ·
-·          spans         /1-/2        ·       ·
+·          distribution         full         ·       ·
+·          vectorized           true         ·       ·
+filter     ·                    ·            (u, v)  ·
+ │         estimated row count  1            ·       ·
+ │         filter               v = 1        ·       ·
+ └── scan  ·                    ·            (u, v)  ·
+·          estimated row count  5            ·       ·
+·          table                uv@uv_u_idx  ·       ·
+·          spans                /1-/2        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[
@@ -125,13 +131,15 @@ ALTER TABLE uv INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM uv WHERE u = 1 AND v = 1
 ----
-·          distribution  full         ·       ·
-·          vectorized    true         ·       ·
-filter     ·             ·            (u, v)  ·
- │         filter        u = 1        ·       ·
- └── scan  ·             ·            (u, v)  ·
-·          table         uv@uv_v_idx  ·       ·
-·          spans         /1-/2        ·       ·
+·          distribution         full         ·       ·
+·          vectorized           true         ·       ·
+filter     ·                    ·            (u, v)  ·
+ │         estimated row count  1            ·       ·
+ │         filter               u = 1        ·       ·
+ └── scan  ·                    ·            (u, v)  ·
+·          estimated row count  1            ·       ·
+·          table                uv@uv_v_idx  ·       ·
+·          spans                /1-/2        ·       ·
 
 statement ok
 ALTER TABLE uv INJECT STATISTICS '[

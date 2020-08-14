@@ -11,197 +11,225 @@ CREATE TABLE t (
 query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         +b
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+sort       ·              ·
+ │         order          +b
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          t@primary
+·          spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         -b
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+sort       ·              ·
+ │         order          -b
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          t@primary
+·          spans          FULL SCAN
 
 # TODO(radu): Should set "strategy top 2" on sort node
 query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-·               distribution  local
-·               vectorized    true
-limit           ·             ·
- │              count         2
- └── sort       ·             ·
-      │         order         +b
-      └── scan  ·             ·
-·               table         t@primary
-·               spans         FULL SCAN
+·               distribution   local
+·               vectorized     true
+limit           ·              ·
+ │              count          2
+ └── sort       ·              ·
+      │         order          +b
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          t@primary
+·               spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT c, b FROM t ORDER BY b LIMIT 2
 ----
-·                         distribution  local      ·       ·
-·                         vectorized    true       ·       ·
-project                   ·             ·          (c, b)  ·
- └── limit                ·             ·          (b, c)  ·
-      │                   count         2          ·       ·
-      └── sort            ·             ·          (b, c)  +b
-           │              order         +b         ·       ·
-           └── distinct   ·             ·          (b, c)  ·
-                │         distinct on   b, c       ·       ·
-                └── scan  ·             ·          (b, c)  ·
-·                         table         t@primary  ·       ·
-·                         spans         FULL SCAN  ·       ·
+·                         distribution         local                 ·       ·
+·                         vectorized           true                  ·       ·
+project                   ·                    ·                     (c, b)  ·
+ └── limit                ·                    ·                     (b, c)  ·
+      │                   estimated row count  2 (missing stats)     ·       ·
+      │                   count                2                     ·       ·
+      └── sort            ·                    ·                     (b, c)  +b
+           │              estimated row count  300 (missing stats)   ·       ·
+           │              order                +b                    ·       ·
+           └── distinct   ·                    ·                     (b, c)  ·
+                │         estimated row count  300 (missing stats)   ·       ·
+                │         distinct on          b, c                  ·       ·
+                └── scan  ·                    ·                     (b, c)  ·
+·                         estimated row count  1000 (missing stats)  ·       ·
+·                         table                t@primary             ·       ·
+·                         spans                FULL SCAN             ·       ·
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
-·             distribution  local
-·             vectorized    true
-project       ·             ·
- └── revscan  ·             ·
-·             table         t@primary
-·             spans         FULL SCAN
+·             distribution   local
+·             vectorized     true
+project       ·              ·
+ └── revscan  ·              ·
+·             missing stats  ·
+·             table          t@primary
+·             spans          FULL SCAN
 
 # Check that LIMIT propagates past nosort nodes.
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
-·          distribution  local
-·          vectorized    true
-project    ·             ·
- └── scan  ·             ·
-·          table         t@primary
-·          spans         LIMITED SCAN
-·          limit         1
+·          distribution   local
+·          vectorized     true
+project    ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          t@primary
+·          spans          LIMITED SCAN
+·          limit          1
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-·             distribution  local
-·             vectorized    true
-project       ·             ·
- └── revscan  ·             ·
-·             table         t@primary
-·             spans         FULL SCAN
+·             distribution   local
+·             vectorized     true
+project       ·              ·
+ └── revscan  ·              ·
+·             missing stats  ·
+·             table          t@primary
+·             spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-·             distribution  local
-·             vectorized    true
-project       ·             ·
- └── revscan  ·             ·
-·             table         t@primary
-·             spans         FULL SCAN
+·             distribution   local
+·             vectorized     true
+project       ·              ·
+ └── revscan  ·              ·
+·             missing stats  ·
+·             table          t@primary
+·             spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
-·          distribution  local      ·          ·
-·          vectorized    true       ·          ·
-sort       ·             ·          (a, b, c)  +b,+a
- │         order         +b,+a      ·          ·
- └── scan  ·             ·          (a, b, c)  ·
-·          table         t@primary  ·          ·
-·          spans         FULL SCAN  ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+sort       ·                    ·                     (a, b, c)  +b,+a
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         order                +b,+a                 ·          ·
+ └── scan  ·                    ·                     (a, b, c)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                t@primary             ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
-·          distribution  local      ·          ·
-·          vectorized    true       ·          ·
-sort       ·             ·          (a, b, c)  +b,+a
- │         order         +b,+a      ·          ·
- └── scan  ·             ·          (a, b, c)  ·
-·          table         t@primary  ·          ·
-·          spans         FULL SCAN  ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+sort       ·                    ·                     (a, b, c)  +b,+a
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         order                +b,+a                 ·          ·
+ └── scan  ·                    ·                     (a, b, c)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                t@primary             ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
-·          distribution  local      ·          ·
-·          vectorized    true       ·          ·
-sort       ·             ·          (a, b, c)  +b,+a
- │         order         +b,+a      ·          ·
- └── scan  ·             ·          (a, b, c)  ·
-·          table         t@primary  ·          ·
-·          spans         FULL SCAN  ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+sort       ·                    ·                     (a, b, c)  +b,+a
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         order                +b,+a                 ·          ·
+ └── scan  ·                    ·                     (a, b, c)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                t@primary             ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
-·          distribution  local      ·          ·
-·          vectorized    true       ·          ·
-sort       ·             ·          (a, b, c)  +b,+a
- │         order         +b,+a      ·          ·
- └── scan  ·             ·          (a, b, c)  ·
-·          table         t@primary  ·          ·
-·          spans         FULL SCAN  ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+sort       ·                    ·                     (a, b, c)  +b,+a
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         order                +b,+a                 ·          ·
+ └── scan  ·                    ·                     (a, b, c)  ·
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                t@primary             ·          ·
+·          spans                FULL SCAN             ·          ·
 
 # Check that sort is skipped if the ORDER BY clause is constant.
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         t@primary
-·     spans         FULL SCAN
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          t@primary
+·     spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
-·          distribution  local
-·          vectorized    true
-render     ·             ·
- └── scan  ·             ·
-·          table         t@primary
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+render     ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          t@primary
+·          spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         t@primary
-·     spans         FULL SCAN
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          t@primary
+·     spans          FULL SCAN
 
 # Check that the sort key reuses the existing render.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 r FROM t ORDER BY b+2
 ----
-·               distribution  local      ·    ·
-·               vectorized    true       ·    ·
-sort            ·             ·          (r)  +r
- │              order         +r         ·    ·
- └── render     ·             ·          (r)  ·
-      │         render 0      b + 2      ·    ·
-      └── scan  ·             ·          (b)  ·
-·               table         t@primary  ·    ·
-·               spans         FULL SCAN  ·    ·
+·               distribution         local                 ·    ·
+·               vectorized           true                  ·    ·
+sort            ·                    ·                     (r)  +r
+ │              estimated row count  1000 (missing stats)  ·    ·
+ │              order                +r                    ·    ·
+ └── render     ·                    ·                     (r)  ·
+      │         estimated row count  1000 (missing stats)  ·    ·
+      │         render 0             b + 2                 ·    ·
+      └── scan  ·                    ·                     (b)  ·
+·               estimated row count  1000 (missing stats)  ·    ·
+·               table                t@primary             ·    ·
+·               spans                FULL SCAN             ·    ·
 
 # Check that the sort picks up a renamed render properly.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
-·               distribution  local      ·    ·
-·               vectorized    true       ·    ·
-sort            ·             ·          (y)  +y
- │              order         +y         ·    ·
- └── render     ·             ·          (y)  ·
-      │         render 0      b + 2      ·    ·
-      └── scan  ·             ·          (b)  ·
-·               table         t@primary  ·    ·
-·               spans         FULL SCAN  ·    ·
+·               distribution         local                 ·    ·
+·               vectorized           true                  ·    ·
+sort            ·                    ·                     (y)  +y
+ │              estimated row count  1000 (missing stats)  ·    ·
+ │              order                +y                    ·    ·
+ └── render     ·                    ·                     (y)  ·
+      │         estimated row count  1000 (missing stats)  ·    ·
+      │         render 0             b + 2                 ·    ·
+      └── scan  ·                    ·                     (b)  ·
+·               estimated row count  1000 (missing stats)  ·    ·
+·               table                t@primary             ·    ·
+·               spans                FULL SCAN             ·    ·
 
 statement ok
 CREATE TABLE abc (
@@ -252,11 +280,12 @@ output row: [4 5]
 query TTT
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abc@ba
-·     spans         FULL SCAN
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          abc@ba
+·     spans          FULL SCAN
 
 # We use the WHERE condition to force the use of the index.
 query TTT
@@ -272,6 +301,7 @@ project               ·                ·
            │          table            abc@primary
            │          key columns      a, b, c
            └── scan   ·                ·
+·                     missing stats    ·
 ·                     table            abc@ba
 ·                     spans            /11-/30
 
@@ -279,16 +309,17 @@ project               ·                ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-·                    distribution  local
-·                    vectorized    true
-project              ·             ·
- └── sort            ·             ·
-      │              order         +b,+a,+d
-      └── filter     ·             ·
-           │         filter        b > 10
-           └── scan  ·             ·
-·                    table         abc@primary
-·                    spans         FULL SCAN
+·                    distribution   local
+·                    vectorized     true
+project              ·              ·
+ └── sort            ·              ·
+      │              order          +b,+a,+d
+      └── filter     ·              ·
+           │         filter         b > 10
+           └── scan  ·              ·
+·                    missing stats  ·
+·                    table          abc@primary
+·                    spans          FULL SCAN
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -305,55 +336,62 @@ SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
 ----
-·               distribution  local        ·             ·
-·               vectorized    true         ·             ·
-sort            ·             ·            (a, b, c, d)  +b,+a,+c
- │              order         +b,+a,+c     ·             ·
- └── filter     ·             ·            (a, b, c, d)  ·
-      │         filter        b > 10       ·             ·
-      └── scan  ·             ·            (a, b, c, d)  ·
-·               table         abc@primary  ·             ·
-·               spans         FULL SCAN    ·             ·
+·               distribution         local                 ·             ·
+·               vectorized           true                  ·             ·
+sort            ·                    ·                     (a, b, c, d)  +b,+a,+c
+ │              estimated row count  333 (missing stats)   ·             ·
+ │              order                +b,+a,+c              ·             ·
+ └── filter     ·                    ·                     (a, b, c, d)  ·
+      │         estimated row count  333 (missing stats)   ·             ·
+      │         filter               b > 10                ·             ·
+      └── scan  ·                    ·                     (a, b, c, d)  ·
+·               estimated row count  1000 (missing stats)  ·             ·
+·               table                abc@primary           ·             ·
+·               spans                FULL SCAN             ·             ·
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
-·          distribution  local
-·          vectorized    true
-project    ·             ·
- └── scan  ·             ·
-·          table         abc@bc
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+project    ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abc@bc
+·          spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-·          distribution  local      ·          ·
-·          vectorized    true       ·          ·
-project    ·             ·          (a, b)     ·
- └── scan  ·             ·          (a, b, c)  +b,+c
-·          table         abc@bc     ·          ·
-·          spans         FULL SCAN  ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+project    ·                    ·                     (a, b)     ·
+ └── scan  ·                    ·                     (a, b, c)  +b,+c
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                abc@bc                ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
-·          distribution  local
-·          vectorized    true
-project    ·             ·
- └── scan  ·             ·
-·          table         abc@bc
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+project    ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abc@bc
+·          spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-·          distribution  local
-·          vectorized    true
-project    ·             ·
- └── scan  ·             ·
-·          table         abc@bc
-·          spans         FULL SCAN
+·          distribution   local
+·          vectorized     true
+project    ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abc@bc
+·          spans          FULL SCAN
 
 statement ok
 SET tracing = on,kv,results; SELECT b, c FROM abc ORDER BY b, c; SET tracing = off
@@ -399,42 +437,47 @@ output row: [1]
 query TTT
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
-·        distribution  local
-·        vectorized    true
-revscan  ·             ·
-·        table         abc@primary
-·        spans         FULL SCAN
+·        distribution   local
+·        vectorized     true
+revscan  ·              ·
+·        missing stats  ·
+·        table          abc@primary
+·        spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-·          distribution  local
-·          vectorized    true
-project    ·             ·
- └── scan  ·             ·
-·          table         abc@bc
-·          spans         /2-/3
+·          distribution   local
+·          vectorized     true
+project    ·              ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abc@bc
+·          spans          /2-/3
 
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-·             distribution  local
-·             vectorized    true
-project       ·             ·
- └── revscan  ·             ·
-·             table         abc@bc
-·             spans         /2-/3
+·             distribution   local
+·             vectorized     true
+project       ·              ·
+ └── revscan  ·              ·
+·             missing stats  ·
+·             table          abc@bc
+·             spans          /2-/3
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-project    ·             ·            (b, c)     +b,+c
- └── scan  ·             ·            (a, b, c)  +b,+c
-·          table         abc@primary  ·          ·
-·          spans         /1-/2        ·          ·
+·          distribution         local               ·          ·
+·          vectorized           true                ·          ·
+project    ·                    ·                   (b, c)     +b,+c
+ │         estimated row count  10 (missing stats)  ·          ·
+ └── scan  ·                    ·                   (a, b, c)  +b,+c
+·          estimated row count  10 (missing stats)  ·          ·
+·          table                abc@primary         ·          ·
+·          spans                /1-/2               ·          ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -442,11 +485,12 @@ CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, id
 ----
-·     distribution  local      ·          ·
-·     vectorized    true       ·          ·
-scan  ·             ·          (id, baz)  +baz,+id
-·     table         bar@i_bar  ·          ·
-·     spans         FULL SCAN  ·          ·
+·     distribution         local                 ·          ·
+·     vectorized           true                  ·          ·
+scan  ·                    ·                     (id, baz)  +baz,+id
+·     estimated row count  1000 (missing stats)  ·          ·
+·     table                bar@i_bar             ·          ·
+·     spans                FULL SCAN             ·          ·
 
 statement ok
 CREATE TABLE abcd (
@@ -466,38 +510,42 @@ CREATE TABLE abcd (
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@abc
-·     spans         /1/4-/1/5
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          abcd@abc
+·     spans          /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@abc
-·     spans         /1/4-/1/5
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          abcd@abc
+·     spans          /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@abc
-·     spans         /1/4-/1/5
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          abcd@abc
+·     spans          /1/4-/1/5
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         abcd@abc
-·     spans         /1/4-/1/5
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          abcd@abc
+·     spans          /1/4-/1/5
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
@@ -536,77 +584,89 @@ sort              ·             ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
-·            distribution   local             ·                  ·
-·            vectorized     false             ·                  ·
-ordinality   ·              ·                 (x, "ordinality")  ·
- └── values  ·              ·                 (column1)          ·
-·            size           1 column, 3 rows  ·                  ·
-·            row 0, expr 0  'a'               ·                  ·
-·            row 1, expr 0  'b'               ·                  ·
-·            row 2, expr 0  'c'               ·                  ·
+·            distribution         local             ·                  ·
+·            vectorized           false             ·                  ·
+ordinality   ·                    ·                 (x, "ordinality")  ·
+ │           estimated row count  3                 ·                  ·
+ └── values  ·                    ·                 (column1)          ·
+·            size                 1 column, 3 rows  ·                  ·
+·            row 0, expr 0        'a'               ·                  ·
+·            row 1, expr 0        'b'               ·                  ·
+·            row 2, expr 0        'c'               ·                  ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
-·                 distribution   local             ·                  ·
-·                 vectorized     false             ·                  ·
-ordinality        ·              ·                 (x, "ordinality")  ·
- └── sort         ·              ·                 (column1)          +column1
-      │           order          +column1          ·                  ·
-      └── values  ·              ·                 (column1)          ·
-·                 size           1 column, 3 rows  ·                  ·
-·                 row 0, expr 0  'a'               ·                  ·
-·                 row 1, expr 0  'b'               ·                  ·
-·                 row 2, expr 0  'c'               ·                  ·
+·                 distribution         local             ·                  ·
+·                 vectorized           false             ·                  ·
+ordinality        ·                    ·                 (x, "ordinality")  ·
+ │                estimated row count  3                 ·                  ·
+ └── sort         ·                    ·                 (column1)          +column1
+      │           estimated row count  3                 ·                  ·
+      │           order                +column1          ·                  ·
+      └── values  ·                    ·                 (column1)          ·
+·                 size                 1 column, 3 rows  ·                  ·
+·                 row 0, expr 0        'a'               ·                  ·
+·                 row 1, expr 0        'b'               ·                  ·
+·                 row 2, expr 0        'c'               ·                  ·
 
 # Check that the ordering of the source does not propagate blindly to RETURNING.
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-·                      distribution   local               ·       ·
-·                      vectorized     false               ·       ·
-project                ·              ·                   (b)     ·
- └── insert fast path  ·              ·                   (a, b)  ·
-·                      into           t(a, b, c)          ·       ·
-·                      auto commit    ·                   ·       ·
-·                      size           3 columns, 1 row    ·       ·
-·                      row 0, expr 0  1                   ·       ·
-·                      row 0, expr 1  2                   ·       ·
-·                      row 0, expr 2  CAST(NULL AS BOOL)  ·       ·
+·                      distribution         local               ·       ·
+·                      vectorized           false               ·       ·
+project                ·                    ·                   (b)     ·
+ │                     estimated row count  1                   ·       ·
+ └── insert fast path  ·                    ·                   (a, b)  ·
+·                      estimated row count  1                   ·       ·
+·                      into                 t(a, b, c)          ·       ·
+·                      auto commit          ·                   ·       ·
+·                      size                 3 columns, 1 row    ·       ·
+·                      row 0, expr 0        1                   ·       ·
+·                      row 0, expr 1        2                   ·       ·
+·                      row 0, expr 2        CAST(NULL AS BOOL)  ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-·               distribution  local      ·       ·
-·               vectorized    false      ·       ·
-project         ·             ·          (b)     ·
- └── delete     ·             ·          (a, b)  ·
-      │         from          t          ·       ·
-      │         auto commit   ·          ·       ·
-      └── scan  ·             ·          (a, b)  ·
-·               table         t@primary  ·       ·
-·               spans         /3-/3/#    ·       ·
+·               distribution         local              ·       ·
+·               vectorized           false              ·       ·
+project         ·                    ·                  (b)     ·
+ │              estimated row count  1 (missing stats)  ·       ·
+ └── delete     ·                    ·                  (a, b)  ·
+      │         estimated row count  1 (missing stats)  ·       ·
+      │         from                 t                  ·       ·
+      │         auto commit          ·                  ·       ·
+      └── scan  ·                    ·                  (a, b)  ·
+·               estimated row count  1 (missing stats)  ·       ·
+·               table                t@primary          ·       ·
+·               spans                /3-/3/#            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-·                         distribution      local       ·                 ·
-·                         vectorized        false       ·                 ·
-project                   ·                 ·           (b)               ·
- └── update               ·                 ·           (a, b)            ·
-      │                   table             t           ·                 ·
-      │                   set               c           ·                 ·
-      │                   auto commit       ·           ·                 ·
-      └── project         ·                 ·           (a, b, c, c_new)  ·
-           └── render     ·                 ·           (c_new, a, b, c)  ·
-                │         render 0          true        ·                 ·
-                │         render 1          a           ·                 ·
-                │         render 2          b           ·                 ·
-                │         render 3          c           ·                 ·
-                └── scan  ·                 ·           (a, b, c)         ·
-·                         table             t@primary   ·                 ·
-·                         spans             FULL SCAN   ·                 ·
-·                         locking strength  for update  ·                 ·
+·                         distribution         local                 ·                 ·
+·                         vectorized           false                 ·                 ·
+project                   ·                    ·                     (b)               ·
+ │                        estimated row count  1000 (missing stats)  ·                 ·
+ └── update               ·                    ·                     (a, b)            ·
+      │                   estimated row count  1000 (missing stats)  ·                 ·
+      │                   table                t                     ·                 ·
+      │                   set                  c                     ·                 ·
+      │                   auto commit          ·                     ·                 ·
+      └── project         ·                    ·                     (a, b, c, c_new)  ·
+           └── render     ·                    ·                     (c_new, a, b, c)  ·
+                │         estimated row count  1000 (missing stats)  ·                 ·
+                │         render 0             true                  ·                 ·
+                │         render 1             a                     ·                 ·
+                │         render 2             b                     ·                 ·
+                │         render 3             c                     ·                 ·
+                └── scan  ·                    ·                     (a, b, c)         ·
+·                         estimated row count  1000 (missing stats)  ·                 ·
+·                         table                t@primary             ·                 ·
+·                         spans                FULL SCAN             ·                 ·
+·                         locking strength     for update            ·                 ·
 
 statement ok
 CREATE TABLE uvwxyz (
@@ -625,12 +685,13 @@ CREATE TABLE uvwxyz (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-·          distribution  local        ·          ·
-·          vectorized    true         ·          ·
-project    ·             ·            (y, w, x)  ·
- └── scan  ·             ·            (w, x, y)  +w,+x
-·          table         uvwxyz@ywxz  ·          ·
-·          spans         /1-/2        ·          ·
+·          distribution         local               ·          ·
+·          vectorized           true                ·          ·
+project    ·                    ·                   (y, w, x)  ·
+ └── scan  ·                    ·                   (w, x, y)  +w,+x
+·          estimated row count  10 (missing stats)  ·          ·
+·          table                uvwxyz@ywxz         ·          ·
+·          spans                /1-/2               ·          ·
 
 
 statement ok
@@ -651,13 +712,14 @@ CREATE TABLE blocks (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-·          distribution  local           ·                                           ·
-·          vectorized    true            ·                                           ·
-project    ·             ·               (block_id, writer_id, block_num, block_id)  ·
- └── scan  ·             ·               (block_id, writer_id, block_num)            ·
-·          table         blocks@primary  ·                                           ·
-·          spans         LIMITED SCAN    ·                                           ·
-·          limit         1               ·                                           ·
+·          distribution         local              ·                                           ·
+·          vectorized           true               ·                                           ·
+project    ·                    ·                  (block_id, writer_id, block_num, block_id)  ·
+ └── scan  ·                    ·                  (block_id, writer_id, block_num)            ·
+·          estimated row count  1 (missing stats)  ·                                           ·
+·          table                blocks@primary     ·                                           ·
+·          spans                LIMITED SCAN       ·                                           ·
+·          limit                1                  ·                                           ·
 
 statement ok
 CREATE TABLE foo(a INT, b CHAR)
@@ -666,34 +728,40 @@ CREATE TABLE foo(a INT, b CHAR)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-·                    distribution  local        ·                ·
-·                    vectorized    true         ·                ·
-project              ·             ·            (b, a)           ·
- └── sort            ·             ·            (column5, a, b)  +a
-      │              order         +a           ·                ·
-      └── render     ·             ·            (column5, a, b)  ·
-           │         render 0      a            ·                ·
-           │         render 1      a            ·                ·
-           │         render 2      b            ·                ·
-           └── scan  ·             ·            (a, b)           ·
-·                    table         foo@primary  ·                ·
-·                    spans         FULL SCAN    ·                ·
+·                    distribution         local                 ·                ·
+·                    vectorized           true                  ·                ·
+project              ·                    ·                     (b, a)           ·
+ └── sort            ·                    ·                     (column5, a, b)  +a
+      │              estimated row count  1000 (missing stats)  ·                ·
+      │              order                +a                    ·                ·
+      └── render     ·                    ·                     (column5, a, b)  ·
+           │         estimated row count  1000 (missing stats)  ·                ·
+           │         render 0             a                     ·                ·
+           │         render 1             a                     ·                ·
+           │         render 2             b                     ·                ·
+           └── scan  ·                    ·                     (a, b)           ·
+·                    estimated row count  1000 (missing stats)  ·                ·
+·                    table                foo@primary           ·                ·
+·                    spans                FULL SCAN             ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @2
 ----
-·                    distribution  local        ·                ·
-·                    vectorized    true         ·                ·
-project              ·             ·            (b, a)           ·
- └── sort            ·             ·            (column5, a, b)  +b
-      │              order         +b           ·                ·
-      └── render     ·             ·            (column5, a, b)  ·
-           │         render 0      b            ·                ·
-           │         render 1      a            ·                ·
-           │         render 2      b            ·                ·
-           └── scan  ·             ·            (a, b)           ·
-·                    table         foo@primary  ·                ·
-·                    spans         FULL SCAN    ·                ·
+·                    distribution         local                 ·                ·
+·                    vectorized           true                  ·                ·
+project              ·                    ·                     (b, a)           ·
+ └── sort            ·                    ·                     (column5, a, b)  +b
+      │              estimated row count  1000 (missing stats)  ·                ·
+      │              order                +b                    ·                ·
+      └── render     ·                    ·                     (column5, a, b)  ·
+           │         estimated row count  1000 (missing stats)  ·                ·
+           │         render 0             b                     ·                ·
+           │         render 1             a                     ·                ·
+           │         render 2             b                     ·                ·
+           └── scan  ·                    ·                     (a, b)           ·
+·                    estimated row count  1000 (missing stats)  ·                ·
+·                    table                foo@primary           ·                ·
+·                    spans                FULL SCAN             ·                ·
 
 # ------------------------------------------------------------------------------
 # Check star expansion in ORDER BY.
@@ -706,26 +774,30 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ]
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         +x,+y
- └── scan  ·             ·
-·          table         a@primary
-·          spans         FULL SCAN
+·          distribution         local
+·          vectorized           true
+sort       ·                    ·
+ │         estimated row count  1000 (missing stats)
+ │         order                +x,+y
+ └── scan  ·                    ·
+·          estimated row count  1000 (missing stats)
+·          table                a@primary
+·          spans                FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ]
 ----
-·          distribution  local
-·          vectorized    true
-sort       ·             ·
- │         order         +x,+y
- └── scan  ·             ·
-·          table         a@primary
-·          spans         FULL SCAN
+·          distribution         local
+·          vectorized           true
+sort       ·                    ·
+ │         estimated row count  1000 (missing stats)
+ │         order                +x,+y
+ └── scan  ·                    ·
+·          estimated row count  1000 (missing stats)
+·          table                a@primary
+·          spans                FULL SCAN
 
 # ------------------------------------------------------------------------------
 # ORDER BY INDEX test cases.
@@ -738,84 +810,93 @@ CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
-·          distribution  local       ·       ·
-·          vectorized    true        ·       ·
-project    ·             ·           (v)     ·
- └── scan  ·             ·           (k, v)  +k
-·          table         kv@primary  ·       ·
-·          spans         FULL SCAN   ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+project    ·                    ·                     (v)     ·
+ └── scan  ·                    ·                     (k, v)  +k
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                kv@primary            ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
-·          distribution  local       ·       ·
-·          vectorized    true        ·       ·
-project    ·             ·           (v)     ·
- └── scan  ·             ·           (k, v)  +k
-·          table         kv@primary  ·       ·
-·          spans         FULL SCAN   ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+project    ·                    ·                     (v)     ·
+ └── scan  ·                    ·                     (k, v)  +k
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                kv@primary            ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
-·             distribution  local       ·       ·
-·             vectorized    true        ·       ·
-project       ·             ·           (v)     ·
- └── revscan  ·             ·           (k, v)  -k
-·             table         kv@primary  ·       ·
-·             spans         FULL SCAN   ·       ·
+·             distribution         local                 ·       ·
+·             vectorized           true                  ·       ·
+project       ·                    ·                     (v)     ·
+ └── revscan  ·                    ·                     (k, v)  -k
+·             estimated row count  1000 (missing stats)  ·       ·
+·             table                kv@primary            ·       ·
+·             spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
-·               distribution  local       ·       ·
-·               vectorized    true        ·       ·
-project         ·             ·           (k)     ·
- └── sort       ·             ·           (k, v)  +v,+k
-      │         order         +v,+k       ·       ·
-      └── scan  ·             ·           (k, v)  ·
-·               table         kv@primary  ·       ·
-·               spans         FULL SCAN   ·       ·
+·               distribution         local                 ·       ·
+·               vectorized           true                  ·       ·
+project         ·                    ·                     (k)     ·
+ └── sort       ·                    ·                     (k, v)  +v,+k
+      │         estimated row count  1000 (missing stats)  ·       ·
+      │         order                +v,+k                 ·       ·
+      └── scan  ·                    ·                     (k, v)  ·
+·               estimated row count  1000 (missing stats)  ·       ·
+·               table                kv@primary            ·       ·
+·               spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
-·          distribution  local      ·       ·
-·          vectorized    true       ·       ·
-project    ·             ·          (k)     ·
- └── scan  ·             ·          (k, v)  -v,+k
-·          table         kv@foo     ·       ·
-·          spans         FULL SCAN  ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+project    ·                    ·                     (k)     ·
+ └── scan  ·                    ·                     (k, v)  -v,+k
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                kv@foo                ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
-·          distribution  local      ·       ·
-·          vectorized    true       ·       ·
-project    ·             ·          (k)     ·
- └── scan  ·             ·          (k, v)  -v,+k
-·          table         kv@foo     ·       ·
-·          spans         FULL SCAN  ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+project    ·                    ·                     (k)     ·
+ └── scan  ·                    ·                     (k, v)  -v,+k
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                kv@foo                ·       ·
+·          spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
-·             distribution  local      ·       ·
-·             vectorized    true       ·       ·
-project       ·             ·          (k)     ·
- └── revscan  ·             ·          (k, v)  +v,-k
-·             table         kv@foo     ·       ·
-·             spans         FULL SCAN  ·       ·
+·             distribution         local                 ·       ·
+·             vectorized           true                  ·       ·
+project       ·                    ·                     (k)     ·
+ └── revscan  ·                    ·                     (k, v)  +v,-k
+·             estimated row count  1000 (missing stats)  ·       ·
+·             table                kv@foo                ·       ·
+·             spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
-·          distribution  local      ·       ·
-·          vectorized    true       ·       ·
-project    ·             ·          (k)     ·
- └── scan  ·             ·          (k, v)  -v,+k
-·          table         kv@foo     ·       ·
-·          spans         FULL SCAN  ·       ·
+·          distribution         local                 ·       ·
+·          vectorized           true                  ·       ·
+project    ·                    ·                     (k)     ·
+ └── scan  ·                    ·                     (k, v)  -v,+k
+·          estimated row count  1000 (missing stats)  ·       ·
+·          table                kv@foo                ·       ·
+·          spans                FULL SCAN             ·       ·
 
 # Check the syntax can be used with joins.
 #
@@ -827,42 +908,49 @@ query TTTTT
 EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
-·                           distribution           local             ·                ·
-·                           vectorized             false             ·                ·
-project                     ·                      ·                 (k)              ·
- └── sort                   ·                      ·                 (k, v)           -v,+k
-      │                     order                  -v,+k             ·                ·
-      └── project           ·                      ·                 (k, v)           ·
-           └── lookup join  ·                      ·                 (column1, k, v)  ·
-                │           table                  kv@primary        ·                ·
-                │           type                   inner             ·                ·
-                │           equality               (column1) = (k)   ·                ·
-                │           equality cols are key  ·                 ·                ·
-                │           parallel               ·                 ·                ·
-                └── values  ·                      ·                 (column1)        ·
-·                           size                   1 column, 2 rows  ·                ·
-·                           row 0, expr 0          1                 ·                ·
-·                           row 1, expr 0          3                 ·                ·
+·                           distribution           local              ·                ·
+·                           vectorized             false              ·                ·
+project                     ·                      ·                  (k)              ·
+ └── sort                   ·                      ·                  (k, v)           -v,+k
+      │                     estimated row count    2 (missing stats)  ·                ·
+      │                     order                  -v,+k              ·                ·
+      └── project           ·                      ·                  (k, v)           ·
+           │                estimated row count    2 (missing stats)  ·                ·
+           └── lookup join  ·                      ·                  (column1, k, v)  ·
+                │           estimated row count    2 (missing stats)  ·                ·
+                │           table                  kv@primary         ·                ·
+                │           type                   inner              ·                ·
+                │           equality               (column1) = (k)    ·                ·
+                │           equality cols are key  ·                  ·                ·
+                │           parallel               ·                  ·                ·
+                └── values  ·                      ·                  (column1)        ·
+·                           size                   1 column, 2 rows   ·                ·
+·                           row 0, expr 0          1                  ·                ·
+·                           row 1, expr 0          3                  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-·                     distribution        local              ·             ·
-·                     vectorized          true               ·             ·
-project               ·                   ·                  (k)           ·
- └── project          ·                   ·                  (k, k, v)     -v,+k
-      └── merge join  ·                   ·                  (k, v, k, v)  -v,+k
-           │          type                inner              ·             ·
-           │          equality            (v, k) = (v, k)    ·             ·
-           │          left cols are key   ·                  ·             ·
-           │          right cols are key  ·                  ·             ·
-           │          mergeJoinOrder      -"(v=v)",+"(k=k)"  ·             ·
-           ├── scan   ·                   ·                  (k, v)        -v,+k
-           │          table               kv@foo             ·             ·
-           │          spans               FULL SCAN          ·             ·
-           └── scan   ·                   ·                  (k, v)        -v,+k
-·                     table               kv@foo             ·             ·
-·                     spans               FULL SCAN          ·             ·
+·                     distribution         local                 ·             ·
+·                     vectorized           true                  ·             ·
+project               ·                    ·                     (k)           ·
+ └── project          ·                    ·                     (k, k, v)     -v,+k
+      │               estimated row count  10 (missing stats)    ·             ·
+      └── merge join  ·                    ·                     (k, v, k, v)  -v,+k
+           │          estimated row count  10 (missing stats)    ·             ·
+           │          type                 inner                 ·             ·
+           │          equality             (v, k) = (v, k)       ·             ·
+           │          left cols are key    ·                     ·             ·
+           │          right cols are key   ·                     ·             ·
+           │          mergeJoinOrder       -"(v=v)",+"(k=k)"     ·             ·
+           ├── scan   ·                    ·                     (k, v)        -v,+k
+           │          estimated row count  1000 (missing stats)  ·             ·
+           │          table                kv@foo                ·             ·
+           │          spans                FULL SCAN             ·             ·
+           └── scan   ·                    ·                     (k, v)        -v,+k
+·                     estimated row count  1000 (missing stats)  ·             ·
+·                     table                kv@foo                ·             ·
+·                     spans                FULL SCAN             ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
@@ -871,15 +959,19 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
-·                     distribution  local            ·              ·
-·                     vectorized    true             ·              ·
-sort                  ·             ·                (x, y, z)      +x
- │                    order         +x               ·              ·
- └── filter           ·             ·                (x, y, z)      ·
-      │               filter        x = y            ·              ·
-      └── index join  ·             ·                (x, y, z)      ·
-           │          table         xyz@primary      ·              ·
-           │          key columns   rowid            ·              ·
-           └── scan   ·             ·                (y, z, rowid)  ·
-·                     table         xyz@xyz_z_y_idx  ·              ·
-·                     spans         /1/!NULL-/2      ·              ·
+·                     distribution         local               ·              ·
+·                     vectorized           true                ·              ·
+sort                  ·                    ·                   (x, y, z)      +x
+ │                    estimated row count  1 (missing stats)   ·              ·
+ │                    order                +x                  ·              ·
+ └── filter           ·                    ·                   (x, y, z)      ·
+      │               estimated row count  1 (missing stats)   ·              ·
+      │               filter               x = y               ·              ·
+      └── index join  ·                    ·                   (x, y, z)      ·
+           │          estimated row count  10 (missing stats)  ·              ·
+           │          table                xyz@primary         ·              ·
+           │          key columns          rowid               ·              ·
+           └── scan   ·                    ·                   (y, z, rowid)  ·
+·                     estimated row count  10 (missing stats)  ·              ·
+·                     table                xyz@xyz_z_y_idx     ·              ·
+·                     spans                /1/!NULL-/2         ·              ·

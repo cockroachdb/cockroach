@@ -122,11 +122,12 @@ SELECT * FROM parent
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6] OFFSET 2
 ----
-filter     ·       ·
- │         filter  (y >= 2) AND (y <= 6)
- └── scan  ·       ·
-·          table   child@primary
-·          spans   /1/2/#/57/2-/4/6/#/57/3
+filter     ·              ·
+ │         filter         (y >= 2) AND (y <= 6)
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          child@primary
+·          spans          /1/2/#/57/2-/4/6/#/57/3
 
 query III rowsort
 SELECT * FROM child WHERE x >= 1 AND x < 5 AND y >= 2 AND y <= 6
@@ -176,9 +177,10 @@ child  CREATE TABLE public.child (
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM child WHERE y >=2 AND y <= 6] OFFSET 2
 ----
-scan  ·      ·
-·     table  child@primary
-·     spans  /2-/7
+scan  ·              ·
+·     missing stats  ·
+·     table          child@primary
+·     spans          /2-/7
 
 query III rowsort
 SELECT * FROM child WHERE y >=2 AND y <= 6
@@ -223,9 +225,10 @@ child                                     CREATE TABLE public.child (
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM child@i] OFFSET 2
 ----
-scan  ·      ·
-·     table  child@i
-·     spans  FULL SCAN
+scan  ·              ·
+·     missing stats  ·
+·     table          child@i
+·     spans          FULL SCAN
 
 query IIII
 SELECT * FROM child@i
@@ -383,12 +386,13 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i1
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i1
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i1
@@ -398,12 +402,13 @@ SELECT * FROM t@i1
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i2
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i2
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i2
@@ -413,12 +418,13 @@ SELECT * FROM t@i2
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i3
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i3
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i3
@@ -428,12 +434,13 @@ SELECT * FROM t@i3
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i4
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i4
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i4
@@ -443,12 +450,13 @@ SELECT * FROM t@i4
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i5
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i5
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5
@@ -458,12 +466,13 @@ SELECT * FROM t@i5
 query TTT
 SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
-index join  ·            ·
- │          table        t@primary
- │          key columns  y
- └── scan   ·            ·
-·           table        t@i7
-·           spans        FULL SCAN
+index join  ·              ·
+ │          table          t@primary
+ │          key columns    y
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          t@i7
+·           spans          FULL SCAN
 
 query IIIIT
 SELECT * FROM t@i5
