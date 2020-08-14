@@ -1,4 +1,4 @@
-# LogicTest: local local-vec-auto
+# LogicTest: local local-vec-auto 3node-tenant
 
 # Test that different operations still succeed when the primary key is not in column family 0.
 
