@@ -231,21 +231,21 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Gets filled below to identify the replica by its address.
-	makeVerifier := func(expAddrs []roachpb.NodeID) func(SendOptions, ReplicaSlice) error {
-		return func(o SendOptions, replicas ReplicaSlice) error {
+	makeVerifier := func(expNodes []roachpb.NodeID) func(SendOptions, []roachpb.ReplicaDescriptor) error {
+		return func(o SendOptions, replicas []roachpb.ReplicaDescriptor) error {
 			var actualAddrs []roachpb.NodeID
 			for i, r := range replicas {
-				if len(expAddrs) <= i {
-					return errors.Errorf("got unexpected address: %s", r.NodeDesc.Address)
+				if len(expNodes) <= i {
+					return errors.Errorf("got unexpected replica: %s", r)
 				}
-				if expAddrs[i] == 0 {
+				if expNodes[i] == 0 {
 					actualAddrs = append(actualAddrs, 0)
 				} else {
-					actualAddrs = append(actualAddrs, r.NodeDesc.NodeID)
+					actualAddrs = append(actualAddrs, r.NodeID)
 				}
 			}
-			if !reflect.DeepEqual(expAddrs, actualAddrs) {
-				return errors.Errorf("expected %d, but found %d", expAddrs, actualAddrs)
+			if !reflect.DeepEqual(expNodes, actualAddrs) {
+				return errors.Errorf("expected %d, but found %d", expNodes, actualAddrs)
 			}
 			return nil
 		}
@@ -345,18 +345,24 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// Stub to be changed in each test case.
-	var verifyCall func(SendOptions, ReplicaSlice) error
+	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		opts SendOptions,
-		replicas ReplicaSlice,
-		args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
-		if err := verifyCall(opts, replicas); err != nil {
+	var transportFactory TransportFactory = func(
+		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+	) (Transport, error) {
+		reps := make([]roachpb.ReplicaDescriptor, len(replicas))
+		for i := range replicas {
+			reps[i] = replicas[i].ReplicaDescriptor
+		}
+		if err := verifyCall(opts, reps); err != nil {
 			return nil, err
 		}
-		return args.CreateReply(), nil
+		return adaptSimpleTransport(
+			func(
+				ctx context.Context, _ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, error) {
+				return ba.CreateReply(), nil
+			})(opts, dialer, replicas)
 	}
 
 	cfg := DistSenderConfig{
@@ -365,7 +371,7 @@ func TestSendRPCOrder(t *testing.T) {
 		NodeDescs:  g,
 		RPCContext: rpcContext,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(testFn),
+			TransportFactory: transportFactory,
 		},
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
