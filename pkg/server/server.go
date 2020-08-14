@@ -513,7 +513,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			Dialer: nodeDialer.CTDialer(),
 		}),
 
-		EnableEpochRangeLeases:  true,
 		ExternalStorage:         externalStorage,
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
