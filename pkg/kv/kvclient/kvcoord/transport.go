@@ -204,10 +204,6 @@ func (gt *grpcTransport) SkipReplica() {
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.moveToFront(replica)
-}
-
-func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.replicas {
 		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
