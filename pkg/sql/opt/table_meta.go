@@ -40,6 +40,12 @@ func (t TableID) ColumnID(ord int) ColumnID {
 	return t.firstColID() + ColumnID(ord)
 }
 
+// IndexColumnID returns the metadata id of the idxOrd-th index column in the
+// given index.
+func (t TableID) IndexColumnID(idx cat.Index, idxOrd int) ColumnID {
+	return t.ColumnID(idx.Column(idxOrd).Ordinal())
+}
+
 // ColumnOrdinal returns the ordinal position of the given column in its base
 // table.
 //
@@ -176,7 +182,7 @@ func (tm *TableMeta) IndexColumns(indexOrd int) ColSet {
 
 	var indexCols ColSet
 	for i, n := 0, index.ColumnCount(); i < n; i++ {
-		ord := index.Column(i).Ordinal
+		ord := index.Column(i).Ordinal()
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
 	return indexCols
@@ -189,7 +195,7 @@ func (tm *TableMeta) IndexKeyColumns(indexOrd int) ColSet {
 
 	var indexCols ColSet
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
-		ord := index.Column(i).Ordinal
+		ord := index.Column(i).Ordinal()
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}
 	return indexCols
@@ -207,7 +213,7 @@ func (tm *TableMeta) IndexKeyColumnsMapVirtual(indexOrd int) ColSet {
 		if i == 0 && index.IsInverted() {
 			ord = index.Column(i).InvertedSourceColumnOrdinal()
 		} else {
-			ord = index.Column(i).Ordinal
+			ord = index.Column(i).Ordinal()
 		}
 		indexCols.Add(tm.MetaID.ColumnID(ord))
 	}

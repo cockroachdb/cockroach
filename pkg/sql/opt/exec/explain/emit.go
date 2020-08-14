@@ -425,7 +425,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		inputCols := a.Input.Columns()
 		rightEqCols := make([]string, len(a.EqCols))
 		for i := range rightEqCols {
-			rightEqCols[i] = string(a.Table.Column(a.Index.Column(i).Ordinal).ColName())
+			rightEqCols[i] = string(a.Index.Column(i).ColName())
 		}
 		ob.Attrf(
 			"equality", "(%s) = (%s)",
