@@ -1747,7 +1747,7 @@ func (ds *DistSender) sendToReplicas(
 		class:   rpc.ConnectionClassForKey(desc.RSpan().Key),
 		metrics: &ds.metrics,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
 	if err != nil {
 		return nil, err
 	}
