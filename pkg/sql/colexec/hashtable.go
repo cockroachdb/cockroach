@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -21,10 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
-
-// HashTableNumBuckets is the default number of buckets in the colexec hashtable.
-// TODO(yuzefovich): support rehashing instead of large fixed bucket size.
-const HashTableNumBuckets = 1 << 16
 
 // hashTableBuildMode represents different modes in which the hashTable can be
 // built.
@@ -133,6 +130,18 @@ type hashTableProbeBuffer struct {
 type hashTable struct {
 	allocator *colmem.Allocator
 
+	// internalMemHelper is a utility struct that helps with memory accounting
+	// of the internal memory of the hash table (auxiliary slices).
+	internalMemHelper struct {
+		// constSlicesAreAccountedFor indicates whether we have already
+		// accounted for the memory used by the slices that are constant in
+		// size.
+		constSlicesAreAccountedFor bool
+		// dynamicSlicesNumUint64AccountedFor stores the number of uint64 from
+		// the dynamic slices that we have already accounted for.
+		dynamicSlicesNumUint64AccountedFor int64
+	}
+
 	// buildScratch contains the scratch buffers required for the build table.
 	buildScratch hashTableBuildBuffer
 
@@ -162,6 +171,9 @@ type hashTable struct {
 	// numBuckets returns the number of buckets the hashTable employs. This is
 	// equivalent to the size of first.
 	numBuckets uint64
+	// loadFactor determines the average number of tuples per bucket exceeding
+	// of which will trigger resizing the hash table.
+	loadFactor float64
 
 	// allowNullEquality determines if NULL keys should be treated as equal to
 	// each other.
@@ -177,9 +189,16 @@ type hashTable struct {
 
 var _ resetter = &hashTable{}
 
+// newHashTable returns a new hashTable.
+// - loadFactor determines the average number of tuples per bucket which, if
+// exceeded, will trigger resizing the hash table. This number can have a
+// noticeable effect on the performance, so every user of the hash table should
+// choose the number that works well for the corresponding use case. 1.0 could
+// be used as the initial default value, and most likely the best value will be
+// in [0.1, 10.0] range.
 func newHashTable(
 	allocator *colmem.Allocator,
-	numBuckets uint64,
+	loadFactor float64,
 	sourceTypes []*types.T,
 	eqCols []uint32,
 	allowNullEquality bool,
@@ -191,11 +210,28 @@ func newHashTable(
 		// assert that it is not requested.
 		colexecerror.InternalError("hashTableDeletingProbeMode is supported only when null equality is allowed")
 	}
+	// This number was chosen after running benchmarks of all users of the hash
+	// table (hash joiner, hash aggregator, unordered distinct). The reasoning
+	// for why using coldata.BatchSize() as the initial number of buckets make
+	// sense:
+	// - on one hand, we make several other allocations that have to be at
+	// least coldata.BatchSize() in size, so we don't win much in the case of
+	// the input with small number of tuples;
+	// - on the other hand, if we start out with a larger number, we won't be
+	// using the vast of majority of the buckets on the input with small number
+	// of tuples (a downside) while not gaining much in the case of the input
+	// with large number of tuples.
+	initialNumHashBuckets := uint64(coldata.BatchSize())
+	// Note that we don't perform memory accounting of the internal memory here
+	// and delay it till buildFromBufferedTuples in order to appease *-disk
+	// logic test configs (our disk-spilling infrastructure doesn't know how to
+	// fallback to disk when a memory limit is hit in the constructor methods
+	// of the operators or in Init() implementations).
 	ht := &hashTable{
 		allocator: allocator,
 
 		buildScratch: hashTableBuildBuffer{
-			first: make([]uint64, numBuckets),
+			first: make([]uint64, initialNumHashBuckets),
 		},
 
 		probeScratch: hashTableProbeBuffer{
@@ -209,14 +245,15 @@ func newHashTable(
 
 		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes),
 		keyCols:           eqCols,
-		numBuckets:        numBuckets,
+		numBuckets:        initialNumHashBuckets,
+		loadFactor:        loadFactor,
 		allowNullEquality: allowNullEquality,
 		buildMode:         buildMode,
 		probeMode:         probeMode,
 	}
 
 	if buildMode == hashTableDistinctBuildMode {
-		ht.probeScratch.first = make([]uint64, numBuckets)
+		ht.probeScratch.first = make([]uint64, initialNumHashBuckets)
 		ht.probeScratch.next = make([]uint64, coldata.BatchSize()+1)
 		ht.buildScratch.next = make([]uint64, 1, coldata.BatchSize()+1)
 		ht.probeScratch.hashBuffer = make([]uint64, coldata.BatchSize())
@@ -226,51 +263,96 @@ func newHashTable(
 	return ht
 }
 
+// shouldResize returns whether the hash table storing numTuples should be
+// resized in order to not exceed the load factor given the current number of
+// buckets.
+func (ht *hashTable) shouldResize(numTuples int) bool {
+	return float64(numTuples)/float64(ht.numBuckets) > ht.loadFactor
+}
+
+const sizeOfUint64 = int64(unsafe.Sizeof(uint64(0)))
+
+// accountForConstSlices checks whether we have already accounted for the
+// memory used by the slices that are constant in size and adjusts the
+// allocator accordingly if we haven't.
+func (ht *hashTable) accountForConstSlices() {
+	if ht.internalMemHelper.constSlicesAreAccountedFor {
+		return
+	}
+	const sizeOfBool = int64(unsafe.Sizeof(true))
+	internalMemUsed := sizeOfUint64 * int64(cap(ht.probeScratch.buckets)+
+		cap(ht.probeScratch.groupID)+cap(ht.probeScratch.headID)+cap(ht.probeScratch.toCheck))
+	internalMemUsed += sizeOfBool * int64(cap(ht.probeScratch.differs)+cap(ht.probeScratch.distinct))
+	ht.allocator.AdjustMemoryUsage(internalMemUsed)
+	ht.internalMemHelper.constSlicesAreAccountedFor = true
+}
+
+// buildFromBufferedTuples builds the hash table from already buffered tuples
+// in ht.vals. It'll determine the appropriate number of buckets that satisfy
+// the target load factor.
+func (ht *hashTable) buildFromBufferedTuples(ctx context.Context) {
+	for ht.shouldResize(ht.vals.Length()) {
+		ht.numBuckets *= 2
+	}
+	ht.buildScratch.first = maybeAllocateUint64Array(ht.buildScratch.first, int(ht.numBuckets))
+	if ht.probeScratch.first != nil {
+		ht.probeScratch.first = maybeAllocateUint64Array(ht.probeScratch.first, int(ht.numBuckets))
+	}
+	keyCols := make([]coldata.Vec, len(ht.keyCols))
+	for i, colIdx := range ht.keyCols {
+		keyCols[i] = ht.vals.ColVec(int(colIdx))
+	}
+	// ht.next is used to store the computed hash value of each key.
+	ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
+	ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
+	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, uint64(ht.vals.Length()))
+	// Account for memory used by the internal auxiliary slices.
+	ht.accountForConstSlices()
+	// Note that if ht.probeScratch.first is nil, it'll have zero capacity.
+	newUint64Count := int64(cap(ht.buildScratch.first) + cap(ht.probeScratch.first) + cap(ht.buildScratch.next))
+	ht.allocator.AdjustMemoryUsage(sizeOfUint64 * (newUint64Count - ht.internalMemHelper.dynamicSlicesNumUint64AccountedFor))
+	ht.internalMemHelper.dynamicSlicesNumUint64AccountedFor = newUint64Count
+}
+
 // build executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process.
 func (ht *hashTable) build(ctx context.Context, input colexecbase.Operator) {
-	nKeyCols := len(ht.keyCols)
-
 	switch ht.buildMode {
 	case hashTableFullBuildMode:
+		// We're using the hash table with the full build mode in which we will
+		// fully buffer all tuples from the input first and only then we'll
+		// build the hash table. Such approach allows us to compute the desired
+		// number of hash buckets for the target load factor (this is done in
+		// buildFromBufferedTuples()).
 		for {
 			batch := input.Next(ctx)
 			if batch.Length() == 0 {
 				break
 			}
-
 			ht.allocator.PerformOperation(ht.vals.ColVecs(), func() {
 				ht.vals.append(batch, 0 /* startIdx */, batch.Length())
 			})
 		}
+		ht.buildFromBufferedTuples(ctx)
 
-		keyCols := make([]coldata.Vec, nKeyCols)
-		for i := 0; i < nKeyCols; i++ {
-			keyCols[i] = ht.vals.ColVec(int(ht.keyCols[i]))
-		}
-
-		// ht.next is used to store the computed hash value of each key.
-		ht.buildScratch.next = maybeAllocateUint64Array(ht.buildScratch.next, ht.vals.Length()+1)
-		ht.computeBuckets(ctx, ht.buildScratch.next[1:], keyCols, ht.vals.Length(), nil)
-		ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, 1, uint64(ht.vals.Length()))
 	case hashTableDistinctBuildMode:
 		for {
 			batch := input.Next(ctx)
 			if batch.Length() == 0 {
 				break
 			}
-
 			ht.computeHashAndBuildChains(ctx, batch)
 			ht.removeDuplicates(batch, ht.probeScratch.keys, ht.probeScratch.first, ht.probeScratch.next, ht.checkProbeForDistinct)
-
 			// We only check duplicates when there is at least one buffered
 			// tuple.
 			if ht.vals.Length() > 0 {
 				ht.removeDuplicates(batch, ht.probeScratch.keys, ht.buildScratch.first, ht.buildScratch.next, ht.checkBuildForDistinct)
 			}
-
-			ht.appendAllDistinct(ctx, batch)
+			if batch.Length() > 0 {
+				ht.appendAllDistinct(ctx, batch)
+			}
 		}
+
 	default:
 		colexecerror.InternalError(fmt.Sprintf("hashTable in unhandled state"))
 	}
@@ -286,20 +368,26 @@ func (ht *hashTable) computeHashAndBuildChains(ctx context.Context, batch coldat
 		ht.probeScratch.keys[i] = srcVecs[keyCol]
 	}
 
-	ht.computeBuckets(ctx, ht.probeScratch.next[1:], ht.probeScratch.keys, batch.Length(), batch.Selection())
+	batchLength := batch.Length()
+	ht.computeBuckets(ctx, ht.probeScratch.next[1:], ht.probeScratch.keys, batchLength, batch.Selection())
 	copy(ht.probeScratch.hashBuffer, ht.probeScratch.next[1:])
 
-	// We should not zero out the entire `first` buffer here since the size of
-	// the `first` buffer same as the hash range (2^16) by default. The size
-	// of the hashBuffer is same as the batch size which is often a lot
-	// smaller than the hash range. Since we are only concerned with tuples
-	// inside the hashBuffer, we only need to zero out the corresponding
-	// entries in the `first` buffer that occurred in the hashBuffer.
-	for _, hash := range ht.probeScratch.hashBuffer[:batch.Length()] {
-		ht.probeScratch.first[hash] = 0
+	// We need to zero out 'first' buffer for all hash codes present in
+	// hashBuffer, and there are two possible approaches that we choose from
+	// based on a heuristic - we can either iterate over all hash codes and
+	// zero out only the relevant elements (beneficial when 'first' buffer is
+	// at least batchLength in size) or zero out the whole 'first' buffer
+	// (beneficial otherwise).
+	if batchLength < len(ht.probeScratch.first) {
+		for _, hash := range ht.probeScratch.hashBuffer[:batchLength] {
+			ht.probeScratch.first[hash] = 0
+		}
+	} else {
+		for n := 0; n < len(ht.probeScratch.first); n += copy(ht.probeScratch.first[n:], zeroUint64Column) {
+		}
 	}
 
-	ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1 /* offset */, uint64(batch.Length()))
+	ht.buildNextChains(ctx, ht.probeScratch.first, ht.probeScratch.next, 1 /* offset */, uint64(batchLength))
 }
 
 // findBuckets finds the buckets for all tuples in batch when probing against a
@@ -355,6 +443,9 @@ func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch)
 	})
 	ht.buildScratch.next = append(ht.buildScratch.next, ht.probeScratch.hashBuffer[:batch.Length()]...)
 	ht.buildNextChains(ctx, ht.buildScratch.first, ht.buildScratch.next, numBuffered+1, uint64(batch.Length()))
+	if ht.shouldResize(ht.vals.Length()) {
+		ht.buildFromBufferedTuples(ctx)
+	}
 }
 
 // checkCols performs a column by column checkCol on the key columns.
@@ -394,17 +485,20 @@ func (ht *hashTable) checkColsForDistinctTuples(
 func (ht *hashTable) computeBuckets(
 	ctx context.Context, buckets []uint64, keys []coldata.Vec, nKeys int, sel []int,
 ) {
-	initHash(buckets, nKeys, defaultInitHashValue)
-
 	if nKeys == 0 {
 		// No work to do - avoid doing the loops below.
 		return
 	}
 
-	// Check if we received a batch with more tuples than the current
-	// allocation size and increase it if so.
-	if nKeys > ht.datumAlloc.AllocSize {
+	initHash(buckets, nKeys, defaultInitHashValue)
+
+	// Check if we received more tuples than the current allocation size and
+	// increase it if so (limiting it by coldata.BatchSize()).
+	if nKeys > ht.datumAlloc.AllocSize && ht.datumAlloc.AllocSize < coldata.BatchSize() {
 		ht.datumAlloc.AllocSize = nKeys
+		if ht.datumAlloc.AllocSize > coldata.BatchSize() {
+			ht.datumAlloc.AllocSize = coldata.BatchSize()
+		}
 	}
 
 	for i := range ht.keyCols {
@@ -577,11 +671,11 @@ func (ht *hashTable) reset(_ context.Context) {
 	// they are used (these slices are not used in all of the code paths).
 	// ht.probeScratch.buckets doesn't need to be reset because buckets are
 	// always initialized when computing the hash.
-	copy(ht.probeScratch.groupID[:coldata.BatchSize()], zeroUint64Column)
+	copy(ht.probeScratch.groupID, zeroUint64Column)
 	// ht.probeScratch.toCheck doesn't need to be reset because it is populated
 	// manually every time before checking the columns.
-	copy(ht.probeScratch.headID[:coldata.BatchSize()], zeroUint64Column)
-	copy(ht.probeScratch.differs[:coldata.BatchSize()], zeroBoolColumn)
+	copy(ht.probeScratch.headID, zeroUint64Column)
+	copy(ht.probeScratch.differs, zeroBoolColumn)
 	copy(ht.probeScratch.distinct, zeroBoolColumn)
 	if ht.buildMode == hashTableDistinctBuildMode && cap(ht.buildScratch.next) > 0 {
 		// In "distinct" build mode, ht.buildScratch.next is populated
