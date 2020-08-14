@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -57,6 +58,7 @@ type hashAggregator struct {
 	allocator *colmem.Allocator
 	spec      *execinfrapb.AggregatorSpec
 
+	aggHelper          hashAggregatorHelper
 	inputTypes         []*types.T
 	outputTypes        []*types.T
 	inputArgsConverter *vecToDatumConverter
@@ -97,6 +99,7 @@ type hashAggregator struct {
 
 	aggFnsAlloc *aggregateFuncsAlloc
 	hashAlloc   hashAggFuncsAlloc
+	datumAlloc  sqlbase.DatumAlloc
 	toClose     Closers
 }
 
@@ -137,6 +140,8 @@ func NewHashAggregator(
 		aggFnsAlloc:        aggFnsAlloc,
 		hashAlloc:          hashAggFuncsAlloc{allocator: allocator},
 	}
+	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
+	hashAgg.aggHelper = newHashAggregatorHelper(allocator, inputTypes, spec, &hashAgg.datumAlloc)
 	return hashAgg, err
 }
 
@@ -303,7 +308,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				// group.
 				eqChain := op.scratch.eqChains[eqChainsSlot]
 				bucket := op.buckets[headID-1]
-				bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
+				op.aggHelper.performAggregation(ctx, inputVecs, len(eqChain), eqChain, bucket.fns, bucket.seen)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
@@ -327,10 +332,8 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			bucket := op.hashAlloc.newHashAggFuncs()
 			bucket.fns = op.aggFnsAlloc.makeAggregateFuncs()
 			op.buckets = append(op.buckets, bucket)
-			// bucket knows that all selected tuples in b belong to the same
-			// single group, so we can pass 'nil' for the first argument.
-			bucket.init(nil /* group */, op.output)
-			bucket.compute(inputVecs, op.spec, len(eqChain), eqChain)
+			bucket.init(op.output, op.aggHelper.makeSeenMaps())
+			op.aggHelper.performAggregation(ctx, inputVecs, len(eqChain), eqChain, bucket.fns, bucket.seen)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
@@ -370,22 +373,21 @@ func (op *hashAggregator) Close(ctx context.Context) error {
 // aggregation group.
 type hashAggFuncs struct {
 	fns []aggregateFunc
+	// seen is a dense slice of maps used to handle distinct aggregation (it is
+	// of the same length as the number of functions with DISTINCT clause). It
+	// will be nil whenever no aggregate function has a DISTINCT clause.
+	seen []map[string]struct{}
 }
 
 const sizeOfHashAggFuncs = unsafe.Sizeof(hashAggFuncs{})
 
-func (v *hashAggFuncs) init(group []bool, b coldata.Batch) {
+func (v *hashAggFuncs) init(b coldata.Batch, seen []map[string]struct{}) {
 	for fnIdx, fn := range v.fns {
-		fn.Init(group, b.ColVec(fnIdx))
+		// We know that all selected tuples in b belong to the same single
+		// group, so we can pass 'nil' for the first argument.
+		fn.Init(nil /* groups */, b.ColVec(fnIdx))
 	}
-}
-
-func (v *hashAggFuncs) compute(
-	vecs []coldata.Vec, spec *execinfrapb.AggregatorSpec, inputLen int, sel []int,
-) {
-	for fnIdx, fn := range v.fns {
-		fn.Compute(vecs, spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
-	}
+	v.seen = seen
 }
 
 // hashAggFuncsAlloc is a utility struct that batches allocations of
