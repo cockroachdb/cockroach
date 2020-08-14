@@ -1852,3 +1852,31 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
+
+# XXX: Bazel shorthands
+bazel-clean:
+	@echo '=== Cleaning out *.bazel (generated build files)'
+	@find . -name '*.bazel' -not -path './.git/*' -not -path './BUILD.bazel' -not -path './c-deps/*' -not -path './vendor/*' -delete
+	@git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null # Reset c-dep changes (some already use bazel), and vendor changes
+	@echo '=== SUCCESS'
+
+# Don't use this one. Bazel-generate does the same thing (the same
+# flags/directives are set up in top-level BUILD.bazel and WORKSPACE). This
+# just does it by invoking `gazelle` directly.
+gazelle-generate:
+	@echo '=== Generating BUILD.bazel and dep file using gazelle'
+	@gazelle update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=dependencies.bzl%go_deps
+	@gazelle -go_prefix github.com/cockroachdb/cockroach \
+		-build_file_name BUILD.bazel \
+		-proto disable_global \
+		-exclude c-deps \
+		-external vendored
+	# @git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null # Reset c-dep changes (some already use bazel), and vendor changes
+	@echo '=== SUCCESS'
+
+bazel-generate:
+	@echo '=== Generating BUILD.bazel and dep file using bazelle'
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=dependencies.bzl%go_deps
+	@bazel run //:gazelle
+	# @git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null # Reset c-dep changes (some already use bazel), and vendor changes
+	@echo '=== SUCCESS'
