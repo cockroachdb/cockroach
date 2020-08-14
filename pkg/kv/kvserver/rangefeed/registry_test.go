@@ -104,7 +104,7 @@ func newTestRegistration(
 		registration: newRegistration(
 			span,
 			ts,
-			catchup,
+			makeIteratorConstructor(catchup),
 			withDiff,
 			5,
 			NewMetrics(),
@@ -253,7 +253,7 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 	}, hlc.Timestamp{WallTime: 4}, iter, true /* withDiff */)
 
 	require.Zero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
-	require.NoError(t, r.runCatchupScan())
+	require.NoError(t, r.maybeRunCatchupScan())
 	require.True(t, iter.closed)
 	require.NotZero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
 
