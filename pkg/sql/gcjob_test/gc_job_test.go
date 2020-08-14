@@ -25,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,4 +231,69 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestSchemaChangeGCJobTableGCdWhileWaitingForExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldAdoptInterval, oldGCInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldAdoptInterval
+	}(jobs.DefaultAdoptInterval, gcjob.MaxSQLGCInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	// We're going to drop a table then manually delete it, then update the
+	// database zone config and ensure the job finishes successfully.
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Note: this is to avoid a common failure during shutdown when a range
+	// merge runs concurrently with node shutdown leading to a panic due to
+	// pebble already being closed. See #51544.
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+
+	sqlDB.Exec(t, "CREATE DATABASE db")
+	sqlDB.Exec(t, "CREATE TABLE db.foo ()")
+	var dbID, tableID sqlbase.ID
+	sqlDB.QueryRow(t, `
+SELECT parent_id, table_id
+  FROM crdb_internal.tables
+ WHERE database_name = $1 AND name = $2;
+`, "db", "foo").Scan(&dbID, &tableID)
+	sqlDB.Exec(t, "DROP TABLE db.foo")
+
+	// Now we should be able to find our GC job
+	var jobID int64
+	var status jobs.Status
+	sqlDB.QueryRow(t, `
+SELECT job_id, status
+  FROM crdb_internal.jobs
+ WHERE description LIKE 'GC for DROP TABLE db.public.foo';
+`).Scan(&jobID, &status)
+	require.Equal(t, jobs.StatusRunning, status)
+
+	// Manually delete the table.
+	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		nameKey := sqlbase.MakeNameMetadataKey(dbID, keys.PublicSchemaID, "foo")
+		if err := txn.Del(ctx, nameKey); err != nil {
+			return err
+		}
+		descKey := sqlbase.MakeDescMetadataKey(tableID)
+		return txn.Del(ctx, descKey)
+	}))
+	// Update the GC TTL to tickle the job to refresh the status and discover that
+	// it has been removed. Use a SucceedsSoon to deal with races between setting
+	// the zone config and when the job subscribes to the zone config.
+	var i int
+	testutils.SucceedsSoon(t, func() error {
+		i++
+		sqlDB.Exec(t, "ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 60 * 60 * 25 + $1", i)
+		var status jobs.Status
+		sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status)
+		if status != jobs.StatusSucceeded {
+			return errors.Errorf("job status %v != %v", status, jobs.StatusSucceeded)
+		}
+		return nil
+	})
 }
