@@ -86,9 +86,21 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaUnderReplicatedForConfigRangeCount = metric.Metadata{
+		Name:        "ranges.underreplicatedForConfig",
+		Help:        "Number of ranges with fewer live replicas than configuration(num_replicas) replica",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaOverReplicatedRangeCount = metric.Metadata{
 		Name:        "ranges.overreplicated",
 		Help:        "Number of ranges with more live replicas than the replication target",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaOverReplicatedForConfigRangeCount = metric.Metadata{
+		Name:        "ranges.overreplicatedForConfig",
+		Help:        "Number of ranges with more live replicas than configuration(num_replicas) replica",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1021,10 +1033,12 @@ type StoreMetrics struct {
 	QuiescentCount                *metric.Gauge
 
 	// Range metrics.
-	RangeCount                *metric.Gauge
-	UnavailableRangeCount     *metric.Gauge
-	UnderReplicatedRangeCount *metric.Gauge
-	OverReplicatedRangeCount  *metric.Gauge
+	RangeCount                         *metric.Gauge
+	UnavailableRangeCount              *metric.Gauge
+	UnderReplicatedRangeCount          *metric.Gauge
+	UnderReplicatedForConfigRangeCount *metric.Gauge
+	OverReplicatedRangeCount           *metric.Gauge
+	OverReplicatedForConfigRangeCount  *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -1386,10 +1400,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
 
 		// Range metrics.
-		RangeCount:                metric.NewGauge(metaRangeCount),
-		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
-		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
-		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
+		RangeCount:                         metric.NewGauge(metaRangeCount),
+		UnavailableRangeCount:              metric.NewGauge(metaUnavailableRangeCount),
+		UnderReplicatedRangeCount:          metric.NewGauge(metaUnderReplicatedRangeCount),
+		UnderReplicatedForConfigRangeCount: metric.NewGauge(metaUnderReplicatedForConfigRangeCount),
+		OverReplicatedRangeCount:           metric.NewGauge(metaOverReplicatedRangeCount),
+		OverReplicatedForConfigRangeCount:  metric.NewGauge(metaOverReplicatedForConfigRangeCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
