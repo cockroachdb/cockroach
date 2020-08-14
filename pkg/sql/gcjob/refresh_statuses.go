@@ -29,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
+
+var maxDeadline = timeutil.Unix(0, math.MaxInt64)
 
 // refreshTables updates the status of tables/indexes that are waiting to be
 // GC'd.
@@ -44,25 +47,24 @@ func refreshTables(
 	jobID int64,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, earliestDeadline time.Time) {
-	earliestDeadline = timeutil.Unix(0, math.MaxInt64)
-
+	earliestDeadline = maxDeadline
+	var haveAnyMissing bool
 	for _, tableID := range tableIDs {
-		tableHasExpiredElem, deadline := updateStatusForGCElements(
+		tableHasExpiredElem, tableIsMissing, deadline := updateStatusForGCElements(
 			ctx,
 			execCfg,
 			tableID,
 			tableDropTimes, indexDropTimes,
 			progress,
 		)
-		if tableHasExpiredElem {
-			expired = true
-		}
+		expired = expired || tableHasExpiredElem
+		haveAnyMissing = haveAnyMissing || tableIsMissing
 		if deadline.Before(earliestDeadline) {
 			earliestDeadline = deadline
 		}
 	}
 
-	if expired {
+	if expired || haveAnyMissing {
 		persistProgress(ctx, execCfg, jobID, progress)
 	}
 
@@ -73,7 +75,9 @@ func refreshTables(
 // are waiting for GC. If the table is waiting for GC then the status of the table
 // will be updated.
 // It returns whether any indexes or the table have expired as well as the time
-// until the next index expires if there are any more to drop.
+// until the next index expires if there are any more to drop. It also returns
+// whether the table descriptor is missing indicating that it was gc'd by
+// another job, in which case the progress will have been updated.
 func updateStatusForGCElements(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -81,7 +85,7 @@ func updateStatusForGCElements(
 	tableDropTimes map[descpb.ID]int64,
 	indexDropTimes map[descpb.IndexID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
-) (expired bool, timeToNextTrigger time.Time) {
+) (expired, missing bool, timeToNextTrigger time.Time) {
 	defTTL := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	cfg := execCfg.SystemConfig.GetSystemConfig()
 	protectedtsCache := execCfg.ProtectedTimestampProvider
@@ -122,11 +126,16 @@ func updateStatusForGCElements(
 
 		return nil
 	}); err != nil {
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
+			markTableGCed(ctx, tableID, progress)
+			return false, true, maxDeadline
+		}
 		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
-		return false, earliestDeadline
+		return false, false, maxDeadline
 	}
 
-	return expired, earliestDeadline
+	return expired, false, earliestDeadline
 }
 
 // updateTableStatus sets the status the table to DELETING if the GC TTL has
