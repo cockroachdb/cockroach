@@ -645,7 +645,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			descriptorChanged = !proto.Equal(
+			descriptorChanged = descriptorChanged || !proto.Equal(
 				&n.tableDesc.PrimaryIndex.Partitioning,
 				&partitioning,
 			)
@@ -660,11 +660,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			n.tableDesc.PrimaryIndex.Partitioning = partitioning
 
 		case *tree.AlterTableSetAudit:
-			var err error
-			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
+			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
 			if err != nil {
 				return err
 			}
+			descriptorChanged = descriptorChanged || changed
 
 		case *tree.AlterTableInjectStats:
 			sd, ok := n.statsData[i]
@@ -685,7 +685,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			descriptorChanged = descChanged
+			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil, params.ExecCfg().Codec)
