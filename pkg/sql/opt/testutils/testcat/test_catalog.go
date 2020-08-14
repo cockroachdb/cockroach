@@ -634,11 +634,6 @@ func (tt *Table) Column(i int) *cat.Column {
 	return &tt.Columns[i]
 }
 
-// ColumnKind is part of the cat.Table interface.
-func (tt *Table) ColumnKind(i int) cat.ColumnKind {
-	return tt.Columns[i].Kind()
-}
-
 // IndexCount is part of the cat.Table interface.
 func (tt *Table) IndexCount() int {
 	return len(tt.Indexes) - tt.writeOnlyIdxCount - tt.deleteOnlyIdxCount

@@ -61,12 +61,6 @@ type Table interface {
 	//
 	Column(i int) *Column
 
-	// ColumnKind returns the column kind.
-	// Note: this is not a method in Column for the efficiency of the
-	// Column implementation (which can't access this information without using
-	// extra objects).
-	ColumnKind(i int) ColumnKind
-
 	// IndexCount returns the number of public indexes defined on this table.
 	// Public indexes are not currently being added or dropped from the table.
 	// This method should be used when mutation columns can be ignored (the common

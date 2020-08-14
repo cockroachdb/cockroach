@@ -766,11 +766,11 @@ func newOptTable(
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []cat.CheckConstraint
 	for i := 0; i < ot.ColumnCount(); i++ {
-		// We do not synthesize check constraints for mutation columns.
-		if cat.IsMutationColumn(ot, i) {
+		col := ot.Column(i)
+		if col.IsMutation() {
+			// We do not synthesize check constraints for mutation columns.
 			continue
 		}
-		col := ot.Column(i)
 		colType := col.DatumType()
 		if colType.UserDefined() {
 			switch colType.Family() {
@@ -925,11 +925,6 @@ func (ot *optTable) ColumnCount() int {
 // Column is part of the cat.Table interface.
 func (ot *optTable) Column(i int) *cat.Column {
 	return &ot.columns[i]
-}
-
-// ColumnKind is part of the cat.Table interface.
-func (ot *optTable) ColumnKind(i int) cat.ColumnKind {
-	return ot.columns[i].Kind()
 }
 
 // getColDesc is part of optCatalogTableInterface.
@@ -1674,11 +1669,6 @@ func (ot *optVirtualTable) ColumnCount() int {
 // Column is part of the cat.Table interface.
 func (ot *optVirtualTable) Column(i int) *cat.Column {
 	return &ot.columns[i]
-}
-
-// ColumnKind is part of the cat.Table interface.
-func (ot *optVirtualTable) ColumnKind(i int) cat.ColumnKind {
-	return cat.Ordinary
 }
 
 // getColDesc is part of optCatalogTableInterface.

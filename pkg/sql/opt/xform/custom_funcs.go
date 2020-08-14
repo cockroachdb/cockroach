@@ -2133,7 +2133,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// don't generate any if some system columns are requested.
 	foundSystemCol := false
 	scanPrivate.Cols.ForEach(func(colID opt.ColumnID) {
-		if cat.IsSystemColumn(tab, scanPrivate.Table.ColumnOrdinal(colID)) {
+		if tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).Kind() == cat.System {
 			foundSystemCol = true
 		}
 	})

@@ -371,7 +371,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 			// #1: Don't consider key columns.
 			continue
 		}
-		if kind := mb.tab.ColumnKind(i); kind == cat.System || kind == cat.Virtual {
+		if kind := mb.tab.Column(i).Kind(); kind == cat.System || kind == cat.Virtual {
 			// #2: Don't consider system or virtual columns.
 			continue
 		}
@@ -518,7 +518,8 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	numCols := 0
 	for i, n := 0, mb.tab.ColumnCount(); i < n && numCols < maxCols; i++ {
 		// Skip mutation, hidden or system columns.
-		if mb.tab.ColumnKind(i) != cat.Ordinary || mb.tab.Column(i).IsHidden() {
+		col := mb.tab.Column(i)
+		if col.Kind() != cat.Ordinary || col.IsHidden() {
 			continue
 		}
 
@@ -565,7 +566,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	} else {
 		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if tabCol := mb.tab.Column(i); !tabCol.IsHidden() && mb.tab.ColumnKind(i) == cat.Ordinary {
+			if tabCol := mb.tab.Column(i); !tabCol.IsHidden() && tabCol.Kind() == cat.Ordinary {
 				desiredTypes = append(desiredTypes, tabCol.DatumType())
 			}
 		}
@@ -925,7 +926,8 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 
 	// Never update mutation or system columns.
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if cat.IsMutationColumn(mb.tab, i) || cat.IsSystemColumn(mb.tab, i) {
+		col := mb.tab.Column(i)
+		if col.IsMutation() || col.Kind() == cat.System {
 			mb.updateColIDs[i] = 0
 		}
 	}
@@ -1025,8 +1027,9 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			continue
 		}
 
+		col := mb.tab.Column(i)
 		// Skip system columns.
-		if cat.IsSystemColumn(mb.tab, i) {
+		if col.Kind() == cat.System {
 			continue
 		}
 
@@ -1050,7 +1053,7 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
 
 		// Assign name to synthesized column.
-		scopeCol.name = mb.tab.Column(i).ColName()
+		scopeCol.name = col.ColName()
 
 		// Update the scope ordinals for the update columns that are involved in
 		// the Upsert. The new columns will be used by the Upsert operator in place
@@ -1101,7 +1104,7 @@ func (mb *mutationBuilder) mapPublicColumnNamesToOrdinals(names tree.NameList) u
 		found := false
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
-			if tabCol.ColName() == name && !cat.IsMutationColumn(mb.tab, i) && !cat.IsSystemColumn(mb.tab, i) {
+			if tabCol.ColName() == name && !tabCol.IsMutation() && tabCol.Kind() != cat.System {
 				ords.Add(i)
 				found = true
 				break
