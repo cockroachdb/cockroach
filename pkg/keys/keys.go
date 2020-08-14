@@ -521,6 +521,17 @@ func SpanAddr(span roachpb.Span) (roachpb.RSpan, error) {
 // - For a meta1 key, KeyMin is returned.
 // - For a meta2 key, a meta1 key is returned.
 // - For an ordinary key, a meta2 key is returned.
+//
+// NOTE(andrei): This function has special handling for RKeyMin, but it does not
+// handle RKeyMin.Next() properly: RKeyMin.Next() maps for a Meta2 key, rather
+// than mapping to RKeyMin. This issue is not trivial to fix, because there's
+// code that has come to rely on it: sql.ScanMetaKVs(RKeyMin,RKeyMax) ends up
+// scanning from RangeMetaKey(RkeyMin.Next()), and what it wants is to scan only
+// the Meta2 ranges. Even if it were fine with also scanning Meta1, there's
+// other problems: a scan from RKeyMin is rejected by the store because it mixes
+// local and non-local keys. The [KeyMin,localPrefixByte) key space doesn't
+// really exist and we should probably have the first range start at
+// meta1PrefixByte, not at KeyMin, but it might be too late for that.
 func RangeMetaKey(key roachpb.RKey) roachpb.RKey {
 	if len(key) == 0 { // key.Equal(roachpb.RKeyMin)
 		return roachpb.RKeyMin
