@@ -746,6 +746,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONTROLCHANGEFEED'
 	| 'CONTROLJOB'
 	| 'CONVERSION'
 	| 'CONVERT'
@@ -857,6 +858,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEROLE'
+	| 'NOCONTROLCHANGEFEED'
 	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
 	| 'NOWAIT'
@@ -1967,6 +1969,8 @@ role_option ::=
 	| 'NOLOGIN'
 	| 'CONTROLJOB'
 	| 'NOCONTROLJOB'
+	| 'CONTROLCHANGEFEED'
+	| 'NOCONTROLCHANGEFEED'
 	| password_clause
 	| valid_until_clause
 

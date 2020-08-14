@@ -73,6 +73,15 @@ type AuthorizationAccessor interface {
 	// MemberOfWithAdminOption looks up all the roles (direct and indirect) that 'member' is a member
 	// of and returns a map of role -> isAdmin.
 	MemberOfWithAdminOption(ctx context.Context, member string) (map[string]bool, error)
+
+	// HasRoleOption converts the roleoption to its SQL column name and checks if
+	// the user belongs to a role where the option has value true. Requires a
+	// valid transaction to be open.
+	//
+	// This check should be done on the version of the privilege that is stored in
+	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
+	// NOLOGIN instead of LOGIN.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }
 
 var _ AuthorizationAccessor = &planner{}
@@ -390,12 +399,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 	return ret, nil
 }
 
-// HasRoleOption converts the roleoption to it's SQL column name and
-// checks if the user belongs to a role where the roleprivilege has value true.
-// Requires a valid transaction to be open.
-// This check should be done on the version of the privilege that is stored in
-// the role options table.
-// Example: CREATEROLE instead of NOCREATEROLE. NOLOGIN instead of LOGIN.
+// HasRoleOption implements the AuthorizationAccessor interface.
 func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests

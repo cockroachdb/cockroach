@@ -43,18 +43,22 @@ const (
 	VALIDUNTIL
 	CONTROLJOB
 	NOCONTROLJOB
+	CONTROLCHANGEFEED
+	NOCONTROLCHANGEFEED
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
-	CREATEROLE:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
-	NOCREATEROLE: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
-	LOGIN:        `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
-	NOLOGIN:      `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
-	VALIDUNTIL:   `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
-	CONTROLJOB:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB')`,
-	NOCONTROLJOB: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
+	CREATEROLE:          `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
+	NOCREATEROLE:        `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
+	LOGIN:               `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
+	NOLOGIN:             `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
+	VALIDUNTIL:          `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
+	CONTROLJOB:          `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB')`,
+	NOCONTROLJOB:        `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
+	CONTROLCHANGEFEED:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLCHANGEFEED')`,
+	NOCONTROLCHANGEFEED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLCHANGEFEED'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -64,14 +68,16 @@ func (o Option) Mask() uint32 {
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Option{
-	"CREATEROLE":   CREATEROLE,
-	"NOCREATEROLE": NOCREATEROLE,
-	"PASSWORD":     PASSWORD,
-	"LOGIN":        LOGIN,
-	"NOLOGIN":      NOLOGIN,
-	"VALID_UNTIL":  VALIDUNTIL,
-	"CONTROLJOB":   CONTROLJOB,
-	"NOCONTROLJOB": NOCONTROLJOB,
+	"CREATEROLE":          CREATEROLE,
+	"NOCREATEROLE":        NOCREATEROLE,
+	"PASSWORD":            PASSWORD,
+	"LOGIN":               LOGIN,
+	"NOLOGIN":             NOLOGIN,
+	"VALID_UNTIL":         VALIDUNTIL,
+	"CONTROLJOB":          CONTROLJOB,
+	"NOCONTROLJOB":        NOCONTROLJOB,
+	"CONTROLCHANGEFEED":   CONTROLCHANGEFEED,
+	"NOCONTROLCHANGEFEED": NOCONTROLCHANGEFEED,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -162,7 +168,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&LOGIN.Mask() != 0 &&
 			roleOptionBits&NOLOGIN.Mask() != 0) ||
 		(roleOptionBits&CONTROLJOB.Mask() != 0 &&
-			roleOptionBits&NOCONTROLJOB.Mask() != 0) {
+			roleOptionBits&NOCONTROLJOB.Mask() != 0) ||
+		(roleOptionBits&CONTROLCHANGEFEED.Mask() != 0 &&
+			roleOptionBits&NOCONTROLCHANGEFEED.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil
