@@ -576,7 +576,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLJOB CONVERSION COPY COVERING CREATE CREATEROLE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLJOB CONVERSION COPY COVERING CREATE CREATEDB CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -618,7 +618,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLJOB NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLJOB NOCREATEDB NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -6301,17 +6301,17 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCREATEROLE
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | LOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | NOLOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | CONTROLJOB
   {
    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
@@ -6319,6 +6319,14 @@ role_option:
 | NOCONTROLJOB
   {
    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| CREATEDB
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOCREATEDB
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | password_clause
 | valid_until_clause
@@ -6335,24 +6343,24 @@ role_options:
   }
 
 opt_role_options:
-	opt_with role_options
-	{
-		$$.val = $2.kvOptions()
-	}
+  opt_with role_options
+  {
+    $$.val = $2.kvOptions()
+  }
 | /* EMPTY */
-	{
-		$$.val = nil
-	}
+  {
+    $$.val = nil
+  }
 
 valid_until_clause:
   VALID UNTIL string_or_placeholder
   {
-		$$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: $3.expr()}
+    $$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: $3.expr()}
   }
 | VALID UNTIL NULL
   {
-		$$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: tree.DNull}
-	}
+    $$.val = tree.KVOption{Key: tree.Name(fmt.Sprintf("%s_%s",$1, $2)), Value: tree.DNull}
+  }
 
 opt_view_recursive:
   /* EMPTY */ { /* no error */ }
@@ -11166,6 +11174,7 @@ unreserved_keyword:
 | CONVERSION
 | COPY
 | COVERING
+| CREATEDB
 | CREATEROLE
 | CUBE
 | CURRENT
@@ -11271,6 +11280,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NO_INDEX_JOIN
+| NOCREATEDB
 | NOCREATEROLE
 | NOCONTROLJOB
 | NOLOGIN
