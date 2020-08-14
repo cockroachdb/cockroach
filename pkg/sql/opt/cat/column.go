@@ -60,6 +60,17 @@ func (c *Column) Kind() ColumnKind {
 	return c.kind
 }
 
+// IsMutation returns true if this is a mutation column (based on its Kind).
+func (c *Column) IsMutation() bool {
+	return c.kind == WriteOnly || c.kind == DeleteOnly
+}
+
+// IsSelectable returns true if this column should be accessible from user
+// queries (based on its Kind).
+func (c *Column) IsSelectable() bool {
+	return c.kind == Ordinary || c.kind == System
+}
+
 // DatumType returns the data type of the column.
 func (c *Column) DatumType() *types.T {
 	return c.datumType
@@ -140,42 +151,6 @@ const (
 	// later, expression-based indexes).
 	Virtual
 )
-
-// IsMutation is a convenience method that returns true if the column kind is
-// a mutation column.
-func (kind ColumnKind) IsMutation() bool {
-	return kind == WriteOnly || kind == DeleteOnly
-}
-
-// IsSelectable is a convenience method that returns true if the column
-// kind is a selectable column.
-func (kind ColumnKind) IsSelectable() bool {
-	return kind == Ordinary || kind == System
-}
-
-// IsMutationColumn is a convenience function that returns true if the column at
-// the given ordinal position is a mutation column.
-func IsMutationColumn(table Table, ord int) bool {
-	return table.ColumnKind(ord).IsMutation()
-}
-
-// IsSystemColumn is a convenience function that returns true if the column at
-// the given ordinal position is a system column.
-func IsSystemColumn(table Table, ord int) bool {
-	return table.ColumnKind(ord) == System
-}
-
-// IsSelectableColumn is a convenience function that returns true if the column
-// at the given ordinal position is a selectable column.
-func IsSelectableColumn(table Table, ord int) bool {
-	return table.ColumnKind(ord).IsSelectable()
-}
-
-// IsVirtualColumn is a convenience function that returns true if the column at
-// the given ordinal position is a virtual column.
-func IsVirtualColumn(table Table, ord int) bool {
-	return table.ColumnKind(ord) == Virtual
-}
 
 // InitNonVirtual is used by catalog implementations to populate a non-virtual
 // Column. It should not be used anywhere else.

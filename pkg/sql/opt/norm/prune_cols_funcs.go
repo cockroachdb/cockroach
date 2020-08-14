@@ -186,7 +186,7 @@ func neededMutationFetchCols(
 				indexCols.ForEach(func(col opt.ColumnID) {
 					ord := tabMeta.MetaID.ColumnOrdinal(col)
 					// We don't want to include system columns.
-					if !cat.IsSystemColumn(tabMeta.Table, ord) {
+					if tabMeta.Table.Column(ord).Kind() != cat.System {
 						cols.Add(col)
 					}
 				})

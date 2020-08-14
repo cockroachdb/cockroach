@@ -645,7 +645,8 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 		ord := 0
 		cnt := tab.ColumnCount()
 		for ord < cnt {
-			if tab.Column(ord).ColID() == cat.StableID(c) && cat.IsSelectableColumn(tab, ord) {
+			col := tab.Column(ord)
+			if col.IsSelectable() && col.ColID() == cat.StableID(c) {
 				break
 			}
 			ord++
@@ -663,7 +664,8 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 // returns -1.
 func findPublicTableColumnByName(tab cat.Table, name tree.Name) int {
 	for ord, n := 0, tab.ColumnCount(); ord < n; ord++ {
-		if tab.Column(ord).ColName() == name && !cat.IsMutationColumn(tab, ord) {
+		col := tab.Column(ord)
+		if col.ColName() == name && !col.IsMutation() {
 			return ord
 		}
 	}
@@ -696,7 +698,7 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	}
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {
-		if shouldInclude[tab.ColumnKind(i)] {
+		if shouldInclude[tab.Column(i).Kind()] {
 			ordinals = append(ordinals, i)
 		}
 	}
