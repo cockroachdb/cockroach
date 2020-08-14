@@ -1,8 +1,8 @@
-# Running CockroachDB across multiple Kubernetes clusters
+# Running CockroachDB across multiple Kubernetes clusters (GKE)
 
 The script and configuration files in this directory enable deploying
 CockroachDB across multiple Kubernetes clusters that are spread across different
-geographic regions. It deploys a CockroachDB
+geographic regions and hosted on [GKE](https://cloud.google.com/kubernetes-engine). It deploys a CockroachDB
 [StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 into each separate cluster, and links them together using DNS.
 
