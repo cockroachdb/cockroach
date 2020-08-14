@@ -63,28 +63,28 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 		t.Fatal(err)
 	}
 
-	rUnsafe := errors.New("panic: i'm not safe")
+	rUnsafe := errors.New("some error")
 	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST)
 
-	const expMessage = "panic: i'm not safe"
+	const expMessage = "some error"
 	actMessage := safeErr.Error()
 	if actMessage != expMessage {
 		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
-	const expSafeRedactedMessage = `...conn_executor_test.go:NN: <*errors.errorString>
-wrapper: <*withstack.withStack>
-(more details:)
-github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
-	...conn_executor_test.go:NN
-testing.tRunner
-	...testing.go:NN
-runtime.goexit
-	...asm_amd64.s:NN
-wrapper: <*safedetails.withSafeDetails>
-(more details:)
-while executing: %s
--- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
+	const expSafeRedactedMessage = `...conn_executor_test.go:NN: *errors.errorString: <redacted>
+*safedetails.withSafeDetails: some error
+*withstack.withStack
+  (more details:)
+  github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
+  	...conn_executor_test.go:NN
+  testing.tRunner
+  	...testing.go:NN
+  runtime.goexit
+  	...asm_amd64.s:NN
+*safedetails.withSafeDetails: format: "while executing: %s"
+  (more details:)
+  -- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
 
 	// Edit non-determinstic stack trace filenames from the message.
 	actSafeRedactedMessage := fileref.ReplaceAllString(
