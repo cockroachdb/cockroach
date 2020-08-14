@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !3node-tenant(52567)
 
 ## Tests for ensuring that prepared statements can't get overwritten and for
 ## deallocate and deallocate all.
