@@ -115,16 +115,19 @@ func grpcTransportFactoryImpl(
 }
 
 type grpcTransport struct {
-	opts        SendOptions
-	nodeDialer  *nodedialer.Dialer
-	class       rpc.ConnectionClass
-	clientIndex int
-	replicas    []roachpb.ReplicaDescriptor
+	opts       SendOptions
+	nodeDialer *nodedialer.Dialer
+	class      rpc.ConnectionClass
+
+	replicas []roachpb.ReplicaDescriptor
+	// nextReplicaIdx represents the index into replicas of the next replica to be
+	// tried.
+	nextReplicaIdx int
 }
 
 // IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	return gt.clientIndex >= len(gt.replicas)
+	return gt.nextReplicaIdx >= len(gt.replicas)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -133,7 +136,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	r := gt.replicas[gt.clientIndex]
+	r := gt.replicas[gt.nextReplicaIdx]
 	ctx, iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
@@ -187,8 +190,8 @@ func (gt *grpcTransport) sendBatch(
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
 ) (context.Context, roachpb.InternalClient, error) {
-	r := gt.replicas[gt.clientIndex]
-	gt.clientIndex++
+	r := gt.replicas[gt.nextReplicaIdx]
+	gt.nextReplicaIdx++
 	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
 }
 
@@ -196,7 +199,7 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if gt.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return gt.replicas[gt.clientIndex]
+	return gt.replicas[gt.nextReplicaIdx]
 }
 
 // SkipReplica is part of the Transport interface.
@@ -204,7 +207,7 @@ func (gt *grpcTransport) SkipReplica() {
 	if gt.IsExhausted() {
 		return
 	}
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
@@ -216,11 +219,11 @@ func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
-			if i < gt.clientIndex {
-				gt.clientIndex--
+			if i < gt.nextReplicaIdx {
+				gt.nextReplicaIdx--
 			}
 			// Swap the client representing this replica to the front.
-			gt.replicas[i], gt.replicas[gt.clientIndex] = gt.replicas[gt.clientIndex], gt.replicas[i]
+			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
 			return
 		}
 	}
