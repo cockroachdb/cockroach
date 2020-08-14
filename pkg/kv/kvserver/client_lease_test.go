@@ -21,13 +21,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,117 +44,46 @@ func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
-		sc := kvserver.TestStoreConfig(nil)
-		sc.TestingKnobs.DisableMergeQueue = true
-		sc.EnableEpochRangeLeases = enableEpoch
-		mtc := &multiTestContext{storeConfig: &sc}
-		defer mtc.Stop()
-		mtc.Start(t, 1)
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
 
-		// NodeLivenessKeyMax is a static split point, so this is always
-		// the start key of the first range that uses epoch-based
-		// leases. Splitting on it here is redundant, but we want to include
-		// it in our tests of lease types below.
-		splitKeys := []roachpb.Key{
-			keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
-		}
-		for _, splitKey := range splitKeys {
-			splitArgs := adminSplitArgs(splitKey)
-			if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
-		}
-
-		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
-		lease, _ := rLeft.GetLease()
-		if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-			t.Fatalf("expected lease type expiration; got %d", lt)
-		}
-
-		// After the expiration, expect an epoch lease for all the ranges if
-		// we've enabled epoch based range leases.
-		for _, key := range splitKeys {
-			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key))
-			lease, _ = repl.GetLease()
-			if enableEpoch {
-				if lt := lease.Type(); lt != roachpb.LeaseEpoch {
-					t.Fatalf("expected lease type epoch; got %d", lt)
-				}
-			} else {
-				if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-					t.Fatalf("expected lease type expiration; got %d", lt)
-				}
-			}
-		}
-	})
-}
-
-// TestStoreRangeLeaseSwitcheroo verifies that ranges can be switched
-// between expiration and epoch and back.
-func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	sc := kvserver.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableMergeQueue = true
-	sc.EnableEpochRangeLeases = true
-	sc.Clock = nil // manual clock
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 1)
-
-	splitKey := roachpb.Key("a")
-	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
-		t.Fatal(pErr)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	// NodeLivenessKeyMax is a static split point, so this is always
+	// the start key of the first range that uses epoch-based
+	// leases. Splitting on it here is redundant, but we want to include
+	// it in our tests of lease types below.
+	splitKeys := []roachpb.Key{
+		keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+	}
+	for _, splitKey := range splitKeys {
+		tc.SplitRangeOrFatal(t, splitKey)
 	}
 
-	// Allow leases to expire and send commands to ensure we
-	// re-acquire, then check types again.
-	mtc.advanceClock(context.Background())
-	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %+v", err)
-	}
-
-	// We started with epoch ranges enabled, so verify we have an epoch lease.
-	repl := mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
-	lease, _ := repl.GetLease()
-	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
-		t.Fatalf("expected lease type epoch; got %d", lt)
-	}
-
-	// Stop the store and reverse the epoch range lease setting.
-	mtc.stopStore(0)
-	sc.EnableEpochRangeLeases = false
-	mtc.restartStore(0)
-
-	mtc.advanceClock(context.Background())
-	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %+v", err)
-	}
-
-	// Verify we end up with an expiration lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
-	lease, _ = repl.GetLease()
+	rLeft := store.LookupReplica(roachpb.RKeyMin)
+	lease, _ := rLeft.GetLease()
 	if lt := lease.Type(); lt != roachpb.LeaseExpiration {
 		t.Fatalf("expected lease type expiration; got %d", lt)
 	}
 
-	// Now, one more time, switch back to epoch-based.
-	mtc.stopStore(0)
-	sc.EnableEpochRangeLeases = true
-	mtc.restartStore(0)
-
-	mtc.advanceClock(context.Background())
-	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
-		t.Fatalf("failed to increment: %+v", err)
-	}
-
-	// Verify we end up with an epoch lease on restart.
-	repl = mtc.stores[0].LookupReplica(roachpb.RKey(splitKey))
-	lease, _ = repl.GetLease()
-	if lt := lease.Type(); lt != roachpb.LeaseEpoch {
-		t.Fatalf("expected lease type epoch; got %d", lt)
+	// After the expiration, expect an epoch lease for all the ranges if
+	// we've enabled epoch based range leases.
+	for _, key := range splitKeys {
+		repl := store.LookupReplica(roachpb.RKey(key))
+		lease, _ = repl.GetLease()
+		if lt := lease.Type(); lt != roachpb.LeaseEpoch {
+			t.Fatalf("expected lease type epoch; got %d", lt)
+		}
 	}
 }
 
@@ -162,64 +92,55 @@ func TestStoreRangeLeaseSwitcheroo(t *testing.T) {
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sc := kvserver.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableMergeQueue = true
-	sc.EnableEpochRangeLeases = true
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	mtc.Start(t, 1)
 
-	splitKey := keys.SystemConfigSplitKey
-	splitArgs := adminSplitArgs(splitKey)
-	if _, pErr := kv.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
-		t.Fatal(pErr)
+	zcfg := zonepb.DefaultZoneConfig()
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+			},
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zcfg,
+			},
+		},
 	}
-	if _, err := mtc.dbs[0].Inc(context.Background(), splitKey, 1); err != nil {
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      serverArgs,
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	splitKey := keys.SystemConfigSplitKey
+	tc.SplitRangeOrFatal(t, splitKey)
+	if _, err := store.DB().Inc(context.Background(), splitKey, 1); err != nil {
 		t.Fatalf("failed to increment: %+v", err)
 	}
 
-	mtc.stopStore(0)
-
-	getSystemConfig := func() *config.SystemConfig {
-		systemConfig := mtc.gossips[0].GetSystemConfig()
+	getSystemConfig := func(s *kvserver.Store) *config.SystemConfig {
+		systemConfig := s.Gossip().GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func() kvserverpb.Liveness {
+	getNodeLiveness := func(s *kvserver.Store) kvserverpb.Liveness {
 		var liveness kvserverpb.Liveness
-		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
+		if err := s.Gossip().GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
 		return kvserverpb.Liveness{}
 	}
 
-	// Clear the system-config and node liveness gossip data. This is necessary
-	// because multiTestContext.restartStore reuse the Gossip structure.
-	if err := mtc.gossips[0].AddInfoProto(
-		gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := mtc.gossips[0].AddInfoProto(
-		gossip.MakeNodeLivenessKey(1), &kvserverpb.Liveness{}, 0); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
-			return errors.New("system config not empty")
-		}
-		if getNodeLiveness() != (kvserverpb.Liveness{}) {
-			return errors.New("node liveness not empty")
-		}
-		return nil
-	})
-
 	// Restart the store and verify that both the system-config and node-liveness
 	// data is gossiped.
-	mtc.restartStore(0)
+	tc.AddServer(t, serverArgs)
+	tc.StopServer(0)
+
 	testutils.SucceedsSoon(t, func() error {
-		if !getSystemConfig().DefaultZoneConfig.Equal(sc.DefaultZoneConfig) {
+		if !getSystemConfig(tc.GetFirstStoreFromServer(t, 1)).DefaultZoneConfig.Equal(zcfg) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness() == (kvserverpb.Liveness{}) {
+		if getNodeLiveness(tc.GetFirstStoreFromServer(t, 1)) == (kvserverpb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil
@@ -234,34 +155,37 @@ func TestStoreGossipSystemData(t *testing.T) {
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sc := kvserver.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicateQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	const numStores = 3
-	mtc.Start(t, numStores)
 
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.SystemConfigSpan.Key)).RangeID
-	mtc.replicateRange(rangeID, 1, 2)
+	const numStores = 3
+	tc := testcluster.StartTestCluster(t, numStores,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	key := keys.SystemConfigSpan.Key
+	tc.AddReplicasOrFatal(t, key, tc.Target(1), tc.Target(2))
 
 	initialStoreIdx := -1
-	for i := range mtc.stores {
-		if mtc.stores[i].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+	for i := range tc.Servers {
+		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 			initialStoreIdx = i
 		}
 	}
 	if initialStoreIdx == -1 {
-		t.Fatalf("no store has gossiped system config; gossip contents: %+v", mtc.stores[0].Gossip().GetInfoStatus())
+		t.Fatalf("no store has gossiped system config; gossip contents: %+v", tc.GetFirstStoreFromServer(t, 0).Gossip().GetInfoStatus())
 	}
 
 	newStoreIdx := (initialStoreIdx + 1) % numStores
-	mtc.transferLease(context.Background(), rangeID, initialStoreIdx, newStoreIdx)
-
+	if err := tc.TransferRangeLease(tc.LookupRangeOrFatal(t, key), tc.Target(newStoreIdx)); err != nil {
+		t.Fatalf("Unexpected error %v", err)
+	}
 	testutils.SucceedsSoon(t, func() error {
-		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 			return errors.New("system config still most recently gossiped by original leaseholder")
 		}
-		if !mtc.stores[newStoreIdx].Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 			return errors.New("system config not most recently gossiped by new leaseholder")
 		}
 		return nil
@@ -271,45 +195,67 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sc := kvserver.TestStoreConfig(nil)
-	sc.TestingKnobs.DisableReplicateQueue = true
-	mtc := &multiTestContext{storeConfig: &sc}
-	defer mtc.Stop()
-	const numStores = 3
-	mtc.Start(t, numStores)
 
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey(keys.NodeLivenessSpan.Key)).RangeID
-	mtc.replicateRange(rangeID, 1, 2)
+	const numStores = 3
+	tc := testcluster.StartTestCluster(t, numStores,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	key := roachpb.RKey(keys.NodeLivenessSpan.Key)
+	tc.AddReplicasOrFatal(t, key.AsRawKey(), tc.Target(1), tc.Target(2))
+	if pErr := tc.WaitForVoters(key.AsRawKey(), tc.Target(1), tc.Target(2)); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	desc := tc.LookupRangeOrFatal(t, key.AsRawKey())
 
 	// Turn off liveness heartbeats on all nodes to ensure that updates to node
 	// liveness are not triggering gossiping.
-	for i := range mtc.nodeLivenesses {
-		mtc.nodeLivenesses[i].PauseHeartbeatLoopForTest()
+	for _, s := range tc.Servers {
+		pErr := s.Stores().VisitStores(func(store *kvserver.Store) error {
+			store.NodeLiveness().PauseHeartbeatLoopForTest()
+			return nil
+		})
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
 	nodeLivenessKey := gossip.MakeNodeLivenessKey(1)
 
-	initialStoreIdx := -1
-	for i := range mtc.stores {
-		if mtc.stores[i].Gossip().InfoOriginatedHere(nodeLivenessKey) {
-			initialStoreIdx = i
+	initialServerId := -1
+	for i, s := range tc.Servers {
+		pErr := s.Stores().VisitStores(func(store *kvserver.Store) error {
+			if store.Gossip().InfoOriginatedHere(nodeLivenessKey) {
+				initialServerId = i
+			}
+			return nil
+		})
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
-	if initialStoreIdx == -1 {
+	if initialServerId == -1 {
 		t.Fatalf("no store has gossiped %s; gossip contents: %+v",
-			nodeLivenessKey, mtc.stores[0].Gossip().GetInfoStatus())
+			nodeLivenessKey, tc.GetFirstStoreFromServer(t, 0).Gossip().GetInfoStatus())
 	}
-	log.Infof(context.Background(), "%s gossiped from n%d",
-		nodeLivenessKey, mtc.stores[initialStoreIdx].Ident.NodeID)
+	log.Infof(context.Background(), "%s gossiped from s%d",
+		nodeLivenessKey, initialServerId)
 
-	newStoreIdx := (initialStoreIdx + 1) % numStores
-	mtc.transferLease(context.Background(), rangeID, initialStoreIdx, newStoreIdx)
+	newServerIdx := (initialServerId + 1) % numStores
+
+	if pErr := tc.TransferRangeLease(desc, tc.Target(newServerIdx)); pErr != nil {
+		t.Fatal(pErr)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if mtc.stores[initialStoreIdx].Gossip().InfoOriginatedHere(nodeLivenessKey) {
+		if tc.GetFirstStoreFromServer(t, initialServerId).Gossip().InfoOriginatedHere(nodeLivenessKey) {
 			return fmt.Errorf("%s still most recently gossiped by original leaseholder", nodeLivenessKey)
 		}
-		if !mtc.stores[newStoreIdx].Gossip().InfoOriginatedHere(nodeLivenessKey) {
+		if !tc.GetFirstStoreFromServer(t, newServerIdx).Gossip().InfoOriginatedHere(nodeLivenessKey) {
 			return fmt.Errorf("%s not most recently gossiped by new leaseholder", nodeLivenessKey)
 		}
 		return nil
