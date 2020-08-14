@@ -176,7 +176,19 @@ func (l *simpleTransportAdapter) SkipReplica() {
 	l.nextReplicaIdx++
 }
 
-func (*simpleTransportAdapter) MoveToFront(roachpb.ReplicaDescriptor) {
+func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) {
+	for i := range l.replicas {
+		if l.replicas[i] == replica {
+			// If we've already processed the replica, decrement the current
+			// index before we swap.
+			if i < l.nextReplicaIdx {
+				l.nextReplicaIdx--
+			}
+			// Swap the client representing this replica to the front.
+			l.replicas[i], l.replicas[l.nextReplicaIdx] = l.replicas[l.nextReplicaIdx], l.replicas[i]
+			return
+		}
+	}
 }
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
