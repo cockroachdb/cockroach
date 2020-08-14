@@ -164,6 +164,8 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	var constraintsToAddBeforeValidation []descpb.ConstraintToUpdate
 	var constraintsToValidate []descpb.ConstraintToUpdate
 
+	var viewToRefresh *descpb.MaterializedViewRefresh
+
 	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
 	if err != nil {
 		return err
@@ -210,6 +212,8 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			case *descpb.DescriptorMutation_PrimaryKeySwap, *descpb.DescriptorMutation_ComputedColumnSwap:
 				// The backfiller doesn't need to do anything here.
+			case *descpb.DescriptorMutation_MaterializedViewRefresh:
+				viewToRefresh = t.MaterializedViewRefresh
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
@@ -225,12 +229,21 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			case *descpb.DescriptorMutation_Constraint:
 				constraintsToDrop = append(constraintsToDrop, *t.Constraint)
-			case *descpb.DescriptorMutation_PrimaryKeySwap, *descpb.DescriptorMutation_ComputedColumnSwap:
+			case *descpb.DescriptorMutation_PrimaryKeySwap,
+				*descpb.DescriptorMutation_ComputedColumnSwap,
+				*descpb.DescriptorMutation_MaterializedViewRefresh:
 				// The backfiller doesn't need to do anything here.
 			default:
 				return errors.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
+		}
+	}
+
+	// If we were requested to refresh a view, then do so.
+	if viewToRefresh != nil {
+		if err := sc.refreshMaterializedView(ctx, tableDesc, viewToRefresh); err != nil {
+			return err
 		}
 	}
 

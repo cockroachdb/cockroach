@@ -534,6 +534,11 @@ func (b *Builder) resolveTableForMutation(
 		alias = *outerAlias
 	}
 
+	// We can't mutate materialized views.
+	if tab.IsMaterializedView() {
+		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot mutate materialized view %q", tab.Name()))
+	}
+
 	return tab, depName, alias, columns
 }
 

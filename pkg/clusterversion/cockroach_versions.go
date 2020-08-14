@@ -75,6 +75,8 @@ const (
 	VersionMinPasswordLength
 	VersionAbortSpanBytes
 	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
+	VersionMaterializedViews
+
 	// Add new versions here (step one of two).
 )
 
@@ -563,6 +565,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionAlterSystemJobsTableAddLeaseColumn is a version which modified system.jobs table.
 		Key:     VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 15},
+	},
+	{
+		// VersionMaterializedViews enables the use of materialized views.
+		Key:     VersionMaterializedViews,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 16},
 	},
 
 	// Add new versions here (step two of two).

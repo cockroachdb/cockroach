@@ -60,14 +60,15 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Schema:      schID,
-			ViewName:    &viewName,
-			IfNotExists: cv.IfNotExists,
-			Replace:     cv.Replace,
-			Persistence: cv.Persistence,
-			ViewQuery:   tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
-			Columns:     p,
-			Deps:        b.viewDeps,
+			Schema:       schID,
+			ViewName:     &viewName,
+			IfNotExists:  cv.IfNotExists,
+			Replace:      cv.Replace,
+			Persistence:  cv.Persistence,
+			Materialized: cv.Materialized,
+			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
+			Columns:      p,
+			Deps:         b.viewDeps,
 		},
 	)
 	return outScope

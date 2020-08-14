@@ -83,7 +83,7 @@ CREATE INDEX fail ON foo (b DESC)
 statement ok
 CREATE VIEW v AS SELECT a,b FROM t
 
-statement error pgcode 42809 "v" is not a table
+statement error pgcode 42809 "v" is not a table or materialized view
 CREATE INDEX failview ON v (b DESC)
 
 statement ok

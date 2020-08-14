@@ -61,6 +61,7 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 		cv.IfNotExists,
 		cv.Replace,
 		cv.Persistence,
+		cv.Materialized,
 		cv.ViewQuery,
 		cols,
 		cv.Deps,

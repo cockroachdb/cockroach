@@ -400,6 +400,8 @@ func TestContextualHelp(t *testing.T) {
 		{`COMMIT TRANSACTION ??`, `COMMIT`},
 		{`END ??`, `COMMIT`},
 
+		{`REFRESH ??`, `REFRESH`},
+
 		{`ROLLBACK TRANSACTION ??`, `ROLLBACK`},
 		{`ROLLBACK TO ??`, `ROLLBACK`},
 
