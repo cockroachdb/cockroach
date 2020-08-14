@@ -888,7 +888,7 @@ func (b *Builder) allowImplicitGroupingColumn(colID opt.ColumnID, g *groupby) bo
 	}
 	primaryIndex := tab.Index(cat.PrimaryIndex)
 	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-		pkCols.Add(colMeta.Table.ColumnID(primaryIndex.Column(i).Ordinal))
+		pkCols.Add(colMeta.Table.IndexColumnID(primaryIndex, i))
 	}
 	// Remove PK columns that are grouping cols and see if there's anything left.
 	groupingCols := g.groupingCols()

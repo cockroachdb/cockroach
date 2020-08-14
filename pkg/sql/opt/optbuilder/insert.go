@@ -420,7 +420,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		colID := mb.tabID.ColumnID(col.Ordinal)
+		colID := mb.tabID.ColumnID(col.Ordinal())
 		if mb.targetColSet.Contains(colID) {
 			// The column is explicitly specified in the target name list.
 			continue
@@ -723,10 +723,10 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 		var on memo.FiltersExpr
 		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
 			indexCol := index.Column(i)
-			scanColID := scanScope.cols[indexCol.Ordinal].id
+			scanColID := scanScope.cols[indexCol.Ordinal()].id
 
 			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColIDs[indexCol.Ordinal]),
+				mb.b.factory.ConstructVariable(mb.insertColIDs[indexCol.Ordinal()]),
 				mb.b.factory.ConstructVariable(scanColID),
 			)
 			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
@@ -760,7 +760,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 		var conflictCols opt.ColSet
 		for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
 			indexCol := index.Column(i)
-			conflictCols.Add(mb.insertColIDs[indexCol.Ordinal])
+			conflictCols.Add(mb.insertColIDs[indexCol.Ordinal()])
 		}
 
 		// Treat NULL values as distinct from one another. And if duplicates are
@@ -935,7 +935,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	// Never update primary key columns.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
-		mb.updateColIDs[conflictIndex.Column(i).Ordinal] = 0
+		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}
 }
 
