@@ -12,13 +12,12 @@ func _() {
 	_ = x[reasonNewLeader-1]
 	_ = x[reasonNewLeaderOrConfigChange-2]
 	_ = x[reasonSnapshotApplied-3]
-	_ = x[reasonReplicaIDChanged-4]
-	_ = x[reasonTicks-5]
+	_ = x[reasonTicks-4]
 }
 
-const _refreshRaftReason_name = "noReasonreasonNewLeaderreasonNewLeaderOrConfigChangereasonSnapshotAppliedreasonReplicaIDChangedreasonTicks"
+const _refreshRaftReason_name = "noReasonreasonNewLeaderreasonNewLeaderOrConfigChangereasonSnapshotAppliedreasonTicks"
 
-var _refreshRaftReason_index = [...]uint8{0, 8, 23, 52, 73, 95, 106}
+var _refreshRaftReason_index = [...]uint8{0, 8, 23, 52, 73, 84}
 
 func (i refreshRaftReason) String() string {
 	if i < 0 || i >= refreshRaftReason(len(_refreshRaftReason_index)-1) {
