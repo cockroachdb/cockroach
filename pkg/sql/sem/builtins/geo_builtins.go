@@ -11,6 +11,7 @@
 package builtins
 
 import (
+	gojson "encoding/json"
 	"fmt"
 	"strings"
 
@@ -1162,6 +1163,99 @@ var geoBuiltins = map[string]builtinDefinition{
 
 	"st_asgeojson": makeBuiltin(
 		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tuple := args[0].(*tree.DTuple)
+				return stAsGeoJSONFromTuple(
+					ctx,
+					tuple,
+					"", /* geoColumn */
+					geo.DefaultGeoJSONDecimalDigits,
+					false, /* pretty */
+				)
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of %d decimal digits.",
+					geo.DefaultGeoJSONDecimalDigits,
+				),
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"row", types.AnyTuple}, {"geo_column", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tuple := args[0].(*tree.DTuple)
+				return stAsGeoJSONFromTuple(
+					ctx,
+					tuple,
+					string(tree.MustBeDString(args[1])),
+					geo.DefaultGeoJSONDecimalDigits,
+					false, /* pretty */
+				)
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. Coordinates have a maximum of %d decimal digits.",
+					geo.DefaultGeoJSONDecimalDigits,
+				),
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"row", types.AnyTuple},
+				{"geo_column", types.String},
+				{"max_decimal_digits", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tuple := args[0].(*tree.DTuple)
+				return stAsGeoJSONFromTuple(
+					ctx,
+					tuple,
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					false, /* pretty */
+				)
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. " +
+						"max_decimal_digits will be output for each coordinate value.",
+				),
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"row", types.AnyTuple},
+				{"geo_column", types.String},
+				{"max_decimal_digits", types.Int},
+				{"pretty", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tuple := args[0].(*tree.DTuple)
+				return stAsGeoJSONFromTuple(
+					ctx,
+					tuple,
+					string(tree.MustBeDString(args[1])),
+					int(tree.MustBeDInt(args[2])),
+					bool(tree.MustBeDBool(args[3])),
+				)
+			},
+			Info: infoBuilder{
+				info: fmt.Sprintf(
+					"Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. " +
+						"max_decimal_digits will be output for each coordinate value. Output will be pretty printed in JSON if pretty is true.",
+				),
+			}.String(),
+			Volatility: tree.VolatilityStable,
+		},
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
 				geojson, err := geo.SpatialObjectToGeoJSON(g.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagShortCRSIfNot4326)
@@ -4147,4 +4241,104 @@ This variant will cast all geometry_str arguments into Geometry types.
 
 	def.overloads = newOverloads
 	return def
+}
+
+// stAsGeoJSONFromTuple returns a *tree.DString representing JSON output
+// for ST_AsGeoJSON.
+func stAsGeoJSONFromTuple(
+	ctx *tree.EvalContext, tuple *tree.DTuple, geoColumn string, numDecimalDigits int, pretty bool,
+) (*tree.DString, error) {
+	typ := tuple.ResolvedType()
+	labels := typ.TupleLabels()
+
+	var geometry json.JSON
+	properties := json.NewObjectBuilder(len(tuple.D))
+
+	foundGeoColumn := false
+	for i, d := range tuple.D {
+		var label string
+		if labels != nil {
+			label = labels[i]
+		}
+		// If label is not specified, append `f + index` as the name, in line with
+		// row_to_json.
+		if label == "" {
+			label = fmt.Sprintf("f%d", i+1)
+		}
+		// If the geoColumn is not specified and the geometry is not found,
+		// take a look.
+		// Also take a look if the column label is the column we desire.
+		if (geoColumn == "" && geometry == nil) || geoColumn == label {
+			// If we can parse the data type as Geometry or Geography,
+			// we've found it.
+			if g, ok := d.(*tree.DGeometry); ok {
+				foundGeoColumn = true
+				var err error
+				geometry, err = json.FromSpatialObject(g.SpatialObject(), numDecimalDigits)
+				if err != nil {
+					return nil, err
+				}
+				continue
+			}
+			if g, ok := d.(*tree.DGeography); ok {
+				foundGeoColumn = true
+				var err error
+				geometry, err = json.FromSpatialObject(g.SpatialObject(), numDecimalDigits)
+				if err != nil {
+					return nil, err
+				}
+				continue
+			}
+
+			if geoColumn == label {
+				foundGeoColumn = true
+				// If the entry is NULL, skip the current entry.
+				// Otherwise, we found the column but it was the wrong type, in which case,
+				// we error out.
+				if d == tree.DNull {
+					continue
+				}
+				return nil, errors.Newf(
+					"expected column %s to be a geo type, but it is of type %s",
+					geoColumn,
+					d.ResolvedType().SQLString(),
+				)
+			}
+		}
+		tupleJSON, err := tree.AsJSON(d, ctx.GetLocation())
+		if err != nil {
+			return nil, err
+		}
+		properties.Add(label, tupleJSON)
+	}
+	// If we have not found a column with the matching name, error out.
+	if !foundGeoColumn && geoColumn != "" {
+		return nil, errors.Newf("%q column not found", geoColumn)
+	}
+	// If geometry is still NULL, we either found no geometry columns
+	// or the found geometry column is NULL. Return a NULL type, a la
+	// PostGIS.
+	if geometry == nil {
+		geometryBuilder := json.NewObjectBuilder(1)
+		geometryBuilder.Add("type", json.NullJSONValue)
+		geometry = geometryBuilder.Build()
+	}
+	retJSON := json.NewObjectBuilder(3)
+	retJSON.Add("type", json.FromString("Feature"))
+	retJSON.Add("geometry", geometry)
+	retJSON.Add("properties", properties.Build())
+	retString := retJSON.Build().String()
+	if !pretty {
+		return tree.NewDString(retString), nil
+	}
+	var reserializedJSON map[string]interface{}
+	err := gojson.Unmarshal([]byte(retString), &reserializedJSON)
+	if err != nil {
+		return nil, err
+	}
+	marshalledIndent, err := gojson.MarshalIndent(reserializedJSON, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDString(string(marshalledIndent)), nil
 }
