@@ -1358,3 +1358,9 @@ child  CREATE TABLE public.child (
        CONSTRAINT "primary" PRIMARY KEY (c ASC),
        FAMILY fam_0_c_p (c)
 )
+
+# Regression test for #52816.
+statement ok
+CREATE TABLE t52816 (x INT, y INT);
+ALTER TABLE t52816 RENAME COLUMN x TO x2, RENAME COLUMN y TO y;
+SELECT x2, y FROM t52816
