@@ -108,42 +108,36 @@ var (
 
 var testAddress = util.NewUnresolvedAddr("tcp", "node1")
 
-// simpleSendFn is the function type used to dispatch RPC calls in simpleTransportAdapter
-type simpleSendFn func(
-	context.Context,
-	SendOptions,
-	ReplicaSlice,
-	roachpb.BatchRequest,
-) (*roachpb.BatchResponse, error)
+// simpleSendFn is the function type used to dispatch RPC calls in simpleTransportAdapter.
+type simpleSendFn func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 // stubRPCSendFn is an rpcSendFn that simply creates a reply for the
 // BatchRequest without performing an RPC call or triggering any
 // test instrumentation.
 var stubRPCSendFn simpleSendFn = func(
-	_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
+	_ context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	return args.CreateReply(), nil
+	return ba.CreateReply(), nil
 }
 
 // adaptSimpleTransport converts the RPCSend functions used in these
 // tests to the newer transport interface.
 func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
-		opts SendOptions,
-		nodeDialer *nodedialer.Dialer,
-		replicas ReplicaSlice,
+		_ SendOptions,
+		_ *nodedialer.Dialer,
+		replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
 			fn:       fn,
-			opts:     opts,
-			replicas: replicas}, nil
+			replicas: replicas,
+		}, nil
 	}
 }
 
 type simpleTransportAdapter struct {
 	fn       simpleSendFn
-	opts     SendOptions
-	replicas ReplicaSlice
+	replicas []roachpb.ReplicaDescriptor
 
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
@@ -157,9 +151,9 @@ func (l *simpleTransportAdapter) IsExhausted() bool {
 func (l *simpleTransportAdapter) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	ba.Replica = l.replicas[l.nextReplicaIdx].ReplicaDescriptor
+	ba.Replica = l.replicas[l.nextReplicaIdx]
 	l.nextReplicaIdx++
-	return l.fn(ctx, l.opts, l.replicas, ba)
+	return l.fn(ctx, ba)
 }
 
 func (l *simpleTransportAdapter) NextInternalClient(
@@ -170,7 +164,7 @@ func (l *simpleTransportAdapter) NextInternalClient(
 
 func (l *simpleTransportAdapter) NextReplica() roachpb.ReplicaDescriptor {
 	if !l.IsExhausted() {
-		return l.replicas[l.nextReplicaIdx].ReplicaDescriptor
+		return l.replicas[l.nextReplicaIdx]
 	}
 	return roachpb.ReplicaDescriptor{}
 }
@@ -348,19 +342,15 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
 		reps := make([]roachpb.ReplicaDescriptor, len(replicas))
-		for i := range replicas {
-			reps[i] = replicas[i].ReplicaDescriptor
-		}
+		copy(reps, replicas)
 		if err := verifyCall(opts, reps); err != nil {
 			return nil, err
 		}
 		return adaptSimpleTransport(
-			func(
-				ctx context.Context, _ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				return ba.CreateReply(), nil
 			})(opts, dialer, replicas)
 	}
@@ -527,10 +517,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
+		_ context.Context, args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		reply := args.CreateReply()
 		reply.Txn = args.Txn.Clone()
@@ -649,10 +636,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 			first := true
 
 			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				args roachpb.BatchRequest,
+				_ context.Context, args roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, error) {
 				reply := &roachpb.BatchResponse{}
 				if first {
@@ -731,12 +715,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 		}
 	}
 	var sequences []roachpb.LeaseSequence
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	var testFn simpleSendFn = func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		reply := &roachpb.BatchResponse{}
 		if len(sequences) > 0 {
 			seq := sequences[0]
@@ -843,12 +822,7 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 		Sequence: 2,
 	}
 
-	transport := func(
-		ctx context.Context,
-		opts SendOptions,
-		replicas ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	transport := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		switch ba.Replica.StoreID {
 		case 1:
 			assert.Equal(t, desc.Generation, ba.ClientRangeInfo.DescriptorGeneration)
@@ -1132,12 +1106,7 @@ func TestEvictCacheOnError(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 
-			var testFn simpleSendFn = func(
-				ctx context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				args roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			var testFn simpleSendFn = func(ctx context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				if !first {
 					return args.CreateReply(), nil
 				}
@@ -1210,12 +1179,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	}
 
 	var count int32
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	testFn := func(_ context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		var err error
 		switch count {
 		case 0, 1:
@@ -1278,12 +1242,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 	newRangeDescriptor.EndKey = badEndKey
 	descStale := true
 
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	var testFn simpleSendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
@@ -1385,12 +1344,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 	rhsDesc.Generation = staleDesc.Generation + 2
 	firstLookup := true
 
-	var testFn simpleSendFn = func(
-		ctx context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	var testFn simpleSendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			panic(err)
@@ -1555,12 +1509,7 @@ func TestSendRPCRetry(t *testing.T) {
 		descriptor,
 	)
 
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	var testFn simpleSendFn = func(ctx context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		batchReply := &roachpb.BatchResponse{}
 		reply := &roachpb.ScanResponse{}
 		batchReply.Add(reply)
@@ -1680,12 +1629,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			descDB := mockRangeDescriptorDBForDescs(testMetaRangeDescriptor, desc)
-			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				args roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			var testFn simpleSendFn = func(ctx context.Context, args roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				batchReply := &roachpb.BatchResponse{}
 				reply := &roachpb.GetResponse{}
 				batchReply.Add(reply)
@@ -1779,12 +1723,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	seen := map[roachpb.ReplicaID]struct{}{}
 	var leaseholderStoreID roachpb.StoreID
 	var ds *DistSender
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	var testFn simpleSendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		br := ba.CreateReply()
 		if _, ok := seen[ba.Replica.ReplicaID]; ok {
 			br.Error = roachpb.NewErrorf("visited replica %+v twice", ba.Replica)
@@ -2004,12 +1943,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		{Key: roachpb.Key("a"), Value: roachpb.MakeValueFromString("1")},
 		{Key: roachpb.Key("c"), Value: roachpb.MakeValueFromString("2")},
 	}
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	testFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
@@ -2230,12 +2164,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 	// requests. Because of parallelization, there's no guarantee
 	// on the ordering of requests.
 	var haveA, haveB bool
-	sendStub := func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	sendStub := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		if err != nil {
 			t.Fatal(err)
@@ -2361,12 +2290,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	// Define our rpcSend stub which checks the span of the batch
 	// requests.
 	haveRequest := []bool{false, false, false}
-	sendStub := func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	sendStub := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		h := ba.Requests[0].GetInner().Header()
 		if h.Key.Equal(keys.RangeDescriptorKey(roachpb.RKey("a"))) && h.EndKey.Equal(keys.MakeRangeKeyPrefix(roachpb.RKey("b"))) {
 			haveRequest[0] = true
@@ -2565,12 +2489,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 
 	for i, test := range testCases {
 		var act [][]roachpb.Method
-		var testFn simpleSendFn = func(
-			_ context.Context,
-			_ SendOptions,
-			_ ReplicaSlice,
-			ba roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, error) {
+		testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 			var cur []roachpb.Method
 			for _, union := range ba.Requests {
 				cur = append(cur, union.GetInner().Method())
@@ -2702,12 +2621,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			var act [][]roachpb.Method
-			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				var cur []roachpb.Method
 				for _, union := range ba.Requests {
 					cur = append(cur, union.GetInner().Method())
@@ -2808,12 +2722,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				br := ba.CreateReply()
 				switch ba.Requests[0].GetInner().Method() {
 				case roachpb.QueryIntent:
@@ -2967,7 +2876,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
+		))(SendOptions{}, &nodedialer.Dialer{}, []roachpb.ReplicaDescriptor{{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3000,12 +2909,7 @@ func TestGatewayNodeID(t *testing.T) {
 	}
 
 	var observedNodeID roachpb.NodeID
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		observedNodeID = ba.Header.GatewayNodeID
 		return ba.CreateReply(), nil
 	}
@@ -3180,12 +3084,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 					tc.err2 = err1
 				}
 
-				var testFn simpleSendFn = func(
-					_ context.Context,
-					_ SendOptions,
-					_ ReplicaSlice,
-					ba roachpb.BatchRequest,
-				) (*roachpb.BatchResponse, error) {
+				testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 					reply := ba.CreateReply()
 					if delRng := ba.Requests[0].GetDeleteRange(); delRng == nil {
 						return nil, errors.Errorf("expected DeleteRange request, found %v", ba.Requests[0])
@@ -3331,12 +3230,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			nthRequest := 0
 
-			var testFn simpleSendFn = func(
-				_ context.Context,
-				_ SendOptions,
-				_ ReplicaSlice,
-				ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			var testFn simpleSendFn = func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				reply := ba.CreateReply()
 				if nthRequest == tc.nthPartialBatch {
 					reply.Error = &roachpb.Error{
@@ -3421,12 +3315,7 @@ func TestCanSendToFollower(t *testing.T) {
 		}
 	}
 	var sentTo roachpb.ReplicaDescriptor
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	testFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		sentTo = ba.Replica
 		return ba.CreateReply(), nil
 	}
@@ -3570,12 +3459,7 @@ func TestEvictMetaRange(t *testing.T) {
 
 		isStale := false
 
-		var testFn simpleSendFn = func(
-			_ context.Context,
-			_ SendOptions,
-			_ ReplicaSlice,
-			ba roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, error) {
+		testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 			rs, err := keys.Range(ba.Requests)
 			if err != nil {
 				t.Fatal(err)
@@ -3743,23 +3627,18 @@ func TestConnectionClass(t *testing.T) {
 			},
 		}}, nil, nil
 	})
-	var testFn simpleSendFn = func(
-		_ context.Context,
-		opts SendOptions,
-		replicas ReplicaSlice,
-		args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
-		return args.CreateReply(), nil
-	}
 
 	// class will capture the connection class used for the last transport
 	// created.
 	var class rpc.ConnectionClass
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
 		class = opts.class
-		return adaptSimpleTransport(testFn)(opts, dialer, replicas)
+		return adaptSimpleTransport(
+			func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+				return ba.CreateReply(), nil
+			})(opts, dialer, replicas)
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -3842,12 +3721,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 	var queriedMetaKeys sync.Map
 
 	var ds *DistSender
-	var testFn simpleSendFn = func(
-		ctx context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	testFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		rs, err := keys.Range(ba.Requests)
 		br := ba.CreateReply()
 		if err != nil {
@@ -4040,12 +3914,7 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 
 	returnErr := true
 	var switchToSplitDesc func()
-	var transportFn = func(
-		_ context.Context,
-		opts SendOptions,
-		replicas ReplicaSlice,
-		ba roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
+	transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		if returnErr {
 			// First time around we return an RPC error. Next time around, make sure
 			// the DistSender tries gets the split descriptors.
@@ -4204,12 +4073,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			}
 
 			var called bool
-			var transportFn = func(
-				_ context.Context,
-				opts SendOptions,
-				replicas ReplicaSlice,
-				ba roachpb.BatchRequest,
-			) (*roachpb.BatchResponse, error) {
+			transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 				// We don't expect more than one RPC because we return a lease pointing
 				// to a replica that's not in the descriptor that sendToReplicas() was
 				// originally called with. sendToReplicas() doesn't deal with that; it

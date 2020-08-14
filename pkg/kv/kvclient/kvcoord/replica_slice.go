@@ -197,3 +197,12 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		return attrMatchI > attrMatchJ
 	})
 }
+
+// Descriptors returns the ReplicaDescriptors inside the ReplicaSlice.
+func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
+	reps := make([]roachpb.ReplicaDescriptor, len(rs))
+	for i := range rs {
+		reps[i] = rs[i].ReplicaDescriptor
+	}
+	return reps
+}

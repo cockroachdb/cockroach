@@ -40,13 +40,8 @@ type SendOptions struct {
 //
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
-//
-// TODO(bdarnell): clean up this crufty interface; it was extracted
-// verbatim from the non-abstracted code.
-// TODO(andrei): This should take just []roachpb.ReplicaDescriptor; ReplicaSlice
-// has unneeded data in it.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, ReplicaSlice,
+	SendOptions, *nodedialer.Dialer, []roachpb.ReplicaDescriptor,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -91,12 +86,11 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs []roachpb.ReplicaDescriptor,
 ) (Transport, error) {
 	health := make(map[roachpb.ReplicaDescriptor]bool)
 	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
-	for i, rinfo := range rs {
-		r := rinfo.ReplicaDescriptor
+	for i, r := range rs {
 		replicas[i] = r
 		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 	}
@@ -264,10 +258,10 @@ func (h byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
+		_ SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0].ReplicaDescriptor
+		replica := replicas[0]
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }
