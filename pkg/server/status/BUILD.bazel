@@ -1,0 +1,141 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "status",
+    srcs = [
+        "disk_counters.go",
+        "disk_counters_darwin.go",
+        "health_check.go",
+        "recorder.go",
+        "runtime.go",
+        "runtime_jemalloc.go",
+        "runtime_jemalloc_darwin.go",
+        "zcgo_flags.go",
+    ],
+    cgo = True,
+    clinkopts = [
+        "-L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/cryptopp -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/protobuf -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/lib -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/snappy -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libedit/src/.libs -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/rocksdb -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libroach -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/proj/lib",
+        "-ljemalloc",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-lrt -lm -lpthread",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "-lm",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-lrt -lm -lpthread",
+        ],
+        "//conditions:default": [],
+    }),
+    cppopts = [
+        "-DJEMALLOC_NO_DEMANGLE",
+        "-I/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/include",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/status",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/gossip",
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/kv/kvserver",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/server/status/statuspb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/ts/tspb",
+        "//pkg/util/cgroups",
+        "//pkg/util/envutil",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/dustin/go-humanize",
+        "//vendor/github.com/elastic/gosigar",
+        "//vendor/github.com/shirou/gopsutil/net",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//vendor/github.com/lufia/iostat",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "//vendor/github.com/lufia/iostat",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/github.com/shirou/gopsutil/disk",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "status_test",
+    srcs = [
+        "health_check_test.go",
+        "jemalloc_test.go",
+        "main_test.go",
+        "recorder_test.go",
+        "runtime_test.go",
+    ],
+    embed = [":status"],
+    deps = [
+        "//pkg/build",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server/status/statuspb",
+        "//pkg/settings/cluster",
+        "//pkg/ts/tspb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/shirou/gopsutil/net",
+    ],
+)

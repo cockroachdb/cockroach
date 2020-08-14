@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testutils",
+    srcs = [
+        "build.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/optbuilder",
+        "//pkg/sql/opt/xform",
+        "//pkg/sql/parser",
+        "//pkg/sql/sem/tree",
+    ],
+)

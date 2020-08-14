@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colexecbase",
+    srcs = [
+        "operator.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexecbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/types",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "colexecbase_test",
+    srcs = ["dep_test.go"],
+    embed = [":colexecbase"],
+    deps = [
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+    ],
+)

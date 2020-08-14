@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "lex",
+    srcs = [
+        "encode.go",
+        "experimental_keywords.go",
+        "keywords.go",
+        "normalize.go",
+        "predicates.go",
+        "reserved_keywords.go",
+        "tokens.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/lex",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/stringencoding",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/golang.org/x/text/unicode/norm",
+    ],
+)
+
+go_test(
+    name = "lex_test",
+    srcs = ["encode_test.go"],
+    deps = [
+        ":lex",
+        "//pkg/sql/parser",
+    ],
+)

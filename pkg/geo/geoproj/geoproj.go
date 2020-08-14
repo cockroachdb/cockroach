@@ -15,7 +15,7 @@ package geoproj
 // #cgo CPPFLAGS: -I../../../c-deps/proj/src
 // #cgo !windows LDFLAGS: -lproj
 // #cgo linux LDFLAGS: -lrt -lm -lpthread
-// #cgo windows LDFLAGS: -lproj_4_9 -lshlwapi -lrpcrt4
+// #cgo windows LDFLAGS: -lshlwapi -lrpcrt4
 //
 // #include "proj.h"
 import "C"

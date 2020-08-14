@@ -1,0 +1,8 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmdutil",
+    srcs = ["env.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmdutil",
+    visibility = ["//visibility:public"],
+)

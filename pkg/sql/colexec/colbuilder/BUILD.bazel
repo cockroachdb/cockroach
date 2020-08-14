@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "colbuilder",
+    srcs = [
+        "execplan.go",
+        "window_functions_util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/typeconv",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colcontainer",
+        "//pkg/sql/colexec",
+        "//pkg/sql/colexecbase",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/colfetcher",
+        "//pkg/sql/colmem",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//pkg/util/mon",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

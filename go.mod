@@ -182,3 +182,5 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
 replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
+
+replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201014033637-ec38f674c2bd

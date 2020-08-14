@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cache",
+    srcs = ["cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/cache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/interval",
+        "//pkg/util/log",
+        "//vendor/github.com/biogo/store/llrb",
+    ],
+)
+
+go_test(
+    name = "cache_test",
+    srcs = ["cache_test.go"],
+    embed = [":cache"],
+    deps = [
+        "//pkg/util/log",
+        "//vendor/github.com/biogo/store/llrb",
+    ],
+)

@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "examples",
+    srcs = [
+        "intro.go",
+        "startrek.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/examples",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/types",
+        "//pkg/workload",
+    ],
+)

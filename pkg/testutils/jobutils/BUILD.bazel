@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jobutils",
+    srcs = ["jobs_verification.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/jobutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/protoutil",
+        "//pkg/util/retry",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/lib/pq",
+    ],
+)

@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "exec",
+    # keep
+    srcs = [
+        "factory.go",
+        ":gen_factory.og.go",  # keep
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/invertedexpr",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+    ],
+)
+
+rules = filegroup(
+    name = "defs",
+    srcs = ["factory.opt"],
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "gen_factory.og.go",
+    srcs = [
+        "//pkg/sql/opt:ops",
+        ":defs",
+    ],
+    outs = ["factory.og.go"],
+    cmd = """
+      $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ execfactory $(locations :defs)
+    """,
+    tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+)

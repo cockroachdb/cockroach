@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "descpb",
+    srcs = [
+        "column.go",
+        "constraint.go",
+        "descriptor.go",
+        "encoded_datum.pb.go",
+        "formatversion_string.go",
+        "index.go",
+        "join_type.go",
+        "join_type.pb.go",
+        "locking.go",
+        "locking.pb.go",
+        "privilege.go",
+        "privilege.pb.go",
+        "privilegedescversion_string.go",
+        "structured.go",
+        "structured.pb.go",
+        "tenant.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/parser",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)
+
+go_test(
+    name = "descpb_test",
+    srcs = ["privilege_test.go"],
+    embed = [":descpb"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/privilege",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+    ],
+)

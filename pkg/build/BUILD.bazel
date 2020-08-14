@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "build",
+    srcs = [
+        "cgo_compiler.go",
+        "cgo_compiler_nocgo.go",
+        "info.go",
+        "info.pb.go",
+    ],
+    cgo = True,
+    importpath = "github.com/cockroachdb/cockroach/pkg/build",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil",
+        "//pkg/util/version",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)

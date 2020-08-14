@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sqlliveness",
+    srcs = ["sqlliveness.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/settings/cluster",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/metric",
+        "//pkg/util/retry",
+    ],
+)

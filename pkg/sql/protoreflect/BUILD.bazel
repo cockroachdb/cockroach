@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "protoreflect",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/json",
+        "//pkg/util/protoutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/jsonpb",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)
+
+go_test(
+    name = "protoreflect_test",
+    srcs = [
+        "main_test.go",
+        "utils_test.go",
+    ],
+    embed = [":protoreflect"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/gogo/protobuf/jsonpb",
+        "//vendor/github.com/gogo/protobuf/types",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

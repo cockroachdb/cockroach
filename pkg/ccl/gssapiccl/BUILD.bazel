@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "gssapiccl",
+    srcs = [
+        "empty.go",
+        "zcgo_flags.go",
+    ],
+    cgo = True,
+    clinkopts = ["-L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/cryptopp -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/protobuf -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/lib -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/snappy -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libedit/src/.libs -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/rocksdb -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/libroach -L/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/proj/lib"],
+    cppopts = ["-I/Users/irfansharif/Software/native/x86_64-apple-darwin19.6.0/jemalloc/include"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
+    visibility = ["//visibility:public"],
+)

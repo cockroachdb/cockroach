@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "colcontainerutils",
+    srcs = ["diskqueuecfg.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/sql/colcontainer",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/testutils",
+    ],
+)

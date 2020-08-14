@@ -1,0 +1,61 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ordering",
+    srcs = [
+        "doc.go",
+        "group_by.go",
+        "inverted_join.go",
+        "limit.go",
+        "lookup_join.go",
+        "merge_join.go",
+        "mutation.go",
+        "ordering.go",
+        "project.go",
+        "row_number.go",
+        "scan.go",
+        "select.go",
+        "sort.go",
+        "statement.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/sem/tree",
+        "//pkg/util",
+        "//pkg/util/log",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "ordering_test",
+    srcs = [
+        "group_by_test.go",
+        "inverted_join_test.go",
+        "lookup_join_test.go",
+        "ordering_test.go",
+        "project_test.go",
+        "row_number_test.go",
+        "scan_test.go",
+    ],
+    embed = [":ordering"],
+    deps = [
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/memo",
+        "//pkg/sql/opt/norm",
+        "//pkg/sql/opt/props",
+        "//pkg/sql/opt/props/physical",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/opt/testutils/testexpr",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

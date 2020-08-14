@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "enginepb",
+    srcs = [
+        "decode.go",
+        "engine.go",
+        "engine.pb.go",
+        "file_registry.pb.go",
+        "mvcc.go",
+        "mvcc.pb.go",
+        "mvcc3.go",
+        "mvcc3.pb.go",
+        "rocksdb.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/enginepb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)
+
+go_test(
+    name = "enginepb_test",
+    srcs = [
+        "decode_test.go",
+        "mvcc_test.go",
+    ],
+    deps = [
+        ":enginepb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

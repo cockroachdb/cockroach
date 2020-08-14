@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "aggmetric",
+    srcs = [
+        "agg_metric.go",
+        "counter.go",
+        "gauge.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/google/btree",
+        "//vendor/github.com/prometheus/client_model/go",
+    ],
+)
+
+go_test(
+    name = "aggmetric_test",
+    srcs = ["agg_metric_test.go"],
+    deps = [
+        ":aggmetric",
+        "//pkg/roachpb",
+        "//pkg/util/leaktest",
+        "//pkg/util/metric",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

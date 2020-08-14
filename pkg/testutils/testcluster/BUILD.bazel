@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testcluster",
+    srcs = ["testcluster.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/testcluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/gossip",
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "testcluster_test",
+    srcs = [
+        "main_test.go",
+        "testcluster_test.go",
+    ],
+    embed = [":testcluster"],
+    deps = [
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/sql/catalog/catalogkv",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/httputil",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "testutils",
+    srcs = ["chan_dialer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/transport/testutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/closedts/ctpb",
+        "//pkg/roachpb",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)

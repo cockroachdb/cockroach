@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "span",
+    srcs = ["span_builder.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/span",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/opt/constraint",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/encoding",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

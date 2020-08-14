@@ -1,0 +1,195 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "log",
+    srcs = [
+        "ambient_context.go",
+        "clog.go",
+        "crash_reporting.go",
+        "doc.go",
+        "every_n.go",
+        "exit_override.go",
+        "file.go",
+        "flags.go",
+        "get_stacks.go",
+        "intercept.go",
+        "log.go",
+        "log.pb.go",
+        "log_bridge.go",
+        "log_buffer.go",
+        "log_entry.go",
+        "log_flush.go",
+        "log_gc.go",
+        "loggers.go",
+        "redact.go",
+        "secondary_log.go",
+        "severity.go",
+        "stderr_redirect.go",
+        "stderr_redirect_unix.go",
+        "stderr_redirect_windows.go",
+        "structured.go",
+        "sync_buffer.go",
+        "test_log_scope.go",
+        "trace.go",
+        "tracebacks.go",
+        "vmodule.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/log",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cli/cliflags",
+        "//pkg/settings",
+        "//pkg/util",
+        "//pkg/util/caller",
+        "//pkg/util/envutil",
+        "//pkg/util/fileutil",
+        "//pkg/util/log/logflags",
+        "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/cockroachdb/sentry-go",
+        "//vendor/github.com/cockroachdb/ttycolor",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/opentracing/opentracing-go",
+        "//vendor/github.com/opentracing/opentracing-go/log",
+        "//vendor/github.com/petermattis/goid",
+        "//vendor/golang.org/x/net/trace",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/sys/windows",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "log_test",
+    srcs = [
+        "ambient_context_test.go",
+        "clog_test.go",
+        "crash_reporting_packet_test.go",
+        "crash_reporting_test.go",
+        "crash_reporting_unix_test.go",
+        "file_test.go",
+        "log_gc_test.go",
+        "main_test.go",
+        "redact_test.go",
+        "secondary_log_test.go",
+        "trace_test.go",
+    ],
+    embed = [":log"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/cockroachdb/redact",
+        "//vendor/github.com/cockroachdb/sentry-go",
+        "//vendor/github.com/kr/pretty",
+        "//vendor/github.com/opentracing/opentracing-go",
+        "//vendor/github.com/pmezard/go-difflib/difflib",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/golang.org/x/net/trace",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//vendor/golang.org/x/sys/unix",
+        ],
+        "//conditions:default": [],
+    }),
+)

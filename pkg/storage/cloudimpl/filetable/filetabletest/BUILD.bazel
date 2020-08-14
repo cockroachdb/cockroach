@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "filetabletest_test",
+    srcs = [
+        "file_table_read_writer_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        "//pkg/kv",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/tests",
+        "//pkg/storage/cloudimpl/filetable",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)
