@@ -575,3 +575,16 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 		t.Stop()
 	}
 }
+
+// Quiescing returns true if the stopper is quiescing.
+//
+// Generally this method shouldn't be used because it provides no
+// synchronization between the caller and quiescing. Generally a caller either
+// wants to use RunTaks() which checks for quiescing at the beginning and the
+// blocks the stopper stopping on the task, or at least ShouldQuiesce() which
+// gives you a channel signaled in the future when quiescing is initiated.
+func (s *Stopper) IsQuiescing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.quiescing
+}
