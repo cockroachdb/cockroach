@@ -732,6 +732,7 @@ unreserved_keyword ::=
 	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
+	| 'CREATEDB'
 	| 'CREATEROLE'
 	| 'CUBE'
 	| 'CURRENT'
@@ -837,6 +838,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
+	| 'NOCREATEDB'
 	| 'NOCREATEROLE'
 	| 'NOLOGIN'
 	| 'NOWAIT'
@@ -1927,7 +1929,9 @@ sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
 
 role_option ::=
-	'CREATEROLE'
+	'CREATEDB'
+	| 'NOCREATEDB'
+	| 'CREATEROLE'
 	| 'NOCREATEROLE'
 	| 'LOGIN'
 	| 'NOLOGIN'

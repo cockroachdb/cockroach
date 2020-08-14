@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -26,9 +27,7 @@ type createDatabaseNode struct {
 }
 
 // CreateDatabase creates a database.
-// Privileges: superuser.
-//   Notes: postgres requires superuser or "CREATEDB".
-//          mysql uses the mysqladmin command.
+// Privileges: superuser or CREATEDB
 func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
@@ -68,8 +67,14 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		}
 	}
 
-	if err := p.RequireAdminRole(ctx, "CREATE DATABASE"); err != nil {
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if !hasAdmin {
+		if err := p.HasRoleOption(ctx, roleoption.CREATEDB); err != nil {
+			return nil, err
+		}
 	}
 
 	return &createDatabaseNode{n: n}, nil
