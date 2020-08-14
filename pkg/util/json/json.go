@@ -915,8 +915,8 @@ func (j jsonObject) allPaths() ([]JSON, error) {
 }
 
 // FromSpatialObject transforms a SpatialObject into the json.JSON type.
-func FromSpatialObject(so geopb.SpatialObject) (JSON, error) {
-	j, err := geo.SpatialObjectToGeoJSON(so, geo.DefaultGeoJSONDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
+func FromSpatialObject(so geopb.SpatialObject, numDecimalDigits int) (JSON, error) {
+	j, err := geo.SpatialObjectToGeoJSON(so, numDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
 	if err != nil {
 		return nil, err
 	}
