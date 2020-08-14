@@ -183,14 +183,13 @@ func (a *orderedAggregator) Init() {
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
+	if a.done {
+		return coldata.ZeroBatch
+	}
 	a.unsafeBatch.ResetInternalBatch()
 	if a.scratch.shouldResetInternalBatch {
 		a.scratch.ResetInternalBatch()
 		a.scratch.shouldResetInternalBatch = false
-	}
-	if a.done {
-		a.scratch.SetLength(0)
-		return a.scratch
 	}
 	if a.scratch.resumeIdx >= a.scratch.outputSize {
 		// Copy the second part of the output batch into the first and resume from
@@ -222,26 +221,6 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			}
 		})
 		a.scratch.resumeIdx = newResumeIdx
-		if a.scratch.resumeIdx >= a.scratch.outputSize {
-			// We still have overflow output values.
-			a.scratch.SetLength(a.scratch.outputSize)
-			a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
-				for i := 0; i < len(a.outputTypes); i++ {
-					a.unsafeBatch.ColVec(i).Copy(
-						coldata.CopySliceArgs{
-							SliceArgs: coldata.SliceArgs{
-								Src:         a.scratch.ColVec(i),
-								SrcStartIdx: 0,
-								SrcEndIdx:   a.scratch.Length(),
-							},
-						},
-					)
-				}
-				a.unsafeBatch.SetLength(a.scratch.Length())
-			})
-			a.scratch.shouldResetInternalBatch = false
-			return a.unsafeBatch
-		}
 	}
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
