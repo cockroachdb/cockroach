@@ -40,7 +40,7 @@ REVOKE ALL ON DATABASE a FROM bar
 # Switch to a user without any privileges.
 user testuser
 
-statement error only users with the admin role are allowed to CREATE DATABASE
+statement error permission denied to create database
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
@@ -75,7 +75,7 @@ GRANT SELECT ON DATABASE a TO testuser
 
 user testuser
 
-statement error only users with the admin role are allowed to CREATE DATABASE
+statement error permission denied to create database
 CREATE DATABASE b
 
 statement error user testuser does not have DROP privilege on database a
@@ -110,7 +110,7 @@ GRANT ALL ON DATABASE a TO testuser
 
 user testuser
 
-statement error only users with the admin role are allowed to CREATE DATABASE
+statement error permission denied to create database
 CREATE DATABASE b
 
 statement ok
