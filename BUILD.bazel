@@ -1,0 +1,13 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# Lets you run `bazel run //:gazelle` to generate BUILD files.
+
+# gazelle:prefix github.com/cockroachdb/cockroach
+# gazelle:build_file_name BUILD.bazel
+# gazelle:proto disable_global
+# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal //vendor/github.com/grpc-ecosystem/grpc-gateway/internal:go_default_library
+
+gazelle(
+    name = "gazelle",
+    prefix = "github.com/cockroachdb/cockroach",
+)

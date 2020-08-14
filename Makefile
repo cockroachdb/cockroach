@@ -1815,3 +1815,26 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
+
+# XXX: Bazel shorthands
+bazel-clean:
+	@echo '=== Cleaning out bazel generated build files'
+	@find . -name '*.bazel' -not -path './.git/*' -not -path './BUILD.bazel' -not -path './c-deps/*' -not -path './vendor/*' -delete
+	@git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null
+	@echo '=== SUCCESS'
+
+gazelle-generate:
+	@echo '=== Generating build files'
+	@gazelle update-repos -from_file=go.mod -build_file_proto_mode=disable
+	@gazelle -go_prefix github.com/cockroachdb/cockroach \
+		-build_file_name BUILD.bazel \
+		-proto disable_global \
+		-exclude c-deps \
+		-external vendored
+	@echo '=== SUCCESS'
+
+bazel-generate:
+	@echo '=== Generating build files'
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable
+	@bazel run //:gazelle
+	@echo '=== SUCCESS'
