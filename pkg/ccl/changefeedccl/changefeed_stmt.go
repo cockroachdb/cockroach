@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -103,8 +105,14 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
-		if err := p.RequireAdminRole(ctx, "CREATE CHANGEFEED"); err != nil {
+		hasAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return err
+		}
+		if !hasAdmin {
+			if err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED); err != nil {
+				return err
+			}
 		}
 
 		sinkURI, err := sinkURIFn()
@@ -162,6 +170,11 @@ func changefeedPlanHook(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
 			return err
+		}
+		for _, desc := range targetDescs {
+			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+				return err
+			}
 		}
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {

@@ -1980,8 +1980,9 @@ func TestChangefeedPermissions(t *testing.T) {
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE USER testuser`)
+		sqlDB.Exec(t, `GRANT SELECT ON DATABASE d TO testuser`)
+		sqlDB.Exec(t, `CREATE TABLE d.foo ()`)
 
 		s := f.Server()
 		pgURL, cleanupFunc := sqlutils.PGUrl(
@@ -1994,12 +1995,28 @@ func TestChangefeedPermissions(t *testing.T) {
 		}
 		defer testuser.Close()
 
-		stmt := `EXPERIMENTAL CHANGEFEED FOR foo`
+		stmt := `EXPERIMENTAL CHANGEFEED FOR d.foo`
 		if strings.Contains(t.Name(), `enterprise`) {
-			stmt = `CREATE CHANGEFEED FOR foo`
+			stmt = `CREATE CHANGEFEED FOR d.foo`
 		}
-		if _, err := testuser.Exec(stmt); !testutils.IsError(err, `only users with the admin role`) {
-			t.Errorf(`expected 'only users with the admin role' error got: %+v`, err)
+		privErr := `user testuser does not have CONTROLCHANGEFEED privilege`
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, privErr) {
+			t.Errorf(`expected '%s' error got: %+v`, privErr, err)
+		}
+
+		// Grant CONTROLCHANGEFEED.
+		sqlDB.Exec(t, `ALTER USER testuser CONTROLCHANGEFEED`)
+		// Now that we pass the CONTROLCHANGEFEED permission check but error on
+		// missing SELECT privileges.
+		selectErr := `user testuser does not have SELECT privilege on relation foo`
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, selectErr) {
+			t.Errorf(`expected '%s' error got: %+v`, selectErr, err)
+		}
+
+		// Revoke CONTROLCHANGEFEED.
+		sqlDB.Exec(t, `ALTER USER testuser NOCONTROLCHANGEFEED`)
+		if _, err := testuser.Exec(stmt); !testutils.IsError(err, privErr) {
+			t.Errorf(`expected '%s' error got: %+v`, privErr, err)
 		}
 	}
 
