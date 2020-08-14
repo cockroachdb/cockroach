@@ -30,7 +30,7 @@ func TestCCLLogic(t *testing.T) {
 // configuration (i.e. "# LogicTest: !3node-tenant") are not run.
 func TestTenantLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", logictestPkg+testdataGlob)
+	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", true /* runCCLConfigs */, logictestPkg+testdataGlob)
 }
 
 func TestTenantSQLLiteLogic(t *testing.T) {
