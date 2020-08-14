@@ -1826,9 +1826,10 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 
 	// Only iterate over non-mutation columns, since even non-null mutation
 	// columns can be null during backfill.
-	for i := 0; i < tab.ColumnCount(); i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		col := tab.Column(i)
 		// Non-null mutation columns can be null during backfill.
-		if !cat.IsMutationColumn(tab, i) && !tab.Column(i).IsNullable() {
+		if !col.IsMutation() && !col.IsNullable() {
 			cs.Add(tabID.ColumnID(i))
 		}
 	}

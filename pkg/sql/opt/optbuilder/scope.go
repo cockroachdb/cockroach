@@ -226,10 +226,10 @@ func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tr
 		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
 	}
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		if tab.ColumnKind(i) != cat.Ordinary {
+		tabCol := tab.Column(i)
+		if tabCol.Kind() != cat.Ordinary {
 			continue
 		}
-		tabCol := tab.Column(i)
 		s.cols = append(s.cols, scopeColumn{
 			name:   tabCol.ColName(),
 			table:  *alias,
