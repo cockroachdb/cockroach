@@ -31,16 +31,18 @@ ALTER TABLE def INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field                description  columns             ordering
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (a, b, c, d, e, f)  ·
+ │           estimated row count  99           ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (b) = (f)    ·                   ·
+ └── scan    ·                    ·            (a, b, c)           ·
+·            estimated row count  100          ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                FULL SCAN    ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
@@ -49,74 +51,84 @@ tree         field                  description     columns             ordering
 ·            distribution           full            ·                   ·
 ·            vectorized             true            ·                   ·
 lookup join  ·                      ·               (a, b, c, d, e, f)  ·
+ │           estimated row count    0               ·                   ·
  │           table                  def@primary     ·                   ·
  │           type                   inner           ·                   ·
  │           equality               (b, c) = (f,e)  ·                   ·
  │           equality cols are key  ·               ·                   ·
  │           parallel               ·               ·                   ·
  └── scan    ·                      ·               (a, b, c)           ·
+·            estimated row count    100             ·                   ·
 ·            table                  abc@primary     ·                   ·
 ·            spans                  FULL SCAN       ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- │           pred          e > 1        ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         /2-          ·                   ·
+tree         field                description  columns             ordering
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (a, b, c, d, e, f)  ·
+ │           estimated row count  33           ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (b) = (f)    ·                   ·
+ │           pred                 e > 1        ·                   ·
+ └── scan    ·                    ·            (a, b, c)           ·
+·            estimated row count  33           ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                /2-          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (a) = (f)    ·                   ·
- │           pred          f > 1        ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         /2-          ·                   ·
+tree         field                description  columns             ordering
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (a, b, c, d, e, f)  ·
+ │           estimated row count  33           ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (a) = (f)    ·                   ·
+ │           pred                 f > 1        ·                   ·
+ └── scan    ·                    ·            (a, b, c)           ·
+·            estimated row count  33           ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                /2-          ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- │           pred          a >= e       ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field                description  columns             ordering
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (a, b, c, d, e, f)  ·
+ │           estimated row count  33           ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (b) = (f)    ·                   ·
+ │           pred                 a >= e       ·                   ·
+ └── scan    ·                    ·            (a, b, c)           ·
+·            estimated row count  100          ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                FULL SCAN    ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-tree         field         description  columns             ordering
-·            distribution  full         ·                   ·
-·            vectorized    true         ·                   ·
-lookup join  ·             ·            (a, b, c, d, e, f)  ·
- │           table         def@primary  ·                   ·
- │           type          inner        ·                   ·
- │           equality      (b) = (f)    ·                   ·
- │           pred          a >= e       ·                   ·
- └── scan    ·             ·            (a, b, c)           ·
-·            table         abc@primary  ·                   ·
-·            spans         FULL SCAN    ·                   ·
+tree         field                description  columns             ordering
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (a, b, c, d, e, f)  ·
+ │           estimated row count  33           ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (b) = (f)    ·                   ·
+ │           pred                 a >= e       ·                   ·
+ └── scan    ·                    ·            (a, b, c)           ·
+·            estimated row count  100          ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                FULL SCAN    ·                   ·
 
 # Verify a distsql plan.
 statement ok
@@ -166,7 +178,9 @@ NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ·                    distribution           full                      ·                         ·
 ·                    vectorized             true                      ·                         ·
 project              ·                      ·                         (a, b, c, d)              ·
+ │                   estimated row count    0                         ·                         ·
  └── lookup join     ·                      ·                         (a, b, c, d, a, b, c, d)  ·
+      │              estimated row count    0                         ·                         ·
       │              table                  data@primary              ·                         ·
       │              type                   inner                     ·                         ·
       │              equality               (a, b, c, d) = (a,b,c,d)  ·                         ·
@@ -174,8 +188,10 @@ project              ·                      ·                         (a, b, c
       │              parallel               ·                         ·                         ·
       │              pred                   c > 0                     ·                         ·
       └── filter     ·                      ·                         (a, b, c, d)              ·
+           │         estimated row count    10                        ·                         ·
            │         filter                 c = 1                     ·                         ·
            └── scan  ·                      ·                         (a, b, c, d)              ·
+·                    estimated row count    100000                    ·                         ·
 ·                    table                  data@primary              ·                         ·
 ·                    spans                  FULL SCAN                 ·                         ·
 
@@ -216,21 +232,24 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-tree                   field         description        columns                       ordering
-·                      distribution  full               ·                             ·
-·                      vectorized    true               ·                             ·
-distinct               ·             ·                  (title)                       ·
- │                     distinct on   title              ·                             ·
- │                     order key     title              ·                             ·
- └── project           ·             ·                  (title)                       +title
-      └── lookup join  ·             ·                  (title, shelf, title, shelf)  +title
-           │           table         books2@primary     ·                             ·
-           │           type          inner              ·                             ·
-           │           equality      (title) = (title)  ·                             ·
-           │           pred          shelf != shelf     ·                             ·
-           └── scan    ·             ·                  (title, shelf)                +title
-·                      table         books@primary      ·                             ·
-·                      spans         FULL SCAN          ·                             ·
+tree                   field                description        columns                       ordering
+·                      distribution         full               ·                             ·
+·                      vectorized           true               ·                             ·
+distinct               ·                    ·                  (title)                       ·
+ │                     estimated row count  100                ·                             ·
+ │                     distinct on          title              ·                             ·
+ │                     order key            title              ·                             ·
+ └── project           ·                    ·                  (title)                       +title
+      └── lookup join  ·                    ·                  (title, shelf, title, shelf)  +title
+           │           estimated row count  327                ·                             ·
+           │           table                books2@primary     ·                             ·
+           │           type                 inner              ·                             ·
+           │           equality             (title) = (title)  ·                             ·
+           │           pred                 shelf != shelf     ·                             ·
+           └── scan    ·                    ·                  (title, shelf)                +title
+·                      estimated row count  100                ·                             ·
+·                      table                books@primary      ·                             ·
+·                      spans                FULL SCAN          ·                             ·
 
 statement ok
 CREATE TABLE authors (name STRING, book STRING)
@@ -248,26 +267,31 @@ ALTER TABLE authors INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-tree                      field         description       columns                                   ordering
-·                         distribution  full              ·                                         ·
-·                         vectorized    true              ·                                         ·
-distinct                  ·             ·                 (name)                                    ·
- │                        distinct on   name              ·                                         ·
- └── project              ·             ·                 (name)                                    ·
-      └── lookup join     ·             ·                 (title, shelf, name, book, title, shelf)  ·
-           │              table         books2@primary    ·                                         ·
-           │              type          inner             ·                                         ·
-           │              equality      (book) = (title)  ·                                         ·
-           │              pred          shelf != shelf    ·                                         ·
-           └── hash join  ·             ·                 (title, shelf, name, book)                ·
-                │         type          inner             ·                                         ·
-                │         equality      (title) = (book)  ·                                         ·
-                ├── scan  ·             ·                 (title, shelf)                            ·
-                │         table         books@primary     ·                                         ·
-                │         spans         FULL SCAN         ·                                         ·
-                └── scan  ·             ·                 (name, book)                              ·
-·                         table         authors@primary   ·                                         ·
-·                         spans         FULL SCAN         ·                                         ·
+tree                      field                description       columns                                   ordering
+·                         distribution         full              ·                                         ·
+·                         vectorized           true              ·                                         ·
+distinct                  ·                    ·                 (name)                                    ·
+ │                        estimated row count  96                ·                                         ·
+ │                        distinct on          name              ·                                         ·
+ └── project              ·                    ·                 (name)                                    ·
+      └── lookup join     ·                    ·                 (title, shelf, name, book, title, shelf)  ·
+           │              estimated row count  323               ·                                         ·
+           │              table                books2@primary    ·                                         ·
+           │              type                 inner             ·                                         ·
+           │              equality             (book) = (title)  ·                                         ·
+           │              pred                 shelf != shelf    ·                                         ·
+           └── hash join  ·                    ·                 (title, shelf, name, book)                ·
+                │         estimated row count  99                ·                                         ·
+                │         type                 inner             ·                                         ·
+                │         equality             (title) = (book)  ·                                         ·
+                ├── scan  ·                    ·                 (title, shelf)                            ·
+                │         estimated row count  100               ·                                         ·
+                │         table                books@primary     ·                                         ·
+                │         spans                FULL SCAN         ·                                         ·
+                └── scan  ·                    ·                 (name, book)                              ·
+·                         estimated row count  100               ·                                         ·
+·                         table                authors@primary   ·                                         ·
+·                         spans                FULL SCAN         ·                                         ·
 
 # Verify data placement.
 query TTTI colnames
@@ -284,36 +308,43 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyck1Fv2jAQx9_3Kbx7SiS34C
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
-tree                 field         description       columns              ordering
-·                    distribution  full              ·                    ·
-·                    vectorized    true              ·                    ·
-project              ·             ·                 (name)               +name
- └── lookup join     ·             ·                 (name, book, title)  +name
-      │              table         books2@primary    ·                    ·
-      │              type          inner             ·                    ·
-      │              equality      (book) = (title)  ·                    ·
-      └── sort       ·             ·                 (name, book)         +name
-           │         order         +name             ·                    ·
-           └── scan  ·             ·                 (name, book)         ·
-·                    table         authors@primary   ·                    ·
-·                    spans         FULL SCAN         ·                    ·
+tree                 field                description       columns              ordering
+·                    distribution         full              ·                    ·
+·                    vectorized           true              ·                    ·
+project              ·                    ·                 (name)               +name
+ │                   estimated row count  990               ·                    ·
+ └── lookup join     ·                    ·                 (name, book, title)  +name
+      │              estimated row count  990               ·                    ·
+      │              table                books2@primary    ·                    ·
+      │              type                 inner             ·                    ·
+      │              equality             (book) = (title)  ·                    ·
+      └── sort       ·                    ·                 (name, book)         +name
+           │         estimated row count  100               ·                    ·
+           │         order                +name             ·                    ·
+           └── scan  ·                    ·                 (name, book)         ·
+·                    estimated row count  100               ·                    ·
+·                    table                authors@primary   ·                    ·
+·                    spans                FULL SCAN         ·                    ·
 
 # Cross joins should not be planned as lookup joins.
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-tree             field         description     columns                                         ordering
-·                distribution  full            ·                                               ·
-·                vectorized    true            ·                                               ·
-project          ·             ·               (title, edition, shelf, title, edition, shelf)  ·
- └── cross join  ·             ·               (title, edition, shelf, title, edition, shelf)  ·
-      │          type          cross           ·                                               ·
-      ├── scan   ·             ·               (title, edition, shelf)                         ·
-      │          table         books2@primary  ·                                               ·
-      │          spans         FULL SCAN       ·                                               ·
-      └── scan   ·             ·               (title, edition, shelf)                         ·
-·                table         books@primary   ·                                               ·
-·                spans         FULL SCAN       ·                                               ·
+tree             field                description     columns                                         ordering
+·                distribution         full            ·                                               ·
+·                vectorized           true            ·                                               ·
+project          ·                    ·               (title, edition, shelf, title, edition, shelf)  ·
+ └── cross join  ·                    ·               (title, edition, shelf, title, edition, shelf)  ·
+      │          estimated row count  1000000         ·                                               ·
+      │          type                 cross           ·                                               ·
+      ├── scan   ·                    ·               (title, edition, shelf)                         ·
+      │          estimated row count  10000           ·                                               ·
+      │          table                books2@primary  ·                                               ·
+      │          spans                FULL SCAN       ·                                               ·
+      └── scan   ·                    ·               (title, edition, shelf)                         ·
+·                estimated row count  100             ·                                               ·
+·                table                books@primary   ·                                               ·
+·                spans                FULL SCAN       ·                                               ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
@@ -365,16 +396,19 @@ ALTER TABLE large INJECT STATISTICS '[
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.a, large.c FROM small JOIN large ON small.a = large.b
 ----
-·                 distribution  full           ·          ·
-·                 vectorized    true           ·          ·
-project           ·             ·              (a, c)     ·
- └── lookup join  ·             ·              (a, b, c)  ·
-      │           table         large@bc       ·          ·
-      │           type          inner          ·          ·
-      │           equality      (a) = (b)      ·          ·
-      └── scan    ·             ·              (a)        ·
-·                 table         small@primary  ·          ·
-·                 spans         FULL SCAN      ·          ·
+·                 distribution         full           ·          ·
+·                 vectorized           true           ·          ·
+project           ·                    ·              (a, c)     ·
+ │                estimated row count  1000           ·          ·
+ └── lookup join  ·                    ·              (a, b, c)  ·
+      │           estimated row count  1000           ·          ·
+      │           table                large@bc       ·          ·
+      │           type                 inner          ·          ·
+      │           equality             (a) = (b)      ·          ·
+      └── scan    ·                    ·              (a)        ·
+·                 estimated row count  100            ·          ·
+·                 table                small@primary  ·          ·
+·                 spans                FULL SCAN      ·          ·
 
 # Lookup join on non-covering secondary index
 query TTTTT
@@ -383,7 +417,9 @@ EXPLAIN (VERBOSE) SELECT small.a, large.d FROM small JOIN large ON small.a = lar
 ·                           distribution           full            ·             ·
 ·                           vectorized             true            ·             ·
 project                     ·                      ·               (a, d)        ·
+ │                          estimated row count    1000            ·             ·
  └── project                ·                      ·               (a, b, d)     ·
+      │                     estimated row count    1000            ·             ·
       └── lookup join       ·                      ·               (a, a, b, d)  ·
            │                table                  large@primary   ·             ·
            │                type                   inner           ·             ·
@@ -391,10 +427,12 @@ project                     ·                      ·               (a, d)     
            │                equality cols are key  ·               ·             ·
            │                parallel               ·               ·             ·
            └── lookup join  ·                      ·               (a, a, b)     ·
+                │           estimated row count    1000            ·             ·
                 │           table                  large@bc        ·             ·
                 │           type                   inner           ·             ·
                 │           equality               (a) = (b)       ·             ·
                 └── scan    ·                      ·               (a)           ·
+·                           estimated row count    100             ·             ·
 ·                           table                  small@primary   ·             ·
 ·                           spans                  FULL SCAN       ·             ·
 
@@ -406,31 +444,36 @@ project                     ·                      ·               (a, d)     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b = large.a
 ----
-·            distribution  full           ·       ·
-·            vectorized    true           ·       ·
-lookup join  ·             ·              (b, a)  ·
- │           table         large@primary  ·       ·
- │           type          left outer     ·       ·
- │           equality      (b) = (a)      ·       ·
- └── scan    ·             ·              (b)     ·
-·            table         small@primary  ·       ·
-·            spans         FULL SCAN      ·       ·
+·            distribution         full           ·       ·
+·            vectorized           true           ·       ·
+lookup join  ·                    ·              (b, a)  ·
+ │           estimated row count  100            ·       ·
+ │           table                large@primary  ·       ·
+ │           type                 left outer     ·       ·
+ │           equality             (b) = (a)      ·       ·
+ └── scan    ·                    ·              (b)     ·
+·            estimated row count  100            ·       ·
+·            table                small@primary  ·       ·
+·            spans                FULL SCAN      ·       ·
 
 # Left join should preserve input order.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
-·                 distribution  full           ·          ·
-·                 vectorized    true           ·          ·
-project           ·             ·              (a, b)     +a
- └── lookup join  ·             ·              (a, a, b)  +a
-      │           table         large@primary  ·          ·
-      │           type          left outer     ·          ·
-      │           equality      (a) = (a)      ·          ·
-      │           pred          (b % 6) = 0    ·          ·
-      └── scan    ·             ·              (a)        +a
-·                 table         small@primary  ·          ·
-·                 spans         FULL SCAN      ·          ·
+·                 distribution         full           ·          ·
+·                 vectorized           true           ·          ·
+project           ·                    ·              (a, b)     +a
+ │                estimated row count  100            ·          ·
+ └── lookup join  ·                    ·              (a, a, b)  +a
+      │           estimated row count  100            ·          ·
+      │           table                large@primary  ·          ·
+      │           type                 left outer     ·          ·
+      │           equality             (a) = (a)      ·          ·
+      │           pred                 (b % 6) = 0    ·          ·
+      └── scan    ·                    ·              (a)        +a
+·                 estimated row count  100            ·          ·
+·                 table                small@primary  ·          ·
+·                 spans                FULL SCAN      ·          ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a]
@@ -441,16 +484,19 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9r2zwUxu_fT3E48ELClD
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b
 ----
-·                 distribution  full           ·          ·
-·                 vectorized    true           ·          ·
-project           ·             ·              (c, c)     ·
- └── lookup join  ·             ·              (c, b, c)  ·
-      │           table         large@bc       ·          ·
-      │           type          left outer     ·          ·
-      │           equality      (c) = (b)      ·          ·
-      └── scan    ·             ·              (c)        ·
-·                 table         small@primary  ·          ·
-·                 spans         FULL SCAN      ·          ·
+·                 distribution         full           ·          ·
+·                 vectorized           true           ·          ·
+project           ·                    ·              (c, c)     ·
+ │                estimated row count  1000           ·          ·
+ └── lookup join  ·                    ·              (c, b, c)  ·
+      │           estimated row count  1000           ·          ·
+      │           table                large@bc       ·          ·
+      │           type                 left outer     ·          ·
+      │           equality             (c) = (b)      ·          ·
+      └── scan    ·                    ·              (c)        ·
+·                 estimated row count  100            ·          ·
+·                 table                small@primary  ·          ·
+·                 spans                FULL SCAN      ·          ·
 
 # Left join against non-covering secondary index
 query TTTTT
@@ -459,7 +505,9 @@ EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c 
 ·                           distribution           full            ·             ·
 ·                           vectorized             true            ·             ·
 project                     ·                      ·               (c, d)        ·
+ │                          estimated row count    1000            ·             ·
  └── project                ·                      ·               (c, b, d)     ·
+      │                     estimated row count    1000            ·             ·
       └── lookup join       ·                      ·               (c, a, b, d)  ·
            │                table                  large@primary   ·             ·
            │                type                   left outer      ·             ·
@@ -467,10 +515,12 @@ project                     ·                      ·               (c, d)     
            │                equality cols are key  ·               ·             ·
            │                parallel               ·               ·             ·
            └── lookup join  ·                      ·               (c, a, b)     ·
+                │           estimated row count    1000            ·             ·
                 │           table                  large@bc        ·             ·
                 │           type                   left outer      ·             ·
                 │           equality               (c) = (b)       ·             ·
                 └── scan    ·                      ·               (c)           ·
+·                           estimated row count    100             ·             ·
 ·                           table                  small@primary   ·             ·
 ·                           spans                  FULL SCAN       ·             ·
 
@@ -478,17 +528,20 @@ project                     ·                      ·               (c, d)     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
 ----
-·                 distribution  full           ·          ·
-·                 vectorized    true           ·          ·
-project           ·             ·              (c, c)     ·
- └── lookup join  ·             ·              (c, b, c)  ·
-      │           table         large@bc       ·          ·
-      │           type          left outer     ·          ·
-      │           equality      (c) = (b)      ·          ·
-      │           pred          c < 20         ·          ·
-      └── scan    ·             ·              (c)        ·
-·                 table         small@primary  ·          ·
-·                 spans         FULL SCAN      ·          ·
+·                 distribution         full           ·          ·
+·                 vectorized           true           ·          ·
+project           ·                    ·              (c, c)     ·
+ │                estimated row count  336            ·          ·
+ └── lookup join  ·                    ·              (c, b, c)  ·
+      │           estimated row count  336            ·          ·
+      │           table                large@bc       ·          ·
+      │           type                 left outer     ·          ·
+      │           equality             (c) = (b)      ·          ·
+      │           pred                 c < 20         ·          ·
+      └── scan    ·                    ·              (c)        ·
+·                 estimated row count  100            ·          ·
+·                 table                small@primary  ·          ·
+·                 spans                FULL SCAN      ·          ·
 
 # Left join with ON filter on non-covering index
 # TODO(radu): this doesn't use lookup join yet, the current rules don't cover
@@ -496,20 +549,25 @@ project           ·             ·              (c, c)     ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c = large.b AND large.d < 30
 ----
-·                    distribution  full           ·          ·
-·                    vectorized    true           ·          ·
-project              ·             ·              (c, d)     ·
- └── hash join       ·             ·              (b, d, c)  ·
-      │              type          right outer    ·          ·
-      │              equality      (b) = (c)      ·          ·
-      ├── filter     ·             ·              (b, d)     ·
-      │    │         filter        d < 30         ·          ·
-      │    └── scan  ·             ·              (b, d)     ·
-      │              table         large@primary  ·          ·
-      │              spans         FULL SCAN      ·          ·
-      └── scan       ·             ·              (c)        ·
-·                    table         small@primary  ·          ·
-·                    spans         FULL SCAN      ·          ·
+·                    distribution         full           ·          ·
+·                    vectorized           true           ·          ·
+project              ·                    ·              (c, d)     ·
+ │                   estimated row count  336            ·          ·
+ └── hash join       ·                    ·              (b, d, c)  ·
+      │              estimated row count  336            ·          ·
+      │              type                 right outer    ·          ·
+      │              equality             (b) = (c)      ·          ·
+      ├── filter     ·                    ·              (b, d)     ·
+      │    │         estimated row count  3303           ·          ·
+      │    │         filter               d < 30         ·          ·
+      │    └── scan  ·                    ·              (b, d)     ·
+      │              estimated row count  10000          ·          ·
+      │              table                large@primary  ·          ·
+      │              spans                FULL SCAN      ·          ·
+      └── scan       ·                    ·              (c)        ·
+·                    estimated row count  100            ·          ·
+·                    table                small@primary  ·          ·
+·                    spans                FULL SCAN      ·          ·
 
 ###########################################################
 #  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
@@ -528,18 +586,22 @@ CREATE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                    distribution  full            ·                ·
-·                    vectorized    true            ·                ·
-project              ·             ·               (a)              ·
- └── lookup join     ·             ·               (a, d, e, a, d)  ·
-      │              table         u@idx           ·                ·
-      │              type          inner           ·                ·
-      │              equality      (d, a) = (d,a)  ·                ·
-      └── filter     ·             ·               (a, d, e)        ·
-           │         filter        e = 5           ·                ·
-           └── scan  ·             ·               (a, d, e)        ·
-·                    table         t@primary       ·                ·
-·                    spans         FULL SCAN       ·                ·
+·                    distribution         full                  ·                ·
+·                    vectorized           true                  ·                ·
+project              ·                    ·                     (a)              ·
+ │                   estimated row count  1 (missing stats)     ·                ·
+ └── lookup join     ·                    ·                     (a, d, e, a, d)  ·
+      │              estimated row count  1 (missing stats)     ·                ·
+      │              table                u@idx                 ·                ·
+      │              type                 inner                 ·                ·
+      │              equality             (d, a) = (d,a)        ·                ·
+      └── filter     ·                    ·                     (a, d, e)        ·
+           │         estimated row count  10 (missing stats)    ·                ·
+           │         filter               e = 5                 ·                ·
+           └── scan  ·                    ·                     (a, d, e)        ·
+·                    estimated row count  1000 (missing stats)  ·                ·
+·                    table                t@primary             ·                ·
+·                    spans                FULL SCAN             ·                ·
 
 # Test unique version of same index. (Lookup join should not use column a.)
 statement ok
@@ -551,21 +613,25 @@ CREATE UNIQUE INDEX idx ON u (d)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
 ----
-·                    distribution           full       ·                ·
-·                    vectorized             true       ·                ·
-project              ·                      ·          (a)              ·
- └── lookup join     ·                      ·          (a, d, e, a, d)  ·
-      │              table                  u@idx      ·                ·
-      │              type                   inner      ·                ·
-      │              equality               (d) = (d)  ·                ·
-      │              equality cols are key  ·          ·                ·
-      │              parallel               ·          ·                ·
-      │              pred                   a = a      ·                ·
-      └── filter     ·                      ·          (a, d, e)        ·
-           │         filter                 e = 5      ·                ·
-           └── scan  ·                      ·          (a, d, e)        ·
-·                    table                  t@primary  ·                ·
-·                    spans                  FULL SCAN  ·                ·
+·                    distribution           full                  ·                ·
+·                    vectorized             true                  ·                ·
+project              ·                      ·                     (a)              ·
+ │                   estimated row count    0 (missing stats)     ·                ·
+ └── lookup join     ·                      ·                     (a, d, e, a, d)  ·
+      │              estimated row count    0 (missing stats)     ·                ·
+      │              table                  u@idx                 ·                ·
+      │              type                   inner                 ·                ·
+      │              equality               (d) = (d)             ·                ·
+      │              equality cols are key  ·                     ·                ·
+      │              parallel               ·                     ·                ·
+      │              pred                   a = a                 ·                ·
+      └── filter     ·                      ·                     (a, d, e)        ·
+           │         estimated row count    10 (missing stats)    ·                ·
+           │         filter                 e = 5                 ·                ·
+           └── scan  ·                      ·                     (a, d, e)        ·
+·                    estimated row count    1000 (missing stats)  ·                ·
+·                    table                  t@primary             ·                ·
+·                    spans                  FULL SCAN             ·                ·
 
 # Test index with first primary key column explicit and the rest implicit.
 statement ok
@@ -577,18 +643,22 @@ CREATE INDEX idx ON u (d, a)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                    distribution  full                 ·                      ·
-·                    vectorized    true                 ·                      ·
-project              ·             ·                    (a)                    ·
- └── lookup join     ·             ·                    (a, b, d, e, a, b, d)  ·
-      │              table         u@idx                ·                      ·
-      │              type          inner                ·                      ·
-      │              equality      (d, a, b) = (d,a,b)  ·                      ·
-      └── filter     ·             ·                    (a, b, d, e)           ·
-           │         filter        e = 5                ·                      ·
-           └── scan  ·             ·                    (a, b, d, e)           ·
-·                    table         t@primary            ·                      ·
-·                    spans         FULL SCAN            ·                      ·
+·                    distribution         full                  ·                      ·
+·                    vectorized           true                  ·                      ·
+project              ·                    ·                     (a)                    ·
+ │                   estimated row count  0 (missing stats)     ·                      ·
+ └── lookup join     ·                    ·                     (a, b, d, e, a, b, d)  ·
+      │              estimated row count  0 (missing stats)     ·                      ·
+      │              table                u@idx                 ·                      ·
+      │              type                 inner                 ·                      ·
+      │              equality             (d, a, b) = (d,a,b)   ·                      ·
+      └── filter     ·                    ·                     (a, b, d, e)           ·
+           │         estimated row count  10 (missing stats)    ·                      ·
+           │         filter               e = 5                 ·                      ·
+           └── scan  ·                    ·                     (a, b, d, e)           ·
+·                    estimated row count  1000 (missing stats)  ·                      ·
+·                    table                t@primary             ·                      ·
+·                    spans                FULL SCAN             ·                      ·
 
 # Test index with middle primary key column explicit and the rest implicit.
 statement ok
@@ -600,18 +670,22 @@ CREATE INDEX idx ON u (d, b)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
 ----
-·                    distribution  full                 ·                      ·
-·                    vectorized    true                 ·                      ·
-project              ·             ·                    (a)                    ·
- └── lookup join     ·             ·                    (a, b, d, e, a, b, d)  ·
-      │              table         u@idx                ·                      ·
-      │              type          inner                ·                      ·
-      │              equality      (d, b, a) = (d,b,a)  ·                      ·
-      └── filter     ·             ·                    (a, b, d, e)           ·
-           │         filter        e = 5                ·                      ·
-           └── scan  ·             ·                    (a, b, d, e)           ·
-·                    table         t@primary            ·                      ·
-·                    spans         FULL SCAN            ·                      ·
+·                    distribution         full                  ·                      ·
+·                    vectorized           true                  ·                      ·
+project              ·                    ·                     (a)                    ·
+ │                   estimated row count  0 (missing stats)     ·                      ·
+ └── lookup join     ·                    ·                     (a, b, d, e, a, b, d)  ·
+      │              estimated row count  0 (missing stats)     ·                      ·
+      │              table                u@idx                 ·                      ·
+      │              type                 inner                 ·                      ·
+      │              equality             (d, b, a) = (d,b,a)   ·                      ·
+      └── filter     ·                    ·                     (a, b, d, e)           ·
+           │         estimated row count  10 (missing stats)    ·                      ·
+           │         filter               e = 5                 ·                      ·
+           └── scan  ·                    ·                     (a, b, d, e)           ·
+·                    estimated row count  1000 (missing stats)  ·                      ·
+·                    table                t@primary             ·                      ·
+·                    spans                FULL SCAN             ·                      ·
 
 # Test index with last primary key column explicit and the rest implicit.
 statement ok
@@ -623,95 +697,112 @@ CREATE INDEX idx ON u (d, c)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
 ----
-·                    distribution  full       ·                ·
-·                    vectorized    true       ·                ·
-project              ·             ·          (a)              ·
- └── lookup join     ·             ·          (a, d, e, a, d)  ·
-      │              table         u@idx      ·                ·
-      │              type          inner      ·                ·
-      │              equality      (d) = (d)  ·                ·
-      │              pred          a = a      ·                ·
-      └── filter     ·             ·          (a, d, e)        ·
-           │         filter        e = 5      ·                ·
-           └── scan  ·             ·          (a, d, e)        ·
-·                    table         t@primary  ·                ·
-·                    spans         FULL SCAN  ·                ·
+·                    distribution         full                  ·                ·
+·                    vectorized           true                  ·                ·
+project              ·                    ·                     (a)              ·
+ │                   estimated row count  1 (missing stats)     ·                ·
+ └── lookup join     ·                    ·                     (a, d, e, a, d)  ·
+      │              estimated row count  1 (missing stats)     ·                ·
+      │              table                u@idx                 ·                ·
+      │              type                 inner                 ·                ·
+      │              equality             (d) = (d)             ·                ·
+      │              pred                 a = a                 ·                ·
+      └── filter     ·                    ·                     (a, d, e)        ·
+           │         estimated row count  10 (missing stats)    ·                ·
+           │         filter               e = 5                 ·                ·
+           └── scan  ·                    ·                     (a, d, e)        ·
+·                    estimated row count  1000 (missing stats)  ·                ·
+·                    table                t@primary             ·                ·
+·                    spans                FULL SCAN             ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-·                 distribution  full         ·                   ·
-·                 vectorized    true         ·                   ·
-project           ·             ·            (d, e, f, a, b, c)  ·
- └── lookup join  ·             ·            (a, b, c, d, e, f)  +a
-      │           table         def@primary  ·                   ·
-      │           type          inner        ·                   ·
-      │           equality      (a) = (f)    ·                   ·
-      └── scan    ·             ·            (a, b, c)           +a
-·                 table         abc@primary  ·                   ·
-·                 spans         FULL SCAN    ·                   ·
+·                 distribution         full         ·                   ·
+·                 vectorized           true         ·                   ·
+project           ·                    ·            (d, e, f, a, b, c)  ·
+ └── lookup join  ·                    ·            (a, b, c, d, e, f)  +a
+      │           estimated row count  100          ·                   ·
+      │           table                def@primary  ·                   ·
+      │           type                 inner        ·                   ·
+      │           equality             (a) = (f)    ·                   ·
+      └── scan    ·                    ·            (a, b, c)           +a
+·                 estimated row count  100          ·                   ·
+·                 table                abc@primary  ·                   ·
+·                 spans                FULL SCAN    ·                   ·
 
 # Test that we don't get a lookup join if we force a merge join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-·           distribution    full         ·                   ·
-·           vectorized      true         ·                   ·
-merge join  ·               ·            (d, e, f, a, b, c)  +f
- │          type            inner        ·                   ·
- │          equality        (f) = (a)    ·                   ·
- │          mergeJoinOrder  +"(f=a)"     ·                   ·
- ├── scan   ·               ·            (d, e, f)           +f
- │          table           def@primary  ·                   ·
- │          spans           FULL SCAN    ·                   ·
- └── scan   ·               ·            (a, b, c)           +a
-·           table           abc@primary  ·                   ·
-·           spans           FULL SCAN    ·                   ·
+·           distribution         full         ·                   ·
+·           vectorized           true         ·                   ·
+merge join  ·                    ·            (d, e, f, a, b, c)  +f
+ │          estimated row count  100          ·                   ·
+ │          type                 inner        ·                   ·
+ │          equality             (f) = (a)    ·                   ·
+ │          mergeJoinOrder       +"(f=a)"     ·                   ·
+ ├── scan   ·                    ·            (d, e, f)           +f
+ │          estimated row count  10000        ·                   ·
+ │          table                def@primary  ·                   ·
+ │          spans                FULL SCAN    ·                   ·
+ └── scan   ·                    ·            (a, b, c)           +a
+·           estimated row count  100          ·                   ·
+·           table                abc@primary  ·                   ·
+·           spans                FULL SCAN    ·                   ·
 
 # Test that we don't get a lookup join if we force a hash join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
-·               distribution  full         ·                   ·
-·               vectorized    true         ·                   ·
-sort            ·             ·            (d, e, f, a, b, c)  +f
- │              order         +f           ·                   ·
- └── hash join  ·             ·            (d, e, f, a, b, c)  ·
-      │         type          inner        ·                   ·
-      │         equality      (f) = (a)    ·                   ·
-      ├── scan  ·             ·            (d, e, f)           ·
-      │         table         def@primary  ·                   ·
-      │         spans         FULL SCAN    ·                   ·
-      └── scan  ·             ·            (a, b, c)           ·
-·               table         abc@primary  ·                   ·
-·               spans         FULL SCAN    ·                   ·
+·               distribution         full         ·                   ·
+·               vectorized           true         ·                   ·
+sort            ·                    ·            (d, e, f, a, b, c)  +f
+ │              estimated row count  100          ·                   ·
+ │              order                +f           ·                   ·
+ └── hash join  ·                    ·            (d, e, f, a, b, c)  ·
+      │         estimated row count  100          ·                   ·
+      │         type                 inner        ·                   ·
+      │         equality             (f) = (a)    ·                   ·
+      ├── scan  ·                    ·            (d, e, f)           ·
+      │         estimated row count  10000        ·                   ·
+      │         table                def@primary  ·                   ·
+      │         spans                FULL SCAN    ·                   ·
+      └── scan  ·                    ·            (a, b, c)           ·
+·               estimated row count  100          ·                   ·
+·               table                abc@primary  ·                   ·
+·               spans                FULL SCAN    ·                   ·
 
 # Test lookup semi and anti join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f)
 ----
-·            distribution  full         ·          ·
-·            vectorized    true         ·          ·
-lookup join  ·             ·            (a, b, c)  ·
- │           table         def@primary  ·          ·
- │           type          semi         ·          ·
- │           equality      (a) = (f)    ·          ·
- └── scan    ·             ·            (a, b, c)  ·
-·            table         abc@primary  ·          ·
-·            spans         FULL SCAN    ·          ·
+·            distribution         full         ·          ·
+·            vectorized           true         ·          ·
+lookup join  ·                    ·            (a, b, c)  ·
+ │           estimated row count  100          ·          ·
+ │           table                def@primary  ·          ·
+ │           type                 semi         ·          ·
+ │           equality             (a) = (f)    ·          ·
+ └── scan    ·                    ·            (a, b, c)  ·
+·            estimated row count  100          ·          ·
+·            table                abc@primary  ·          ·
+·            spans                FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f)
 ----
-·            distribution  full         ·          ·
-·            vectorized    true         ·          ·
-lookup join  ·             ·            (a, b, c)  ·
- │           table         def@primary  ·          ·
- │           type          anti         ·          ·
- │           equality      (a) = (f)    ·          ·
- └── scan    ·             ·            (a, b, c)  ·
-·            table         abc@primary  ·          ·
-·            spans         FULL SCAN    ·          ·
+·            distribution         full         ·          ·
+·            vectorized           true         ·          ·
+lookup join  ·                    ·            (a, b, c)  ·
+ │           estimated row count  0            ·          ·
+ │           table                def@primary  ·          ·
+ │           type                 anti         ·          ·
+ │           equality             (a) = (f)    ·          ·
+ └── scan    ·                    ·            (a, b, c)  ·
+·            estimated row count  100          ·          ·
+·            table                abc@primary  ·          ·
+·            spans                FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND c=e)
@@ -719,12 +810,14 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AN
 ·            distribution           full            ·          ·
 ·            vectorized             true            ·          ·
 lookup join  ·                      ·               (a, b, c)  ·
+ │           estimated row count    100             ·          ·
  │           table                  def@primary     ·          ·
  │           type                   semi            ·          ·
  │           equality               (a, c) = (f,e)  ·          ·
  │           equality cols are key  ·               ·          ·
  │           parallel               ·               ·          ·
  └── scan    ·                      ·               (a, b, c)  ·
+·            estimated row count    100             ·          ·
 ·            table                  abc@primary     ·          ·
 ·            spans                  FULL SCAN       ·          ·
 
@@ -734,42 +827,48 @@ EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=
 ·            distribution           full            ·          ·
 ·            vectorized             true            ·          ·
 lookup join  ·                      ·               (a, b, c)  ·
+ │           estimated row count    0               ·          ·
  │           table                  def@primary     ·          ·
  │           type                   anti            ·          ·
  │           equality               (a, c) = (f,e)  ·          ·
  │           equality cols are key  ·               ·          ·
  │           parallel               ·               ·          ·
  └── scan    ·                      ·               (a, b, c)  ·
+·            estimated row count    100             ·          ·
 ·            table                  abc@primary     ·          ·
 ·            spans                  FULL SCAN       ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-·            distribution  full         ·          ·
-·            vectorized    true         ·          ·
-lookup join  ·             ·            (a, b, c)  ·
- │           table         def@primary  ·          ·
- │           type          semi         ·          ·
- │           equality      (a) = (f)    ·          ·
- │           pred          (d + b) > 1  ·          ·
- └── scan    ·             ·            (a, b, c)  ·
-·            table         abc@primary  ·          ·
-·            spans         FULL SCAN    ·          ·
+·            distribution         full         ·          ·
+·            vectorized           true         ·          ·
+lookup join  ·                    ·            (a, b, c)  ·
+ │           estimated row count  33           ·          ·
+ │           table                def@primary  ·          ·
+ │           type                 semi         ·          ·
+ │           equality             (a) = (f)    ·          ·
+ │           pred                 (d + b) > 1  ·          ·
+ └── scan    ·                    ·            (a, b, c)  ·
+·            estimated row count  100          ·          ·
+·            table                abc@primary  ·          ·
+·            spans                FULL SCAN    ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=f AND d+b>1)
 ----
-·            distribution  full         ·          ·
-·            vectorized    true         ·          ·
-lookup join  ·             ·            (a, b, c)  ·
- │           table         def@primary  ·          ·
- │           type          anti         ·          ·
- │           equality      (a) = (f)    ·          ·
- │           pred          (d + b) > 1  ·          ·
- └── scan    ·             ·            (a, b, c)  ·
-·            table         abc@primary  ·          ·
-·            spans         FULL SCAN    ·          ·
+·            distribution         full         ·          ·
+·            vectorized           true         ·          ·
+lookup join  ·                    ·            (a, b, c)  ·
+ │           estimated row count  67           ·          ·
+ │           table                def@primary  ·          ·
+ │           type                 anti         ·          ·
+ │           equality             (a) = (f)    ·          ·
+ │           pred                 (d + b) > 1  ·          ·
+ └── scan    ·                    ·            (a, b, c)  ·
+·            estimated row count  100          ·          ·
+·            table                abc@primary  ·          ·
+·            spans                FULL SCAN    ·          ·
 
 query T
 SELECT url FROM [ EXPLAIN (DISTSQL)
@@ -804,19 +903,20 @@ INSERT INTO b VALUES(1)
 query TTT
 EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
 ----
-·                      distribution  full
-·                      vectorized    true
-group                  ·             ·
- │                     aggregate 0   count_rows()
- │                     scalar        ·
- └── project           ·             ·
-      └── lookup join  ·             ·
-           │           table         a@primary
-           │           type          inner
-           │           equality      (a) = (a)
-           └── scan    ·             ·
-·                      table         b@primary
-·                      spans         FULL SCAN
+·                      distribution   full
+·                      vectorized     true
+group                  ·              ·
+ │                     aggregate 0    count_rows()
+ │                     scalar         ·
+ └── project           ·              ·
+      └── lookup join  ·              ·
+           │           table          a@primary
+           │           type           inner
+           │           equality       (a) = (a)
+           └── scan    ·              ·
+·                      missing stats  ·
+·                      table          b@primary
+·                      spans          FULL SCAN
 
 statement ok
 SET tracing = on
@@ -1445,6 +1545,7 @@ limit                                                                  ·       
                                                         └── filter     ·                      ·
                                                              │         filter                 n_name = 'SAUDI ARABIA'
                                                              └── scan  ·                      ·
+·                                                                      estimated row count    25
 ·                                                                      table                  nation@primary
 ·                                                                      spans                  FULL SCAN
 
@@ -1462,7 +1563,9 @@ EXPLAIN (VERBOSE)
 ·                               distribution           full                                         ·                                          ·
 ·                               vectorized             true                                         ·                                          ·
 project                         ·                      ·                                            (pk)                                       ·
+ │                              estimated row count    10 (missing stats)                           ·                                          ·
  └── project                    ·                      ·                                            (pk, col0, col3)                           ·
+      │                         estimated row count    10 (missing stats)                           ·                                          ·
       └── lookup join           ·                      ·                                            ("project_const_col_@14", pk, col0, col3)  ·
            │                    table                  tab4@tab4_col3_col4_key                      ·                                          ·
            │                    type                   semi                                         ·                                          ·
@@ -1470,13 +1573,16 @@ project                         ·                      ·                      
            │                    equality cols are key  ·                                            ·                                          ·
            │                    parallel               ·                                            ·                                          ·
            └── render           ·                      ·                                            ("project_const_col_@14", pk, col0, col3)  ·
+                │               estimated row count    10 (missing stats)                           ·                                          ·
                 │               render 0               495.6                                        ·                                          ·
                 │               render 1               pk                                           ·                                          ·
                 │               render 2               col0                                         ·                                          ·
                 │               render 3               col3                                         ·                                          ·
                 └── index join  ·                      ·                                            (pk, col0, col3)                           ·
+                     │          estimated row count    10 (missing stats)                           ·                                          ·
                      │          table                  tab4@primary                                 ·                                          ·
                      │          key columns            pk                                           ·                                          ·
                      └── scan   ·                      ·                                            (pk, col3)                                 ·
+·                               estimated row count    10 (missing stats)                           ·                                          ·
 ·                               table                  tab4@tab4_col3_col4_key                      ·                                          ·
 ·                               spans                  /NULL-                                       ·                                          ·

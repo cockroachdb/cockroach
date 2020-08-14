@@ -13,11 +13,12 @@ CREATE MATERIALIZED VIEW v AS SELECT x, y FROM t
 query TTT
 EXPLAIN SELECT * FROM v
 ----
-·     distribution  local
-·     vectorized    true
-scan  ·             ·
-·     table         v@primary
-·     spans         FULL SCAN
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          v@primary
+·     spans          FULL SCAN
 
 # Create an index on a materialized view, and ensure that we use it.
 statement ok
@@ -26,11 +27,12 @@ CREATE INDEX i ON v (y)
 query TTT
 EXPLAIN SELECT * FROM v WHERE y = 3
 ----
-·           distribution  local
-·           vectorized    true
-index join  ·             ·
- │          table         v@primary
- │          key columns   rowid
- └── scan   ·             ·
-·           table         v@i
-·           spans         /3-/4
+·           distribution   local
+·           vectorized     true
+index join  ·              ·
+ │          table          v@primary
+ │          key columns    rowid
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          v@i
+·           spans          /3-/4

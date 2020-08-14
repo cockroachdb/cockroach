@@ -21,48 +21,55 @@ CREATE TABLE t9 (
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET b = b + 1 WHERE a = 5
 ----
-·                         distribution  local                      ·                              ·
-·                         vectorized    false                      ·                              ·
-update                    ·             ·                          ()                             ·
- │                        table         t9                         ·                              ·
- │                        set           b                          ·                              ·
- │                        auto commit   ·                          ·                              ·
- └── project              ·             ·                          (a, b, b_new, check1, check2)  ·
-      └── render          ·             ·                          (check1, check2, a, b, b_new)  ·
-           │              render 0      a > b_new                  ·                              ·
-           │              render 1      d IS NULL                  ·                              ·
-           │              render 2      a                          ·                              ·
-           │              render 3      b                          ·                              ·
-           │              render 4      b_new                      ·                              ·
-           └── render     ·             ·                          (b_new, a, b, d)               ·
-                │         render 0      b + 1                      ·                              ·
-                │         render 1      a                          ·                              ·
-                │         render 2      b                          ·                              ·
-                │         render 3      d                          ·                              ·
-                └── scan  ·             ·                          (a, b, d)                      ·
-·                         table         t9@primary                 ·                              ·
-·                         spans         /5/0-/5/1/2 /5/3/1-/5/3/2  ·                              ·
+·                         distribution         local                      ·                              ·
+·                         vectorized           false                      ·                              ·
+update                    ·                    ·                          ()                             ·
+ │                        estimated row count  0 (missing stats)          ·                              ·
+ │                        table                t9                         ·                              ·
+ │                        set                  b                          ·                              ·
+ │                        auto commit          ·                          ·                              ·
+ └── project              ·                    ·                          (a, b, b_new, check1, check2)  ·
+      └── render          ·                    ·                          (check1, check2, a, b, b_new)  ·
+           │              estimated row count  1 (missing stats)          ·                              ·
+           │              render 0             a > b_new                  ·                              ·
+           │              render 1             d IS NULL                  ·                              ·
+           │              render 2             a                          ·                              ·
+           │              render 3             b                          ·                              ·
+           │              render 4             b_new                      ·                              ·
+           └── render     ·                    ·                          (b_new, a, b, d)               ·
+                │         estimated row count  1 (missing stats)          ·                              ·
+                │         render 0             b + 1                      ·                              ·
+                │         render 1             a                          ·                              ·
+                │         render 2             b                          ·                              ·
+                │         render 3             d                          ·                              ·
+                └── scan  ·                    ·                          (a, b, d)                      ·
+·                         estimated row count  1 (missing stats)          ·                              ·
+·                         table                t9@primary                 ·                              ·
+·                         spans                /5/0-/5/1/2 /5/3/1-/5/3/2  ·                              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE t9 SET a = 2 WHERE a = 5
 ----
-·                    distribution      local       ·                                       ·
-·                    vectorized        false       ·                                       ·
-update               ·                 ·           ()                                      ·
- │                   table             t9          ·                                       ·
- │                   set               a           ·                                       ·
- │                   auto commit       ·           ·                                       ·
- └── project         ·                 ·           (a, b, c, d, e, a_new, check1, check2)  ·
-      └── render     ·                 ·           (check1, check2, a_new, a, b, c, d, e)  ·
-           │         render 0          b < 2       ·                                       ·
-           │         render 1          d IS NULL   ·                                       ·
-           │         render 2          2           ·                                       ·
-           │         render 3          a           ·                                       ·
-           │         render 4          b           ·                                       ·
-           │         render 5          c           ·                                       ·
-           │         render 6          d           ·                                       ·
-           │         render 7          e           ·                                       ·
-           └── scan  ·                 ·           (a, b, c, d, e)                         ·
-·                    table             t9@primary  ·                                       ·
-·                    spans             /5-/5/#     ·                                       ·
-·                    locking strength  for update  ·                                       ·
+·                    distribution         local              ·                                       ·
+·                    vectorized           false              ·                                       ·
+update               ·                    ·                  ()                                      ·
+ │                   estimated row count  0 (missing stats)  ·                                       ·
+ │                   table                t9                 ·                                       ·
+ │                   set                  a                  ·                                       ·
+ │                   auto commit          ·                  ·                                       ·
+ └── project         ·                    ·                  (a, b, c, d, e, a_new, check1, check2)  ·
+      └── render     ·                    ·                  (check1, check2, a_new, a, b, c, d, e)  ·
+           │         estimated row count  1 (missing stats)  ·                                       ·
+           │         render 0             b < 2              ·                                       ·
+           │         render 1             d IS NULL          ·                                       ·
+           │         render 2             2                  ·                                       ·
+           │         render 3             a                  ·                                       ·
+           │         render 4             b                  ·                                       ·
+           │         render 5             c                  ·                                       ·
+           │         render 6             d                  ·                                       ·
+           │         render 7             e                  ·                                       ·
+           └── scan  ·                    ·                  (a, b, c, d, e)                         ·
+·                    estimated row count  1 (missing stats)  ·                                       ·
+·                    table                t9@primary         ·                                       ·
+·                    spans                /5-/5/#            ·                                       ·
+·                    locking strength     for update         ·                                       ·
