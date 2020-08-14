@@ -3743,23 +3743,25 @@ func TestConnectionClass(t *testing.T) {
 			},
 		}}, nil, nil
 	})
-	// Verify that the request carries the class we expect it to for its span.
-	verifyClass := func(class rpc.ConnectionClass, args roachpb.BatchRequest) {
-		span, err := keys.Range(args.Requests)
-		if assert.Nil(t, err) {
-			assert.Equalf(t, rpc.ConnectionClassForKey(span.Key), class,
-				"unexpected class for span key %v", span.Key)
-		}
-	}
 	var testFn simpleSendFn = func(
 		_ context.Context,
 		opts SendOptions,
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
-		verifyClass(opts.class, args)
 		return args.CreateReply(), nil
 	}
+
+	// class will capture the connection class used for the last transport
+	// created.
+	var class rpc.ConnectionClass
+	var transportFactory TransportFactory = func(
+		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+	) (Transport, error) {
+		class = opts.class
+		return adaptSimpleTransport(testFn)(opts, dialer, replicas)
+	}
+
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
@@ -3769,7 +3771,7 @@ func TestConnectionClass(t *testing.T) {
 		NodeDescs:  g,
 		RPCContext: rpcContext,
 		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: adaptSimpleTransport(testFn),
+			TransportFactory: transportFactory,
 		},
 		NodeDialer: nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 		RPCRetryOptions: &retry.Options{
@@ -3794,8 +3796,14 @@ func TestConnectionClass(t *testing.T) {
 					Key: key,
 				},
 			})
-			_, err := ds.Send(context.Background(), ba)
-			require.Nil(t, err)
+			_, pErr := ds.Send(context.Background(), ba)
+			require.Nil(t, pErr)
+
+			// Verify that the request carries the class we expect it to for its span.
+			span, err := keys.Range(ba.Requests)
+			require.NoError(t, err)
+			require.Equalf(t, rpc.ConnectionClassForKey(span.Key), class,
+				"unexpected class for span key %v", span.Key)
 		})
 	}
 }
