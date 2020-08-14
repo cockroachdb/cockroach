@@ -1577,7 +1577,7 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 		return &roachpb.NodeUnavailableError{}
 	case <-ctx.Done():
 		// Happens when the client request is canceled.
-		return errors.Wrap(ctx.Err(), "aborted in distSender")
+		return errors.Wrap(ctx.Err(), "aborted in DistSender")
 	default:
 	}
 	return nil
