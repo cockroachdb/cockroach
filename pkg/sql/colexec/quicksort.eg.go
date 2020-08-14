@@ -13,7 +13,9 @@
 
 package colexec
 
-import "context"
+import (
+	"context"
+)
 
 // This file is copied from the the Go standard library's sort
 // implementation, found in https://golang.org/src/sort/sort.go. The only

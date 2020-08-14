@@ -1853,3 +1853,17 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
+
+# XXX: Bazel shorthands
+bazel-clean:
+	@echo '=== Cleaning out *.bazel (generated build files)'
+	@find . -name '*.bazel' -not -path './.git/*' -not -path './BUILD.bazel' -not -path './c-deps/*' -not -path './vendor/*' -delete
+	@git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null # Reset c-dep changes (some already use bazel), and vendor changes
+	@echo '=== SUCCESS'
+
+bazel-generate:
+	@echo '=== Generating BUILD.bazel and dep file using bazelle'
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=dependencies.bzl%go_deps
+	@bazel run //:gazelle
+	# @git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null # Reset c-dep changes (some already use bazel), and vendor changes
+	@echo '=== SUCCESS'

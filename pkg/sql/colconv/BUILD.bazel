@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# TODO(irfansharif): The dependency tree for vec_to_datum.eg.go needs
+# sorting out. It depends on execgen+templates from elsewhere.
+
+# keep
+go_library(
+    name = "colconv",
+    srcs = ["vec_to_datum.eg.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colconv",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/col/typeconv",
+        "//pkg/sql/colexecbase/colexecerror",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/timeutil/pgdate",
+        "//pkg/util/uuid",
+        "//vendor/github.com/lib/pq/oid",
+    ],
+)

@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "diagnosticspb",
+    srcs = [
+        "diagnostics.go",
+        "diagnostics.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/config/zonepb",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/envutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+    ],
+)
+
+go_test(
+    name = "diagnosticspb_test",
+    srcs = ["dep_test.go"],
+    embed = [":diagnosticspb"],
+    deps = [
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+    ],
+)

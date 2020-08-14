@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "colencoding",
+    srcs = [
+        "key_encoding.go",
+        "value_encoding.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colencoding",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/duration",
+        "//pkg/util/encoding",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "colencoding_test",
+    srcs = ["value_encoding_test.go"],
+    embed = [":colencoding"],
+    deps = [
+        "//pkg/col/coldata",
+        "//pkg/col/coldataext",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/encoding",
+        "//pkg/util/randutil",
+    ],
+)

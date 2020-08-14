@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "leasemanager",
+    srcs = [
+        "lease.go",
+        "lease.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)
+
+go_test(
+    name = "leasemanager_test",
+    srcs = [
+        "lease_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":leasemanager",
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

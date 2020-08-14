@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "codeowners",
+    srcs = ["codeowners.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/codeowners",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/internal/gopath",
+        "//pkg/internal/team",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/zabawaba99/go-gitignore",
+    ],
+)
+
+go_test(
+    name = "codeowners_test",
+    srcs = ["codeowners_test.go"],
+    embed = [":codeowners"],
+    deps = [
+        "//pkg/internal/team",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

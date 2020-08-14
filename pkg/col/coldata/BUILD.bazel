@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "coldata",
+    # TODO(irfansharif): The dependency tree for vec.eg.go need fleshing out.
+    # It's generated using execgen+templates, from another package.
+    srcs = [
+        "batch.go",
+        "bytes.go",
+        "datum_vec.go",
+        "native_types.go",
+        "nulls.go",
+        "testutils.go",
+        "vec.eg.go",  # keep
+        "vec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/typeconv",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/duration",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)
+
+go_test(
+    name = "coldata_test",
+    srcs = [
+        "batch_test.go",
+        "bytes_test.go",
+        "dep_test.go",
+        "main_test.go",
+        "nulls_test.go",
+        "vec_test.go",
+    ],
+    embed = [":coldata"],
+    deps = [
+        "//pkg/col/coldatatestutils",
+        "//pkg/sql/types",
+        "//pkg/testutils/buildutil",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

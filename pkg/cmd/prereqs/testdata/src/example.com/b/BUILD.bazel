@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "b",
+    srcs = ["b.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/prereqs/testdata/src/example.com/b",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/prereqs/testdata/src/example.com/b/vendor/foo.com/bar",
+        "//pkg/cmd/prereqs/testdata/src/example.com/vendor/foo.com/foo",
+    ],
+)

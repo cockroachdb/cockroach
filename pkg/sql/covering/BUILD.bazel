@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "covering",
+    srcs = ["overlap_merge.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/covering",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "covering_test",
+    srcs = [
+        "bench_test.go",
+        "main_test.go",
+        "overlap_merge_test.go",
+    ],
+    embed = [":covering"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

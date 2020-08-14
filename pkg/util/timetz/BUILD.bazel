@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "timetz",
+    srcs = ["timetz.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timetz",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/timeofday",
+        "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
+    ],
+)
+
+go_test(
+    name = "timetz_test",
+    srcs = ["timetz_test.go"],
+    embed = [":timetz"],
+    deps = [
+        "//pkg/util/timeofday",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/stretchr/testify/assert",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

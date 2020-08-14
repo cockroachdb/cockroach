@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gcjobnotifier",
+    srcs = ["notifier.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/gossip",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "gcjobnotifier_test",
+    srcs = ["notifier_test.go"],
+    embed = [":gcjobnotifier"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

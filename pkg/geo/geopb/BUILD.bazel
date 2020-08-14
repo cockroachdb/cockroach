@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geopb",
+    srcs = [
+        "geopb.go",
+        "geopb.pb.go",
+        "types.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geopb",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/gogo/protobuf/proto"],
+)

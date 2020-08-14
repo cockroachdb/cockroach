@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "extract",
+    srcs = [
+        "extract.go",
+        "xhtml.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/internal/rsg/yacc",
+        "//pkg/util/httputil",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/PuerkitoBio/goquery",
+        "//vendor/golang.org/x/net/html",
+    ],
+)
+
+go_test(
+    name = "extract_test",
+    srcs = ["extract_test.go"],
+    embed = [":extract"],
+)

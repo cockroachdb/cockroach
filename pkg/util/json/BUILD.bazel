@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "json",
+    srcs = [
+        "contains.go",
+        "contains_testers.go",
+        "encode.go",
+        "encoded.go",
+        "iterator.go",
+        "jentry.go",
+        "json.go",
+        "random.go",
+        "tables.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/json",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo",
+        "//pkg/geo/geopb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/encoding",
+        "//pkg/util/syncutil",
+        "//pkg/util/unique",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "json_test",
+    srcs = [
+        "encode_test.go",
+        "json_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":json"],
+    deps = [
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/encoding",
+        "//pkg/util/timeutil",
+        "//pkg/util/unique",
+        "//vendor/github.com/cockroachdb/apd/v2:apd",
+    ],
+)

@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testcat",
+    srcs = [
+        "alter_table.go",
+        "create_index.go",
+        "create_sequence.go",
+        "create_table.go",
+        "create_view.go",
+        "drop_index.go",
+        "drop_table.go",
+        "set_zone_config.go",
+        "test_catalog.go",
+        "vtable.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/geo/geoindex",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/parser",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/stats",
+        "//pkg/sql/types",
+        "//pkg/sql/vtable",
+        "//pkg/util",
+        "//pkg/util/treeprinter",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/lib/pq/oid",
+        "//vendor/gopkg.in/yaml.v2:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "testcat_test",
+    srcs = ["test_catalog_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":testcat",
+        "//pkg/sql/opt/testutils/opttester",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/cockroachdb/datadriven",
+    ],
+)

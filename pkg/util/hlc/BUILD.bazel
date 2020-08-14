@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "hlc",
+    srcs = [
+        "hlc.go",
+        "hlc_clock_device_linux.go",
+        "hlc_clock_device_stub.go",
+        "legacy_timestamp.pb.go",
+        "timestamp.go",
+        "timestamp.pb.go",
+    ],
+    cgo = True,
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/hlc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)
+
+go_test(
+    name = "hlc_test",
+    srcs = [
+        "hlc_test.go",
+        "timestamp_test.go",
+    ],
+    embed = [":hlc"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/assert",
+    ],
+)

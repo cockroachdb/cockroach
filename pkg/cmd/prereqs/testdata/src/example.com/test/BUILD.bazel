@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "test_test",
+    srcs = [
+        "external_test.go",
+        "internal_test.go",
+    ],
+    deps = [
+        "//pkg/cmd/prereqs/testdata/src/example.com/vendor/foo.com/baz",
+        "//pkg/cmd/prereqs/testdata/src/example.com/vendor/foo.com/foo",
+    ],
+)

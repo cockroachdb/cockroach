@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "blobspb",
+    srcs = ["blobs.pb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/blobs/blobspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/google.golang.org/grpc",
+    ],
+)

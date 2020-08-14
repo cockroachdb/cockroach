@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = [
+        "keys.go",
+        "provider.go",
+        "system.go",
+        "system.pb.go",
+        "system_mask.go",
+        "testutil.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = [
+        "keys_test.go",
+        "main_test.go",
+        "system_test.go",
+    ],
+    deps = [
+        ":config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils",
+        "//pkg/util/encoding",
+        "//pkg/util/leaktest",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

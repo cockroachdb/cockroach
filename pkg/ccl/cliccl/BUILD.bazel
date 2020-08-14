@@ -1,0 +1,56 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cliccl",
+    srcs = [
+        "cliccl.go",
+        "debug.go",
+        "demo.go",
+        "load.go",
+        "mtproxy.go",
+        "start.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cliccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/blobs",
+        "//pkg/build",
+        "//pkg/ccl/backupccl",
+        "//pkg/ccl/baseccl",
+        "//pkg/ccl/cliccl/cliflagsccl",
+        "//pkg/ccl/sqlproxyccl",
+        "//pkg/ccl/storageccl/engineccl/enginepbccl",
+        "//pkg/ccl/workloadccl/cliccl",
+        "//pkg/cli",
+        "//pkg/security",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/storage/cloud",
+        "//pkg/storage/cloudimpl",
+        "//pkg/storage/enginepb",
+        "//pkg/util/envutil",
+        "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/cmux",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/spf13/cobra",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)
+
+go_test(
+    name = "cliccl_test",
+    srcs = ["main_test.go"],
+    deps = [
+        "//pkg/build",
+        "//pkg/ccl/utilccl",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+    ],
+)

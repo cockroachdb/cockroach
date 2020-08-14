@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "compactor",
+    srcs = [
+        "compactor.go",
+        "metrics.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/compactor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/protoutil",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+    ],
+)
+
+go_test(
+    name = "compactor_test",
+    srcs = ["compactor_test.go"],
+    embed = [":compactor"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)

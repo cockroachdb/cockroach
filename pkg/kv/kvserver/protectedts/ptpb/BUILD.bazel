@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ptpb",
+    srcs = ["protectedts.pb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "//vendor/github.com/gogo/protobuf/proto",
+    ],
+)

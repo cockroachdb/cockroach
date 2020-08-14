@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "slinstance",
+    srcs = ["slinstance.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/retry",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "slinstance_test",
+    srcs = [
+        "helpers_test.go",
+        "slinstance_test.go",
+    ],
+    embed = [":slinstance"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

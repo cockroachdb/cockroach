@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tscache",
+    srcs = [
+        "cache.go",
+        "interval_skl.go",
+        "metrics.go",
+        "skl_impl.go",
+        "tree_impl.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util",
+        "//pkg/util/cache",
+        "//pkg/util/envutil",
+        "//pkg/util/hlc",
+        "//pkg/util/interval",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/andy-kimball/arenaskl",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "tscache_test",
+    srcs = [
+        "cache_test.go",
+        "interval_skl_test.go",
+        "tree_impl_test.go",
+    ],
+    embed = [":tscache"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "//vendor/github.com/andy-kimball/arenaskl",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/stretchr/testify/require",
+        "//vendor/golang.org/x/sync/errgroup",
+    ],
+)

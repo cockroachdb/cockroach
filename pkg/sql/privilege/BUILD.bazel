@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "privilege",
+    srcs = [
+        "kind_string.go",
+        "privilege.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//vendor/github.com/cockroachdb/errors",
+    ],
+)
+
+go_test(
+    name = "privilege_test",
+    srcs = [
+        "main_test.go",
+        "privilege_test.go",
+    ],
+    deps = [
+        ":privilege",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+    ],
+)

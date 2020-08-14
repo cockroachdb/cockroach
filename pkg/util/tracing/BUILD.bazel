@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tracing",
+    srcs = [
+        "annotate.go",
+        "annotate_nocgo.go",
+        "recorded_span.go",
+        "recorded_span.pb.go",
+        "shadow.go",
+        "tags.go",
+        "test_utils.go",
+        "tracer.go",
+        "tracer_span.go",
+    ],
+    cgo = True,
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util",
+        "//pkg/util/caller",
+        "//pkg/util/envutil",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/gogo/protobuf/proto",
+        "//vendor/github.com/gogo/protobuf/sortkeys",
+        "//vendor/github.com/gogo/protobuf/types",
+        "//vendor/github.com/jaegertracing/jaeger/model/json",
+        "//vendor/github.com/lightstep/lightstep-tracer-go",
+        "//vendor/github.com/opentracing/opentracing-go",
+        "//vendor/github.com/opentracing/opentracing-go/log",
+        "//vendor/github.com/openzipkin-contrib/zipkin-go-opentracing",
+        "//vendor/golang.org/x/net/trace",
+    ],
+)
+
+go_test(
+    name = "tracing_test",
+    srcs = [
+        "helpers_test.go",
+        "tags_test.go",
+        "tracer_span_test.go",
+        "tracer_test.go",
+    ],
+    embed = [":tracing"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/cockroachdb/logtags",
+        "//vendor/github.com/lightstep/lightstep-tracer-go",
+        "//vendor/github.com/opentracing/opentracing-go",
+        "//vendor/github.com/opentracing/opentracing-go/log",
+        "//vendor/github.com/stretchr/testify/require",
+    ],
+)

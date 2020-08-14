@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cat",
+    srcs = [
+        "catalog.go",
+        "column.go",
+        "data_source.go",
+        "family.go",
+        "index.go",
+        "object.go",
+        "schema.go",
+        "sequence.go",
+        "table.go",
+        "utils.go",
+        "view.go",
+        "zone.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/cat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geoindex",
+        "//pkg/roachpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/treeprinter",
+        "//vendor/github.com/cockroachdb/errors",
+        "//vendor/github.com/lib/pq/oid",
+    ],
+)
+
+go_test(
+    name = "cat_test",
+    srcs = ["utils_test.go"],
+    deps = [
+        ":cat",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/tree",
+    ],
+)

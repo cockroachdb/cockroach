@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ddl_analysis",
+    srcs = ["ddl_analysis_bench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/bench/ddl_analysis",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/kvcoord",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//vendor/github.com/opentracing/opentracing-go",
+    ],
+)
+
+go_test(
+    name = "ddl_analysis_test",
+    srcs = [
+        "alter_table_bench_test.go",
+        "bench_test.go",
+        "create_alter_role_bench_test.go",
+        "drop_bench_test.go",
+        "grant_revoke_bench_test.go",
+        "grant_revoke_role_bench_test.go",
+        "truncate_bench_test.go",
+    ],
+    embed = [":ddl_analysis"],
+    deps = [
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/randutil",
+    ],
+)
