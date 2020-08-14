@@ -15,6 +15,7 @@ stmt ::=
 	| revoke_stmt
 	| savepoint_stmt
 	| release_stmt
+	| refresh_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
@@ -86,6 +87,9 @@ savepoint_stmt ::=
 
 release_stmt ::=
 	'RELEASE' savepoint_name
+
+refresh_stmt ::=
+	'REFRESH' 'MATERIALIZED' 'VIEW' view_name
 
 nonpreparable_set_stmt ::=
 	set_transaction_stmt
@@ -285,6 +289,9 @@ prep_type_clause ::=
 savepoint_name ::=
 	'SAVEPOINT' name
 	| name
+
+view_name ::=
+	table_name
 
 set_transaction_stmt ::=
 	'SET' 'TRANSACTION' transaction_mode_list
@@ -871,6 +878,7 @@ unreserved_keyword ::=
 	| 'RECURRING'
 	| 'RECURSIVE'
 	| 'REF'
+	| 'REFRESH'
 	| 'REINDEX'
 	| 'RELEASE'
 	| 'RENAME'
@@ -1160,6 +1168,7 @@ create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list 'AS' select_stmt
 	| 'CREATE' opt_temp 'VIEW' 'IF' 'NOT' 'EXISTS' view_name opt_column_list 'AS' select_stmt
+	| 'CREATE' 'MATERIALIZED' 'VIEW' view_name opt_column_list 'AS' select_stmt
 
 create_sequence_stmt ::=
 	'CREATE' opt_temp 'SEQUENCE' sequence_name opt_sequence_option_list
@@ -1634,9 +1643,6 @@ opt_temp ::=
 	'TEMPORARY'
 	| 'TEMP'
 	| 
-
-view_name ::=
-	table_name
 
 sequence_name ::=
 	db_object_name

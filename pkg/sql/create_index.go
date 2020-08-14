@@ -62,10 +62,25 @@ func (a *indexStorageParamObserver) apply(
 //          mysql requires INDEX on the table.
 func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(
-		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableDesc,
+		ctx, &n.Table, true /*required*/, tree.ResolveRequireTableOrViewDesc,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if tableDesc.IsView() && !tableDesc.MaterializedView() {
+		return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a table or materialized view", tableDesc.Name)
+	}
+
+	if tableDesc.MaterializedView() {
+		if n.Interleave != nil {
+			return nil, pgerror.New(pgcode.InvalidObjectDefinition,
+				"cannot create interleaved index on materialized view")
+		}
+		if n.Sharded != nil {
+			return nil, pgerror.New(pgcode.InvalidObjectDefinition,
+				"cannot create hash sharded index on materialized view")
+		}
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {

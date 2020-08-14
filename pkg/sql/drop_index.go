@@ -87,7 +87,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
 		tableDesc, err := params.p.ResolveMutableTableDescriptor(
-			ctx, index.tn, true /*required*/, tree.ResolveRequireTableDesc)
+			ctx, index.tn, true /*required*/, tree.ResolveRequireTableOrViewDesc)
 		if sqlbase.IsUndefinedRelationError(err) {
 			// Somehow the descriptor we had during planning is not there
 			// any more.
@@ -97,6 +97,10 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		}
 		if err != nil {
 			return err
+		}
+
+		if tableDesc.IsView() && !tableDesc.MaterializedView() {
+			return pgerror.Newf(pgcode.WrongObjectType, "%q is not a table or materialized view", tableDesc.Name)
 		}
 
 		// If we couldn't find the index by name, this is either a legitimate error or

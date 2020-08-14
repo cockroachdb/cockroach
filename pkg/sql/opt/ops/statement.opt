@@ -41,6 +41,7 @@ define CreateViewPrivate {
     Persistence Persistence
     IfNotExists bool
     Replace bool
+    Materialized bool
 
     # ViewQuery contains the query for the view; data sources are always fully
     # qualified.

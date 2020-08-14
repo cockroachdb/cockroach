@@ -197,34 +197,41 @@ func (e errTableVersionMismatch) Error() string {
 	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
 }
 
-// maybe backfill a created table by executing the AS query. Return nil if
-// successfully backfilled.
-//
-// Note that this does not connect to the tracing settings of the
-// surrounding SQL transaction. This should be OK as (at the time of
-// this writing) this code path is only used for standalone CREATE
-// TABLE AS statements, which cannot be traced.
-func (sc *SchemaChanger) maybeBackfillCreateTableAs(
-	ctx context.Context, table *sqlbase.ImmutableTableDescriptor,
+// refreshMaterializedView updates the physical data for a materialized view.
+func (sc *SchemaChanger) refreshMaterializedView(
+	ctx context.Context,
+	table *sqlbase.MutableTableDescriptor,
+	refresh *descpb.MaterializedViewRefresh,
 ) error {
-	if !(table.Adding() && table.IsAs()) {
-		return nil
-	}
-	log.Info(ctx, "starting backfill for CREATE TABLE AS")
+	// The data for the materialized view is stored under the current set of
+	// indexes in table. We want to keep all of that data untouched, and write
+	// out all the data into the new set of indexes denoted by refresh. So, just
+	// perform some surgery on the input table to denote it as having the desired
+	// set of indexes. We then backfill into this modified table, which writes
+	// data only to the new desired indexes. In SchemaChanger.done(), we'll swap
+	// the indexes from the old versions into the new ones.
+	tableToRefresh := protoutil.Clone(table.TableDesc()).(*descpb.TableDescriptor)
+	tableToRefresh.PrimaryIndex = refresh.NewPrimaryIndex
+	tableToRefresh.Indexes = refresh.NewIndexes
+	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.ViewQuery, refresh.AsOf, "refreshView")
+}
 
+func (sc *SchemaChanger) backfillQueryIntoTable(
+	ctx context.Context, table *descpb.TableDescriptor, query string, ts hlc.Timestamp, desc string,
+) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		txn.SetFixedTimestamp(ctx, table.CreateAsOfTime)
+		txn.SetFixedTimestamp(ctx, ts)
 
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
-		p, cleanup := NewInternalPlanner("ctasBackfill", txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
+		p, cleanup := NewInternalPlanner(desc, txn, security.RootUser, &MemoryMetrics{}, sc.execCfg)
 		defer cleanup()
 		localPlanner := p.(*planner)
 		// TODO (rohany): This is a hack and should be removed once #51865 lands.
 		// In case we used this planner to access any descriptors, we need to
 		// release any leases we might have acquired during planning and execution.
 		defer func() { localPlanner.Descriptors().ReleaseAll(ctx) }()
-		stmt, err := parser.ParseOne(table.CreateQuery)
+		stmt, err := parser.ParseOne(query)
 		if err != nil {
 			return err
 		}
@@ -293,7 +300,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 
 			isLocal := !willDistribute
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
-				Table: *table.TableDesc(),
+				Table: *table,
 			}}
 
 			PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
@@ -308,6 +315,35 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 
 		return planAndRunErr
 	})
+}
+
+// maybe backfill a created table by executing the AS query. Return nil if
+// successfully backfilled.
+//
+// Note that this does not connect to the tracing settings of the
+// surrounding SQL transaction. This should be OK as (at the time of
+// this writing) this code path is only used for standalone CREATE
+// TABLE AS statements, which cannot be traced.
+func (sc *SchemaChanger) maybeBackfillCreateTableAs(
+	ctx context.Context, table *sqlbase.ImmutableTableDescriptor,
+) error {
+	if !(table.Adding() && table.IsAs()) {
+		return nil
+	}
+	log.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.CreateQuery)
+
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.CreateQuery, table.CreateAsOfTime, "ctasBackfill")
+}
+
+func (sc *SchemaChanger) maybeBackfillMaterializedView(
+	ctx context.Context, table *sqlbase.ImmutableTableDescriptor,
+) error {
+	if !(table.Adding() && table.MaterializedView()) {
+		return nil
+	}
+	log.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.ViewQuery)
+
+	return sc.backfillQueryIntoTable(ctx, table.TableDesc(), table.ViewQuery, table.CreateAsOfTime, "materializedViewBackfill")
 }
 
 // maybe make a table PUBLIC if it's in the ADD state.
@@ -571,6 +607,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		return err
 	}
 
+	if err := sc.maybeBackfillMaterializedView(ctx, tableDesc); err != nil {
+		return err
+	}
+
 	if err := sc.maybeMakeAddTablePublic(ctx, tableDesc); err != nil {
 		return err
 	}
@@ -797,6 +837,29 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	return WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
 }
 
+func (sc *SchemaChanger) createIndexGCJob(
+	ctx context.Context, index *descpb.IndexDescriptor, txn *kv.Txn, jobDesc string,
+) (*jobs.StartableJob, error) {
+	dropTime := timeutil.Now().UnixNano()
+	indexGCDetails := jobspb.SchemaChangeGCDetails{
+		Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
+			{
+				IndexID:  index.ID,
+				DropTime: dropTime,
+			},
+		},
+		ParentID: sc.descID,
+	}
+
+	gcJobRecord := CreateGCJobRecord(jobDesc, sc.job.Payload().Username, indexGCDetails)
+	indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+	if err != nil {
+		return nil, err
+	}
+	log.VEventf(ctx, 2, "created index GC job %d", *indexGCJob.ID())
+	return indexGCJob, nil
+}
+
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
 // version of the descriptor.
 func WaitToUpdateLeases(ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID) error {
@@ -929,28 +992,16 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							IndexID: indexDesc.ID,
 						})
 
-					dropTime := timeutil.Now().UnixNano()
-					indexGCDetails := jobspb.SchemaChangeGCDetails{
-						Indexes: []jobspb.SchemaChangeGCDetails_DroppedIndex{
-							{
-								IndexID:  indexDesc.ID,
-								DropTime: dropTime,
-							},
-						},
-						ParentID: sc.descID,
-					}
-
 					description := sc.job.Payload().Description
 					if isRollback {
 						description = "ROLLBACK of " + description
 					}
-					gcJobRecord := CreateGCJobRecord(description, sc.job.Payload().Username, indexGCDetails)
-					indexGCJob, err := sc.jobRegistry.CreateStartableJobWithTxn(ctx, gcJobRecord, txn, nil /* resultsCh */)
+
+					childJob, err := sc.createIndexGCJob(ctx, indexDesc, txn, description)
 					if err != nil {
 						return err
 					}
-					log.VEventf(ctx, 2, "created index GC job %d", *indexGCJob.ID())
-					childJobs = append(childJobs, indexGCJob)
+					childJobs = append(childJobs, childJob)
 				}
 			}
 			if constraint := mutation.GetConstraint(); constraint != nil &&
@@ -977,6 +1028,52 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if err := maybeUpdateZoneConfigsForPKChange(
 					ctx, txn, sc.execCfg, scTable, pkSwap); err != nil {
 					return err
+				}
+			}
+
+			// If we are refreshing a materialized view, then create GC jobs for all
+			// of the existing indexes in the view. We do this before the call to
+			// MakeMutationComplete, which swaps out the existing indexes for the
+			// backfilled ones.
+			if refresh := mutation.GetMaterializedViewRefresh(); refresh != nil {
+				if fn := sc.testingKnobs.RunBeforeMaterializedViewRefreshCommit; fn != nil {
+					if err := fn(); err != nil {
+						return err
+					}
+				}
+				// If we are mutation is in the ADD state, then start GC jobs for the
+				// existing indexes on the table.
+				if mutation.Direction == descpb.DescriptorMutation_ADD {
+					desc := fmt.Sprintf("REFRESH MATERIALIZED VIEW %q cleanup", scTable.Name)
+					pkJob, err := sc.createIndexGCJob(ctx, &scTable.PrimaryIndex, txn, desc)
+					if err != nil {
+						return err
+					}
+					childJobs = append(childJobs, pkJob)
+					for i := range scTable.Indexes {
+						idxJob, err := sc.createIndexGCJob(ctx, &scTable.Indexes[i], txn, desc)
+						if err != nil {
+							return err
+						}
+						childJobs = append(childJobs, idxJob)
+					}
+				} else if mutation.Direction == descpb.DescriptorMutation_DROP {
+					// Otherwise, the refresh job ran into an error and is being rolled
+					// back. So, we need to GC all of the indexes that were going to be
+					// created, in case any data was written to them.
+					desc := fmt.Sprintf("ROLLBACK OF REFRESH MATERIALIZED VIEW %q", scTable.Name)
+					pkJob, err := sc.createIndexGCJob(ctx, &refresh.NewPrimaryIndex, txn, desc)
+					if err != nil {
+						return err
+					}
+					childJobs = append(childJobs, pkJob)
+					for i := range refresh.NewIndexes {
+						idxJob, err := sc.createIndexGCJob(ctx, &refresh.NewIndexes[i], txn, desc)
+						if err != nil {
+							return err
+						}
+						childJobs = append(childJobs, idxJob)
+					}
 				}
 			}
 
@@ -1528,9 +1625,12 @@ func (sc *SchemaChanger) reverseMutation(
 		if col := mutation.GetColumn(); col != nil {
 			columns[col.Name] = struct{}{}
 		}
-		// PrimaryKeySwap and ComputedColumnSwap don't have a concept of the state machine.
-		if pkSwap, computedColumnsSwap :=
-			mutation.GetPrimaryKeySwap(), mutation.GetComputedColumnSwap(); pkSwap != nil || computedColumnsSwap != nil {
+		// PrimaryKeySwap, ComputedColumnSwap and MaterializedViewRefresh don't
+		// have a concept of the state machine.
+		if pkSwap, computedColumnsSwap, refresh :=
+			mutation.GetPrimaryKeySwap(),
+			mutation.GetComputedColumnSwap(),
+			mutation.GetMaterializedViewRefresh(); pkSwap != nil || computedColumnsSwap != nil || refresh != nil {
 			return mutation, columns
 		}
 
@@ -1601,6 +1701,10 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
 	RunBeforeIndexBackfill func()
+
+	// RunBeforeMaterializedViewRefreshCommit is called before committing a
+	// materialized view refresh.
+	RunBeforeMaterializedViewRefreshCommit func() error
 
 	// RunBeforePrimaryKeySwap is called just before the primary key swap is committed.
 	RunBeforePrimaryKeySwap func()

@@ -526,6 +526,9 @@ statement ok
 CREATE VIEW view_test AS SELECT k, v FROM tbl_test ORDER BY v
 
 statement ok
+CREATE MATERIALIZED VIEW mv_test AS SELECT 1
+
+statement ok
 CREATE SEQUENCE seq_test
 
 query TT
@@ -535,6 +538,8 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY relname
 ----
+mv_test         m
+primary         i
 primary         i
 seq_test        S
 tbl_test        r
@@ -953,11 +958,11 @@ CREATE TYPE newtype2 AS ENUM ('v3', 'v4')
 query OORT colnames
 SELECT * FROM pg_enum
 ----
-oid  enumtypid  enumsortorder  enumlabel
-1043025669  100063  0  v1
-1043025861  100063  1  v2
-1881906619  100065  0  v3
-1881906555  100065  1  v4
+oid         enumtypid  enumsortorder  enumlabel
+1865129000  100064     0              v1
+1865129192  100064     1              v2
+1898684366  100066     0              v3
+1898684174  100066     1              v4
 
 ## pg_catalog.pg_type
 
@@ -1040,10 +1045,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 90001   _geometry      1307062959    NULL      -1      false     b
 90002   geography      1307062959    NULL      -1      false     b
 90003   _geography     1307062959    NULL      -1      false     b
-100063  newtype1       2332901747    NULL      -1      false     e
-100064  _newtype1      2332901747    NULL      -1      false     b
-100065  newtype2       2332901747    NULL      -1      false     e
-100066  _newtype2      2332901747    NULL      -1      false     b
+100064  newtype1       2332901747    NULL      -1      false     e
+100065  _newtype1      2332901747    NULL      -1      false     b
+100066  newtype2       2332901747    NULL      -1      false     e
+100067  _newtype2      2332901747    NULL      -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1124,10 +1129,10 @@ oid     typname        typcategory  typispreferred  typisdefined  typdelim  typr
 90001   _geometry      A            false           true          ,         0         90000    0
 90002   geography      U            false           true          ,         0         0        90003
 90003   _geography     A            false           true          ,         0         90002    0
-100063  newtype1       E            false           true          ,         0         0        100064
-100064  _newtype1      A            false           true          ,         0         100063   0
-100065  newtype2       E            false           true          ,         0         0        100066
-100066  _newtype2      A            false           true          ,         0         100065   0
+100064  newtype1       E            false           true          ,         0         0        100065
+100065  _newtype1      A            false           true          ,         0         100064   0
+100066  newtype2       E            false           true          ,         0         0        100067
+100067  _newtype2      A            false           true          ,         0         100066   0
 
 query OTOOOOOOO colnames
 SELECT oid, typname, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze
@@ -1208,10 +1213,10 @@ oid     typname        typinput        typoutput        typreceive        typsen
 90001   _geometry      array_in        array_out        array_recv        array_send        0         0          0
 90002   geography      geography_in    geography_out    geography_recv    geography_send    0         0          0
 90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
-100063  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100064  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
-100065  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
-100066  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
+100064  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100065  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
+100066  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
+100067  _newtype2      array_in        array_out        array_recv        array_send        0         0          0
 
 query OTTTBOI colnames
 SELECT oid, typname, typalign, typstorage, typnotnull, typbasetype, typtypmod
@@ -1292,10 +1297,10 @@ oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 90001   _geometry      NULL      NULL        false       0            -1
 90002   geography      NULL      NULL        false       0            -1
 90003   _geography     NULL      NULL        false       0            -1
-100063  newtype1       NULL      NULL        false       0            -1
-100064  _newtype1      NULL      NULL        false       0            -1
-100065  newtype2       NULL      NULL        false       0            -1
-100066  _newtype2      NULL      NULL        false       0            -1
+100064  newtype1       NULL      NULL        false       0            -1
+100065  _newtype1      NULL      NULL        false       0            -1
+100066  newtype2       NULL      NULL        false       0            -1
+100067  _newtype2      NULL      NULL        false       0            -1
 
 query OTIOTTT colnames
 SELECT oid, typname, typndims, typcollation, typdefaultbin, typdefault, typacl
@@ -1376,10 +1381,10 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90001   _geometry      0         0             NULL           NULL        NULL
 90002   geography      0         0             NULL           NULL        NULL
 90003   _geography     0         0             NULL           NULL        NULL
-100063  newtype1       0         0             NULL           NULL        NULL
-100064  _newtype1      0         0             NULL           NULL        NULL
-100065  newtype2       0         0             NULL           NULL        NULL
-100066  _newtype2      0         0             NULL           NULL        NULL
+100064  newtype1       0         0             NULL           NULL        NULL
+100065  _newtype1      0         0             NULL           NULL        NULL
+100066  newtype2       0         0             NULL           NULL        NULL
+100067  _newtype2      0         0             NULL           NULL        NULL
 
 user testuser
 
@@ -1405,10 +1410,10 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
-WHERE oid = 100063
+WHERE oid = 100064
 ----
 oid     typname   typnamespace  typowner  typlen  typbyval  typtype
-100063  newtype1  2332901747    NULL      -1      false     e
+100064  newtype1  2332901747    NULL      -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -1985,8 +1990,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid  seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-68        20        1         1             9223372036854775807  1       1         false
-69        20        6         2             10                   5       1         false
+69        20        1         1             9223372036854775807  1       1         false
+70        20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
@@ -2439,7 +2444,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query TTTTTT
 select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
-1962521914  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
+1702785641  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -2488,7 +2493,7 @@ statement ok
 CREATE TABLE t(x INT DEFAULT 1, y INT DEFAULT 1);
 
 query I
-SELECT adnum FROM pg_attrdef WHERE adrelid = 89
+SELECT adnum FROM pg_attrdef WHERE adrelid = 90
 ----
 1
 2
@@ -2500,7 +2505,7 @@ ALTER TABLE t ADD COLUMN y INT DEFAULT 1;
 
 # Make sure after adding and dropping the same column, the adnum for the re-added column increases.
 query I
-select adnum from pg_attrdef WHERE adrelid = 89
+select adnum from pg_attrdef WHERE adrelid = 90
 ----
 1
 3
@@ -2513,13 +2518,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-90  90  jt
+91  91  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1   NULL  NULL
-90  90    jt
+91  91    jt
 
 subtest regression_49207
 statement ok
