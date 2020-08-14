@@ -97,19 +97,26 @@ func (c *vecToDatumConverter) convertBatchAndDeselect(batch coldata.Batch) {
 // convertBatch converts the selected vectors from the batch *without*
 // performing a deselection step.
 // NOTE: converted columns are "sparse" in regards to the selection vector - if
-// there was a selection vector on the batch, only elements that were selected
-// are converted, but the results are put at position sel[tupleIdx], so use
+// there was a selection vector, only elements that were selected are
+// converted, but the results are put at position sel[tupleIdx], so use
 // getDatumColumn(colIdx)[sel[tupleIdx]] and *NOT*
 // getDatumColumn(colIdx)[tupleIdx].
 func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
+	c.convertVecs(batch.ColVecs(), batch.Length(), batch.Selection())
+}
+
+// convertVecs converts the selected vectors from vecs *without* performing a
+// deselection step.
+// Note that this method is equivalent to convertBatch with the only difference
+// being the fact that it takes in a "disassembled" batch and not coldata.Batch.
+// Consider whether you should be using convertBatch instead.
+func (c *vecToDatumConverter) convertVecs(vecs []coldata.Vec, inputLen int, sel []int) {
 	if len(c.vecIdxsToConvert) == 0 {
 		// No vectors were selected for conversion, so there is nothing to do.
 		return
 	}
-	batchLength := batch.Length()
-	sel := batch.Selection()
 	// Ensure that convertedVecs are of sufficient length.
-	requiredLength := batchLength
+	requiredLength := inputLen
 	if sel != nil {
 		// When sel is non-nil, it might be something like sel = [1023], so we
 		// need to allocate up to the full coldata.BatchSize(), regardless of
@@ -128,10 +135,9 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 			c.convertedVecs[vecIdx] = c.convertedVecs[vecIdx][:requiredLength]
 		}
 	}
-	vecs := batch.ColVecs()
 	for _, vecIdx := range c.vecIdxsToConvert {
 		ColVecToDatum(
-			c.convertedVecs[vecIdx], vecs[vecIdx], batchLength, sel, &c.da,
+			c.convertedVecs[vecIdx], vecs[vecIdx], inputLen, sel, &c.da,
 		)
 	}
 }
