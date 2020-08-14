@@ -1045,6 +1045,8 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 90001   _geometry      1307062959    NULL      -1      false     b
 90002   geography      1307062959    NULL      -1      false     b
 90003   _geography     1307062959    NULL      -1      false     b
+90004   box2d          1307062959    NULL      8       true      b
+90005   _box2d         1307062959    NULL      -1      false     b
 100064  newtype1       2332901747    NULL      -1      false     e
 100065  _newtype1      2332901747    NULL      -1      false     b
 100066  newtype2       2332901747    NULL      -1      false     e
@@ -1129,6 +1131,8 @@ oid     typname        typcategory  typispreferred  typisdefined  typdelim  typr
 90001   _geometry      A            false           true          ,         0         90000    0
 90002   geography      U            false           true          ,         0         0        90003
 90003   _geography     A            false           true          ,         0         90002    0
+90004   box2d          U            false           true          ,         0         0        90005
+90005   _box2d         A            false           true          ,         0         90004    0
 100064  newtype1       E            false           true          ,         0         0        100065
 100065  _newtype1      A            false           true          ,         0         100064   0
 100066  newtype2       E            false           true          ,         0         0        100067
@@ -1213,6 +1217,8 @@ oid     typname        typinput        typoutput        typreceive        typsen
 90001   _geometry      array_in        array_out        array_recv        array_send        0         0          0
 90002   geography      geography_in    geography_out    geography_recv    geography_send    0         0          0
 90003   _geography     array_in        array_out        array_recv        array_send        0         0          0
+90004   box2d          box2d_in        box2d_out        box2d_recv        box2d_send        0         0          0
+90005   _box2d         array_in        array_out        array_recv        array_send        0         0          0
 100064  newtype1       enum_in         enum_out         enum_recv         enum_send         0         0          0
 100065  _newtype1      array_in        array_out        array_recv        array_send        0         0          0
 100066  newtype2       enum_in         enum_out         enum_recv         enum_send         0         0          0
@@ -1297,6 +1303,8 @@ oid     typname        typalign  typstorage  typnotnull  typbasetype  typtypmod
 90001   _geometry      NULL      NULL        false       0            -1
 90002   geography      NULL      NULL        false       0            -1
 90003   _geography     NULL      NULL        false       0            -1
+90004   box2d          NULL      NULL        false       0            -1
+90005   _box2d         NULL      NULL        false       0            -1
 100064  newtype1       NULL      NULL        false       0            -1
 100065  _newtype1      NULL      NULL        false       0            -1
 100066  newtype2       NULL      NULL        false       0            -1
@@ -1381,6 +1389,8 @@ oid     typname        typndims  typcollation  typdefaultbin  typdefault  typacl
 90001   _geometry      0         0             NULL           NULL        NULL
 90002   geography      0         0             NULL           NULL        NULL
 90003   _geography     0         0             NULL           NULL        NULL
+90004   box2d          0         0             NULL           NULL        NULL
+90005   _box2d         0         0             NULL           NULL        NULL
 100064  newtype1       0         0             NULL           NULL        NULL
 100065  _newtype1      0         0             NULL           NULL        NULL
 100066  newtype2       0         0             NULL           NULL        NULL
@@ -2188,6 +2198,7 @@ oid         oprname  aggsortop
 1737252658  >        1737252658
 1737252658  >        1737252658
 1383827510  >        1383827510
+264553706   >        264553706
 2105536758  >        2105536758
 1928531314  >        1928531314
 3421685890  >        3421685890
@@ -2221,6 +2232,7 @@ oid         oprname  aggsortop
 235310192   <        235310192
 235310192   <        235310192
 2011297100  <        2011297100
+3269496816  <        3269496816
 2104629996  <        2104629996
 3942776496  <        3942776496
 4132205728  <        4132205728

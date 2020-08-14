@@ -152,6 +152,11 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
+	case *tree.DBox2D:
+		s := v.Repr()
+		b.putInt32(int32(len(s)))
+		b.write([]byte(s))
+
 	case *tree.DGeography:
 		s := v.Geography.EWKBHex()
 		b.putInt32(int32(len(s)))
@@ -456,6 +461,13 @@ func (b *writeBuffer) writeBinaryDatum(
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc, elem.ResolvedType())
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+
+	case *tree.DBox2D:
+		b.putInt32(32)
+		b.putInt64(int64(math.Float64bits(v.LoX)))
+		b.putInt64(int64(math.Float64bits(v.HiX)))
+		b.putInt64(int64(math.Float64bits(v.LoY)))
+		b.putInt64(int64(math.Float64bits(v.HiY)))
 
 	case *tree.DGeography:
 		b.putInt32(int32(len(v.EWKB())))

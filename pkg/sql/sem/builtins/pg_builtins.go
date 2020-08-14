@@ -71,6 +71,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.VarBit.Oid():      {},
 	types.Geometry.Oid():    {},
 	types.Geography.Oid():   {},
+	types.Box2D.Oid():       {},
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},

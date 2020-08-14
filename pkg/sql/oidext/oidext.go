@@ -32,6 +32,8 @@ const (
 	T__geometry  = oid.Oid(90001)
 	T_geography  = oid.Oid(90002)
 	T__geography = oid.Oid(90003)
+	T_box2d      = oid.Oid(90004)
+	T__box2d     = oid.Oid(90005)
 )
 
 // ExtensionTypeName returns a mapping from extension oids
@@ -41,6 +43,8 @@ var ExtensionTypeName = map[oid.Oid]string{
 	T__geometry:  "_GEOMETRY",
 	T_geography:  "GEOGRAPHY",
 	T__geography: "_GEOGRAPHY",
+	T_box2d:      "BOX2D",
+	T__box2d:     "_BOX2D",
 }
 
 // TypeName checks the name for a given type by first looking up oid.TypeName

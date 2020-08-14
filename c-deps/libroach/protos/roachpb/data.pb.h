@@ -164,6 +164,7 @@ enum ValueType {
   DURATION = 6,
   TIMETZ = 12,
   GEO = 13,
+  BOX2D = 14,
   TUPLE = 10,
   BITARRAY = 11,
   TIMESERIES = 100,
