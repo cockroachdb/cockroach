@@ -9,34 +9,13 @@
 package backupccl_test
 
 import (
-	"bytes"
-	gosql "database/sql"
 	"fmt"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
-
-func bankBuf(numAccounts int) *bytes.Buffer {
-	bankData := bank.FromRows(numAccounts).Tables()[0]
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
-	for rowIdx := 0; rowIdx < bankData.InitialRows.NumBatches; rowIdx++ {
-		for _, row := range bankData.InitialRows.BatchRows(rowIdx) {
-			rowBatch := strings.Join(workloadsql.StringTuple(row), `,`)
-			fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, rowBatch)
-		}
-	}
-	return &buf
-}
 
 func BenchmarkDatabaseBackup(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
@@ -83,65 +62,12 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := bank.FromRows(b.N).Tables()[0]
-	backup, err := sampledataccl.ToBackup(b, bankData, dir, "foo")
-	if err != nil {
+	if _, err := sampledataccl.ToBackup(b, bankData, dir, "foo"); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	b.SetBytes(backup.Desc.EntryCounts.DataSize / int64(b.N))
 
 	b.ResetTimer()
 	sqlDB.Exec(b, `RESTORE data.* FROM 'nodelocal://0/foo'`)
-	b.StopTimer()
-}
-
-func BenchmarkLoadRestore(b *testing.B) {
-	// NB: This benchmark takes liberties in how b.N is used compared to the go
-	// documentation's description. We're getting useful information out of it,
-	// but this is not a pattern to cargo-cult.
-
-	ctx, _, sqlDB, dir, cleanup := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitNone)
-	defer cleanup()
-	sqlDB.Exec(b, `DROP TABLE data.bank`)
-
-	buf := bankBuf(b.N)
-	b.SetBytes(int64(buf.Len() / b.N))
-	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	b.ResetTimer()
-	if _, err := importccl.Load(ctx, sqlDB.DB.(*gosql.DB), buf, "data", security.RootUser,
-		dir, backupccl.LocalFoo, ts, 0); err != nil {
-		b.Fatalf("%+v", err)
-	}
-	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, backupccl.LocalFoo))
-	b.StopTimer()
-}
-
-func BenchmarkLoadSQL(b *testing.B) {
-	// NB: This benchmark takes liberties in how b.N is used compared to the go
-	// documentation's description. We're getting useful information out of it,
-	// but this is not a pattern to cargo-cult.
-	_, _, sqlDB, _, cleanup := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitNone)
-	defer cleanup()
-	sqlDB.Exec(b, `DROP TABLE data.bank`)
-
-	buf := bankBuf(b.N)
-	b.SetBytes(int64(buf.Len() / b.N))
-	lines := make([]string, 0, b.N)
-	for {
-		line, err := buf.ReadString(';')
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			b.Fatalf("%+v", err)
-		}
-		lines = append(lines, line)
-	}
-
-	b.ResetTimer()
-	for _, line := range lines {
-		sqlDB.Exec(b, line)
-	}
 	b.StopTimer()
 }
 
