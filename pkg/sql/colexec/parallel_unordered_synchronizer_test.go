@@ -157,10 +157,11 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	for i := 1; i < len(inputs); i++ {
 		inputs[i].Op = &colexecbase.CallbackOperator{
 			NextCb: func(ctx context.Context) coldata.Batch {
-				<-ctx.Done()
-				colexecerror.InternalError(ctx.Err())
-				// This code is unreachable, but the compiler cannot infer that.
-				return nil
+				// All inputs that do not encounter an error will continue to return
+				// batches.
+				b := coldata.NewMemBatch([]*types.T{types.Int}, coldata.StandardColumnFactory)
+				b.SetLength(1)
+				return b
 			},
 		}
 	}
@@ -170,10 +171,17 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		wg  sync.WaitGroup
 	)
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	for {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) }); err != nil {
+			require.True(t, testutils.IsError(err, expectedErr), err)
+			break
+		}
+		// Loop until we get an error.
+	}
+	// The caller must call DrainMeta on error.
+	require.Zero(t, len(s.DrainMeta(ctx)))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
-	require.True(t, testutils.IsError(err, expectedErr), err)
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
