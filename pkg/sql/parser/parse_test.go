@@ -127,6 +127,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b TIMETZ)`},
 		{`CREATE TABLE a (b TIME(3))`},
 		{`CREATE TABLE a (b TIMETZ(3))`},
+		{`CREATE TABLE a (b BOX2D)`},
 		{`CREATE TABLE a (b GEOGRAPHY)`},
 		{`CREATE TABLE a (b GEOGRAPHY(POINT))`},
 		{`CREATE TABLE a (b GEOGRAPHY(POINT,4326))`},
@@ -841,6 +842,7 @@ func TestParse(t *testing.T) {
 		{`SELECT 'foo'::TIME(6)`},
 		{`SELECT '0'::INTERVAL`},
 
+		{`SELECT 'foo'::BOX2D`},
 		{`SELECT 'foo'::GEOGRAPHY`},
 		{`SELECT 'foo'::GEOGRAPHY(POINT,4326)`},
 		{`SELECT 'foo'::GEOGRAPHY(POINT)`},

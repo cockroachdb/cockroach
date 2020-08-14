@@ -296,6 +296,7 @@ func TestAvroSchema(t *testing.T) {
 	t.Run("type_goldens", func(t *testing.T) {
 		goldens := map[string]string{
 			`BOOL`:         `["null","boolean"]`,
+			`BOX2D`:        `["null","string"]`,
 			`BYTES`:        `["null","bytes"]`,
 			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
 			`FLOAT8`:       `["null","double"]`,
@@ -362,6 +363,8 @@ func TestAvroSchema(t *testing.T) {
 				sql:  `1.2`,
 				avro: `{"double":1.2}`},
 
+			{sqlType: `BOX2D`, sql: `NULL`, avro: `null`},
+			{sqlType: `BOX2D`, sql: `'BOX(1 2,3 4)'`, avro: `{"string":"BOX(1 2,3 4)"}`},
 			{sqlType: `GEOGRAPHY`, sql: `NULL`, avro: `null`},
 			{sqlType: `GEOGRAPHY`,
 				sql:  "'POINT(1.0 1.0)'",

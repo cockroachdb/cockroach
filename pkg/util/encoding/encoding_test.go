@@ -1148,6 +1148,63 @@ func TestEncodeDecodeTimeTZ(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeBox2D(t *testing.T) {
+	testCases := []struct {
+		ordered []*geo.CartesianBoundingBox
+	}{
+		{
+			ordered: []*geo.CartesianBoundingBox{
+				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 99, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: -100, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: -50, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 0, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 0, HiX: 100, LoY: 50, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -100, HiY: 100}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 50}},
+				{BoundingBox: geopb.BoundingBox{LoX: 10, HiX: 100, LoY: -10, HiY: 100}},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
+				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
+					var lastEncoded []byte
+					for j := range tc.ordered {
+						var b []byte
+						var err error
+						var decoded *geo.CartesianBoundingBox
+
+						if dir == Ascending {
+							b, err = EncodeBox2DAscending(b, tc.ordered[j])
+							require.NoError(t, err)
+							_, decoded, err = DecodeBox2DAscending(b)
+							require.NoError(t, err)
+						} else {
+							b, err = EncodeBox2DDescending(b, tc.ordered[j])
+							require.NoError(t, err)
+							_, decoded, err = DecodeBox2DDescending(b)
+							require.NoError(t, err)
+						}
+						require.Equal(t, tc.ordered[j], decoded)
+						testPeekLength(t, b)
+
+						if j > 0 {
+							if dir == Ascending {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.ordered[j], tc.ordered[j-1])
+							} else {
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.ordered[j], tc.ordered[j-1])
+							}
+						}
+
+						lastEncoded = b
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestEncodeDecodeGeometry(t *testing.T) {
 	testCases := []struct {
 		orderedWKTs []string
@@ -1163,11 +1220,11 @@ func TestEncodeDecodeGeometry(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		for _, dir := range []Direction{Ascending, Descending} {
-			t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
 				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 					var lastEncoded []byte
-					for _, wkt := range tc.orderedWKTs {
+					for j, wkt := range tc.orderedWKTs {
 						parsed, err := geo.ParseGeometry(wkt)
 						require.NoError(t, err)
 						spatialObject := parsed.SpatialObject()
@@ -1188,19 +1245,19 @@ func TestEncodeDecodeGeometry(t *testing.T) {
 						require.Equal(t, spatialObject, decoded)
 						testPeekLength(t, b)
 
-						if i > 0 {
+						if j > 0 {
 							if dir == Ascending {
-								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
 							} else {
-								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
 							}
 						}
 
 						lastEncoded = b
 					}
 				})
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -1219,11 +1276,11 @@ func TestEncodeDecodeGeography(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		for _, dir := range []Direction{Ascending, Descending} {
-			t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+		t.Run(strconv.Itoa(i+1), func(t *testing.T) {
+			for _, dir := range []Direction{Ascending, Descending} {
 				t.Run(fmt.Sprintf("dir:%d", dir), func(t *testing.T) {
 					var lastEncoded []byte
-					for _, wkt := range tc.orderedWKTs {
+					for j, wkt := range tc.orderedWKTs {
 						parsed, err := geo.ParseGeography(wkt)
 						require.NoError(t, err)
 						spatialObject := parsed.SpatialObject()
@@ -1244,19 +1301,19 @@ func TestEncodeDecodeGeography(t *testing.T) {
 						require.Equal(t, spatialObject, decoded)
 						testPeekLength(t, b)
 
-						if i > 0 {
+						if j > 0 {
 							if dir == Ascending {
-								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+								assert.Truef(t, bytes.Compare(b, lastEncoded) > 0, "expected %s > %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
 							} else {
-								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[i], tc.orderedWKTs[i-1])
+								assert.Truef(t, bytes.Compare(b, lastEncoded) < 0, "expected %s < %s", tc.orderedWKTs[j], tc.orderedWKTs[j-1])
 							}
 						}
 
 						lastEncoded = b
 					}
 				})
-			})
-		}
+			}
+		})
 	}
 }
 

@@ -49,6 +49,8 @@ func ParseAndRequireString(
 			return nil, false, typErr
 		}
 		d, err = ParseDIntervalWithTypeMetadata(s, itm)
+	case types.Box2DFamily:
+		d, err = ParseDBox2D(s)
 	case types.GeographyFamily:
 		d, err = ParseDGeography(s)
 	case types.GeometryFamily:

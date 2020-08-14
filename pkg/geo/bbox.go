@@ -11,7 +11,10 @@
 package geo
 
 import (
+	"fmt"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
@@ -36,6 +39,63 @@ func NewCartesianBoundingBox() *CartesianBoundingBox {
 			HiY: -math.MaxFloat64,
 		},
 	}
+}
+
+// Repr is the string representation of the CartesianBoundingBox.
+func (b *CartesianBoundingBox) Repr() string {
+	// fmt.Sprintf with %f does not truncate leading zeroes, so use
+	// FormatFloat instead.
+	return fmt.Sprintf(
+		"BOX(%s %s,%s %s)",
+		strconv.FormatFloat(b.LoX, 'f', -1, 64),
+		strconv.FormatFloat(b.LoY, 'f', -1, 64),
+		strconv.FormatFloat(b.HiX, 'f', -1, 64),
+		strconv.FormatFloat(b.HiY, 'f', -1, 64),
+	)
+}
+
+// ParseCartesianBoundingBox parses a box2d string into a bounding box.
+func ParseCartesianBoundingBox(s string) (*CartesianBoundingBox, error) {
+	b := &CartesianBoundingBox{}
+	var prefix string
+	numScanned, err := fmt.Sscanf(s, "%3s(%f %f,%f %f)", &prefix, &b.LoX, &b.LoY, &b.HiX, &b.HiY)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error parsing box2d")
+	}
+	if numScanned != 5 || strings.ToLower(prefix) != "box" {
+		return nil, errors.Newf("expected format 'box(min_x min_y,max_x max_y)'")
+	}
+	return b, nil
+}
+
+// Compare returns the comparison between two bounding boxes.
+// Compare lower dimensions before higher ones, i.e. X, then Y.
+func (b *CartesianBoundingBox) Compare(o *CartesianBoundingBox) int {
+	if b.LoX < o.LoX {
+		return -1
+	} else if b.LoX > o.LoX {
+		return 1
+	}
+
+	if b.HiX < o.HiX {
+		return -1
+	} else if b.HiX > o.HiX {
+		return 1
+	}
+
+	if b.LoY < o.LoY {
+		return -1
+	} else if b.LoY > o.LoY {
+		return 1
+	}
+
+	if b.HiY < o.HiY {
+		return -1
+	} else if b.HiY > o.HiY {
+		return 1
+	}
+
+	return 0
 }
 
 // AddPoint adds a point to the BoundingBox coordinates.

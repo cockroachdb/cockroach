@@ -570,7 +570,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 %token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
-%token <str> BOOLEAN BOTH BUNDLE BY
+%token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
 %token <str> CACHE CANCEL CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
@@ -8461,6 +8461,7 @@ geo_shape_type:
 const_geo:
   GEOGRAPHY { $$.val = types.Geography }
 | GEOMETRY  { $$.val = types.Geometry }
+| BOX2D     { $$.val = types.Box2D }
 | GEOMETRY '(' geo_shape_type ')'
   {
     $$.val = types.MakeGeometry($3.geoShapeType(), 0)
@@ -11299,6 +11300,7 @@ col_name_keyword:
 | BIGINT
 | BIT
 | BOOLEAN
+| BOX2D
 | CHAR
 | CHARACTER
 | CHARACTERISTICS

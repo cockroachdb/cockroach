@@ -2055,6 +2055,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// detected during type checking.
 		makeEqFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
 		makeEqFn(types.Float, types.Float, VolatilityLeakProof),
+		makeEqFn(types.Box2D, types.Box2D, VolatilityLeakProof),
 		makeEqFn(types.Geography, types.Geography, VolatilityLeakProof),
 		makeEqFn(types.Geometry, types.Geometry, VolatilityLeakProof),
 		makeEqFn(types.INet, types.INet, VolatilityLeakProof),
@@ -2109,6 +2110,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// the operator is leak proof under the assumption that these cases will be
 		// detected during type checking.
 		makeLtFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLtFn(types.Box2D, types.Box2D, VolatilityLeakProof),
 		makeLtFn(types.Geography, types.Geography, VolatilityLeakProof),
 		makeLtFn(types.Geometry, types.Geometry, VolatilityLeakProof),
 		makeLtFn(types.INet, types.INet, VolatilityLeakProof),
@@ -2162,6 +2164,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// detected during type checking.
 		makeLeFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
 		makeLeFn(types.Float, types.Float, VolatilityLeakProof),
+		makeLeFn(types.Box2D, types.Box2D, VolatilityLeakProof),
 		makeLeFn(types.Geography, types.Geography, VolatilityLeakProof),
 		makeLeFn(types.Geometry, types.Geometry, VolatilityLeakProof),
 		makeLeFn(types.INet, types.INet, VolatilityLeakProof),
@@ -2224,6 +2227,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		// detected during type checking.
 		makeIsFn(types.AnyCollatedString, types.AnyCollatedString, VolatilityLeakProof),
 		makeIsFn(types.Float, types.Float, VolatilityLeakProof),
+		makeIsFn(types.Box2D, types.Box2D, VolatilityLeakProof),
 		makeIsFn(types.Geography, types.Geography, VolatilityLeakProof),
 		makeIsFn(types.Geometry, types.Geometry, VolatilityLeakProof),
 		makeIsFn(types.INet, types.INet, VolatilityLeakProof),
@@ -2279,6 +2283,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.AnyCollatedString, VolatilityLeakProof),
 		makeEvalTupleIn(types.AnyTuple, VolatilityLeakProof),
 		makeEvalTupleIn(types.Float, VolatilityLeakProof),
+		makeEvalTupleIn(types.Box2D, VolatilityLeakProof),
 		makeEvalTupleIn(types.Geography, VolatilityLeakProof),
 		makeEvalTupleIn(types.Geometry, VolatilityLeakProof),
 		makeEvalTupleIn(types.INet, VolatilityLeakProof),
@@ -4137,6 +4142,11 @@ func (t *DInt) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DInterval) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DBox2D) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

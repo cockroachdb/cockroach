@@ -36,6 +36,7 @@ type DatumAlloc struct {
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
 	denumAlloc        []tree.DEnum
+	dbox2dAlloc       []tree.DBox2D
 	dgeometryAlloc    []tree.DGeometry
 	dgeographyAlloc   []tree.DGeography
 	dtimeAlloc        []tree.DTime
@@ -191,6 +192,21 @@ func (a *DatumAlloc) NewDEnum(v tree.DEnum) *tree.DEnum {
 	buf := &a.denumAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DEnum, a.AllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDBox2D allocates a DBox2D.
+func (a *DatumAlloc) NewDBox2D(v tree.DBox2D) *tree.DBox2D {
+	if a.AllocSize == 0 {
+		a.AllocSize = defaultDatumAllocSize
+	}
+	buf := &a.dbox2dAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DBox2D, a.AllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
