@@ -38,9 +38,8 @@ type SendOptions struct {
 // function returns a Transport object which is used to send requests
 // to one or more replicas in the slice.
 //
-// In addition to actually sending RPCs, the transport is responsible
-// for ordering replicas in accordance with SendOptions.Ordering and
-// transport-specific knowledge such as connection health or latency.
+// The caller is responsible for ordering the replicas in the slice according to
+// the order in which the should be tried.
 //
 // TODO(bdarnell): clean up this crufty interface; it was extracted
 // verbatim from the non-abstracted code.
