@@ -85,7 +85,7 @@ func lookupJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoic
 	md := lookupJoin.Memo().Metadata()
 	index := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
 	for i, colID := range lookupJoin.KeyCols {
-		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal)
+		indexColID := lookupJoin.Table.ColumnID(index.Column(i).Ordinal())
 		fds.AddEquivalency(colID, indexColID)
 	}
 

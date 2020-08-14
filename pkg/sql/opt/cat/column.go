@@ -24,6 +24,7 @@ type Column struct {
 	//
 	// Warning! If any fields are added here, make sure both Init methods below
 	// set all fields (even if they are the empty value).
+	ordinal                     int
 	stableID                    StableID
 	name                        tree.Name
 	kind                        ColumnKind
@@ -33,6 +34,13 @@ type Column struct {
 	defaultExpr                 *string
 	computedExpr                *string
 	invertedSourceColumnOrdinal int
+}
+
+// Ordinal returns the position of the column in its table. The following always
+// holds:
+//   tab.Column(i).Ordinal() == i
+func (c *Column) Ordinal() int {
+	return c.ordinal
 }
 
 // ColID is the unique, stable identifier for this column within its table.
@@ -155,6 +163,7 @@ const (
 // InitNonVirtual is used by catalog implementations to populate a non-virtual
 // Column. It should not be used anywhere else.
 func (c *Column) InitNonVirtual(
+	ordinal int,
 	stableID StableID,
 	name tree.Name,
 	kind ColumnKind,
@@ -167,6 +176,7 @@ func (c *Column) InitNonVirtual(
 	if kind == Virtual {
 		panic(errors.AssertionFailedf("incorrect init method"))
 	}
+	c.ordinal = ordinal
 	c.stableID = stableID
 	c.name = name
 	c.kind = kind
@@ -181,8 +191,9 @@ func (c *Column) InitNonVirtual(
 // InitVirtual is used by catalog implementations to populate a virtual Column.
 // It should not be used anywhere else.
 func (c *Column) InitVirtual(
-	name tree.Name, datumType *types.T, nullable bool, invertedSourceColumnOrdinal int,
+	ordinal int, name tree.Name, datumType *types.T, nullable bool, invertedSourceColumnOrdinal int,
 ) {
+	c.ordinal = ordinal
 	c.stableID = 0
 	c.name = name
 	c.kind = Virtual

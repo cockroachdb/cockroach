@@ -635,6 +635,7 @@ func newOptTable(
 		}
 
 		ot.columns[i].InitNonVirtual(
+			i,
 			cat.StableID(desc.ID),
 			tree.Name(desc.Name),
 			kind,
@@ -658,8 +659,9 @@ func newOptTable(
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
 	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
-		col, _ := newColumn()
+		col, ord := newColumn()
 		col.InitNonVirtual(
+			ord,
 			cat.StableID(sqlbase.MVCCTimestampColumnID),
 			tree.Name(sqlbase.MVCCTimestampColumnName),
 			cat.System,
@@ -717,6 +719,7 @@ func newOptTable(
 			// encoding.DecodeBytesAscending).
 			typ := ot.Column(invertedSourceColOrdinal).DatumType()
 			virtualCol.InitVirtual(
+				virtualColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
 				typ,
 				false, /* nullable */
@@ -1169,7 +1172,6 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 		}
 		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
-			Ordinal:    ord,
 			Descending: oi.desc.ColumnDirections[i] == descpb.IndexDescriptor_DESC,
 		}
 	}
@@ -1178,12 +1180,12 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+		return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 	}
 
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 }
 
 // Zone is part of the cat.Index interface.
@@ -1551,6 +1553,7 @@ func newOptVirtualTable(
 	ot.columns = make([]cat.Column, len(desc.Columns)+1)
 	// Init dummy PK column.
 	ot.columns[0].InitNonVirtual(
+		0,
 		math.MaxInt64, /* stableID */
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
@@ -1563,6 +1566,7 @@ func newOptVirtualTable(
 	for i := range desc.Columns {
 		d := desc.Columns[i]
 		ot.columns[i+1].InitNonVirtual(
+			i+1,
 			cat.StableID(d.ID),
 			tree.Name(d.Name),
 			cat.Ordinary,
@@ -1826,24 +1830,23 @@ func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, erro
 // Column is part of the cat.Index interface.
 func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	if oi.isPrimary {
-		return cat.IndexColumn{Column: oi.tab.Column(i), Ordinal: i}
+		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
 	if i == oi.ColumnCount()-1 {
 		// The special bogus PK column goes at the end. It has ID 0.
-		return cat.IndexColumn{Column: oi.tab.Column(0), Ordinal: 0}
+		return cat.IndexColumn{Column: oi.tab.Column(0)}
 	}
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
 		return cat.IndexColumn{
-			Column:  oi.tab.Column(ord),
-			Ordinal: ord,
+			Column: oi.tab.Column(ord),
 		}
 	}
 
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
 // Zone is part of the cat.Index interface.

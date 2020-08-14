@@ -101,6 +101,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		var rowid cat.Column
 		ordinal := len(tab.Columns)
 		rowid.InitNonVirtual(
+			ordinal,
 			cat.StableID(1+ordinal),
 			"rowid",
 			cat.Ordinary,
@@ -127,6 +128,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	var mvcc cat.Column
 	ordinal := len(tab.Columns)
 	mvcc.InitNonVirtual(
+		ordinal,
 		cat.StableID(1+ordinal),
 		sqlbase.MVCCTimestampColumnName,
 		cat.System,
@@ -245,7 +247,8 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 	// Add the dummy PK column.
 	var pk cat.Column
 	pk.InitNonVirtual(
-		0,
+		0, /* ordinal */
+		0, /* stableID */
 		"crdb_internal_vtable_pk",
 		cat.Ordinary,
 		types.Int,
@@ -288,6 +291,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 	var rowid cat.Column
 	ordinal := len(columns)
 	rowid.InitNonVirtual(
+		ordinal,
 		cat.StableID(1+ordinal),
 		"rowid",
 		cat.Ordinary,
@@ -357,7 +361,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			return false
 		}
 		for i := range cols {
-			if idx.Column(i).Ordinal != cols[i] {
+			if idx.Column(i).Ordinal() != cols[i] {
 				return false
 			}
 		}
@@ -447,6 +451,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 
 	var col cat.Column
 	col.InitNonVirtual(
+		ordinal,
 		cat.StableID(1+ordinal),
 		name,
 		kind,
@@ -497,6 +502,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 				computedExpr = &e
 			}
 			col.InitNonVirtual(
+				col.Ordinal(),
 				col.ColID(),
 				col.ColName(),
 				col.Kind(),
@@ -548,7 +554,7 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	if typ == primaryIndex {
 		var pkOrdinals util.FastIntSet
 		for _, c := range idx.Columns {
-			pkOrdinals.Add(c.Ordinal)
+			pkOrdinals.Add(c.Ordinal())
 		}
 		// Add the rest of the columns in the table.
 		for i, col := range tt.Columns {
@@ -672,13 +678,14 @@ func (ti *Index) addColumn(
 		// catalog is fixed (see sql.newOptTable).
 		typ := tt.Columns[ordinal].DatumType()
 		col.InitVirtual(
+			len(tt.Columns),
 			tree.Name(name+"_inverted_key"),
 			typ,
 			false,   /* nullable */
 			ordinal, /* invertedSourceColumnOrdinal */
 		)
-		ordinal = len(tt.Columns)
 		tt.Columns = append(tt.Columns, col)
+		ordinal = col.Ordinal()
 	}
 
 	return ti.addColumnByOrdinal(tt, ordinal, direction, colType)
@@ -690,7 +697,6 @@ func (ti *Index) addColumnByOrdinal(
 	col := tt.Column(ord)
 	idxCol := cat.IndexColumn{
 		Column:     col,
-		Ordinal:    ord,
 		Descending: direction == tree.Descending,
 	}
 	ti.Columns = append(ti.Columns, idxCol)

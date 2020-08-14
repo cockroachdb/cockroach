@@ -1014,7 +1014,7 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	numCols := idx.ColumnCount()
 	// Remove any system columns from numCols.
 	for i := 0; i < idx.ColumnCount(); i++ {
-		if col := tab.Column(idx.Column(i).Ordinal); col.Kind() == cat.System {
+		if idx.Column(i).Kind() == cat.System {
 			numCols--
 		}
 	}
