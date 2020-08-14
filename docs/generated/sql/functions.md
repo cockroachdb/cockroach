@@ -772,6 +772,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="geometrytype"></a><code>geometrytype(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of geometry as a string.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="geomfromewkb"></a><code>geomfromewkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKB representation.</p>
+</span></td></tr>
+<tr><td><a name="geomfromewkt"></a><code>geomfromewkt(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKT representation.</p>
+</span></td></tr>
 <tr><td><a name="postgis_addbbox"></a><code>postgis_addbbox(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.</p>
 </span></td></tr>
 <tr><td><a name="postgis_dropbbox"></a><code>postgis_dropbbox(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. This does not perform any operation on the Geometry.</p>
