@@ -901,10 +901,9 @@ func createImportingDescriptors(
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if len(details.Tenants) > 0 {
-				// TODO(during review): if the txn already has txn.Key set, we get an
-				// eror from AnchorOnSystemConfigRange without this. This is pretty
-				// silly though, can we avoid the system config trigger here? Might not
-				// be worth the hassle though.
+				// TODO(dt): we need to set the system config trigger as the loop below
+				// will make a batch that anchors the txn at '/Table/...', and setting the trigger
+				// later (as we will have to) would fail.
 				if err := txn.SetSystemConfigTrigger(p.ExecCfg().Codec.ForSystemTenant()); err != nil {
 					return err
 				}
@@ -1155,7 +1154,9 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 	newDescriptorChangeJobs := make([]*jobs.StartableJob, 0)
 	err := r.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if len(details.Tenants) > 0 {
-			// TODO(during review): see the other code like this when creating tenants.
+			// TODO(dt): we need to set the system config trigger as the loop below
+			// will make a batch that anchors the txn at '/Table/...', and setting the trigger
+			// later (as we will have to) would fail.
 			if err := txn.SetSystemConfigTrigger(r.execCfg.Codec.ForSystemTenant()); err != nil {
 				return err
 			}
@@ -1262,8 +1263,6 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, phs interface{}) er
 		for _, tenant := range details.Tenants {
 			// TODO(dt): this is a noop since the tenant is already active=false but
 			// that should be fixed in DestroyTenant.
-			// TODO(during review): why is r.execCfg nil and what's the difference
-			// to execCfg above?
 			if err := sql.DestroyTenant(ctx, execCfg, txn, tenant.ID); err != nil {
 				return err
 			}
