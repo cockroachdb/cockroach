@@ -3319,7 +3319,6 @@ func TestImportDefault(t *testing.T) {
 			targetCols []string
 			randomCols []string
 			data       string
-			repeat     bool
 		}{
 			{
 				name:       "random-multiple",
@@ -3346,15 +3345,6 @@ func TestImportDefault(t *testing.T) {
 				randomCols: []string{selectNotNull("d")},
 				data:       "1,0.37\n2,0.455\n3,3.14\n4,0.246\n5,0.42",
 			},
-			{
-				// Test that two instances of random will still produce different sets of
-				// random numbers.
-				name:       "random-import-two-times",
-				create:     "a INT, b FLOAT DEFAULT random(), c STRING, d FLOAT DEFAULT random()",
-				targetCols: []string{"a", "c"},
-				randomCols: []string{selectNotNull("b"), selectNotNull("d")},
-				repeat:     true,
-			},
 			// TODO (anzoteh96): create a testcase for AVRO once we manage to extract
 			// targeted columns from the AVRO schema.
 		}
@@ -3367,10 +3357,9 @@ func TestImportDefault(t *testing.T) {
 					data = test.data
 					fileName = fmt.Sprintf(`%q`, srv.URL)
 				}
-				sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
-					strings.Join(test.targetCols, ", "),
-					fileName))
-				if test.repeat {
+				// Let's do 3 IMPORTs for each test case to ensure that the values produced
+				// do not overlap.
+				for i := 0; i < 3; i++ {
 					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
 						strings.Join(test.targetCols, ", "),
 						fileName))
