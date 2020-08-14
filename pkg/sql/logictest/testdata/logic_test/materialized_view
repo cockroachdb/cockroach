@@ -103,3 +103,26 @@ INSERT INTO dup VALUES (1), (1);
 
 statement error pq: duplicate key value \(x\)=\(1\) violates unique constraint "i"
 REFRESH MATERIALIZED VIEW v_dup
+
+# We shouldn't be able to mix materialized and non materialized views in DDLs.
+statement ok
+CREATE VIEW normal_view AS SELECT 1;
+CREATE MATERIALIZED VIEW materialized_view AS SELECT 1;
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view RENAME TO newname
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view RENAME TO newname
+
+statement error pq: "materialized_view" is a materialized view
+ALTER VIEW materialized_view SET SCHEMA public
+
+statement error pq: "normal_view" is not a materialized view
+ALTER MATERIALIZED VIEW normal_view SET SCHEMA public
+
+statement error pq: "materialized_view" is a materialized view
+DROP VIEW materialized_view
+
+statement error pq: "normal_view" is not a materialized view
+DROP MATERIALIZED VIEW normal_view

@@ -37,17 +37,21 @@ func (node *RenameDatabase) Format(ctx *FmtCtx) {
 // statement. Whether the user has asked to rename a view or a sequence
 // is indicated by the IsView and IsSequence fields.
 type RenameTable struct {
-	Name       *UnresolvedObjectName
-	NewName    *UnresolvedObjectName
-	IfExists   bool
-	IsView     bool
-	IsSequence bool
+	Name           *UnresolvedObjectName
+	NewName        *UnresolvedObjectName
+	IfExists       bool
+	IsView         bool
+	IsMaterialized bool
+	IsSequence     bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *RenameTable) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
 	if node.IsView {
+		if node.IsMaterialized {
+			ctx.WriteString("MATERIALIZED ")
+		}
 		ctx.WriteString("VIEW ")
 	} else if node.IsSequence {
 		ctx.WriteString("SEQUENCE ")

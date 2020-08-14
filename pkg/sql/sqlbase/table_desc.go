@@ -61,6 +61,7 @@ type TableDescriptor interface {
 
 	IsTable() bool
 	IsView() bool
+	MaterializedView() bool
 	IsSequence() bool
 
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob

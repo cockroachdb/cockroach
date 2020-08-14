@@ -1339,8 +1339,8 @@ alter_partition_stmt:
 // %Help: ALTER VIEW - change the definition of a view
 // %Category: DDL
 // %Text:
-// ALTER VIEW [IF EXISTS] <name> RENAME TO <newname>
-// ALTER VIEW [IF EXISTS] <name> SET SCHEMA <newschemaname>
+// ALTER [MATERIALIZED] VIEW [IF EXISTS] <name> RENAME TO <newname>
+// ALTER [MATERIALIZED] VIEW [IF EXISTS] <name> SET SCHEMA <newschemaname>
 // %SeeAlso: WEBDOCS/alter-view.html
 alter_view_stmt:
   alter_rename_view_stmt
@@ -3133,7 +3133,7 @@ drop_ddl_stmt:
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
-// %Text: DROP VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
+// %Text: DROP [MATERIALIZED] VIEW [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
 // %SeeAlso: WEBDOCS/drop-index.html
 drop_view_stmt:
   DROP VIEW table_name_list opt_drop_behavior
@@ -3143,6 +3143,24 @@ drop_view_stmt:
 | DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
     $$.val = &tree.DropView{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+| DROP MATERIALIZED VIEW table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropView{
+      Names: $4.tableNames(),
+      IfExists: false,
+      DropBehavior: $5.dropBehavior(),
+      IsMaterialized: true,
+    }
+  }
+| DROP MATERIALIZED VIEW IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropView{
+      Names: $6.tableNames(),
+      IfExists: true,
+      DropBehavior: $7.dropBehavior(),
+      IsMaterialized: true,
+    }
   }
 | DROP VIEW error // SHOW HELP: DROP VIEW
 
@@ -6562,10 +6580,30 @@ alter_view_set_schema_stmt:
 			 Name: $3.unresolvedObjectName(), Schema: $6, IfExists: false, IsView: true,
 		 }
 	 }
+| ALTER MATERIALIZED VIEW relation_expr SET SCHEMA schema_name
+	 {
+		 $$.val = &tree.AlterTableSetSchema{
+			 Name: $4.unresolvedObjectName(),
+			 Schema: $7,
+			 IfExists: false,
+			 IsView: true,
+			 IsMaterialized: true,
+		 }
+	 }
 | ALTER VIEW IF EXISTS relation_expr SET SCHEMA schema_name
 	{
 		$$.val = &tree.AlterTableSetSchema{
 			Name: $5.unresolvedObjectName(), Schema: $8, IfExists: true, IsView: true,
+		}
+	}
+| ALTER MATERIALIZED VIEW IF EXISTS relation_expr SET SCHEMA schema_name
+	{
+		$$.val = &tree.AlterTableSetSchema{
+			Name: $6.unresolvedObjectName(),
+			Schema: $9,
+			IfExists: true,
+			IsView: true,
+			IsMaterialized: true,
 		}
 	}
 
@@ -6590,11 +6628,35 @@ alter_rename_view_stmt:
     newName := $6.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: false, IsView: true}
   }
+| ALTER MATERIALIZED VIEW relation_expr RENAME TO view_name
+  {
+    name := $4.unresolvedObjectName()
+    newName := $7.unresolvedObjectName()
+    $$.val = &tree.RenameTable{
+      Name: name,
+      NewName: newName,
+      IfExists: false,
+      IsView: true,
+      IsMaterialized: true,
+    }
+  }
 | ALTER VIEW IF EXISTS relation_expr RENAME TO view_name
   {
     name := $5.unresolvedObjectName()
     newName := $8.unresolvedObjectName()
     $$.val = &tree.RenameTable{Name: name, NewName: newName, IfExists: true, IsView: true}
+  }
+| ALTER MATERIALIZED VIEW IF EXISTS relation_expr RENAME TO view_name
+  {
+    name := $6.unresolvedObjectName()
+    newName := $9.unresolvedObjectName()
+    $$.val = &tree.RenameTable{
+      Name: name,
+      NewName: newName,
+      IfExists: true,
+      IsView: true,
+      IsMaterialized: true,
+    }
   }
 
 alter_rename_sequence_stmt:
