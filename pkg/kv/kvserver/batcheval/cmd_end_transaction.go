@@ -857,10 +857,7 @@ func splitTrigger(
 			rightMS, err := rditer.ComputeStatsForRange(
 				&split.RightDesc, batch, ts.WallTime,
 			)
-			return rightMS, errors.Wrap(
-				err,
-				"unable to compute stats for RHS range after split",
-			)
+			return rightMS, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		},
 	}
 	return splitTriggerHelper(ctx, rec, batch, h, split, ts)
@@ -1035,6 +1032,14 @@ func splitTriggerHelper(
 	deltaPostSplitLeft := h.DeltaPostSplitLeft()
 	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionContainsEstimatesCounter) {
 		deltaPostSplitLeft.ContainsEstimates = 0
+	}
+	if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.VersionAbortSpanBytes) {
+		// Since the stats here is used to seed the initial state for the RHS
+		// replicas, we need to be careful about zero-ing out the abort span
+		// bytes if the cluster version introducing it is not yet active. Not
+		// doing so can result in inconsistencies in MVCCStats across replicas
+		// in a mixed-version cluster.
+		pd.Replicated.Split.RHSDelta.AbortSpanBytes = 0
 	}
 	return deltaPostSplitLeft, pd, nil
 }
