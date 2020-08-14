@@ -3056,9 +3056,9 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	case *DGeometry:
-		return json.FromSpatialObject(t.Geometry.SpatialObject())
+		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	case *DGeography:
-		return json.FromSpatialObject(t.Geography.SpatialObject())
+		return json.FromSpatialObject(t.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 	default:
 		if d == DNull {
 			return json.NullJSONValue, nil
