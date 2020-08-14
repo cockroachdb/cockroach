@@ -1012,20 +1012,17 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 			}
 		}
 
-		invertedCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
-
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = iter.IndexOrdinal()
 		newScanPrivate.Constraint = constraint
 		newScanPrivate.InvertedConstraint = spansToRead
 
-		// Though the index is marked as containing the column being indexed, it
-		// doesn't actually, and it's only valid to extract the primary key columns
-		// from it. However, the inverted key column is still needed if there is an
+		// We scan the PK columns, and the inverted key column if there is an
 		// inverted filter.
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
+		invertedCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
 		if spanExpr != nil {
 			newScanPrivate.Cols.Add(invertedCol)
 		}
@@ -1064,14 +1061,25 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	// which does not take part in an index scan). Note that the OrderingColumn
 	// slice cannot be reused, as Instance.Init can use it in the constraint.
 	md := c.e.mem.Metadata()
-	index := md.Table(tabID).Index(indexOrd)
+	tab := md.Table(tabID)
+	index := tab.Index(indexOrd)
 	columns := make([]opt.OrderingColumn, index.LaxKeyColumnCount())
 	var notNullCols opt.ColSet
 	for i := range columns {
 		col := index.Column(i)
-		colID := tabID.ColumnID(col.Ordinal)
+		ordinal := col.Ordinal
+		nullable := col.IsNullable()
+		if isInverted && i == 0 {
+			// We pass the real column to the index constraint generator (instead of
+			// the virtual column).
+			// TODO(radu): improve the inverted index constraint generator to handle
+			// this internally.
+			ordinal = col.InvertedSourceColumnOrdinal()
+			nullable = tab.Column(ordinal).IsNullable()
+		}
+		colID := tabID.ColumnID(ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-		if !col.IsNullable() {
+		if !nullable {
 			notNullCols.Add(colID)
 		}
 	}
@@ -1093,8 +1101,8 @@ func (c *CustomFuncs) tryConstrainIndex(
 ) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !isInverted &&
-		!c.canMaybeConstrainIndex(requiredFilters, tabID, indexOrd) &&
-		!c.canMaybeConstrainIndex(optionalFilters, tabID, indexOrd) {
+		!c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
+		!c.canMaybeConstrainNonInvertedIndex(optionalFilters, tabID, indexOrd) {
 		return nil, nil, false
 	}
 
@@ -1134,9 +1142,9 @@ func (c *CustomFuncs) allInvIndexConstraints(
 	return constraints, true
 }
 
-// canMaybeConstrainIndex returns true if we should try to constrain a given
-// index by the given filter. It returns false if it is impossible for the
-// filter can constrain the scan.
+// canMaybeConstrainNonInvertedIndex returns true if we should try to constrain
+// a given non-inverted index by the given filter. It returns false if it is
+// impossible for the filter can constrain the scan.
 //
 // If any of the three following statements are true, then it is
 // possible that the index can be constrained:
@@ -1145,7 +1153,7 @@ func (c *CustomFuncs) allInvIndexConstraints(
 //   2. The constraints are not tight (see props.Scalar.TightConstraints).
 //   3. Any of the filter's constraints start with the first index column.
 //
-func (c *CustomFuncs) canMaybeConstrainIndex(
+func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) bool {
 	md := c.e.mem.Metadata()
@@ -2974,9 +2982,15 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 	for iter.Next() {
 		// Iterate through all indexes of the table and return true if cols
 		// intersect with the index's key columns.
-		indexColumns := tabMeta.IndexKeyColumns(iter.IndexOrdinal())
-		if cols.Intersects(indexColumns) {
-			return true
+		index := iter.Index()
+		for i, n := 0, index.KeyColumnCount(); i < n; i++ {
+			ord := index.Column(i).Ordinal
+			if i == 0 && index.IsInverted() {
+				ord = index.Column(i).InvertedSourceColumnOrdinal()
+			}
+			if cols.Contains(tabMeta.MetaID.ColumnID(ord)) {
+				return true
+			}
 		}
 	}
 

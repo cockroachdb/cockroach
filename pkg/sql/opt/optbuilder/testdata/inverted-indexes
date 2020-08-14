@@ -1,0 +1,181 @@
+# This file contains tests on tables with inverted indexes. Even though index
+# selection is not a factor in the optbuilder, inverted indexes involve virtual
+# columns that need to be handled properly (especially during mutations).
+
+exec-ddl
+CREATE TABLE kj (
+    k INT PRIMARY KEY,
+    j JSON,
+    INVERTED INDEX (j)
+)
+----
+
+build
+SELECT * FROM kj
+----
+project
+ ├── columns: k:1!null j:2
+ └── scan kj
+      └── columns: k:1!null j:2 crdb_internal_mvcc_timestamp:3
+
+exec-ddl
+SHOW CREATE TABLE kj
+----
+TABLE kj
+ ├── k int not null
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── j_inverted_key jsonb not null [hidden] [virtual]
+ ├── INDEX primary
+ │    └── k int not null
+ └── INVERTED INDEX secondary
+      ├── j_inverted_key jsonb not null [hidden] [virtual]
+      └── k int not null
+
+build
+SELECT j_inverted_key FROM kj
+----
+error (42703): column "j_inverted_key" does not exist
+
+build
+INSERT INTO kj VALUES (1, '{"a": 2}')
+----
+insert kj
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    └── column2:6 => j:2
+ └── values
+      ├── columns: column1:5!null column2:6!null
+      └── (1, '{"a": 2}')
+
+build
+UPSERT INTO kj VALUES (1, '{"a": 2}')
+----
+upsert kj
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: k:7 j:8
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    └── column2:6 => j:2
+ ├── update-mapping:
+ │    └── column2:6 => j:2
+ └── project
+      ├── columns: upsert_k:11 column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      ├── left-join (hash)
+      │    ├── columns: column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:5!null column2:6!null
+      │    │    ├── grouping columns: column1:5!null
+      │    │    ├── values
+      │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    └── (1, '{"a": 2}')
+      │    │    └── aggregations
+      │    │         └── first-agg [as=column2:6]
+      │    │              └── column2:6
+      │    ├── scan kj
+      │    │    └── columns: k:7!null j:8 crdb_internal_mvcc_timestamp:9
+      │    └── filters
+      │         └── column1:5 = k:7
+      └── projections
+           └── CASE WHEN k:7 IS NULL THEN column1:5 ELSE k:7 END [as=upsert_k:11]
+
+build
+INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO NOTHING
+----
+insert kj
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    └── column2:6 => j:2
+ └── upsert-distinct-on
+      ├── columns: column1:5!null column2:6!null
+      ├── grouping columns: column1:5!null
+      ├── project
+      │    ├── columns: column1:5!null column2:6!null
+      │    └── select
+      │         ├── columns: column1:5!null column2:6!null k:7 j:8
+      │         ├── left-join (hash)
+      │         │    ├── columns: column1:5!null column2:6!null k:7 j:8
+      │         │    ├── values
+      │         │    │    ├── columns: column1:5!null column2:6!null
+      │         │    │    └── (1, '{"a": 2}')
+      │         │    ├── scan kj
+      │         │    │    └── columns: k:7!null j:8
+      │         │    └── filters
+      │         │         └── column1:5 = k:7
+      │         └── filters
+      │              └── k:7 IS NULL
+      └── aggregations
+           └── first-agg [as=column2:6]
+                └── column2:6
+
+build
+INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3}'
+----
+upsert kj
+ ├── columns: <none>
+ ├── canary column: 7
+ ├── fetch columns: k:7 j:8
+ ├── insert-mapping:
+ │    ├── column1:5 => k:1
+ │    └── column2:6 => j:2
+ ├── update-mapping:
+ │    └── upsert_j:13 => j:2
+ └── project
+      ├── columns: upsert_k:12 upsert_j:13!null column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9 j_new:11!null
+      ├── project
+      │    ├── columns: j_new:11!null column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    ├── grouping columns: column1:5!null
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:5!null column2:6!null
+      │    │    │    │    └── (1, '{"a": 2}')
+      │    │    │    └── aggregations
+      │    │    │         └── first-agg [as=column2:6]
+      │    │    │              └── column2:6
+      │    │    ├── scan kj
+      │    │    │    └── columns: k:7!null j:8 crdb_internal_mvcc_timestamp:9
+      │    │    └── filters
+      │    │         └── column1:5 = k:7
+      │    └── projections
+      │         └── '{"a": 3}' [as=j_new:11]
+      └── projections
+           ├── CASE WHEN k:7 IS NULL THEN column1:5 ELSE k:7 END [as=upsert_k:12]
+           └── CASE WHEN k:7 IS NULL THEN column2:6 ELSE j_new:11 END [as=upsert_j:13]
+
+build
+UPDATE kj SET j = '{"a": 3}' WHERE k > 0
+----
+update kj
+ ├── columns: <none>
+ ├── fetch columns: k:5 j:6
+ ├── update-mapping:
+ │    └── j_new:9 => j:2
+ └── project
+      ├── columns: j_new:9!null k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      ├── select
+      │    ├── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      │    ├── scan kj
+      │    │    └── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      │    └── filters
+      │         └── k:5 > 0
+      └── projections
+           └── '{"a": 3}' [as=j_new:9]
+
+build
+DELETE FROM kj WHERE j @> '{"a": 2}'
+----
+delete kj
+ ├── columns: <none>
+ ├── fetch columns: k:5 j:6
+ └── select
+      ├── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      ├── scan kj
+      │    └── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      └── filters
+           └── j:6 @> '{"a": 2}'

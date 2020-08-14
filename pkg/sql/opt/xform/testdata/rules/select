@@ -1322,7 +1322,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1330,14 +1330,14 @@ project
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_intersects('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
 
@@ -1360,7 +1360,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1368,14 +1368,14 @@ project
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_intersects(geog:4, '0101000020E61000009279E40F069E45C0BEE36FD63B1D5240') [outer=(4), immutable]
 
@@ -1397,7 +1397,7 @@ project
       │    ├── fd: (1)-->(3)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /3
+      │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1405,14 +1405,14 @@ project
       │         │         └── ["\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geom_idx
-      │              ├── columns: k:1!null geom:3
-      │              ├── inverted constraint: /3/1
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
       │              │    └── spans
       │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              │         └── ["\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(3)
+      │              └── fd: (1)-->(6)
       └── filters
            └── st_coveredby('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3) [outer=(3), immutable]
 
@@ -1435,16 +1435,16 @@ project
       │    ├── fd: (1)-->(3)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /3
+      │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["\x89", "\xfd ")
       │         ├── key: (1)
       │         └── scan g@geom_idx
-      │              ├── columns: k:1!null geom:3
-      │              ├── inverted constraint: /3/1
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
       │              │    └── spans: ["\x89", "\xfd ")
       │              ├── key: (1)
-      │              └── fd: (1)-->(3)
+      │              └── fd: (1)-->(6)
       └── filters
            └── st_coveredby(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000') [outer=(3), immutable]
 
@@ -1466,16 +1466,16 @@ project
       │    ├── fd: (1)-->(3)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /3
+      │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["\x89", "\xfd ")
       │         ├── key: (1)
       │         └── scan g@geom_idx
-      │              ├── columns: k:1!null geom:3
-      │              ├── inverted constraint: /3/1
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
       │              │    └── spans: ["\x89", "\xfd ")
       │              ├── key: (1)
-      │              └── fd: (1)-->(3)
+      │              └── fd: (1)-->(6)
       └── filters
            └── st_dwithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
 
@@ -1497,16 +1497,16 @@ project
       │    ├── fd: (1)-->(3)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /3
+      │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["\x89", "\xfd ")
       │         ├── key: (1)
       │         └── scan g@geom_idx
-      │              ├── columns: k:1!null geom:3
-      │              ├── inverted constraint: /3/1
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
       │              │    └── spans: ["\x89", "\xfd ")
       │              ├── key: (1)
-      │              └── fd: (1)-->(3)
+      │              └── fd: (1)-->(6)
       └── filters
            └── st_dfullywithin('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
 
@@ -1528,7 +1528,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
@@ -1543,8 +1543,8 @@ project
       │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
@@ -1557,7 +1557,7 @@ project
       │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0) [outer=(4), immutable]
 
@@ -1579,7 +1579,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
@@ -1594,8 +1594,8 @@ project
       │         │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x00", "\xfdD\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdD\x00\x00\x00\x00\x00\x00\x01", "\xfdF")
@@ -1608,7 +1608,7 @@ project
       │              │         ├── ["\xfdZ\x00\x00\x00\x00\x00\x00\x01", "\xfd\\")
       │              │         └── ["\xfd\\\x00\x00\x00\x00\x00\x00\x00", "\xfd\\\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable]
 
@@ -1634,7 +1634,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    ├── union spans: ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         │    └── INTERSECTION
@@ -1650,14 +1650,14 @@ project
       │         │                   └── ["\xfdO\x00\x00\x00\x00\x00\x00\x00", "\xfdO\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
            └── st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable]
@@ -1682,7 +1682,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1690,14 +1690,14 @@ project
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR st_coveredby('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) [outer=(4), immutable]
 
@@ -1722,7 +1722,7 @@ project
       │    ├── fd: (1)-->(4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    ├── union spans
       │         │    │    ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1753,14 +1753,14 @@ project
       │         │                   └── ["\xfdO\x00\x00\x00\x00\x00\x00\x00", "\xfdO\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_coveredby('0102000020E61000000200000075029A081B9A5DC0F085C954C1F840406DC5FEB27B720440454772F90F814840', geog:4) AND st_coveredby('0101000020E610000058569A94821E46C07BC7DFAC773A4E40', geog:4)) [outer=(4), immutable]
 
@@ -1785,16 +1785,16 @@ project
       │    ├── fd: (1)-->(3,4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /3
+      │         ├── inverted expression: /6
       │         │    ├── tight: false
       │         │    └── union spans: ["\x89", "\xfd ")
       │         ├── key: (1)
       │         └── scan g@geom_idx
-      │              ├── columns: k:1!null geom:3
-      │              ├── inverted constraint: /3/1
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
       │              │    └── spans: ["\x89", "\xfd ")
       │              ├── key: (1)
-      │              └── fd: (1)-->(3)
+      │              └── fd: (1)-->(6)
       └── filters
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
            └── st_overlaps('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3) [outer=(3), immutable]
@@ -1842,7 +1842,7 @@ project
       │    ├── fd: (1)-->(3,4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1850,14 +1850,14 @@ project
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── scan g@geog_idx
-      │              ├── columns: k:1!null geog:4
-      │              ├── inverted constraint: /4/1
+      │              ├── columns: k:1!null geog_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
       │              │    └── spans
       │              │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── key: (1)
-      │              └── fd: (1)-->(4)
+      │              └── fd: (1)-->(7)
       └── filters
            └── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) OR (st_intersects('0101000020E61000009279E40F061E44C0BEE36FD63B9D5140', geog:4) AND st_crosses('0102000000020000000000000000000000000000000000000000000000000000000000000000000040', geom:3)) [outer=(3,4), immutable]
 
@@ -1882,7 +1882,7 @@ project
       │    ├── fd: (1)-->(2,4)
       │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted expression: /4
+      │         ├── inverted expression: /7
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
@@ -1890,18 +1890,18 @@ project
       │         │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── key: (1)
       │         └── select
-      │              ├── columns: k:1!null geog:4
+      │              ├── columns: k:1!null geog_inverted_key:7!null
       │              ├── key: (1)
-      │              ├── fd: (1)-->(4)
+      │              ├── fd: (1)-->(7)
       │              ├── scan g@geog_idx
-      │              │    ├── columns: k:1!null geog:4
-      │              │    ├── inverted constraint: /4/1
+      │              │    ├── columns: k:1!null geog_inverted_key:7!null
+      │              │    ├── inverted constraint: /7/1
       │              │    │    └── spans
       │              │    │         ├── ["\xfdL\x00\x00\x00\x00\x00\x00\x00", "\xfdL\x00\x00\x00\x00\x00\x00\x00"]
       │              │    │         ├── ["\xfdN\x00\x00\x00\x00\x00\x00\x01", "\xfdP")
       │              │    │         └── ["\xfdP\x00\x00\x00\x00\x00\x00\x00", "\xfdP\x00\x00\x00\x00\x00\x00\x00"]
       │              │    ├── key: (1)
-      │              │    └── fd: (1)-->(4)
+      │              │    └── fd: (1)-->(7)
       │              └── filters
       │                   └── k:1 > 100 [outer=(1), constraints=(/1: [/101 - ]; tight)]
       └── filters
@@ -2188,7 +2188,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null j:4
       │    ├── left columns: k:1!null j:4
-      │    ├── right columns: k:6 j:9
+      │    ├── right columns: k:7 j:10
       │    ├── immutable
       │    ├── scan b
       │    │    ├── columns: k:1!null j:4
@@ -2197,14 +2197,14 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,4)
       │    └── index-join b
-      │         ├── columns: k:6!null j:9
+      │         ├── columns: k:7!null j:10
       │         ├── immutable
-      │         ├── key: (6)
-      │         ├── fd: (6)-->(9)
+      │         ├── key: (7)
+      │         ├── fd: (7)-->(10)
       │         └── scan b@inv_idx
-      │              ├── columns: k:6!null
-      │              ├── constraint: /9/6: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
-      │              └── key: (6)
+      │              ├── columns: k:7!null
+      │              ├── constraint: /10/7: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              └── key: (7)
       └── aggregations
            └── const-agg [as=j:4, outer=(4)]
                 └── j:4
@@ -2226,7 +2226,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null a:2
       │    ├── left columns: k:1!null a:2
-      │    ├── right columns: k:5 a:6
+      │    ├── right columns: k:6 a:7
       │    ├── immutable
       │    ├── scan c
       │    │    ├── columns: k:1!null a:2
@@ -2235,14 +2235,14 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(1,2)
       │    └── index-join c
-      │         ├── columns: k:5!null a:6
+      │         ├── columns: k:6!null a:7
       │         ├── immutable
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6)
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7)
       │         └── scan c@inv_idx
-      │              ├── columns: k:5!null
-      │              ├── constraint: /6/5: [/ARRAY[2] - /ARRAY[2]]
-      │              └── key: (5)
+      │              ├── columns: k:6!null
+      │              ├── constraint: /7/6: [/ARRAY[2] - /ARRAY[2]]
+      │              └── key: (6)
       └── aggregations
            └── const-agg [as=a:2, outer=(2)]
                 └── a:2
@@ -3227,7 +3227,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null u:2 j:4
       │    ├── left columns: k:1!null u:2 j:4
-      │    ├── right columns: k:6 u:7 j:9
+      │    ├── right columns: k:7 u:8 j:10
       │    ├── immutable
       │    ├── index-join b
       │    │    ├── columns: k:1!null u:2!null j:4
@@ -3239,14 +3239,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(2)
       │    └── index-join b
-      │         ├── columns: k:6!null u:7 j:9
+      │         ├── columns: k:7!null u:8 j:10
       │         ├── immutable
-      │         ├── key: (6)
-      │         ├── fd: (6)-->(7,9)
+      │         ├── key: (7)
+      │         ├── fd: (7)-->(8,10)
       │         └── scan b@inv_idx
-      │              ├── columns: k:6!null
-      │              ├── constraint: /9/6: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
-      │              └── key: (6)
+      │              ├── columns: k:7!null
+      │              ├── constraint: /10/7: [/'{"foo": "bar"}' - /'{"foo": "bar"}']
+      │              └── key: (7)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -3269,7 +3269,7 @@ project
       ├── union-all
       │    ├── columns: k:1!null a:2 u:3
       │    ├── left columns: k:1!null a:2 u:3
-      │    ├── right columns: k:5 a:6 u:7
+      │    ├── right columns: k:6 a:7 u:8
       │    ├── immutable
       │    ├── index-join c
       │    │    ├── columns: k:1!null a:2 u:3!null
@@ -3281,14 +3281,14 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── index-join c
-      │         ├── columns: k:5!null a:6 u:7
+      │         ├── columns: k:6!null a:7 u:8
       │         ├── immutable
-      │         ├── key: (5)
-      │         ├── fd: (5)-->(6,7)
+      │         ├── key: (6)
+      │         ├── fd: (6)-->(7,8)
       │         └── scan c@inv_idx
-      │              ├── columns: k:5!null
-      │              ├── constraint: /6/5: [/ARRAY[2] - /ARRAY[2]]
-      │              └── key: (5)
+      │              ├── columns: k:6!null
+      │              ├── constraint: /7/6: [/ARRAY[2] - /ARRAY[2]]
+      │              └── key: (6)
       └── aggregations
            ├── const-agg [as=a:2, outer=(2)]
            │    └── a:2

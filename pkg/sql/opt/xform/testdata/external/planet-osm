@@ -1725,42 +1725,42 @@ ORDER BY
     p.way, v.prio;
 ----
 sort
- ├── columns: way:69 int_tc_type:98!null
+ ├── columns: way:69 int_tc_type:99!null
  ├── immutable
  ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
  ├── key: (69)
- ├── fd: (69)-->(98)
+ ├── fd: (69)-->(99)
  ├── ordering: +69
  └── distinct-on
-      ├── columns: p.way:69 l.highway:98!null
+      ├── columns: p.way:69 l.highway:99!null
       ├── grouping columns: p.way:69
-      ├── internal-ordering: +144 opt(29,69)
+      ├── internal-ordering: +146 opt(29,69)
       ├── immutable
       ├── stats: [rows=2632.05556, distinct(69)=2632.05556, null(69)=0]
       ├── key: (69)
-      ├── fd: (69)-->(98)
+      ├── fd: (69)-->(99)
       ├── sort
-      │    ├── columns: p.highway:29!null p.way:69 l.highway:98!null l.way:140 column1:143!null column2:144!null
+      │    ├── columns: p.highway:29!null p.way:69 l.highway:99!null l.way:141 column1:145!null column2:146!null
       │    ├── immutable
-      │    ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(98)=5, null(98)=0, distinct(143)=5, null(143)=0]
-      │    ├── fd: ()-->(29), (98)==(143), (143)==(98)
-      │    ├── ordering: +144 opt(29,69) [actual: +144]
+      │    ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(99)=5, null(99)=0, distinct(145)=5, null(145)=0]
+      │    ├── fd: ()-->(29), (99)==(145), (145)==(99)
+      │    ├── ordering: +146 opt(29,69) [actual: +146]
       │    └── inner-join (hash)
-      │         ├── columns: p.highway:29!null p.way:69 l.highway:98!null l.way:140 column1:143!null column2:144!null
+      │         ├── columns: p.highway:29!null p.way:69 l.highway:99!null l.way:141 column1:145!null column2:146!null
       │         ├── immutable
-      │         ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(98)=5, null(98)=0, distinct(143)=5, null(143)=0]
-      │         ├── fd: ()-->(29), (98)==(143), (143)==(98)
+      │         ├── stats: [rows=386640.471, distinct(69)=2632.05556, null(69)=0, distinct(99)=5, null(99)=0, distinct(145)=5, null(145)=0]
+      │         ├── fd: ()-->(29), (99)==(145), (145)==(99)
       │         ├── inner-join (lookup planet_osm_line)
-      │         │    ├── columns: p.highway:29!null p.way:69 l.highway:98 l.way:140
-      │         │    ├── key columns: [141] = [141]
+      │         │    ├── columns: p.highway:29!null p.way:69 l.highway:99 l.way:141
+      │         │    ├── key columns: [142] = [142]
       │         │    ├── lookup columns are key
       │         │    ├── immutable
-      │         │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0, distinct(98)=31, null(98)=1529566.44]
+      │         │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0, distinct(69)=2632.05556, null(69)=0, distinct(99)=31, null(99)=1529566.44]
       │         │    ├── fd: ()-->(29)
       │         │    ├── inner-join (inverted-lookup planet_osm_line@planet_osm_line_way_idx)
-      │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:141!null
+      │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:142!null
       │         │    │    ├── inverted-expr
-      │         │    │    │    └── st_dwithin(p.way:69, l.way:140, 100.0)
+      │         │    │    │    └── st_dwithin(p.way:69, l.way:141, 100.0)
       │         │    │    ├── stats: [rows=3926737.36, distinct(29)=1, null(29)=0]
       │         │    │    ├── fd: ()-->(29)
       │         │    │    ├── select
@@ -1774,18 +1774,18 @@ sort
       │         │    │    │         └── p.highway:29 = 'turning_circle' [outer=(29), constraints=(/29: [/'turning_circle' - /'turning_circle']; tight), fd=()-->(29)]
       │         │    │    └── filters (true)
       │         │    └── filters
-      │         │         └── st_dwithin(p.way:69, l.way:140, 100.0) [outer=(69,140), immutable]
+      │         │         └── st_dwithin(p.way:69, l.way:141, 100.0) [outer=(69,141), immutable]
       │         ├── values
-      │         │    ├── columns: column1:143!null column2:144!null
+      │         │    ├── columns: column1:145!null column2:146!null
       │         │    ├── cardinality: [5 - 5]
-      │         │    ├── stats: [rows=5, distinct(143)=5, null(143)=0, distinct(144)=5, null(144)=0]
+      │         │    ├── stats: [rows=5, distinct(145)=5, null(145)=0, distinct(146)=5, null(146)=0]
       │         │    ├── ('tertiary', 1)
       │         │    ├── ('unclassified', 2)
       │         │    ├── ('residential', 3)
       │         │    ├── ('living_street', 4)
       │         │    └── ('service', 5)
       │         └── filters
-      │              └── column1:143 = l.highway:98 [outer=(98,143), constraints=(/98: (/NULL - ]; /143: (/NULL - ]), fd=(98)==(143), (143)==(98)]
+      │              └── column1:145 = l.highway:99 [outer=(99,145), constraints=(/99: (/NULL - ]; /145: (/NULL - ]), fd=(99)==(145), (145)==(99)]
       └── aggregations
-           └── first-agg [as=l.highway:98, outer=(98)]
-                └── l.highway:98
+           └── first-agg [as=l.highway:99, outer=(99)]
+                └── l.highway:99

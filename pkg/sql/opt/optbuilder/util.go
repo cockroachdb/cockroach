@@ -645,7 +645,7 @@ func resolveNumericColumnRefs(tab cat.Table, columns []tree.ColumnID) (ordinals 
 		ord := 0
 		cnt := tab.ColumnCount()
 		for ord < cnt {
-			if tab.Column(ord).ColID() == cat.StableID(c) && !cat.IsMutationColumn(tab, ord) {
+			if tab.Column(ord).ColID() == cat.StableID(c) && cat.IsSelectableColumn(tab, ord) {
 				break
 			}
 			ord++
@@ -678,19 +678,25 @@ type columnKinds struct {
 
 	// If true, include system columns.
 	includeSystem bool
+
+	// If true, include virtual columns.
+	includeVirtual bool
 }
 
 // tableOrdinals returns a slice of ordinals that correspond to table columns of
 // the desired kinds.
 func tableOrdinals(tab cat.Table, k columnKinds) []int {
 	n := tab.ColumnCount()
+	shouldInclude := [...]bool{
+		cat.Ordinary:   true,
+		cat.WriteOnly:  k.includeMutations,
+		cat.DeleteOnly: k.includeMutations,
+		cat.System:     k.includeSystem,
+		cat.Virtual:    k.includeVirtual,
+	}
 	ordinals := make([]int, 0, n)
 	for i := 0; i < n; i++ {
-		kind := tab.ColumnKind(i)
-
-		if kind == cat.Ordinary ||
-			(k.includeMutations && (kind == cat.WriteOnly || kind == cat.DeleteOnly)) ||
-			(k.includeSystem && kind == cat.System) {
+		if shouldInclude[tab.ColumnKind(i)] {
 			ordinals = append(ordinals, i)
 		}
 	}
