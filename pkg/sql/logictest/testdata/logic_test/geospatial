@@ -429,6 +429,219 @@ FROM parse_test ORDER BY id ASC
 {"type":"Point","coordinates":[]}                                                             {"type":"Point","coordinates":[]}                                                             {"type":"Point","coordinates":[]}
 NULL                                                                                          NULL                                                                                          NULL
 
+# Since id in parse_test can change between tests, make a new table
+# that has a consistent id over multiple logic test runs.
+statement ok
+CREATE TABLE parse_test_geojson AS
+  SELECT
+    row_number() OVER (ORDER BY id) as id,
+    geom,
+    geog
+  FROM parse_test
+
+query T
+SELECT
+  ST_AsGeoJSON(t.*)
+FROM ( VALUES
+  (1),
+  (2)
+) t(row_id)
+----
+{"geometry": {"type": null}, "properties": {"row_id": 1}, "type": "Feature"}
+{"geometry": {"type": null}, "properties": {"row_id": 2}, "type": "Feature"}
+
+query TTT
+SELECT
+  ST_AsGeoJSON(parse_test_geojson.*),
+  ST_AsGeoJSON(parse_test_geojson.*, 'geom'),
+  ST_AsGeoJSON(parse_test_geojson.*, 'geog')
+FROM parse_test_geojson ORDER BY id ASC
+----
+{"geometry": {"coordinates": [1.555, -2], "type": "Point"}, "properties": {"geog": {"coordinates": [1.555, -2], "type": "Point"}, "id": 1}, "type": "Feature"}  {"geometry": {"coordinates": [1.555, -2], "type": "Point"}, "properties": {"geog": {"coordinates": [1.555, -2], "type": "Point"}, "id": 1}, "type": "Feature"}  {"geometry": {"coordinates": [1.555, -2], "type": "Point"}, "properties": {"geom": {"coordinates": [1.555, -2], "type": "Point"}, "id": 1}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 2}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 2}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 2], "type": "Point"}, "id": 2}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 3}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 3}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 2], "type": "Point"}, "id": 3}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 4}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 4}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 2], "type": "Point"}, "id": 4}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 5}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 2], "type": "Point"}, "id": 5}, "type": "Feature"}            {"geometry": {"coordinates": [1, 2], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 2], "type": "Point"}, "id": 5}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 1], "type": "Point"}, "id": 6}, "type": "Feature"}            {"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 1], "type": "Point"}, "id": 6}, "type": "Feature"}            {"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 1], "type": "Point"}, "id": 6}, "type": "Feature"}
+{"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 1], "type": "Point"}, "id": 7}, "type": "Feature"}            {"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geog": {"coordinates": [1, 1], "type": "Point"}, "id": 7}, "type": "Feature"}            {"geometry": {"coordinates": [1, 1], "type": "Point"}, "properties": {"geom": {"coordinates": [1, 1], "type": "Point"}, "id": 7}, "type": "Feature"}
+{"geometry": {"coordinates": [], "type": "Point"}, "properties": {"geog": {"coordinates": [], "type": "Point"}, "id": 8}, "type": "Feature"}                    {"geometry": {"coordinates": [], "type": "Point"}, "properties": {"geog": {"coordinates": [], "type": "Point"}, "id": 8}, "type": "Feature"}                    {"geometry": {"coordinates": [], "type": "Point"}, "properties": {"geom": {"coordinates": [], "type": "Point"}, "id": 8}, "type": "Feature"}
+{"geometry": {"type": null}, "properties": {"geog": null, "geom": null, "id": 9}, "type": "Feature"}                                                            {"geometry": {"type": null}, "properties": {"geog": null, "id": 9}, "type": "Feature"}                                                                          {"geometry": {"type": null}, "properties": {"geom": null, "id": 9}, "type": "Feature"}
+
+query T
+SELECT
+  ST_AsGeoJSON(parse_test_geojson.*, 'geog', 3, true)
+FROM parse_test_geojson ORDER BY id ASC
+----
+{
+   "geometry": {
+     "coordinates": [
+       1.555,
+       -2
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1.555,
+         -2
+       ],
+       "type": "Point"
+     },
+     "id": 1
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       2
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         2
+       ],
+       "type": "Point"
+     },
+     "id": 2
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       2
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         2
+       ],
+       "type": "Point"
+     },
+     "id": 3
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       2
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         2
+       ],
+       "type": "Point"
+     },
+     "id": 4
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       2
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         2
+       ],
+       "type": "Point"
+     },
+     "id": 5
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       1
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         1
+       ],
+       "type": "Point"
+     },
+     "id": 6
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [
+       1,
+       1
+     ],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [
+         1,
+         1
+       ],
+       "type": "Point"
+     },
+     "id": 7
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "coordinates": [],
+     "type": "Point"
+   },
+   "properties": {
+     "geom": {
+       "coordinates": [],
+       "type": "Point"
+     },
+     "id": 8
+   },
+   "type": "Feature"
+}
+{
+   "geometry": {
+     "type": null
+   },
+   "properties": {
+     "geom": null,
+     "id": 9
+   },
+   "type": "Feature"
+}
+
+statement error "geom_no_exist" column not found
+SELECT
+  ST_AsGeoJSON(parse_test.*, 'geom_no_exist')
+FROM parse_test ORDER BY id asc
+
 # tests casts
 query TTT
 SELECT

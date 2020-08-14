@@ -896,6 +896,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 </ul>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry. Coordinates have a maximum of 9 decimal digits.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. Coordinates have a maximum of 9 decimal digits.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. max_decimal_digits will be output for each coordinate value.</p>
+</span></td></tr>
+<tr><td><a name="st_asgeojson"></a><code>st_asgeojson(row: tuple, geo_column: <a href="string.html">string</a>, max_decimal_digits: <a href="int.html">int</a>, pretty: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the GeoJSON representation of a given Geometry, using geo_column as the geometry for the given Feature. max_decimal_digits will be output for each coordinate value. Output will be pretty printed in JSON if pretty is true.</p>
+</span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography.</p>
 </span></td></tr>
 <tr><td><a name="st_ashexewkb"></a><code>st_ashexewkb(geography: geography, xdr_or_ndr: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the EWKB representation in hex of a given Geography. This variant has a second argument denoting the encoding - <code>xdr</code> for big endian and <code>ndr</code> for little endian.</p>
