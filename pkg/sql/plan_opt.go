@@ -14,12 +14,14 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -184,8 +186,6 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 // makeOptimizerPlan generates a plan using the cost-based optimizer.
 // On success, it populates p.curPlan.
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
-	stmt := p.stmt
-
 	opc := &p.optPlanningCtx
 	opc.reset()
 
@@ -195,11 +195,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	// Build the plan tree.
-	root := execMemo.RootExpr()
-	var (
-		plan exec.Plan
-		bld  *execbuilder.Builder
-	)
 	// TODO(yuzefovich): we're creating a new exec.Factory for every query, but
 	// we probably could pool those allocations using sync.Pool. Investigate
 	// this.
@@ -211,11 +206,15 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		if p.Descriptors().HasUncommittedTypes() {
 			planningMode = distSQLLocalOnlyPlanning
 		}
-		bld = execbuilder.New(
-			newDistSQLSpecExecFactory(p, planningMode), execMemo, &opc.catalog, root,
-			p.EvalContext(), p.autoCommit,
+		err := opc.runExecBuilder(
+			&p.curPlan,
+			p.stmt,
+			newDistSQLSpecExecFactory(p, planningMode),
+			execMemo,
+			p.EvalContext(),
+			p.ExecCfg().Codec,
+			p.autoCommit,
 		)
-		plan, err = bld.Build()
 		if err != nil {
 			if mode == sessiondata.ExperimentalDistSQLPlanningAlways &&
 				!strings.Contains(p.stmt.AST.StatementTag(), "SET") {
@@ -229,12 +228,11 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				return err
 			}
 			// We will fallback to the old path.
-		}
-		if err == nil {
+		} else {
 			// TODO(yuzefovich): think through whether subqueries or
 			// postqueries can be distributed. If that's the case, we might
 			// need to also look at the plan distribution of those.
-			m := plan.(*planComponents).main
+			m := p.curPlan.main
 			isPartiallyDistributed := m.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
 			if isPartiallyDistributed && p.SessionData().PartiallyDistributedPlansDisabled {
 				// The planning has succeeded, but we've created a partially
@@ -243,51 +241,36 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// that forces local planning.
 				// TODO(yuzefovich): remove this logic when deleting old
 				// execFactory.
-				bld = execbuilder.New(
-					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning), execMemo, &opc.catalog, root,
-					p.EvalContext(), p.autoCommit,
+				err = opc.runExecBuilder(
+					&p.curPlan,
+					p.stmt,
+					newDistSQLSpecExecFactory(p, distSQLLocalOnlyPlanning),
+					execMemo,
+					p.EvalContext(),
+					p.ExecCfg().Codec,
+					p.autoCommit,
 				)
-				plan, err = bld.Build()
+			}
+			if err == nil {
+				return nil
 			}
 		}
-		if err != nil {
-			bld = nil
-			// TODO(yuzefovich): make the logging conditional on the verbosity
-			// level once new DistSQL planning is no longer experimental.
-			log.Infof(ctx, "distSQLSpecExecFactory failed planning with %v, "+
-				"falling back to the old path", err)
-		}
-	}
-	if bld == nil {
-		// If bld is non-nil, then experimental planning has succeeded and has
-		// already created a plan.
-		bld = execbuilder.New(
-			newExecFactory(p), execMemo, &opc.catalog, root, p.EvalContext(), p.autoCommit,
+		// TODO(yuzefovich): make the logging conditional on the verbosity
+		// level once new DistSQL planning is no longer experimental.
+		log.Infof(
+			ctx, "distSQLSpecExecFactory failed planning with %v, falling back to the old path", err,
 		)
-		plan, err = bld.Build()
-		if err != nil {
-			return err
-		}
 	}
-
-	result := plan.(*planComponents)
-	cols := result.main.planColumns()
-	if stmt.ExpectedTypes != nil {
-		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
-		}
-	}
-
-	p.curPlan.planComponents = *result
-	p.curPlan.mem = execMemo
-	p.curPlan.catalog = &opc.catalog
-	p.curPlan.stmt = stmt
-	p.curPlan.flags = opc.flags
-	if bld.IsDDL {
-		p.curPlan.flags.Set(planFlagIsDDL)
-	}
-
-	return nil
+	// If we got here, we did not create a plan above.
+	return opc.runExecBuilder(
+		&p.curPlan,
+		p.stmt,
+		newExecFactory(p),
+		execMemo,
+		p.EvalContext(),
+		p.ExecCfg().Codec,
+		p.autoCommit,
+	)
 }
 
 type optPlanningCtx struct {
@@ -549,4 +532,61 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	return f.Memo(), nil
+}
+
+// runExecBuilder execbuilds a plan using the given factory and stores the
+// result in planTop. If required, also captures explain data using the explain
+// factory.
+func (opc *optPlanningCtx) runExecBuilder(
+	planTop *planTop,
+	stmt *Statement,
+	f exec.Factory,
+	mem *memo.Memo,
+	evalCtx *tree.EvalContext,
+	codec keys.SQLCodec,
+	allowAutoCommit bool,
+) error {
+	var result *planComponents
+	var explainPlan *explain.Plan
+	var isDDL bool
+	if !planTop.savePlanString {
+		// No instrumentation.
+		bld := execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		plan, err := bld.Build()
+		if err != nil {
+			return err
+		}
+		result = plan.(*planComponents)
+		isDDL = bld.IsDDL
+	} else {
+		// Create an explain factory and record the explain.Plan.
+		explainFactory := explain.NewFactory(f)
+		bld := execbuilder.New(explainFactory, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		plan, err := bld.Build()
+		if err != nil {
+			return err
+		}
+		explainPlan = plan.(*explain.Plan)
+		result = explainPlan.WrappedPlan.(*planComponents)
+		isDDL = bld.IsDDL
+	}
+
+	if stmt.ExpectedTypes != nil {
+		cols := result.main.planColumns()
+		if !stmt.ExpectedTypes.TypesEqual(cols) {
+			return pgerror.New(pgcode.FeatureNotSupported, "cached plan must not change result type")
+		}
+	}
+
+	planTop.planComponents = *result
+	planTop.explainPlan = explainPlan
+	planTop.mem = mem
+	planTop.catalog = &opc.catalog
+	planTop.codec = codec
+	planTop.stmt = stmt
+	planTop.flags = opc.flags
+	if isDDL {
+		planTop.flags.Set(planFlagIsDDL)
+	}
+	return nil
 }
