@@ -97,7 +97,7 @@ const (
 	DefaultDescriptorLeaseJitterFraction = 0.05
 
 	// DefaultDescriptorLeaseRenewalTimeout is the default time
-	// before a lease expires when acquisition to renew the lease begins.
+	//	// before a lease expires when acquisition to renew the lease begins.
 	DefaultDescriptorLeaseRenewalTimeout = time.Minute
 )
 
@@ -584,30 +584,5 @@ func TempStorageConfigFromEnv(
 		InMemory: inMem,
 		Mon:      monitor,
 		Spec:     useStore,
-	}
-}
-
-// LeaseManagerConfig holds lease manager parameters.
-type LeaseManagerConfig struct {
-	// DescriptorLeaseDuration is the mean duration a lease will be
-	// acquired for.
-	DescriptorLeaseDuration time.Duration
-
-	// DescriptorLeaseJitterFraction is the factor that we use to
-	// randomly jitter the lease duration when acquiring a new lease and
-	// the lease renewal timeout.
-	DescriptorLeaseJitterFraction float64
-
-	// DefaultDescriptorLeaseRenewalTimeout is the default time
-	// before a lease expires when acquisition to renew the lease begins.
-	DescriptorLeaseRenewalTimeout time.Duration
-}
-
-// NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
-func NewLeaseManagerConfig() *LeaseManagerConfig {
-	return &LeaseManagerConfig{
-		DescriptorLeaseDuration:       DefaultDescriptorLeaseDuration,
-		DescriptorLeaseJitterFraction: DefaultDescriptorLeaseJitterFraction,
-		DescriptorLeaseRenewalTimeout: DefaultDescriptorLeaseRenewalTimeout,
 	}
 }

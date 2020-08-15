@@ -835,12 +835,11 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 
 			serverArgs := base.TestServerArgs{Knobs: testingKnobs}
 
-			serverArgs.LeaseManagerConfig = base.NewLeaseManagerConfig()
 			// The LeaseJitterFraction is zero so leases will have
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			serverArgs.LeaseManagerConfig.DescriptorLeaseJitterFraction = 0.0
+			LeaseJitterFraction.Override(&serverArgs.SV, 0)
 
 			s, _, _ := serverutils.StartServer(
 				t, serverArgs)

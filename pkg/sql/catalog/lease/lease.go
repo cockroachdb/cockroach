@@ -55,6 +55,33 @@ import (
 var errRenewLease = errors.New("renew lease on id")
 var errReadOlderVersion = errors.New("read older descriptor version from store")
 
+// LeaseDuration controls the duration of sql descriptor leases.
+var LeaseDuration = settings.RegisterNonNegativeDurationSetting(
+	"sql.catalog.descriptor_lease_duration",
+	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	base.DefaultDescriptorLeaseDuration)
+
+func between0and1inclusive(f float64) error {
+	if f < 0 || f > 1 {
+		return errors.Errorf("must be between 0 and 1")
+	}
+	return nil
+}
+
+// LeaseJitterFraction controls the percent jitter around sql lease durations
+var LeaseJitterFraction = settings.RegisterValidatedFloatSetting(
+	"sql.catalog.descriptor_lease_jitter_fraction",
+	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	base.DefaultDescriptorLeaseJitterFraction,
+	between0and1inclusive)
+
+// LeaseRenewalDuration controls the default time before a lease expires when
+//// acquisition to renew the lease begins.
+var LeaseRenewalDuration = settings.RegisterNonNegativeDurationSetting(
+	"sql.catalog.descriptor_lease_renewal_fraction",
+	"controls the default time before a lease expires when acquisition to renew the lease begins.",
+	base.DefaultDescriptorLeaseRenewalTimeout)
+
 // A lease stored in system.lease.
 type storedLease struct {
 	id         descpb.ID
@@ -163,28 +190,16 @@ type storage struct {
 	// concurrent lease acquisitions from the store.
 	group *singleflight.Group
 
-	// leaseDuration is the mean duration a lease will be acquired for. The
-	// actual duration is jittered using leaseJitterFraction. Jittering is done to
-	// prevent multiple leases from being renewed simultaneously if they were all
-	// acquired simultaneously.
-	leaseDuration time.Duration
-	// leaseJitterFraction is the factor that we use to randomly jitter the lease
-	// duration when acquiring a new lease and the lease renewal timeout. The
-	// range of the actual lease duration will be
-	// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration]
-	leaseJitterFraction float64
-	// leaseRenewalTimeout is the time before a lease expires when
-	// acquisition to renew the lease begins.
-	leaseRenewalTimeout time.Duration
-
 	testingKnobs StorageTestingKnobs
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
 func (s storage) jitteredLeaseDuration() time.Duration {
-	return time.Duration(float64(s.leaseDuration) * (1 - s.leaseJitterFraction +
-		2*s.leaseJitterFraction*rand.Float64()))
+	leaseDuration := LeaseDuration.Get(&s.settings.SV)
+	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)
+	return time.Duration(float64(leaseDuration) * (1 - jitterFraction +
+		2*jitterFraction*rand.Float64()))
 }
 
 // acquire a lease on the most recent version of a descriptor. If the lease
@@ -603,6 +618,10 @@ func (s storage) getForExpiration(
 // lease to define restricted capabilities and prevent improper use of a lease
 // where we instead have leaseTokens.
 type leaseToken *descriptorVersionState
+
+func (s storage) leaseRenewalTimeout() time.Duration {
+	return LeaseRenewalDuration.Get(&s.settings.SV)
+}
 
 // descriptorSet maintains an ordered set of descriptorVersionState objects
 // sorted by version. It supports addition and removal of elements, finding the
@@ -1477,21 +1496,17 @@ func NewLeaseManager(
 	codec keys.SQLCodec,
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
-	cfg *base.LeaseManagerConfig,
 ) *Manager {
 	lm := &Manager{
 		storage: storage{
-			nodeIDContainer:     nodeIDContainer,
-			db:                  db,
-			clock:               clock,
-			internalExecutor:    internalExecutor,
-			settings:            settings,
-			codec:               codec,
-			group:               &singleflight.Group{},
-			leaseDuration:       cfg.DescriptorLeaseDuration,
-			leaseJitterFraction: cfg.DescriptorLeaseJitterFraction,
-			leaseRenewalTimeout: cfg.DescriptorLeaseRenewalTimeout,
-			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
+			nodeIDContainer:  nodeIDContainer,
+			db:               db,
+			clock:            clock,
+			internalExecutor: internalExecutor,
+			settings:         settings,
+			codec:            codec,
+			group:            &singleflight.Group{},
+			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 		},
 		testingKnobs: testingKnobs,
 		names: nameCache{
@@ -1558,7 +1573,7 @@ func (m *Manager) AcquireByName(
 		if descVersion.GetModificationTime().LessEq(timestamp) {
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(descVersion.expiration.WallTime - timestamp.WallTime)
-			if durationUntilExpiry < m.storage.leaseRenewalTimeout {
+			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 				if t := m.findDescriptorState(descVersion.GetID(), false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(
 						ctx, m, descVersion.GetID(), name); err != nil {
@@ -1709,7 +1724,7 @@ func (m *Manager) Acquire(
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
 				durationUntilExpiry := time.Duration(desc.expiration.WallTime - timestamp.WallTime)
-				if durationUntilExpiry < m.storage.leaseRenewalTimeout {
+				if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, id, desc.GetName()); err != nil {
 						return nil, hlc.Timestamp{}, err
 					}
@@ -2173,7 +2188,8 @@ var leaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *Manager) PeriodicallyRefreshSomeLeases(ctx context.Context) {
 	m.stopper.RunWorker(ctx, func(ctx context.Context) {
-		if m.storage.leaseDuration <= 0 {
+		leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
+		if leaseDuration <= 0 {
 			return
 		}
 		refreshTimer := timeutil.NewTimer()

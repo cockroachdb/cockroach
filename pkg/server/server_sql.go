@@ -257,7 +257,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		codec,
 		lmKnobs,
 		cfg.stopper,
-		cfg.LeaseManagerConfig,
 	)
 
 	// Set up internal memory metrics for use by internal SQL executors.
