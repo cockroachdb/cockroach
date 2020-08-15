@@ -213,7 +213,7 @@ root                             ·              ·
  │         └── scan              ·              ·
  │                               missing stats  ·
  │                               table          parent@primary
- │                               spans          /3-/3/#
+ │                               spans          [/3 - /3]
  ├── fk-check                    ·              ·
  │    └── error if rows          ·              ·
  │         └── lookup join       ·              ·
@@ -247,7 +247,7 @@ root                             ·              ·
  │         └── scan              ·              ·
  │                               missing stats  ·
  │                               table          parent@primary
- │                               spans          /3-/3/#
+ │                               spans          [/3 - /3]
  ├── fk-check                    ·              ·
  │    └── error if rows          ·              ·
  │         └── lookup join       ·              ·
@@ -298,7 +298,7 @@ root                             ·              ·
  │         └── scan              ·              ·
  │                               missing stats  ·
  │                               table          doubleparent@primary
- │                               spans          /10-/11
+ │                               spans          [/10 - /10]
  └── fk-check                    ·              ·
       └── error if rows          ·              ·
            └── lookup join       ·              ·
@@ -355,7 +355,7 @@ root                             ·                      ·
  │              └── scan         ·                      ·
  │                               missing stats          ·
  │                               table                  child@primary
- │                               spans                  /10-/10/#
+ │                               spans                  [/10 - /10]
  │                               locking strength       for update
  └── fk-check                    ·                      ·
       └── error if rows          ·                      ·
@@ -439,7 +439,7 @@ root                                  ·                 ·
  │              └── scan              ·                 ·
  │                                    missing stats     ·
  │                                    table             parent@parent_other_key
- │                                    spans             /10-/11
+ │                                    spans             [/10 - /10]
  │                                    locking strength  for update
  ├── fk-check                         ·                 ·
  │    └── error if rows               ·                 ·
@@ -905,7 +905,7 @@ filter               ·                   ·
       │    └── scan  ·                   ·
       │              missing stats       ·
       │              table               b@idx
-      │              spans               /!NULL-
+      │              spans               (/NULL - ]
       └── scan       ·                   ·
 ·                    missing stats       ·
 ·                    table               a@primary

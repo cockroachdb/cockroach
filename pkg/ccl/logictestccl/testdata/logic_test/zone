@@ -32,7 +32,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -77,7 +77,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@tertiary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -122,7 +122,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 # ------------------------------------------------------------------------------
 # Swap location of primary and secondary indexes and ensure that primary index
@@ -143,7 +143,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /10-/10/#
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -185,7 +185,7 @@ EXECUTE p
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /10-/10/#
+·     spans          [/10 - /10]
 
 statement ok
 ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
@@ -201,7 +201,7 @@ EXECUTE p
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 statement ok
 DEALLOCATE p
@@ -227,7 +227,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 # ------------------------------------------------------------------------------
 # Move secondary lease preference to dc3 and put tertiary lease preference in
@@ -250,7 +250,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@tertiary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -305,7 +305,7 @@ EXPLAIN SELECT * FROM t WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -350,7 +350,7 @@ EXECUTE p
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE
@@ -364,7 +364,7 @@ EXECUTE p
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /10-/10/#
+·     spans          [/10 - /10]
 
 statement ok
 DEALLOCATE p
@@ -395,7 +395,7 @@ EXPLAIN SELECT * FROM t36642 WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t36642@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 statement ok
 ALTER INDEX t36642@tertiary CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
@@ -411,7 +411,7 @@ EXPLAIN SELECT * FROM t36642 WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t36642@tertiary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 query T retry
 EXPLAIN (OPT, CATALOG) SELECT * FROM t
@@ -467,7 +467,7 @@ EXPLAIN SELECT * FROM t36644 WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t36644@secondary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 statement ok
 ALTER INDEX t36644@secondary CONFIGURE ZONE USING lease_preferences='[[+dc=dc3]]'
@@ -484,7 +484,7 @@ EXPLAIN SELECT * FROM t36644 WHERE k=10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t36644@tertiary
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 subtest regression_35756
 

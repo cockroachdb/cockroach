@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -661,15 +662,40 @@ func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Ind
 func (e *emitter) emitSpans(
 	field string, table cat.Table, index cat.Index, scanParams exec.ScanParams,
 ) {
+	e.ob.Attr(field, e.spansStr(table, index, scanParams))
+}
+
+func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 	if scanParams.InvertedConstraint == nil && scanParams.IndexConstraint == nil {
 		if scanParams.HardLimit > 0 {
-			e.ob.Attr(field, "LIMITED SCAN")
-		} else {
-			e.ob.Attr(field, "FULL SCAN")
+			return "LIMITED SCAN"
 		}
-	} else {
-		e.ob.Attr(field, e.spanFormatFn(table, index, scanParams))
+		return "FULL SCAN"
 	}
+
+	// In verbose mode show the physical spans.
+	if e.ob.flags.Verbose {
+		return e.spanFormatFn(table, index, scanParams)
+	}
+
+	// In non-verbose mode, show the logical spans.
+	if scanParams.IndexConstraint != nil {
+		sp := &scanParams.IndexConstraint.Spans
+		// Show up to 4 spans.
+		if maxSpans := 4; sp.Count() > maxSpans {
+			trunc := &constraint.Spans{}
+			trunc.Alloc(maxSpans)
+			for i := 0; i < maxSpans; i++ {
+				trunc.Append(sp.Get(i))
+			}
+			return fmt.Sprintf("%s … (%d more)", trunc.String(), sp.Count()-maxSpans)
+		}
+		return sp.String()
+	}
+	// For inverted constraints, just print the number of spans. Inverted key
+	// values are generally not user-readable.
+	n := len(scanParams.InvertedConstraint)
+	return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 }
 
 func (e *emitter) emitLockingPolicy(locking *tree.LockingItem) {
