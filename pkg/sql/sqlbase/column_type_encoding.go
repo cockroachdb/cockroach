@@ -95,6 +95,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
+	case *tree.DBox2D:
+		if dir == encoding.Ascending {
+			return encoding.EncodeBox2DAscending(b, t.CartesianBoundingBox)
+		}
+		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox)
 	case *tree.DGeography:
 		so := t.Geography.SpatialObject()
 		if dir == encoding.Ascending {
@@ -286,6 +291,14 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
+	case types.Box2DFamily:
+		var r *geo.CartesianBoundingBox
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeBox2DAscending(key)
+		} else {
+			rkey, r, err = encoding.DecodeBox2DDescending(key)
+		}
+		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
 	case types.GeographyFamily:
 		var r geopb.SpatialObject
 		if dir == encoding.Ascending {
@@ -437,6 +450,8 @@ func EncodeTableValue(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
+	case *tree.DBox2D:
+		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObject())
 	case *tree.DGeometry:
@@ -561,6 +576,12 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, b, err
 		}
 		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(data))), b, nil
+	case types.Box2DFamily:
+		b, data, err := encoding.DecodeUntaggedBox2DValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
 	case types.GeographyFamily:
 		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
 		if err != nil {
@@ -696,6 +717,11 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 	case types.DateFamily:
 		if v, ok := val.(*tree.DDate); ok {
 			r.SetInt(v.UnixEpochDaysWithOrig())
+			return r, nil
+		}
+	case types.Box2DFamily:
+		if v, ok := val.(*tree.DBox2D); ok {
+			r.SetBox2D(v.CartesianBoundingBox)
 			return r, nil
 		}
 	case types.GeographyFamily:
@@ -858,6 +884,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(v))), nil
+	case types.Box2DFamily:
+		v, err := value.GetBox2D()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: v}), nil
 	case types.GeographyFamily:
 		v, err := value.GetGeo()
 		if err != nil {
@@ -1256,6 +1288,8 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.Int, nil
 	case types.FloatFamily:
 		return encoding.Float, nil
+	case types.Box2DFamily:
+		return encoding.Box2D, nil
 	case types.GeometryFamily:
 		return encoding.Geo, nil
 	case types.GeographyFamily:
@@ -1326,6 +1360,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
+	case *tree.DBox2D:
+		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox)
 	case *tree.DGeography:
 		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObject())
 	case *tree.DGeometry:

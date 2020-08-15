@@ -2935,6 +2935,91 @@ func (d *DGeometry) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
+// DBox2D is the Datum representation of the Box2D type.
+type DBox2D struct {
+	*geo.CartesianBoundingBox
+}
+
+// NewDBox2D returns a new Box2D Datum.
+func NewDBox2D(b *geo.CartesianBoundingBox) *DBox2D {
+	return &DBox2D{CartesianBoundingBox: b}
+}
+
+// ParseDBox2D attempts to pass `str` as a Box2D type.
+func ParseDBox2D(str string) (*DBox2D, error) {
+	b, err := geo.ParseCartesianBoundingBox(str)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse geometry")
+	}
+	return &DBox2D{CartesianBoundingBox: b}, nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DBox2D) ResolvedType() *types.T {
+	return types.Box2D
+}
+
+// Compare implements the Datum interface.
+func (d *DBox2D) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	o := other.(*DBox2D)
+	return d.CartesianBoundingBox.Compare(o.CartesianBoundingBox)
+}
+
+// Prev implements the Datum interface.
+func (d *DBox2D) Prev(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DBox2D) Next(ctx *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DBox2D) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DBox2D) IsMin(_ *EvalContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DBox2D) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DBox2D) Min(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DBox2D) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DBox2D) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+	ctx.WriteString(d.CartesianBoundingBox.Repr())
+	if !bareStrings {
+		ctx.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DBox2D) Size() uintptr {
+	return unsafe.Sizeof(*d) + unsafe.Sizeof(*d.CartesianBoundingBox)
+}
+
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
@@ -3053,7 +3138,7 @@ func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
-	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray:
+	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	case *DGeometry:
 		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
@@ -4463,7 +4548,7 @@ func NewDefaultDatum(evalCtx *EvalContext, t *types.T) (d Datum, err error) {
 		return dNullJSON, nil
 	case types.TimeTZFamily:
 		return dZeroTimeTZ, nil
-	case types.GeometryFamily, types.GeographyFamily:
+	case types.GeometryFamily, types.GeographyFamily, types.Box2DFamily:
 		// TODO(otan): force Geometry/Geography to not allow `NOT NULL` columns to
 		// make this impossible.
 		return nil, pgerror.Newf(
@@ -4542,6 +4627,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 }{
 	types.UnknownFamily:        {unsafe.Sizeof(dNull{}), fixedSize},
 	types.BoolFamily:           {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.Box2DFamily:          {unsafe.Sizeof(DBox2D{CartesianBoundingBox: &geo.CartesianBoundingBox{}}), fixedSize},
 	types.BitFamily:            {unsafe.Sizeof(DBitArray{}), variableSize},
 	types.IntFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.FloatFamily:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},

@@ -1043,6 +1043,11 @@ func dumpTableData(
 						if err != nil {
 							return err
 						}
+					case types.Box2DFamily:
+						d, err = tree.ParseDBox2D(string(t))
+						if err != nil {
+							return err
+						}
 					case types.GeographyFamily:
 						d, err = tree.ParseDGeography(string(t))
 						if err != nil {
