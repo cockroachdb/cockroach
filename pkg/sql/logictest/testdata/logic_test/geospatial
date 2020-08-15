@@ -4035,6 +4035,11 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 ----
 NULL
 
+query T
+SELECT ST_AsEWKT(ST_MakeLine(ST_MakePoint(1, 2), ST_MakePoint(3, 4)))
+----
+LINESTRING (1 2, 3 4)
+
 subtest set_point_test
 
 query T

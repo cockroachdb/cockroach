@@ -41,6 +41,12 @@ func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			v.Aggregated = true
 			return false, expr
 		}
+		if fd.Class == tree.ContainsAggregateClass {
+			if t.ResolvedOverload().AggregateFunc != nil {
+				v.Aggregated = true
+				return false, expr
+			}
+		}
 	case *tree.Subquery:
 		return false, expr
 	}

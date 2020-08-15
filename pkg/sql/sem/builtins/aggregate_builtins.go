@@ -358,23 +358,6 @@ var aggregates = map[string]builtinDefinition{
 			"Aggregates values as a JSON or JSONB object.", tree.VolatilityStable),
 	),
 
-	"st_makeline": makeBuiltin(
-		aggPropsNullableArgs(),
-		makeAggOverload(
-			[]*types.T{types.Geometry},
-			types.Geometry,
-			func(
-				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
-			) tree.AggregateFunc {
-				return &stMakeLineAgg{}
-			},
-			infoBuilder{
-				info: "Forms a LineString from Point, MultiPoint or LineStrings. Other shapes will be ignored.",
-			}.String(),
-			tree.VolatilityImmutable,
-		),
-	),
-
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
 			[]*types.T{types.Any},

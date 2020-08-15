@@ -846,6 +846,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 	panic(errors.AssertionFailedf("unhandled aggregate: %s", name))
 }
 
+func isContainsAggregate(def *tree.FunctionDefinition) bool {
+	return def.Class == tree.ContainsAggregateClass
+}
+
 func isAggregate(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.AggregateClass
 }
