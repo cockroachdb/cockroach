@@ -278,9 +278,7 @@ func newChunker(
 
 func (s *chunker) init() {
 	s.input.Init()
-	s.bufferedTuples = newAppendOnlyBufferedBatch(
-		s.allocator, s.inputTypes, 0, /* initialSize */
-	)
+	s.bufferedTuples = newAppendOnlyBufferedBatch(s.allocator, s.inputTypes)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
 }

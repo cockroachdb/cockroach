@@ -44,7 +44,7 @@ func NewUnorderedDistinct(
 		OneInputNode: NewOneInputNode(input),
 		allocator:    allocator,
 		ht:           ht,
-		output:       allocator.NewMemBatch(typs),
+		typs:         typs,
 	}
 }
 
@@ -60,6 +60,7 @@ type unorderedDistinct struct {
 
 	allocator     *colmem.Allocator
 	ht            *hashTable
+	typs          []*types.T
 	buildFinished bool
 
 	distinctCount int
@@ -75,7 +76,6 @@ func (op *unorderedDistinct) Init() {
 }
 
 func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
-	op.output.ResetInternalBatch()
 	// First, build the hash table and populate the selection vector that
 	// includes only distinct tuples.
 	if !op.buildFinished {
@@ -86,11 +86,15 @@ func (op *unorderedDistinct) Next(ctx context.Context) coldata.Batch {
 		// tuples, as a result, we will be simply returning all buffered tuples.
 		op.distinctCount = op.ht.vals.Length()
 	}
+	if op.outputBatchStart == op.distinctCount {
+		return coldata.ZeroBatch
+	}
+	op.output, _ = op.allocator.ResetMaybeReallocate(op.typs, op.output, op.distinctCount-op.outputBatchStart)
 
-	// Create and return the next batch of input to a maximum size of
-	// coldata.BatchSize().
+	// Create and return the next batch of input to a maximum size equal to the
+	// capacity of the output batch.
 	nSelected := 0
-	batchEnd := op.outputBatchStart + coldata.BatchSize()
+	batchEnd := op.outputBatchStart + op.output.Capacity()
 	if batchEnd > op.distinctCount {
 		batchEnd = op.distinctCount
 	}

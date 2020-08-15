@@ -217,7 +217,7 @@ var mjTestCases = []*joinTestCase{
 		expected:     tuples{{1}, {1}, {2}, {2}, {2}, {3}, {4}},
 	},
 	{
-		description:  "cross product test, batch size = col.BatchSize()",
+		description:  "cross product test",
 		leftTypes:    []*types.T{types.Int},
 		rightTypes:   []*types.T{types.Int},
 		leftTuples:   tuples{{1}, {1}, {1}, {1}},
@@ -229,46 +229,7 @@ var mjTestCases = []*joinTestCase{
 		expected:     tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 	},
 	{
-		description:     "cross product test, batch size = 4 (small even)",
-		leftTypes:       []*types.T{types.Int},
-		rightTypes:      []*types.T{types.Int},
-		leftTuples:      tuples{{1}, {1}, {1}, {1}},
-		rightTuples:     tuples{{1}, {1}, {1}, {1}},
-		leftOutCols:     []uint32{0},
-		rightOutCols:    []uint32{},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-		outputBatchSize: 4,
-	},
-	{
-		description:     "cross product test, batch size = 3 (small odd)",
-		leftTypes:       []*types.T{types.Int},
-		rightTypes:      []*types.T{types.Int},
-		leftTuples:      tuples{{1}, {1}, {1}, {1}},
-		rightTuples:     tuples{{1}, {1}, {1}, {1}},
-		leftOutCols:     []uint32{},
-		rightOutCols:    []uint32{0},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-		outputBatchSize: 3,
-	},
-	{
-		description:     "cross product test, batch size = 1 (unit)",
-		leftTypes:       []*types.T{types.Int},
-		rightTypes:      []*types.T{types.Int},
-		leftTuples:      tuples{{1}, {1}, {1}, {1}},
-		rightTuples:     tuples{{1}, {1}, {1}, {1}},
-		leftOutCols:     []uint32{},
-		rightOutCols:    []uint32{0},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
-		outputBatchSize: 1,
-	},
-	{
-		description:  "multi output column test, basic",
+		description:  "multi output column test",
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
@@ -278,19 +239,6 @@ var mjTestCases = []*joinTestCase{
 		leftEqCols:   []uint32{0},
 		rightEqCols:  []uint32{0},
 		expected:     tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
-	},
-	{
-		description:     "multi output column test, batch size = 1",
-		leftTypes:       []*types.T{types.Int, types.Int},
-		rightTypes:      []*types.T{types.Int, types.Int},
-		leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
-		rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
-		leftOutCols:     []uint32{0, 1},
-		rightOutCols:    []uint32{0, 1},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
-		outputBatchSize: 1,
 	},
 	{
 		description:  "multi output column test, test output coldata projection",
@@ -329,19 +277,6 @@ var mjTestCases = []*joinTestCase{
 		expected:     tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 	},
 	{
-		description:     "multi output column test, L run, batch size = 1",
-		leftTypes:       []*types.T{types.Int, types.Int},
-		rightTypes:      []*types.T{types.Int, types.Int},
-		leftTuples:      tuples{{1, 10}, {2, 20}, {2, 21}, {3, 30}, {4, 40}},
-		rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
-		leftOutCols:     []uint32{0, 1},
-		rightOutCols:    []uint32{0, 1},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
-		outputBatchSize: 1,
-	},
-	{
 		description:  "multi output column test, R run",
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
@@ -352,19 +287,6 @@ var mjTestCases = []*joinTestCase{
 		leftEqCols:   []uint32{0},
 		rightEqCols:  []uint32{0},
 		expected:     tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
-	},
-	{
-		description:     "multi output column test, R run, batch size = 1",
-		leftTypes:       []*types.T{types.Int, types.Int},
-		rightTypes:      []*types.T{types.Int, types.Int},
-		leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
-		rightTuples:     tuples{{1, 11}, {1, 111}, {2, 12}, {3, 13}, {4, 14}},
-		leftOutCols:     []uint32{0, 1},
-		rightOutCols:    []uint32{0, 1},
-		leftEqCols:      []uint32{0},
-		rightEqCols:     []uint32{0},
-		expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
-		outputBatchSize: 1,
 	},
 	{
 		description:  "logic test",
@@ -379,7 +301,7 @@ var mjTestCases = []*joinTestCase{
 		expected:     tuples{{4, 5}, {4, 2}},
 	},
 	{
-		description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns",
+		description:  "multi output column test, runs (to test saved output), reordered out columns",
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
@@ -399,10 +321,9 @@ var mjTestCases = []*joinTestCase{
 			{30, 3, 13, 3},
 			{40, 4, 14, 4},
 		},
-		outputBatchSize: 1,
 	},
 	{
-		description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns that dont start at 0",
+		description:  "multi output column test, runs (to test saved output), reordered out columns that dont start at 0",
 		leftTypes:    []*types.T{types.Int, types.Int},
 		rightTypes:   []*types.T{types.Int, types.Int},
 		leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
@@ -422,7 +343,6 @@ var mjTestCases = []*joinTestCase{
 			{30, 3, 13},
 			{40, 4, 14},
 		},
-		outputBatchSize: 1,
 	},
 	{
 		description:  "equality column is correctly indexed",
@@ -575,40 +495,6 @@ var mjTestCases = []*joinTestCase{
 			{true, 20, 2.2, true, 20, 2.3},
 			{true, 20, 2.2, true, 20, 2.4},
 		},
-	},
-	{
-		description:  "templating cross product test, output batch size 1",
-		leftTypes:    []*types.T{types.Bool, types.Int2, types.Float},
-		rightTypes:   []*types.T{types.Bool, types.Int2, types.Float},
-		leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
-		rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
-		leftOutCols:  []uint32{0, 1, 2},
-		rightOutCols: []uint32{0, 1, 2},
-		leftEqCols:   []uint32{0, 1},
-		rightEqCols:  []uint32{0, 1},
-		expected: tuples{
-			{false, 10, 1.2, false, 10, 1.2},
-			{true, 20, 2.2, true, 20, 2.3},
-			{true, 20, 2.2, true, 20, 2.4},
-		},
-		outputBatchSize: 1,
-	},
-	{
-		description:  "templating cross product test, output batch size 2",
-		leftTypes:    []*types.T{types.Bool, types.Int2, types.Float},
-		rightTypes:   []*types.T{types.Bool, types.Int2, types.Float},
-		leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
-		rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
-		leftOutCols:  []uint32{0, 1, 2},
-		rightOutCols: []uint32{0, 1, 2},
-		leftEqCols:   []uint32{0, 1},
-		rightEqCols:  []uint32{0, 1},
-		expected: tuples{
-			{false, 10, 1.2, false, 10, 1.2},
-			{true, 20, 2.2, true, 20, 2.3},
-			{true, 20, 2.2, true, 20, 2.4},
-		},
-		outputBatchSize: 2,
 	},
 	{
 		description:  "templating reordered eq columns",
@@ -1659,28 +1545,13 @@ func TestMergeJoiner(t *testing.T) {
 	for _, tc := range mjTestCases {
 		for _, tc := range tc.mutateTypes() {
 			tc.init()
-
-			// We use a custom verifier function so that we can get the merge join op
-			// to use a custom output batch size per test, to exercise more cases.
-			var mergeJoinVerifier verifierFn = func(output *opTestOutput) error {
-				if mj, ok := output.input.(variableOutputBatchSizeInitializer); ok {
-					mj.initWithOutputBatchSize(tc.outputBatchSize)
-				} else {
-					// When we have an inner join with ON expression, a filter operator
-					// will be put on top of the merge join, so to make life easier, we'll
-					// just ignore the requested output batch size.
-					output.input.Init()
-				}
-				verify := output.Verify
-				if tc.joinType == descpb.FullOuterJoin {
-					// FULL OUTER JOIN doesn't guarantee any ordering on its output (since
-					// it is ambiguous), so we're comparing the outputs as sets.
-					verify = output.VerifyAnyOrder
-				}
-
-				return verify()
+			verifier := orderedVerifier
+			if tc.joinType == descpb.FullOuterJoin {
+				// FULL OUTER JOIN doesn't guarantee any ordering on its output
+				// (since it is ambiguous), so we're comparing the outputs as
+				// sets.
+				verifier = unorderedVerifier
 			}
-
 			var runner testRunner
 			if tc.skipAllNullsInjection {
 				// We're omitting all nulls injection test. See comments for each such
@@ -1695,7 +1566,7 @@ func TestMergeJoiner(t *testing.T) {
 				log.Infof(context.Background(), "MemoryLimit=%s/%s", humanizeutil.IBytes(memoryLimit), tc.description)
 				runner(t, []tuples{tc.leftTuples, tc.rightTuples},
 					[][]*types.T{tc.leftTypes, tc.rightTypes},
-					tc.expected, mergeJoinVerifier,
+					tc.expected, verifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
 						args := &NewColOperatorArgs{
@@ -1742,69 +1613,64 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	nTuples := coldata.BatchSize() * 4
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
-	for _, outBatchSize := range []int{1, 16, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
-		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
-			func(t *testing.T) {
-				typs := []*types.T{types.Int}
-				colsLeft := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
-				colsRight := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
-				groupsLeft := colsLeft[0].Int64()
-				groupsRight := colsRight[0].Int64()
-				for i := range groupsLeft {
-					groupsLeft[i] = int64(i * 2)
-					groupsRight[i] = int64(i*2 + 1)
+	typs := []*types.T{types.Int}
+	colsLeft := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+	colsRight := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+	groupsLeft := colsLeft[0].Int64()
+	groupsRight := colsRight[0].Int64()
+	for i := range groupsLeft {
+		groupsLeft[i] = int64(i * 2)
+		groupsRight[i] = int64(i*2 + 1)
+	}
+	leftSource := newChunkingBatchSource(typs, colsLeft, nTuples)
+	rightSource := newChunkingBatchSource(typs, colsRight, nTuples)
+	a, err := NewMergeJoinOp(
+		testAllocator, defaultMemoryLimit, queueCfg,
+		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
+		leftSource, rightSource, typs, typs,
+		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+		testDiskAcc,
+	)
+	if err != nil {
+		t.Fatal("error in merge join op constructor", err)
+	}
+	a.Init()
+	i, count, expVal := 0, 0, int64(0)
+	for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+		count += b.Length()
+		leftOutCol := b.ColVec(0).Int64()
+		leftNulls := b.ColVec(0).Nulls()
+		rightOutCol := b.ColVec(1).Int64()
+		rightNulls := b.ColVec(1).Nulls()
+		for j := 0; j < b.Length(); j++ {
+			leftVal := leftOutCol[j]
+			leftNull := leftNulls.NullAt(j)
+			rightVal := rightOutCol[j]
+			rightNull := rightNulls.NullAt(j)
+			if expVal%2 == 0 {
+				// It is an even-numbered row, so the left value should contain
+				// expVal and the right value should be NULL.
+				if leftVal != expVal || leftNull || !rightNull {
+					t.Fatalf("found left = %d, left NULL? = %t, right NULL? = %t, "+
+						"expected left = %d, left NULL? = false, right NULL? = true, idx %d of batch %d",
+						leftVal, leftNull, rightNull, expVal, j, i)
 				}
-				leftSource := newChunkingBatchSource(typs, colsLeft, nTuples)
-				rightSource := newChunkingBatchSource(typs, colsRight, nTuples)
-				a, err := NewMergeJoinOp(
-					testAllocator, defaultMemoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
-					leftSource, rightSource, typs, typs,
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
-				)
-				if err != nil {
-					t.Fatal("error in merge join op constructor", err)
+			} else {
+				// It is an odd-numbered row, so the right value should contain
+				// expVal and the left value should be NULL.
+				if rightVal != expVal || rightNull || !leftNull {
+					t.Fatalf("found right = %d, right NULL? = %t, left NULL? = %t, "+
+						"expected right = %d, right NULL? = false, left NULL? = true, idx %d of batch %d",
+						rightVal, rightNull, leftNull, expVal, j, i)
 				}
-				a.(*mergeJoinFullOuterOp).initWithOutputBatchSize(outBatchSize)
-				i, count, expVal := 0, 0, int64(0)
-				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-					count += b.Length()
-					leftOutCol := b.ColVec(0).Int64()
-					leftNulls := b.ColVec(0).Nulls()
-					rightOutCol := b.ColVec(1).Int64()
-					rightNulls := b.ColVec(1).Nulls()
-					for j := 0; j < b.Length(); j++ {
-						leftVal := leftOutCol[j]
-						leftNull := leftNulls.NullAt(j)
-						rightVal := rightOutCol[j]
-						rightNull := rightNulls.NullAt(j)
-						if expVal%2 == 0 {
-							// It is an even-numbered row, so the left value should contain
-							// expVal and the right value should be NULL.
-							if leftVal != expVal || leftNull || !rightNull {
-								t.Fatalf("found left = %d, left NULL? = %t, right NULL? = %t, "+
-									"expected left = %d, left NULL? = false, right NULL? = true, idx %d of batch %d",
-									leftVal, leftNull, rightNull, expVal, j, i)
-							}
-						} else {
-							// It is an odd-numbered row, so the right value should contain
-							// expVal and the left value should be NULL.
-							if rightVal != expVal || rightNull || !leftNull {
-								t.Fatalf("found right = %d, right NULL? = %t, left NULL? = %t, "+
-									"expected right = %d, right NULL? = false, left NULL? = true, idx %d of batch %d",
-									rightVal, rightNull, leftNull, expVal, j, i)
-							}
-						}
-						expVal++
-					}
-					i++
-				}
-				if count != 2*nTuples {
-					t.Fatalf("found count %d, expected count %d", count, 2*nTuples)
-				}
-			})
+			}
+			expVal++
+		}
+		i++
+	}
+	if count != 2*nTuples {
+		t.Fatalf("found count %d, expected count %d", count, 2*nTuples)
 	}
 }
 
@@ -1830,87 +1696,81 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	rng, _ := randutil.NewPseudoRand()
-	for _, outBatchSize := range []int{1, 17, coldata.BatchSize() - 1, coldata.BatchSize(), coldata.BatchSize() + 1} {
-		t.Run(fmt.Sprintf("outBatchSize=%d", outBatchSize),
-			func(t *testing.T) {
-				typs := []*types.T{types.Int, types.Bytes, types.Decimal}
-				colsLeft := make([]coldata.Vec, len(typs))
-				colsRight := make([]coldata.Vec, len(typs))
-				for i, typ := range typs {
-					colsLeft[i] = testAllocator.NewMemColumn(typ, nTuples)
-					colsRight[i] = testAllocator.NewMemColumn(typ, nTuples)
-				}
-				groupsLeft := colsLeft[0].Int64()
-				groupsRight := colsRight[0].Int64()
-				leftGroupIdx, rightGroupIdx := 0, 0
-				for i := range groupsLeft {
-					if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
-						leftGroupIdx++
-					}
-					if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
-						rightGroupIdx++
-					}
-					groupsLeft[i] = int64(leftGroupIdx)
-					groupsRight[i] = int64(rightGroupIdx)
-				}
-				for i := range typs[1:] {
-					for _, vecs := range [][]coldata.Vec{colsLeft, colsRight} {
-						coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-							Rand:            rng,
-							Vec:             vecs[i+1],
-							N:               nTuples,
-							NullProbability: nullProbability,
-						})
-					}
-				}
-				leftMJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
-				rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
-				leftHJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
-				rightHJSource := newChunkingBatchSource(typs, colsRight, nTuples)
-				mj, err := NewMergeJoinOp(
-					testAllocator, defaultMemoryLimit, queueCfg,
-					colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
-					leftMJSource, rightMJSource, typs, typs,
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-					testDiskAcc,
-				)
-				if err != nil {
-					t.Fatal("error in merge join op constructor", err)
-				}
-				mj.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
-				hj := NewHashJoiner(
-					testAllocator, HashJoinerSpec{
-						joinType: descpb.InnerJoin,
-						left: hashJoinerSourceSpec{
-							eqCols: []uint32{0}, sourceTypes: typs,
-						},
-						right: hashJoinerSourceSpec{
-							eqCols: []uint32{0}, sourceTypes: typs,
-						},
-					}, leftHJSource, rightHJSource)
-				hj.Init()
-
-				var mjOutputTuples, hjOutputTuples tuples
-				for b := mj.Next(ctx); b.Length() != 0; b = mj.Next(ctx) {
-					for i := 0; i < b.Length(); i++ {
-						mjOutputTuples = append(mjOutputTuples, getTupleFromBatch(b, i))
-					}
-				}
-				for b := hj.Next(ctx); b.Length() != 0; b = hj.Next(ctx) {
-					for i := 0; i < b.Length(); i++ {
-						hjOutputTuples = append(hjOutputTuples, getTupleFromBatch(b, i))
-					}
-				}
-				err = assertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
-				// Note that the error message can be extremely verbose (it
-				// might contain all output tuples), so we manually check that
-				// comparing err to nil returns true (if we were to use
-				// require.NoError, then the error message would be output).
-				require.True(t, err == nil)
-			})
-
+	typs := []*types.T{types.Int, types.Bytes, types.Decimal}
+	colsLeft := make([]coldata.Vec, len(typs))
+	colsRight := make([]coldata.Vec, len(typs))
+	for i, typ := range typs {
+		colsLeft[i] = testAllocator.NewMemColumn(typ, nTuples)
+		colsRight[i] = testAllocator.NewMemColumn(typ, nTuples)
 	}
+	groupsLeft := colsLeft[0].Int64()
+	groupsRight := colsRight[0].Int64()
+	leftGroupIdx, rightGroupIdx := 0, 0
+	for i := range groupsLeft {
+		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+			leftGroupIdx++
+		}
+		if rng.Float64() < 1.0/float64(coldata.BatchSize()) {
+			rightGroupIdx++
+		}
+		groupsLeft[i] = int64(leftGroupIdx)
+		groupsRight[i] = int64(rightGroupIdx)
+	}
+	for i := range typs[1:] {
+		for _, vecs := range [][]coldata.Vec{colsLeft, colsRight} {
+			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+				Rand:            rng,
+				Vec:             vecs[i+1],
+				N:               nTuples,
+				NullProbability: nullProbability,
+			})
+		}
+	}
+	leftMJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
+	rightMJSource := newChunkingBatchSource(typs, colsRight, nTuples)
+	leftHJSource := newChunkingBatchSource(typs, colsLeft, nTuples)
+	rightHJSource := newChunkingBatchSource(typs, colsRight, nTuples)
+	mj, err := NewMergeJoinOp(
+		testAllocator, defaultMemoryLimit, queueCfg,
+		colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+		leftMJSource, rightMJSource, typs, typs,
+		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+		testDiskAcc,
+	)
+	if err != nil {
+		t.Fatal("error in merge join op constructor", err)
+	}
+	mj.Init()
+	hj := NewHashJoiner(
+		testAllocator, HashJoinerSpec{
+			joinType: descpb.InnerJoin,
+			left: hashJoinerSourceSpec{
+				eqCols: []uint32{0}, sourceTypes: typs,
+			},
+			right: hashJoinerSourceSpec{
+				eqCols: []uint32{0}, sourceTypes: typs,
+			},
+		}, leftHJSource, rightHJSource)
+	hj.Init()
+
+	var mjOutputTuples, hjOutputTuples tuples
+	for b := mj.Next(ctx); b.Length() != 0; b = mj.Next(ctx) {
+		for i := 0; i < b.Length(); i++ {
+			mjOutputTuples = append(mjOutputTuples, getTupleFromBatch(b, i))
+		}
+	}
+	for b := hj.Next(ctx); b.Length() != 0; b = hj.Next(ctx) {
+		for i := 0; i < b.Length(); i++ {
+			hjOutputTuples = append(hjOutputTuples, getTupleFromBatch(b, i))
+		}
+	}
+	err = assertTuplesSetsEqual(hjOutputTuples, mjOutputTuples, evalCtx)
+	// Note that the error message can be extremely verbose (it
+	// might contain all output tuples), so we manually check that
+	// comparing err to nil returns true (if we were to use
+	// require.NoError, then the error message would be output).
+	require.True(t, err == nil)
 }
 
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps
@@ -1923,56 +1783,50 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(t, true /* inMem */)
 	defer cleanup()
 	for _, numInputBatches := range []int{1, 2, 16} {
-		for _, outBatchSize := range []int{1, 16, coldata.BatchSize()} {
-			t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
-				func(t *testing.T) {
-					nTuples := coldata.BatchSize() * numInputBatches
-					typs := []*types.T{types.Int}
-					cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
-					groups := cols[0].Int64()
-					for i := range groups {
-						groups[i] = int64(i)
-					}
-
-					leftSource := newChunkingBatchSource(typs, cols, nTuples)
-					rightSource := newChunkingBatchSource(typs, cols, nTuples)
-
-					a, err := NewMergeJoinOp(
-						testAllocator, defaultMemoryLimit,
-						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
-						leftSource, rightSource, typs, typs,
-						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
-						testDiskAcc,
-					)
-					if err != nil {
-						t.Fatal("error in merge join op constructor", err)
-					}
-
-					a.(*mergeJoinInnerOp).initWithOutputBatchSize(outBatchSize)
-
-					i := 0
-					count := 0
-					// Keep track of the last comparison value.
-					expVal := int64(0)
-					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
-						count += b.Length()
-						outCol := b.ColVec(0).Int64()
-						for j := int64(0); j < int64(b.Length()); j++ {
-							outVal := outCol[j]
-							if outVal != expVal {
-								t.Fatalf("found val %d, expected %d, idx %d of batch %d",
-									outVal, expVal, j, i)
-							}
-							expVal++
+		t.Run(fmt.Sprintf("numInputBatches=%d", numInputBatches),
+			func(t *testing.T) {
+				nTuples := coldata.BatchSize() * numInputBatches
+				typs := []*types.T{types.Int}
+				cols := []coldata.Vec{testAllocator.NewMemColumn(typs[0], nTuples)}
+				groups := cols[0].Int64()
+				for i := range groups {
+					groups[i] = int64(i)
+				}
+				leftSource := newChunkingBatchSource(typs, cols, nTuples)
+				rightSource := newChunkingBatchSource(typs, cols, nTuples)
+				a, err := NewMergeJoinOp(
+					testAllocator, defaultMemoryLimit,
+					queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
+					leftSource, rightSource, typs, typs,
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
+					testDiskAcc,
+				)
+				if err != nil {
+					t.Fatal("error in merge join op constructor", err)
+				}
+				a.Init()
+				i := 0
+				count := 0
+				// Keep track of the last comparison value.
+				expVal := int64(0)
+				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+					count += b.Length()
+					outCol := b.ColVec(0).Int64()
+					for j := int64(0); j < int64(b.Length()); j++ {
+						outVal := outCol[j]
+						if outVal != expVal {
+							t.Fatalf("found val %d, expected %d, idx %d of batch %d",
+								outVal, expVal, j, i)
 						}
-						i++
+						expVal++
 					}
-					if count != nTuples {
-						t.Fatalf("found count %d, expected count %d", count, nTuples)
-					}
-				})
-		}
+					i++
+				}
+				if count != nTuples {
+					t.Fatalf("found count %d, expected count %d", count, nTuples)
+				}
+			})
 	}
 }
 
@@ -2014,10 +1868,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						cols[0].Int64()[i] = int64(i / groupSize)
 						cols[1].Int64()[i] = int64(i / groupSize)
 					}
-
 					leftSource := newChunkingBatchSource(typs, cols, nTuples)
 					rightSource := newChunkingBatchSource(typs, cols, nTuples)
-
 					a, err := NewMergeJoinOp(
 						testAllocator, defaultMemoryLimit,
 						queueCfg, colexecbase.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
@@ -2029,9 +1881,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
 					}
-
-					a.(*mergeJoinInnerOp).Init()
-
+					a.Init()
 					i := 0
 					count := 0
 					// Keep track of the last comparison value.
@@ -2156,13 +2006,10 @@ func TestMergeJoinerRandomized(t *testing.T) {
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 						testDiskAcc,
 					)
-
 					if err != nil {
 						t.Fatal("error in merge join op constructor", err)
 					}
-
-					a.(*mergeJoinInnerOp).Init()
-
+					a.Init()
 					i := 0
 					count := 0
 					cpIdx := 0
@@ -2233,7 +2080,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	benchMemAccount := testMemMonitor.MakeBoundAccount()

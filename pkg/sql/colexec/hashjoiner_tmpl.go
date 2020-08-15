@@ -30,7 +30,7 @@ func collectProbeOuter(
 		currentID := hj.ht.probeScratch.headID[i]
 
 		for {
-			if nResults >= hj.outputBatchSize {
+			if nResults >= coldata.BatchSize() {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults
@@ -71,7 +71,7 @@ func collectProbeNoOuter(
 	for i := hj.probeState.prevBatchResumeIdx; i < batchSize; i++ {
 		currentID := hj.ht.probeScratch.headID[i]
 		for currentID != 0 {
-			if nResults >= hj.outputBatchSize {
+			if nResults >= coldata.BatchSize() {
 				hj.probeState.prevBatch = batch
 				hj.probeState.prevBatchResumeIdx = i
 				return nResults

@@ -41695,7 +41695,6 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 ) {
 	sel := batch.Selection()
 	initialBuilderState := o.builderState.left
-	outputBatchSize := o.outputBatchSize
 	o.unlimitedAllocator.PerformOperation(
 		o.output.ColVecs()[:len(input.sourceTypes)],
 		func() {
@@ -41741,8 +41740,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -41806,8 +41805,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -41871,8 +41870,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -41935,8 +41934,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -41996,8 +41995,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42058,8 +42057,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42123,8 +42122,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42188,8 +42187,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42253,8 +42252,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42318,8 +42317,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42389,8 +42388,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42451,8 +42450,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42513,8 +42512,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42574,8 +42573,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42632,8 +42631,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42691,8 +42690,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42753,8 +42752,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42815,8 +42814,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42877,8 +42876,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -42939,8 +42938,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43008,8 +43007,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43072,8 +43071,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43136,8 +43135,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43199,8 +43198,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43259,8 +43258,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43320,8 +43319,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43384,8 +43383,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43448,8 +43447,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43512,8 +43511,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43576,8 +43575,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43646,8 +43645,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43707,8 +43706,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43768,8 +43767,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43828,8 +43827,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43885,8 +43884,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -43943,8 +43942,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -44004,8 +44003,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -44065,8 +44064,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -44126,8 +44125,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -44187,8 +44186,8 @@ func (o *mergeJoinFullOuterOp) buildLeftGroupsFromBatch(
 
 										repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 										toAppend := repeatsLeft
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if leftGroup.nullGroup {
@@ -44291,8 +44290,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44340,8 +44339,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44389,8 +44388,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44437,8 +44436,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44482,8 +44481,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44528,8 +44527,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44577,8 +44576,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44626,8 +44625,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44675,8 +44674,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44724,8 +44723,8 @@ func (o *mergeJoinFullOuterOp) buildLeftBufferedGroup(
 								srcStartIdx := o.builderState.left.curSrcStartIdx
 								repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
 								toAppend := repeatsLeft
-								if outStartIdx+toAppend > o.outputBatchSize {
-									toAppend = o.outputBatchSize - outStartIdx
+								if outStartIdx+toAppend > o.output.Capacity() {
+									toAppend = o.output.Capacity() - outStartIdx
 								}
 
 								if src.Nulls().NullAt(srcStartIdx) {
@@ -44821,8 +44820,6 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 ) {
 	initialBuilderState := o.builderState.right
 	sel := batch.Selection()
-	outputBatchSize := o.outputBatchSize
-
 	o.unlimitedAllocator.PerformOperation(
 		o.output.ColVecs()[colOffset:colOffset+len(input.sourceTypes)],
 		func() {
@@ -44859,8 +44856,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -44929,8 +44926,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -44999,8 +44996,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45068,8 +45065,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45134,8 +45131,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45201,8 +45198,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45271,8 +45268,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45341,8 +45338,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45411,8 +45408,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45481,8 +45478,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45557,8 +45554,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45625,8 +45622,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45693,8 +45690,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45760,8 +45757,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45824,8 +45821,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45889,8 +45886,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -45957,8 +45954,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46025,8 +46022,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46093,8 +46090,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46161,8 +46158,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46237,8 +46234,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46307,8 +46304,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46377,8 +46374,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46446,8 +46443,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46512,8 +46509,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46579,8 +46576,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46649,8 +46646,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46719,8 +46716,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46789,8 +46786,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46859,8 +46856,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -46935,8 +46932,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47003,8 +47000,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47071,8 +47068,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47138,8 +47135,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47202,8 +47199,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47267,8 +47264,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47335,8 +47332,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47403,8 +47400,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47471,8 +47468,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47539,8 +47536,8 @@ func (o *mergeJoinFullOuterOp) buildRightGroupsFromBatch(
 											o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 										}
 										toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-										if outStartIdx+toAppend > outputBatchSize {
-											toAppend = outputBatchSize - outStartIdx
+										if outStartIdx+toAppend > o.output.Capacity() {
+											toAppend = o.output.Capacity() - outStartIdx
 										}
 
 										if rightGroup.nullGroup {
@@ -47635,8 +47632,8 @@ func (o *mergeJoinFullOuterOp) buildRightBufferedGroup(
 				batchLength := currentBatch.Length()
 				for batchLength > 0 {
 					toAppend := batchLength - o.builderState.right.curSrcStartIdx
-					if outStartIdx+toAppend > o.outputBatchSize {
-						toAppend = o.outputBatchSize - outStartIdx
+					if outStartIdx+toAppend > o.output.Capacity() {
+						toAppend = o.output.Capacity() - outStartIdx
 					}
 
 					// Loop over every column.
@@ -48080,9 +48077,9 @@ func (o *mergeJoinFullOuterOp) calculateOutputCount(groups []group) int {
 	for i := 0; i < len(groups); i++ {
 		count += groups[i].toBuild
 		groups[i].toBuild = 0
-		if count > o.outputBatchSize {
-			groups[i].toBuild = count - o.outputBatchSize
-			count = o.outputBatchSize
+		if count > o.output.Capacity() {
+			groups[i].toBuild = count - o.output.Capacity()
+			count = o.output.Capacity()
 			return count
 		}
 	}
@@ -48114,7 +48111,7 @@ func (o *mergeJoinFullOuterOp) build(ctx context.Context) {
 }
 
 func (o *mergeJoinFullOuterOp) Next(ctx context.Context) coldata.Batch {
-	o.output.ResetInternalBatch()
+	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(o.outputTypes, o.output, 1 /* minCapacity */)
 	for {
 		switch o.state {
 		case mjEntry:
@@ -48180,7 +48177,7 @@ func (o *mergeJoinFullOuterOp) Next(ctx context.Context) coldata.Batch {
 				o.builderState.outFinished = false
 			}
 
-			if o.outputReady || o.builderState.outCount == o.outputBatchSize {
+			if o.outputReady || o.builderState.outCount == o.output.Capacity() {
 				if o.builderState.outCount == 0 {
 					// We have already fully emitted the result of the join, so we
 					// transition to "finished" state.

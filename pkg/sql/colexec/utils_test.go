@@ -204,8 +204,6 @@ const (
 	unorderedVerifier
 )
 
-type verifierFn func(output *opTestOutput) error
-
 // maybeHasNulls is a helper function that returns whether any of the columns in b
 // (maybe) have nulls.
 func maybeHasNulls(b coldata.Batch) bool {
@@ -220,14 +218,7 @@ func maybeHasNulls(b coldata.Batch) bool {
 	return false
 }
 
-type testRunner func(*testing.T, []tuples, [][]*types.T, tuples, interface{}, func([]colexecbase.Operator) (colexecbase.Operator, error))
-
-// variableOutputBatchSizeInitializer is implemented by operators that can be
-// initialized with variable output size batches. This allows runTests to
-// increase test coverage of these operators.
-type variableOutputBatchSizeInitializer interface {
-	initWithOutputBatchSize(int)
-}
+type testRunner func(*testing.T, []tuples, [][]*types.T, tuples, verifierType, func([]colexecbase.Operator) (colexecbase.Operator, error))
 
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
@@ -239,7 +230,7 @@ func runTests(
 	t *testing.T,
 	tups []tuples,
 	expected tuples,
-	verifier interface{},
+	verifier verifierType,
 	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
 ) {
 	runTestsWithTyps(t, tups, nil /* typs */, expected, verifier, constructor)
@@ -255,7 +246,7 @@ func runTestsWithTyps(
 	tups []tuples,
 	typs [][]*types.T,
 	expected tuples,
-	verifier interface{},
+	verifier verifierType,
 	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
 ) {
 	runTestsWithoutAllNullsInjection(t, tups, typs, expected, verifier, constructor)
@@ -351,28 +342,18 @@ func runTestsWithoutAllNullsInjection(
 	tups []tuples,
 	typs [][]*types.T,
 	expected tuples,
-	verifier interface{},
+	verifier verifierType,
 	constructor func(inputs []colexecbase.Operator) (colexecbase.Operator, error),
 ) {
 	ctx := context.Background()
+	verifyFn := (*opTestOutput).VerifyAnyOrder
 	skipVerifySelAndNullsResets := true
-	var verifyFn verifierFn
-	switch v := verifier.(type) {
-	case verifierType:
-		switch v {
-		case orderedVerifier:
-			verifyFn = (*opTestOutput).Verify
-			// Note that this test makes sense only if we expect tuples to be
-			// returned in the same order (otherwise the second batch's selection
-			// vector or nulls info can be different and that is totally valid).
-			skipVerifySelAndNullsResets = false
-		case unorderedVerifier:
-			verifyFn = (*opTestOutput).VerifyAnyOrder
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unexpected verifierType %d", v))
-		}
-	case verifierFn:
-		verifyFn = v
+	if verifier == orderedVerifier {
+		verifyFn = (*opTestOutput).Verify
+		// Note that this test makes sense only if we expect tuples to be
+		// returned in the same order (otherwise the second batch's selection
+		// vector or nulls info can be different and that is totally valid).
+		skipVerifySelAndNullsResets = false
 	}
 	runTestsWithFn(t, tups, typs, func(t *testing.T, inputs []colexecbase.Operator) {
 		op, err := constructor(inputs)
@@ -413,13 +394,7 @@ func runTestsWithoutAllNullsInjection(
 			if err != nil {
 				t.Fatal(err)
 			}
-			if vbsiOp, ok := op.(variableOutputBatchSizeInitializer); ok {
-				// initialize the operator with a very small output batch size to
-				// increase the likelihood that multiple batches will be output.
-				vbsiOp.initWithOutputBatchSize(1)
-			} else {
-				op.Init()
-			}
+			op.Init()
 			b := op.Next(ctx)
 			if b.Length() == 0 {
 				return
@@ -722,7 +697,7 @@ func (s *opTestInput) Init() {
 		}
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
-	s.batch = testAllocator.NewMemBatch(s.typs)
+	s.batch = testAllocator.NewMemBatchWithMaxCapacity(s.typs)
 
 	s.selection = make([]int, coldata.BatchSize())
 	for i := range s.selection {
@@ -898,7 +873,7 @@ func (s *opFixedSelTestInput) Init() {
 		s.typs = extrapolateTypesFromTuples(s.tuples)
 	}
 
-	s.batch = testAllocator.NewMemBatch(s.typs)
+	s.batch = testAllocator.NewMemBatchWithMaxCapacity(s.typs)
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
@@ -1317,7 +1292,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batchLen := 10
 	if coldata.BatchSize() < batchLen {
 		batchLen = coldata.BatchSize()
@@ -1342,7 +1317,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	rng, _ := randutil.NewPseudoRand()
 	batchSize := 10
 	if batchSize > coldata.BatchSize() {
@@ -1417,7 +1392,7 @@ func newChunkingBatchSource(typs []*types.T, cols []coldata.Vec, len int) *chunk
 }
 
 func (c *chunkingBatchSource) Init() {
-	c.batch = testAllocator.NewMemBatch(c.typs)
+	c.batch = testAllocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
 		c.batch.ColVec(i).SetNulls(c.cols[i].Nulls())
@@ -1470,16 +1445,11 @@ type joinTestCase struct {
 	leftEqColsAreKey      bool
 	rightEqColsAreKey     bool
 	expected              tuples
-	outputBatchSize       int
 	skipAllNullsInjection bool
 	onExpr                execinfrapb.Expression
 }
 
 func (tc *joinTestCase) init() {
-	if tc.outputBatchSize == 0 {
-		tc.outputBatchSize = coldata.BatchSize()
-	}
-
 	if len(tc.leftDirections) == 0 {
 		tc.leftDirections = make([]execinfrapb.Ordering_Column_Direction, len(tc.leftTypes))
 		for i := range tc.leftDirections {

@@ -127,10 +127,8 @@ func newAllSpooler(
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = newAppendOnlyBufferedBatch(
-		p.allocator, p.inputTypes, 0, /* initialSize */
-	)
-	p.windowedBatch = p.allocator.NewMemBatchWithSize(p.inputTypes, 0 /* size */)
+	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes)
+	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
 
 func (p *allSpooler) spool(ctx context.Context) {
@@ -251,52 +249,59 @@ const (
 	// sortEmitting is the third state of the operator, indicating that each call
 	// to Next will return another batch of the sorted data.
 	sortEmitting
+	// sortDone is the final state of the operator, where it always returns a
+	// zero batch.
+	sortDone
 )
 
 func (p *sortOp) Next(ctx context.Context) coldata.Batch {
-	switch p.state {
-	case sortSpooling:
-		p.input.spool(ctx)
-		p.state = sortSorting
-		fallthrough
-	case sortSorting:
-		p.sort(ctx)
-		p.state = sortEmitting
-		fallthrough
-	case sortEmitting:
-		newEmitted := p.emitted + coldata.BatchSize()
-		if newEmitted > p.input.getNumTuples() {
-			newEmitted = p.input.getNumTuples()
-		}
-		if newEmitted == p.emitted {
-			return coldata.ZeroBatch
-		}
-
-		p.resetOutput()
-		for j := 0; j < len(p.inputTypes); j++ {
-			// At this point, we have already fully sorted the input. It is ok to do
-			// this Copy outside of the allocator - the work has been done, but
-			// theoretically it is possible to hit the limit here (mainly with
-			// variable-sized types like Bytes). Nonetheless, for performance reasons
-			// it would be sad to fallback to disk at this point.
-			p.output.ColVec(j).Copy(
-				coldata.CopySliceArgs{
-					SliceArgs: coldata.SliceArgs{
-						Sel:         p.order,
-						Src:         p.input.getValues(j),
-						SrcStartIdx: p.emitted,
-						SrcEndIdx:   newEmitted,
+	for {
+		switch p.state {
+		case sortSpooling:
+			p.input.spool(ctx)
+			p.state = sortSorting
+		case sortSorting:
+			p.sort(ctx)
+			p.state = sortEmitting
+		case sortEmitting:
+			toEmit := p.input.getNumTuples() - p.emitted
+			if toEmit == 0 {
+				p.state = sortDone
+				continue
+			}
+			if toEmit > coldata.BatchSize() {
+				toEmit = coldata.BatchSize()
+			}
+			p.output, _ = p.allocator.ResetMaybeReallocate(p.inputTypes, p.output, toEmit)
+			newEmitted := p.emitted + toEmit
+			for j := 0; j < len(p.inputTypes); j++ {
+				// At this point, we have already fully sorted the input. It is ok to do
+				// this Copy outside of the allocator - the work has been done, but
+				// theoretically it is possible to hit the limit here (mainly with
+				// variable-sized types like Bytes). Nonetheless, for performance reasons
+				// it would be sad to fallback to disk at this point.
+				p.output.ColVec(j).Copy(
+					coldata.CopySliceArgs{
+						SliceArgs: coldata.SliceArgs{
+							Sel:         p.order,
+							Src:         p.input.getValues(j),
+							SrcStartIdx: p.emitted,
+							SrcEndIdx:   newEmitted,
+						},
 					},
-				},
-			)
+				)
+			}
+			p.output.SetLength(toEmit)
+			p.emitted = newEmitted
+			return p.output
+		case sortDone:
+			return coldata.ZeroBatch
+		default:
+			colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
+			// This code is unreachable, but the compiler cannot infer that.
+			return nil
 		}
-		p.output.SetLength(newEmitted - p.emitted)
-		p.emitted = newEmitted
-		return p.output
 	}
-	colexecerror.InternalError(fmt.Sprintf("invalid sort state %v", p.state))
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
 }
 
 // sort sorts the spooled tuples, so it must be called after spool() has been
@@ -393,14 +398,6 @@ func (p *sortOp) sort(ctx context.Context) {
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
 		sorter.sortPartitions(ctx, partitions)
-	}
-}
-
-func (p *sortOp) resetOutput() {
-	if p.output == nil {
-		p.output = p.allocator.NewMemBatch(p.inputTypes)
-	} else {
-		p.output.ResetInternalBatch()
 	}
 }
 

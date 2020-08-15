@@ -165,7 +165,7 @@ func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
 	if err := a.r.Deserialize(&arrowDataOut, buf.Bytes()); err != nil {
 		colexecerror.InternalError(err)
 	}
-	batchOut := testAllocator.NewMemBatchWithSize(a.typs, coldata.BatchSize())
+	batchOut := testAllocator.NewMemBatchWithMaxCapacity(a.typs)
 	if err := a.c.ArrowToBatch(arrowDataOut, batchOut); err != nil {
 		colexecerror.InternalError(err)
 	}

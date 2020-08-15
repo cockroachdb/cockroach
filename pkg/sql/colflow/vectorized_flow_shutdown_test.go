@@ -297,7 +297,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
 						remoteAllocator := colmem.NewAllocator(ctxRemote, &sourceMemAccount, testColumnFactory)
-						batch := remoteAllocator.NewMemBatch(typs)
+						batch := remoteAllocator.NewMemBatchWithMaxCapacity(typs)
 						batch.SetLength(coldata.BatchSize())
 						runOutboxInbox(
 							ctxRemote,

@@ -177,9 +177,6 @@ type routerOutputOpTestingKnobs struct {
 	// defaultRouterOutputBlockedThreshold but can be modified by tests to test
 	// edge cases.
 	blockedThreshold int
-	// outputBatchSize defaults to coldata.BatchSize() but can be modified by
-	// tests to test edge cases.
-	outputBatchSize int
 	// alwaysFlush, if set to true, will always flush o.mu.pendingBatch to
 	// o.mu.data.
 	alwaysFlush bool
@@ -224,9 +221,6 @@ func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
 	if args.testingKnobs.blockedThreshold == 0 {
 		args.testingKnobs.blockedThreshold = getDefaultRouterOutputBlockedThreshold()
 	}
-	if args.testingKnobs.outputBatchSize == 0 {
-		args.testingKnobs.outputBatchSize = coldata.BatchSize()
-	}
 
 	o := &routerOutputOp{
 		types:               args.types,
@@ -241,7 +235,6 @@ func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
 		args.memoryLimit,
 		args.cfg,
 		args.fdSemaphore,
-		args.testingKnobs.outputBatchSize,
 		args.diskAcc,
 	)
 
@@ -419,9 +412,9 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	for toAppend := len(selection); toAppend > 0; {
 		if o.mu.pendingBatch == nil {
-			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithSize(o.types, o.testingKnobs.outputBatchSize)
+			o.mu.pendingBatch = o.mu.unlimitedAllocator.NewMemBatchWithFixedCapacity(o.types, coldata.BatchSize())
 		}
-		available := o.testingKnobs.outputBatchSize - o.mu.pendingBatch.Length()
+		available := o.mu.pendingBatch.Capacity() - o.mu.pendingBatch.Length()
 		numAppended := toAppend
 		if toAppend > available {
 			numAppended = available
@@ -442,7 +435,7 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		})
 		newLength := o.mu.pendingBatch.Length() + numAppended
 		o.mu.pendingBatch.SetLength(newLength)
-		if o.testingKnobs.alwaysFlush || newLength >= o.testingKnobs.outputBatchSize {
+		if o.testingKnobs.alwaysFlush || newLength >= o.mu.pendingBatch.Capacity() {
 			// The capacity in o.mu.pendingBatch has been filled.
 			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
 			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {

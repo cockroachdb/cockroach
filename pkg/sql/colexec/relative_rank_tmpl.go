@@ -144,7 +144,7 @@ func _COMPUTE_PARTITIONS_SIZES() { // */}}
 			// TODO(yuzefovich): do not instantiate a new batch here once
 			// spillingQueues actually copy the batches when those are kept
 			// in-memory.
-			r.partitionsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
+			r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
 			runningPartitionsSizesCol = r.partitionsState.runningSizes.ColVec(0).Int64()
 		}
 		if r.numTuplesInPartition > 0 {
@@ -182,7 +182,7 @@ func _COMPUTE_PEER_GROUPS_SIZES() { // */}}
 			// TODO(yuzefovich): do not instantiate a new batch here once
 			// spillingQueues actually copy the batches when those are kept
 			// in-memory.
-			r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
+			r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
 			runningPeerGroupsSizesCol = r.peerGroupsState.runningSizes.ColVec(0).Int64()
 		}
 		if r.numPeers > 0 {
@@ -283,7 +283,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	r.partitionsState.spillingQueue = newSpillingQueue(
 		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	// {{end}}
@@ -291,16 +291,16 @@ func (r *_RELATIVE_RANK_STRINGOp) Init() {
 	r.peerGroupsState.spillingQueue = newSpillingQueue(
 		r.allocator, []*types.T{types.Int},
 		int64(float64(r.memoryLimit)*relativeRankUtilityQueueMemLimitFraction),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
 	usedMemoryLimitFraction += relativeRankUtilityQueueMemLimitFraction
 	// {{end}}
 	r.bufferedTuples = newSpillingQueue(
 		r.allocator, r.inputTypes,
 		int64(float64(r.memoryLimit)*(1.0-usedMemoryLimitFraction)),
-		r.diskQueueCfg, r.fdSemaphore, coldata.BatchSize(), r.diskAcc,
+		r.diskQueueCfg, r.fdSemaphore, r.diskAcc,
 	)
-	r.output = r.allocator.NewMemBatch(append(r.inputTypes, types.Float))
+	r.output = r.allocator.NewMemBatchWithFixedCapacity(append(r.inputTypes, types.Float), coldata.BatchSize())
 	// {{if .IsPercentRank}}
 	// All rank functions start counting from 1. Before we assign the rank to a
 	// tuple in the batch, we first increment r.rank, so setting this
@@ -358,7 +358,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.partitionsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
+					r.partitionsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
 				}
 				runningPartitionsSizesCol := r.partitionsState.runningSizes.ColVec(0).Int64()
 				runningPartitionsSizesCol[r.partitionsState.idx] = r.numTuplesInPartition
@@ -378,7 +378,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 					// TODO(yuzefovich): do not instantiate a new batch here once
 					// spillingQueues actually copy the batches when those are kept
 					// in-memory.
-					r.peerGroupsState.runningSizes = r.allocator.NewMemBatch([]*types.T{types.Int})
+					r.peerGroupsState.runningSizes = r.allocator.NewMemBatchWithFixedCapacity([]*types.T{types.Int}, coldata.BatchSize())
 				}
 				runningPeerGroupsSizesCol := r.peerGroupsState.runningSizes.ColVec(0).Int64()
 				runningPeerGroupsSizesCol[r.peerGroupsState.idx] = r.numPeers
@@ -411,7 +411,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// TODO(yuzefovich): do not instantiate a new batch here once
 			// spillingQueues actually copy the batches when those are kept
 			// in-memory.
-			r.scratch = r.allocator.NewMemBatchWithSize(r.inputTypes, n)
+			r.scratch = r.allocator.NewMemBatchWithFixedCapacity(r.inputTypes, n)
 			r.allocator.PerformOperation(r.scratch.ColVecs(), func() {
 				for colIdx, vec := range r.scratch.ColVecs() {
 					vec.Copy(

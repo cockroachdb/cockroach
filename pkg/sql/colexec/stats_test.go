@@ -123,34 +123,32 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			[]*VectorizedStatsCollector{leftInput, rightInput},
 		)
 
-		// The inputs are identical, so the merge joiner should output nBatches
-		// batches with each having coldata.BatchSize() tuples.
+		// The inputs are identical, so the merge joiner should output
+		// nBatches x coldata.BatchSize() tuples.
 		mjStatsCollector.Init()
-		batchCount := 0
+		batchCount, tupleCount := 0, 0
 		for {
 			b := mjStatsCollector.Next(context.Background())
 			if b.Length() == 0 {
 				break
 			}
-			require.Equal(t, coldata.BatchSize(), b.Length())
 			batchCount++
+			tupleCount += b.Length()
 		}
 		mjStatsCollector.finalizeStats()
 
-		require.Equal(t, nBatches, batchCount)
-		require.Equal(t, nBatches, int(mjStatsCollector.NumBatches))
 		require.Equal(t, nBatches*coldata.BatchSize(), int(mjStatsCollector.NumTuples))
 		// Two inputs are advancing the time source for a total of 2 * nBatches
 		// advances, but these do not count towards merge joiner execution time.
 		// Merge joiner advances the time on its every non-empty batch totaling
-		// nBatches advances that should be accounted for in stats.
-		require.Equal(t, time.Duration(nBatches), mjStatsCollector.Time)
+		// batchCount advances that should be accounted for in stats.
+		require.Equal(t, time.Duration(batchCount), mjStatsCollector.Time)
 	}
 }
 
 func makeFiniteChunksSourceWithBatchSize(nBatches int, batchSize int) colexecbase.Operator {
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatchWithSize(typs, batchSize)
+	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, batchSize)
 	vec := batch.ColVec(0).Int64()
 	for i := 0; i < batchSize; i++ {
 		vec[i] = int64(i)

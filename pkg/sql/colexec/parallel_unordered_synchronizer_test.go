@@ -182,7 +182,7 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	typs := []*types.T{types.Int}
 	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
-		batch := testAllocator.NewMemBatchWithSize(typs, coldata.BatchSize())
+		batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 		batch.SetLength(coldata.BatchSize())
 		inputs[i].Op = colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	}

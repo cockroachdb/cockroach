@@ -29,6 +29,11 @@ type Batch interface {
 	Length() int
 	// SetLength sets the number of values in the columns in the batch.
 	SetLength(int)
+	// Capacity returns the maximum number of values that can be stored in the
+	// columns in the batch. Note that it could be a lower bound meaning some
+	// of the Vecs could actually have larger underlying capacity (for example,
+	// if they have been appended to).
+	Capacity() int
 	// Width returns the number of columns in the batch.
 	Width() int
 	// ColVec returns the ith Vec in this batch.
@@ -73,6 +78,9 @@ const defaultBatchSize = 1024
 var batchSize int64 = defaultBatchSize
 
 // BatchSize is the maximum number of tuples that fit in a column batch.
+// TODO(yuzefovich): we are treating this method almost as if it were a
+// constant while it performs an atomic operation. Think through whether it has
+// a noticeable performance hit.
 func BatchSize() int {
 	return int(atomic.LoadInt64(&batchSize))
 }
@@ -96,19 +104,18 @@ func ResetBatchSizeForTests() {
 	atomic.SwapInt64(&batchSize, defaultBatchSize)
 }
 
-// NewMemBatch allocates a new in-memory Batch. An unsupported type will create
-// a placeholder Vec that may not be accessed.
+// NewMemBatch allocates a new in-memory Batch.
 // TODO(jordan): pool these allocations.
 func NewMemBatch(typs []*types.T, factory ColumnFactory) Batch {
-	return NewMemBatchWithSize(typs, BatchSize(), factory)
+	return NewMemBatchWithCapacity(typs, BatchSize(), factory)
 }
 
-// NewMemBatchWithSize allocates a new in-memory Batch with the given column
-// size. Use for operators that have a precisely-sized output batch.
-func NewMemBatchWithSize(typs []*types.T, size int, factory ColumnFactory) Batch {
-	b := NewMemBatchNoCols(typs, size).(*MemBatch)
+// NewMemBatchWithCapacity allocates a new in-memory Batch with the given
+// column size. Use for operators that have a precisely-sized output batch.
+func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactory) Batch {
+	b := NewMemBatchNoCols(typs, capacity).(*MemBatch)
 	for i, t := range typs {
-		b.b[i] = NewMemColumn(t, size, factory)
+		b.b[i] = NewMemColumn(t, capacity, factory)
 		if b.b[i].CanonicalTypeFamily() == types.BytesFamily {
 			b.bytesVecIdxs = append(b.bytesVecIdxs, i)
 		}
@@ -119,20 +126,21 @@ func NewMemBatchWithSize(typs []*types.T, size int, factory ColumnFactory) Batch
 // NewMemBatchNoCols creates a "skeleton" of new in-memory Batch. It allocates
 // memory for the selection vector but does *not* allocate any memory for the
 // column vectors - those will have to be added separately.
-func NewMemBatchNoCols(typs []*types.T, size int) Batch {
-	if max := math.MaxUint16; size > max {
-		panic(fmt.Sprintf(`batches cannot have length larger than %d; requested %d`, max, size))
+func NewMemBatchNoCols(typs []*types.T, capacity int) Batch {
+	if max := math.MaxUint16; capacity > max {
+		panic(fmt.Sprintf(`batches cannot have capacity larger than %d; requested %d`, max, capacity))
 	}
 	b := &MemBatch{}
+	b.capacity = capacity
 	b.b = make([]Vec, len(typs))
-	b.sel = make([]int, size)
+	b.sel = make([]int, capacity)
 	return b
 }
 
 // ZeroBatch is a schema-less Batch of length 0.
 var ZeroBatch = &zeroBatch{
-	MemBatch: NewMemBatchWithSize(
-		nil /* types */, 0 /* size */, StandardColumnFactory,
+	MemBatch: NewMemBatchWithCapacity(
+		nil /* typs */, 0 /* capacity */, StandardColumnFactory,
 	).(*MemBatch),
 }
 
@@ -145,6 +153,10 @@ type zeroBatch struct {
 var _ Batch = &zeroBatch{}
 
 func (b *zeroBatch) Length() int {
+	return 0
+}
+
+func (b *zeroBatch) Capacity() int {
 	return 0
 }
 
@@ -170,9 +182,12 @@ func (b *zeroBatch) Reset([]*types.T, int, ColumnFactory) {
 
 // MemBatch is an in-memory implementation of Batch.
 type MemBatch struct {
-	// length of batch or sel in tuples
-	n int
-	// slice of columns in this batch.
+	// length is the length of batch or sel in tuples.
+	length int
+	// capacity is the maximum number of tuples that can be stored in this
+	// MemBatch.
+	capacity int
+	// b is the slice of columns in this batch.
 	b []Vec
 	// bytesVecIdxs stores the indices of all vectors of Bytes type in b. Bytes
 	// vectors require special handling, so rather than iterating over all
@@ -180,14 +195,21 @@ type MemBatch struct {
 	// separately.
 	bytesVecIdxs []int
 	useSel       bool
-	// if useSel is true, a selection vector from upstream. a selection vector is
-	// a list of selected column indexes in this memBatch's columns.
+	// sel is - if useSel is true - a selection vector from upstream. A
+	// selection vector is a list of selected tuple indices in this memBatch's
+	// columns (tuples for which indices are not in sel are considered to be
+	// "not present").
 	sel []int
 }
 
 // Length implements the Batch interface.
 func (m *MemBatch) Length() int {
-	return m.n
+	return m.length
+}
+
+// Capacity implements the Batch interface.
+func (m *MemBatch) Capacity() int {
+	return m.capacity
 }
 
 // Width implements the Batch interface.
@@ -219,11 +241,11 @@ func (m *MemBatch) SetSelection(b bool) {
 }
 
 // SetLength implements the Batch interface.
-func (m *MemBatch) SetLength(n int) {
-	m.n = n
-	if n > 0 {
+func (m *MemBatch) SetLength(length int) {
+	m.length = length
+	if length > 0 {
 		for _, bytesVecIdx := range m.bytesVecIdxs {
-			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(n)
+			m.b[bytesVecIdx].Bytes().UpdateOffsetsToBeNonDecreasing(length)
 		}
 	}
 }
@@ -247,11 +269,7 @@ func (m *MemBatch) ReplaceCol(col Vec, colIdx int) {
 
 // Reset implements the Batch interface.
 func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
-	// The columns are always sized the same as the selection vector, so use it as
-	// a shortcut for the capacity (like a go slice, the batch's `Length` could be
-	// shorter than the capacity). We could be more defensive and type switch
-	// every column to verify its capacity, but that doesn't seem necessary yet.
-	cannotReuse := m == nil || len(m.sel) < length || m.Width() < len(typs)
+	cannotReuse := m == nil || m.Capacity() < length || m.Width() < len(typs)
 	for i := 0; i < len(typs) && !cannotReuse; i++ {
 		// TODO(yuzefovich): change this when DatumVec is introduced.
 		// TODO(yuzefovich): requiring that types are "identical" might be an
@@ -259,18 +277,26 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 		// but non-identical types. Think through this more.
 		if !m.ColVec(i).Type().Identical(typs[i]) {
 			cannotReuse = true
+			break
 		}
 	}
 	if cannotReuse {
-		*m = *NewMemBatchWithSize(typs, length, factory).(*MemBatch)
+		*m = *NewMemBatchWithCapacity(typs, length, factory).(*MemBatch)
 		m.SetLength(length)
 		return
 	}
 	// Yay! We can reuse m. NB It's not specified in the Reset contract, but
 	// probably a good idea to keep all modifications below this line.
-	m.SetLength(length)
-	m.sel = m.sel[:length]
+	//
+	// Note that we're intentionally not calling m.SetLength() here because
+	// that would update offsets in the bytes vectors which is not necessary
+	// since those will get reset in ResetInternalBatch anyway.
+	m.length = length
 	m.b = m.b[:len(typs)]
+	for i := range m.b {
+		m.b[i].SetLength(length)
+	}
+	m.sel = m.sel[:length]
 	for i, idx := range m.bytesVecIdxs {
 		if idx >= len(typs) {
 			m.bytesVecIdxs = m.bytesVecIdxs[:i]

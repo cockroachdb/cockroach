@@ -68,7 +68,7 @@ func TestOffset(t *testing.T) {
 func BenchmarkOffset(b *testing.B) {
 	ctx := context.Background()
 	typs := []*types.T{types.Int, types.Int, types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
 	source := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
 	source.Init()

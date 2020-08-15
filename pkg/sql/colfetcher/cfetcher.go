@@ -249,12 +249,31 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 	}
 
+	typs      []*types.T
+	allocator *colmem.Allocator
+
 	// adapter is a utility struct that helps with memory accounting.
 	adapter struct {
-		ctx       context.Context
-		allocator *colmem.Allocator
-		batch     coldata.Batch
-		err       error
+		ctx   context.Context
+		batch coldata.Batch
+		err   error
+	}
+}
+
+const cFetcherBatchMinCapacity = 1
+
+func (rf *cFetcher) resetBatch(timestampOutputIdx int) {
+	var reallocated bool
+	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
+		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity,
+	)
+	if reallocated {
+		rf.machine.colvecs = rf.machine.batch.ColVecs()
+		// If the fetcher is requested to produce a timestamp column, pull out the
+		// column as a decimal and save it.
+		if timestampOutputIdx != noTimestampColumn {
+			rf.machine.timestampCol = rf.machine.colvecs[timestampOutputIdx].Decimal()
+		}
 	}
 }
 
@@ -268,7 +287,7 @@ func (rf *cFetcher) Init(
 	lockStr descpb.ScanLockingStrength,
 	tables ...row.FetcherTableArgs,
 ) error {
-	rf.adapter.allocator = allocator
+	rf.allocator = allocator
 	if len(tables) == 0 {
 		return errors.AssertionFailedf("no tables to fetch from")
 	}
@@ -302,9 +321,9 @@ func (rf *cFetcher) Init(
 		timestampOutputIdx: noTimestampColumn,
 	}
 
-	typs := make([]*types.T, len(colDescriptors))
-	for i := range typs {
-		typs[i] = colDescriptors[i].Type
+	rf.typs = make([]*types.T, len(colDescriptors))
+	for i := range rf.typs {
+		rf.typs[i] = colDescriptors[i].Type
 	}
 
 	var err error
@@ -328,14 +347,7 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.machine.batch = allocator.NewMemBatch(typs)
-	rf.machine.colvecs = rf.machine.batch.ColVecs()
-	// If the fetcher is requested to produce a timestamp column, pull out the
-	// column as a decimal and save it.
-	if table.timestampOutputIdx != noTimestampColumn {
-		rf.machine.timestampCol = rf.machine.colvecs[table.timestampOutputIdx].Decimal()
-	}
-
+	rf.resetBatch(table.timestampOutputIdx)
 	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
@@ -611,7 +623,7 @@ const debugState = false
 // NextBatch is nextBatch with the addition of memory accounting.
 func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	rf.adapter.ctx = ctx
-	rf.adapter.allocator.PerformOperation(
+	rf.allocator.PerformOperation(
 		rf.machine.colvecs,
 		rf.nextAdapter,
 	)
@@ -672,7 +684,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			rf.machine.batch.ResetInternalBatch()
+			rf.resetBatch(rf.table.timestampOutputIdx)
 			rf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
@@ -904,7 +916,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= coldata.BatchSize() {
+			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0
