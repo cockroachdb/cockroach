@@ -199,32 +199,30 @@ filter     ·              ·
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-·               distribution   local
-·               vectorized     true
-project         ·              ·
- └── filter     ·              ·
-      │         filter         (a >= 20) AND (a <= 30)
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          abcd@b
-·               spans          FULL SCAN
+·          distribution   local
+·          vectorized     true
+filter     ·              ·
+ │         filter         (a >= 20) AND (a <= 30)
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abcd@b
+·          spans          FULL SCAN
 
 # Force index b (non-covering due to WHERE clause)
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-·                     distribution   local
-·                     vectorized     true
-project               ·              ·
- └── filter           ·              ·
-      │               filter         (c >= 20) AND (c <= 30)
-      └── index join  ·              ·
-           │          table          abcd@primary
-           │          key columns    a
-           └── scan   ·              ·
-·                     missing stats  ·
-·                     table          abcd@b
-·                     spans          FULL SCAN
+·                distribution   local
+·                vectorized     true
+filter           ·              ·
+ │               filter         (c >= 20) AND (c <= 30)
+ └── index join  ·              ·
+      │          table          abcd@primary
+      │          key columns    a
+      └── scan   ·              ·
+·                missing stats  ·
+·                table          abcd@b
+·                spans          FULL SCAN
 
 # No hint, should be using index cd
 query TTT
