@@ -1835,6 +1835,6 @@ gazelle-generate:
 
 bazel-generate:
 	@echo '=== Generating build files'
-	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable
+	@bazel run //:gazelle -- update-repos -from_file=go.mod -build_file_proto_mode=disable -to_macro=dependencies.bzl%go_deps
 	@bazel run //:gazelle
 	@echo '=== SUCCESS'
