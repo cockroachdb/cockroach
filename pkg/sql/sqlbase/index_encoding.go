@@ -1213,7 +1213,7 @@ func writeColumnValues(
 func EncodeSecondaryIndexes(
 	codec keys.SQLCodec,
 	tableDesc *ImmutableTableDescriptor,
-	indexes []descpb.IndexDescriptor,
+	indexes []*descpb.IndexDescriptor,
 	colMap map[descpb.ColumnID]int,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
@@ -1223,7 +1223,7 @@ func EncodeSecondaryIndexes(
 		panic("Length of secondaryIndexEntries was non-zero")
 	}
 	for i := range indexes {
-		entries, err := EncodeSecondaryIndex(codec, tableDesc, &indexes[i], colMap, values, includeEmpty)
+		entries, err := EncodeSecondaryIndex(codec, tableDesc, indexes[i], colMap, values, includeEmpty)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}

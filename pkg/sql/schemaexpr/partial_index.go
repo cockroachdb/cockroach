@@ -153,7 +153,7 @@ func FormatIndexForDisplay(
 // that are added previously in the same transaction.
 func MakePartialIndexExprs(
 	ctx context.Context,
-	indexes []descpb.IndexDescriptor,
+	indexes []*descpb.IndexDescriptor,
 	cols []descpb.ColumnDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	evalCtx *tree.EvalContext,
@@ -177,8 +177,7 @@ func MakePartialIndexExprs(
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
-	for i := range indexes {
-		idx := &indexes[i]
+	for _, idx := range indexes {
 		if idx.IsPartial() {
 			expr, err := parser.ParseExpr(idx.Predicate)
 			if err != nil {
