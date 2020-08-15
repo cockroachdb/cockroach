@@ -9,23 +9,26 @@ CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=11)
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
 ----
-·                           distribution   local                                          ·                           ·
-·                           vectorized     false                                          ·                           ·
-insert                      ·              ·                                              ()                          ·
- │                          into           sharded_primary(crdb_internal_a_shard_11, a)   ·                           ·
- │                          auto commit    ·                                              ·                           ·
- └── project                ·              ·                                              (column5, column1, check1)  ·
-      └── render            ·              ·                                              (check1, column1, column5)  ·
-           │                render 0       column5 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
-           │                render 1       column1                                        ·                           ·
-           │                render 2       column5                                        ·                           ·
-           └── render       ·              ·                                              (column5, column1)          ·
-                │           render 0       mod(fnv32(COALESCE(column1::STRING, '')), 11)  ·                           ·
-                │           render 1       column1                                        ·                           ·
-                └── values  ·              ·                                              (column1)                   ·
-·                           size           1 column, 2 rows                               ·                           ·
-·                           row 0, expr 0  1                                              ·                           ·
-·                           row 1, expr 0  2                                              ·                           ·
+·                           distribution         local                                          ·                           ·
+·                           vectorized           false                                          ·                           ·
+insert                      ·                    ·                                              ()                          ·
+ │                          estimated row count  0 (missing stats)                              ·                           ·
+ │                          into                 sharded_primary(crdb_internal_a_shard_11, a)   ·                           ·
+ │                          auto commit          ·                                              ·                           ·
+ └── project                ·                    ·                                              (column5, column1, check1)  ·
+      └── render            ·                    ·                                              (check1, column1, column5)  ·
+           │                estimated row count  2                                              ·                           ·
+           │                render 0             column5 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)  ·                           ·
+           │                render 1             column1                                        ·                           ·
+           │                render 2             column5                                        ·                           ·
+           └── render       ·                    ·                                              (column5, column1)          ·
+                │           estimated row count  2                                              ·                           ·
+                │           render 0             mod(fnv32(COALESCE(column1::STRING, '')), 11)  ·                           ·
+                │           render 1             column1                                        ·                           ·
+                └── values  ·                    ·                                              (column1)                   ·
+·                           size                 1 column, 2 rows                               ·                           ·
+·                           row 0, expr 0        1                                              ·                           ·
+·                           row 1, expr 0        2                                              ·                           ·
 
 statement ok
 CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
@@ -33,22 +36,25 @@ CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=1
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
 ----
-·                           distribution   local                                                  ·                                    ·
-·                           vectorized     false                                                  ·                                    ·
-insert                      ·              ·                                                      ()                                   ·
- │                          into           sharded_secondary(a, crdb_internal_a_shard_12, rowid)  ·                                    ·
- │                          auto commit    ·                                                      ·                                    ·
- └── project                ·              ·                                                      (column1, column7, column6, check1)  ·
-      └── render            ·              ·                                                      (check1, column1, column6, column7)  ·
-           │                render 0       column7 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
-           │                render 1       column1                                                ·                                    ·
-           │                render 2       column6                                                ·                                    ·
-           │                render 3       column7                                                ·                                    ·
-           └── render       ·              ·                                                      (column7, column6, column1)          ·
-                │           render 0       mod(fnv32(COALESCE(column1::STRING, '')), 12)          ·                                    ·
-                │           render 1       unique_rowid()                                         ·                                    ·
-                │           render 2       column1                                                ·                                    ·
-                └── values  ·              ·                                                      (column1)                            ·
-·                           size           1 column, 2 rows                                       ·                                    ·
-·                           row 0, expr 0  1                                                      ·                                    ·
-·                           row 1, expr 0  2                                                      ·                                    ·
+·                           distribution         local                                                  ·                                    ·
+·                           vectorized           false                                                  ·                                    ·
+insert                      ·                    ·                                                      ()                                   ·
+ │                          estimated row count  0 (missing stats)                                      ·                                    ·
+ │                          into                 sharded_secondary(a, crdb_internal_a_shard_12, rowid)  ·                                    ·
+ │                          auto commit          ·                                                      ·                                    ·
+ └── project                ·                    ·                                                      (column1, column7, column6, check1)  ·
+      └── render            ·                    ·                                                      (check1, column1, column6, column7)  ·
+           │                estimated row count  2                                                      ·                                    ·
+           │                render 0             column7 IN (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)      ·                                    ·
+           │                render 1             column1                                                ·                                    ·
+           │                render 2             column6                                                ·                                    ·
+           │                render 3             column7                                                ·                                    ·
+           └── render       ·                    ·                                                      (column7, column6, column1)          ·
+                │           estimated row count  2                                                      ·                                    ·
+                │           render 0             mod(fnv32(COALESCE(column1::STRING, '')), 12)          ·                                    ·
+                │           render 1             unique_rowid()                                         ·                                    ·
+                │           render 2             column1                                                ·                                    ·
+                └── values  ·                    ·                                                      (column1)                            ·
+·                           size                 1 column, 2 rows                                       ·                                    ·
+·                           row 0, expr 0        1                                                      ·                                    ·
+·                           row 1, expr 0        2                                                      ·                                    ·

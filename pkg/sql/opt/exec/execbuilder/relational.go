@@ -339,6 +339,17 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
+	// If we are building against an ExplainFactory, annotate the nodes with more
+	// information.
+	if ef, ok := b.factory.(exec.ExplainFactory); ok {
+		stats := &e.Relational().Stats
+		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &exec.EstimatedStats{
+			TableStatsAvailable: stats.Available,
+			RowCount:            stats.RowCount,
+			Cost:                float64(e.Cost()),
+		})
+	}
+
 	if saveTableName != "" {
 		ep, err = b.applySaveTable(ep, e, saveTableName)
 		if err != nil {

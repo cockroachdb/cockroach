@@ -40,13 +40,17 @@ func TestFactory(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	f.AnnotateNode(n, exec.EstimatedRowCount, 10.0)
-	f.AnnotateNode(n, exec.EstimatedCost, 1000.0)
+	f.AnnotateNode(n, exec.EstimatedStatsID, &exec.EstimatedStats{
+		RowCount: 10.0,
+		Cost:     1000.0,
+	})
 
 	n, err = f.ConstructFilter(n, tree.DBoolTrue, exec.OutputOrdering{{ColIdx: 0, Direction: encoding.Ascending}})
 	require.NoError(t, err)
-	f.AnnotateNode(n, exec.EstimatedRowCount, 5.0)
-	f.AnnotateNode(n, exec.EstimatedCost, 1500.0)
+	f.AnnotateNode(n, exec.EstimatedStatsID, &exec.EstimatedStats{
+		RowCount: 5.0,
+		Cost:     1500.0,
+	})
 
 	plan, err := f.ConstructPlan(n, nil /* subqueries */, nil /* cascades */, nil /* checks */)
 	require.NoError(t, err)
@@ -74,8 +78,9 @@ func printTree(n *Node, tp treeprinter.Node) {
 	if len(n.Ordering()) > 0 {
 		tp.Childf("ordering: %v", n.Ordering().String(n.Columns()))
 	}
-	tp.Childf("estimated row count: %v", n.annotations[exec.EstimatedRowCount])
-	tp.Childf("estimated cost: %v", n.annotations[exec.EstimatedCost])
+	stats := n.annotations[exec.EstimatedStatsID].(*exec.EstimatedStats)
+	tp.Childf("estimated row count: %v", stats.RowCount)
+	tp.Childf("estimated cost: %v", stats.Cost)
 	for i := 0; i < n.ChildCount(); i++ {
 		printTree(n.Child(i), tp)
 	}

@@ -279,12 +279,21 @@ type ExplainFactory interface {
 type ExplainAnnotationID int
 
 const (
-	// EstimatedRowCount is the estimated number of rows produced by an operator.
-	EstimatedRowCount ExplainAnnotationID = iota
-	// EstimatedCost is the internal optimizer cost for the subtree rooted at an
-	// operator.
-	EstimatedCost
+	// EstimatedStatsID is an annotation with a *EstimatedStats value.
+	EstimatedStatsID ExplainAnnotationID = iota
 )
+
+// EstimatedStats  contains estimated statistics about a given operator.
+type EstimatedStats struct {
+	// TableStatsAvailable is true if all the tables involved by this operator
+	// (directly or indirectly) had table statistics.
+	TableStatsAvailable bool
+	// RowCount is the estimated number of rows produced by the operator.
+	RowCount float64
+	// Cost is the estimated cost of the operator. This cost includes the costs of
+	// the child operators.
+	Cost float64
+}
 
 // BuildPlanForExplainFn builds an execution plan against the given
 // ExplainFactory.

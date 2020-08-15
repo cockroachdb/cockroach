@@ -58,31 +58,39 @@ output row: [8 3.5355339059327376220]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
 ----
-·                    distribution  local                                                                         ·                      ·
-·                    vectorized    true                                                                          ·                      ·
-project              ·             ·                                                                             (ntile)                ·
- └── window          ·             ·                                                                             (ntile_1_arg1, ntile)  ·
-      │              window 0      ntile(ntile_1_arg1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                      ·
-      └── render     ·             ·                                                                             (ntile_1_arg1)         ·
-           │         render 0      1                                                                             ·                      ·
-           └── scan  ·             ·                                                                             ()                     ·
-·                    table         kv@primary                                                                    ·                      ·
-·                    spans         FULL SCAN                                                                     ·                      ·
+·                    distribution         local                                                                         ·                      ·
+·                    vectorized           true                                                                          ·                      ·
+project              ·                    ·                                                                             (ntile)                ·
+ │                   estimated row count  1000 (missing stats)                                                          ·                      ·
+ └── window          ·                    ·                                                                             (ntile_1_arg1, ntile)  ·
+      │              estimated row count  1000 (missing stats)                                                          ·                      ·
+      │              window 0             ntile(ntile_1_arg1) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                      ·
+      └── render     ·                    ·                                                                             (ntile_1_arg1)         ·
+           │         estimated row count  1000 (missing stats)                                                          ·                      ·
+           │         render 0             1                                                                             ·                      ·
+           └── scan  ·                    ·                                                                             ()                     ·
+·                    estimated row count  1000 (missing stats)                                                          ·                      ·
+·                    table                kv@primary                                                                    ·                      ·
+·                    spans                FULL SCAN                                                                     ·                      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
 ----
-·                    distribution  local                                                                                                   ·                                                ·
-·                    vectorized    true                                                                                                    ·                                                ·
-project              ·             ·                                                                                                       (nth_value)                                      ·
- └── window          ·             ·                                                                                                       (nth_value_1_arg1, nth_value_1_arg2, nth_value)  ·
-      │              window 0      nth_value(nth_value_1_arg1, nth_value_1_arg2) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                ·
-      └── render     ·             ·                                                                                                       (nth_value_1_arg1, nth_value_1_arg2)             ·
-           │         render 0      1                                                                                                       ·                                                ·
-           │         render 1      2                                                                                                       ·                                                ·
-           └── scan  ·             ·                                                                                                       ()                                               ·
-·                    table         kv@primary                                                                                              ·                                                ·
-·                    spans         FULL SCAN                                                                                               ·                                                ·
+·                    distribution         local                                                                                                   ·                                                ·
+·                    vectorized           true                                                                                                    ·                                                ·
+project              ·                    ·                                                                                                       (nth_value)                                      ·
+ │                   estimated row count  1000 (missing stats)                                                                                    ·                                                ·
+ └── window          ·                    ·                                                                                                       (nth_value_1_arg1, nth_value_1_arg2, nth_value)  ·
+      │              estimated row count  1000 (missing stats)                                                                                    ·                                                ·
+      │              window 0             nth_value(nth_value_1_arg1, nth_value_1_arg2) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                ·
+      └── render     ·                    ·                                                                                                       (nth_value_1_arg1, nth_value_1_arg2)             ·
+           │         estimated row count  1000 (missing stats)                                                                                    ·                                                ·
+           │         render 0             1                                                                                                       ·                                                ·
+           │         render 1             2                                                                                                       ·                                                ·
+           └── scan  ·                    ·                                                                                                       ()                                               ·
+·                    estimated row count  1000 (missing stats)                                                                                    ·                                                ·
+·                    table                kv@primary                                                                                              ·                                                ·
+·                    spans                FULL SCAN                                                                                               ·                                                ·
 
 statement error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
@@ -90,159 +98,197 @@ EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
 query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-·                         distribution  local
-·                         vectorized    true
-project                   ·             ·
- └── sort                 ·             ·
-      │                   order         +variance,+k
-      └── project         ·             ·
-           └── window     ·             ·
-                └── scan  ·             ·
-·                         table         kv@primary
-·                         spans         FULL SCAN
+·                         distribution   local
+·                         vectorized     true
+project                   ·              ·
+ └── sort                 ·              ·
+      │                   order          +variance,+k
+      └── project         ·              ·
+           └── window     ·              ·
+                └── scan  ·              ·
+·                         missing stats  ·
+·                         table          kv@primary
+·                         spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-·                         distribution  local                                                                                                             ·                                                            ·
-·                         vectorized    true                                                                                                              ·                                                            ·
-project                   ·             ·                                                                                                                 (k int, stddev decimal)                                      ·
- └── sort                 ·             ·                                                                                                                 (k int, stddev decimal, variance decimal)                    +variance,+k
-      │                   order         +variance,+k                                                                                                      ·                                                            ·
-      └── project         ·             ·                                                                                                                 (k int, stddev decimal, variance decimal)                    ·
-           └── window     ·             ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
-                │         window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
-                │         window 1      (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
-                └── scan  ·             ·                                                                                                                 (k int, v int, d decimal)                                    ·
-·                         table         kv@primary                                                                                                        ·                                                            ·
-·                         spans         FULL SCAN                                                                                                         ·                                                            ·
+·                         distribution         local                                                                                                             ·                                                            ·
+·                         vectorized           true                                                                                                              ·                                                            ·
+project                   ·                    ·                                                                                                                 (k int, stddev decimal)                                      ·
+ └── sort                 ·                    ·                                                                                                                 (k int, stddev decimal, variance decimal)                    +variance,+k
+      │                   estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+      │                   order                +variance,+k                                                                                                      ·                                                            ·
+      └── project         ·                    ·                                                                                                                 (k int, stddev decimal, variance decimal)                    ·
+           │              estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+           └── window     ·                    ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
+                │         estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+                │         window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                │         window 1             (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                └── scan  ·                    ·                                                                                                                 (k int, v int, d decimal)                                    ·
+·                         estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+·                         table                kv@primary                                                                                                        ·                                                            ·
+·                         spans                FULL SCAN                                                                                                         ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
-·                              distribution  local                                                                                                             ·                                                            ·
-·                              vectorized    true                                                                                                              ·                                                            ·
-project                        ·             ·                                                                                                                 (k int, stddev decimal)                                      ·
- └── sort                      ·             ·                                                                                                                 (k int, stddev decimal, variance decimal)                    +variance,+k
-      │                        order         +variance,+k                                                                                                      ·                                                            ·
-      └── project              ·             ·                                                                                                                 (k int, stddev decimal, variance decimal)                    ·
-           └── window          ·             ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
-                │              window 0      (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
-                └── window     ·             ·                                                                                                                 (k int, v int, d decimal, stddev decimal)                    ·
-                     │         window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
-                     └── scan  ·             ·                                                                                                                 (k int, v int, d decimal)                                    ·
-·                              table         kv@primary                                                                                                        ·                                                            ·
-·                              spans         FULL SCAN                                                                                                         ·                                                            ·
+·                              distribution         local                                                                                                             ·                                                            ·
+·                              vectorized           true                                                                                                              ·                                                            ·
+project                        ·                    ·                                                                                                                 (k int, stddev decimal)                                      ·
+ └── sort                      ·                    ·                                                                                                                 (k int, stddev decimal, variance decimal)                    +variance,+k
+      │                        estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+      │                        order                +variance,+k                                                                                                      ·                                                            ·
+      └── project              ·                    ·                                                                                                                 (k int, stddev decimal, variance decimal)                    ·
+           │                   estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+           └── window          ·                    ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
+                │              estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+                │              window 0             (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                └── window     ·                    ·                                                                                                                 (k int, v int, d decimal, stddev decimal)                    ·
+                     │         estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+                     │         window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                     └── scan  ·                    ·                                                                                                                 (k int, v int, d decimal)                                    ·
+·                              estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+·                              table                kv@primary                                                                                                        ·                                                            ·
+·                              spans                FULL SCAN                                                                                                         ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY k
 ----
-·                    distribution  local                                                                                                           ·                                          ·
-·                    vectorized    true                                                                                                            ·                                          ·
-sort                 ·             ·                                                                                                               (k int, stddev decimal)                    +k
- │                   order         +k                                                                                                              ·                                          ·
- └── project         ·             ·                                                                                                               (k int, stddev decimal)                    ·
-      └── window     ·             ·                                                                                                               (k int, v int, d decimal, stddev decimal)  ·
-           │         window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                          ·
-           └── scan  ·             ·                                                                                                               (k int, v int, d decimal)                  ·
-·                    table         kv@primary                                                                                                      ·                                          ·
-·                    spans         FULL SCAN                                                                                                       ·                                          ·
+·                    distribution         local                                                                                                           ·                                          ·
+·                    vectorized           true                                                                                                            ·                                          ·
+sort                 ·                    ·                                                                                                               (k int, stddev decimal)                    +k
+ │                   estimated row count  1000 (missing stats)                                                                                            ·                                          ·
+ │                   order                +k                                                                                                              ·                                          ·
+ └── project         ·                    ·                                                                                                               (k int, stddev decimal)                    ·
+      │              estimated row count  1000 (missing stats)                                                                                            ·                                          ·
+      └── window     ·                    ·                                                                                                               (k int, v int, d decimal, stddev decimal)  ·
+           │         estimated row count  1000 (missing stats)                                                                                            ·                                          ·
+           │         window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                          ·
+           └── scan  ·                    ·                                                                                                               (k int, v int, d decimal)                  ·
+·                    estimated row count  1000 (missing stats)                                                                                            ·                                          ·
+·                    table                kv@primary                                                                                                      ·                                          ·
+·                    spans                FULL SCAN                                                                                                       ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, k + stddev(d) OVER (PARTITION BY v, 'a') FROM kv ORDER BY variance(d) OVER (PARTITION BY v, 100), k
 ----
-·                              distribution  local                                                                                                             ·                                                            ·
-·                              vectorized    true                                                                                                              ·                                                            ·
-project                        ·             ·                                                                                                                 (k int, "?column?" decimal)                                  ·
- └── sort                      ·             ·                                                                                                                 ("?column?" decimal, k int, variance decimal)                +variance,+k
-      │                        order         +variance,+k                                                                                                      ·                                                            ·
-      └── render               ·             ·                                                                                                                 ("?column?" decimal, k int, variance decimal)                ·
-           │                   render 0      ((k)[int] + (stddev)[decimal])[decimal]                                                                           ·                                                            ·
-           │                   render 1      (k)[int]                                                                                                          ·                                                            ·
-           │                   render 2      (variance)[decimal]                                                                                               ·                                                            ·
-           └── window          ·             ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
-                │              window 0      (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
-                └── window     ·             ·                                                                                                                 (k int, v int, d decimal, stddev decimal)                    ·
-                     │         window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
-                     └── scan  ·             ·                                                                                                                 (k int, v int, d decimal)                                    ·
-·                              table         kv@primary                                                                                                        ·                                                            ·
-·                              spans         FULL SCAN                                                                                                         ·                                                            ·
+·                              distribution         local                                                                                                             ·                                                            ·
+·                              vectorized           true                                                                                                              ·                                                            ·
+project                        ·                    ·                                                                                                                 (k int, "?column?" decimal)                                  ·
+ └── sort                      ·                    ·                                                                                                                 ("?column?" decimal, k int, variance decimal)                +variance,+k
+      │                        estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+      │                        order                +variance,+k                                                                                                      ·                                                            ·
+      └── render               ·                    ·                                                                                                                 ("?column?" decimal, k int, variance decimal)                ·
+           │                   estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+           │                   render 0             ((k)[int] + (stddev)[decimal])[decimal]                                                                           ·                                                            ·
+           │                   render 1             (k)[int]                                                                                                          ·                                                            ·
+           │                   render 2             (variance)[decimal]                                                                                               ·                                                            ·
+           └── window          ·                    ·                                                                                                                 (k int, v int, d decimal, stddev decimal, variance decimal)  ·
+                │              estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+                │              window 0             (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                            ·
+                └── window     ·                    ·                                                                                                                 (k int, v int, d decimal, stddev decimal)                    ·
+                     │         estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+                     │         window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                            ·
+                     └── scan  ·                    ·                                                                                                                 (k int, v int, d decimal)                                    ·
+·                              estimated row count  1000 (missing stats)                                                                                              ·                                                            ·
+·                              table                kv@primary                                                                                                        ·                                                            ·
+·                              spans                FULL SCAN                                                                                                         ·                                                            ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(k), max(k) + stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY variance(d) OVER (PARTITION BY v, 100)
 ----
-·                                   distribution  local                                                                                                             ·                                                              ·
-·                                   vectorized    true                                                                                                              ·                                                              ·
-project                             ·             ·                                                                                                                 (max int, "?column?" decimal)                                  ·
- └── sort                           ·             ·                                                                                                                 ("?column?" decimal, max int, variance decimal)                +variance
-      │                             order         +variance                                                                                                         ·                                                              ·
-      └── render                    ·             ·                                                                                                                 ("?column?" decimal, max int, variance decimal)                ·
-           │                        render 0      ((max)[int] + (stddev)[decimal])[decimal]                                                                         ·                                                              ·
-           │                        render 1      (max)[int]                                                                                                        ·                                                              ·
-           │                        render 2      (variance)[decimal]                                                                                               ·                                                              ·
-           └── window               ·             ·                                                                                                                 (v int, d decimal, max int, stddev decimal, variance decimal)  ·
-                │                   window 0      (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                              ·
-                └── window          ·             ·                                                                                                                 (v int, d decimal, max int, stddev decimal)                    ·
-                     │              window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                              ·
-                     └── group      ·             ·                                                                                                                 (v int, d decimal, max int)                                    ·
-                          │         aggregate 0   max(k)                                                                                                            ·                                                              ·
-                          │         group by      v, d                                                                                                              ·                                                              ·
-                          └── scan  ·             ·                                                                                                                 (k int, v int, d decimal)                                      ·
-·                                   table         kv@primary                                                                                                        ·                                                              ·
-·                                   spans         FULL SCAN                                                                                                         ·                                                              ·
+·                                   distribution         local                                                                                                             ·                                                              ·
+·                                   vectorized           true                                                                                                              ·                                                              ·
+project                             ·                    ·                                                                                                                 (max int, "?column?" decimal)                                  ·
+ └── sort                           ·                    ·                                                                                                                 ("?column?" decimal, max int, variance decimal)                +variance
+      │                             estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+      │                             order                +variance                                                                                                         ·                                                              ·
+      └── render                    ·                    ·                                                                                                                 ("?column?" decimal, max int, variance decimal)                ·
+           │                        estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+           │                        render 0             ((max)[int] + (stddev)[decimal])[decimal]                                                                         ·                                                              ·
+           │                        render 1             (max)[int]                                                                                                        ·                                                              ·
+           │                        render 2             (variance)[decimal]                                                                                               ·                                                              ·
+           └── window               ·                    ·                                                                                                                 (v int, d decimal, max int, stddev decimal, variance decimal)  ·
+                │                   estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+                │                   window 0             (variance((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                                              ·
+                └── window          ·                    ·                                                                                                                 (v int, d decimal, max int, stddev decimal)                    ·
+                     │              estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+                     │              window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]    ·                                                              ·
+                     └── group      ·                    ·                                                                                                                 (v int, d decimal, max int)                                    ·
+                          │         estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+                          │         aggregate 0          max(k)                                                                                                            ·                                                              ·
+                          │         group by             v, d                                                                                                              ·                                                              ·
+                          └── scan  ·                    ·                                                                                                                 (k int, v int, d decimal)                                      ·
+·                                   estimated row count  1000 (missing stats)                                                                                              ·                                                              ·
+·                                   table                kv@primary                                                                                                        ·                                                              ·
+·                                   spans                FULL SCAN                                                                                                         ·                                                              ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(k), stddev(d) OVER (PARTITION BY v, 'a') FROM kv GROUP BY d, v ORDER BY 1
 ----
-·                         distribution  local                                                                                                           ·                                            ·
-·                         vectorized    true                                                                                                            ·                                            ·
-sort                      ·             ·                                                                                                               (max int, stddev decimal)                    +max
- │                        order         +max                                                                                                            ·                                            ·
- └── project              ·             ·                                                                                                               (max int, stddev decimal)                    ·
-      └── window          ·             ·                                                                                                               (v int, d decimal, max int, stddev decimal)  ·
-           │              window 0      (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                            ·
-           └── group      ·             ·                                                                                                               (v int, d decimal, max int)                  ·
-                │         aggregate 0   max(k)                                                                                                          ·                                            ·
-                │         group by      v, d                                                                                                            ·                                            ·
-                └── scan  ·             ·                                                                                                               (k int, v int, d decimal)                    ·
-·                         table         kv@primary                                                                                                      ·                                            ·
-·                         spans         FULL SCAN                                                                                                       ·                                            ·
+·                         distribution         local                                                                                                           ·                                            ·
+·                         vectorized           true                                                                                                            ·                                            ·
+sort                      ·                    ·                                                                                                               (max int, stddev decimal)                    +max
+ │                        estimated row count  1000 (missing stats)                                                                                            ·                                            ·
+ │                        order                +max                                                                                                            ·                                            ·
+ └── project              ·                    ·                                                                                                               (max int, stddev decimal)                    ·
+      │                   estimated row count  1000 (missing stats)                                                                                            ·                                            ·
+      └── window          ·                    ·                                                                                                               (v int, d decimal, max int, stddev decimal)  ·
+           │              estimated row count  1000 (missing stats)                                                                                            ·                                            ·
+           │              window 0             (stddev((d)[decimal]) OVER (PARTITION BY (v)[int] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW))[decimal]  ·                                            ·
+           └── group      ·                    ·                                                                                                               (v int, d decimal, max int)                  ·
+                │         estimated row count  1000 (missing stats)                                                                                            ·                                            ·
+                │         aggregate 0          max(k)                                                                                                          ·                                            ·
+                │         group by             v, d                                                                                                            ·                                            ·
+                └── scan  ·                    ·                                                                                                               (k int, v int, d decimal)                    ·
+·                         estimated row count  1000 (missing stats)                                                                                            ·                                            ·
+·                         table                kv@primary                                                                                                      ·                                            ·
+·                         spans                FULL SCAN                                                                                                       ·                                            ·
 
 # Partition
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
 ----
-·                              distribution  local                                                                                                     ·                                                       ·
-·                              vectorized    true                                                                                                      ·                                                       ·
-project                        ·             ·                                                                                                         (lag, lead)                                             ·
- └── window                    ·             ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)  ·
-      │                        window 0      lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                       ·
-      └── project              ·             ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)        ·
-           └── window          ·             ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1, lag)        ·
-                │              window 0      lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                       ·
-                └── render     ·             ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1)             ·
-                     │         render 0      1                                                                                                         ·                                                       ·
-                     │         render 1      CAST(NULL AS INT8)                                                                                        ·                                                       ·
-                     │         render 2      2                                                                                                         ·                                                       ·
-                     └── scan  ·             ·                                                                                                         ()                                                      ·
-·                              table         kv@primary                                                                                                ·                                                       ·
-·                              spans         FULL SCAN                                                                                                 ·                                                       ·
+·                              distribution         local                                                                                                     ·                                                       ·
+·                              vectorized           true                                                                                                      ·                                                       ·
+project                        ·                    ·                                                                                                         (lag, lead)                                             ·
+ │                             estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+ └── window                    ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)  ·
+      │                        estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+      │                        window 0             lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                       ·
+      └── project              ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)        ·
+           └── window          ·                    ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1, lag)        ·
+                │              estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+                │              window 0             lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                       ·
+                └── render     ·                    ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1)             ·
+                     │         estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+                     │         render 0             1                                                                                                         ·                                                       ·
+                     │         render 1             CAST(NULL AS INT8)                                                                                        ·                                                       ·
+                     │         render 2             2                                                                                                         ·                                                       ·
+                     └── scan  ·                    ·                                                                                                         ()                                                      ·
+·                              estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+·                              table                kv@primary                                                                                                ·                                                       ·
+·                              spans                FULL SCAN                                                                                                 ·                                                       ·
 
 # Ordering
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 ----
-·               distribution  local                                                                           ·             ·
-·               vectorized    true                                                                            ·             ·
-sort            ·             ·                                                                               (k, v, rank)  +k
- │              order         +k                                                                              ·             ·
- └── window     ·             ·                                                                               (k, v, rank)  ·
-      │         window 0      rank() OVER (ORDER BY k ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·             ·
-      └── scan  ·             ·                                                                               (k, v)        ·
-·               table         kv@primary                                                                      ·             ·
-·               spans         FULL SCAN                                                                       ·             ·
+·               distribution         local                                                                           ·             ·
+·               vectorized           true                                                                            ·             ·
+sort            ·                    ·                                                                               (k, v, rank)  +k
+ │              estimated row count  1000 (missing stats)                                                            ·             ·
+ │              order                +k                                                                              ·             ·
+ └── window     ·                    ·                                                                               (k, v, rank)  ·
+      │         estimated row count  1000 (missing stats)                                                            ·             ·
+      │         window 0             rank() OVER (ORDER BY k ASC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·             ·
+      └── scan  ·                    ·                                                                               (k, v)        ·
+·               estimated row count  1000 (missing stats)                                                            ·             ·
+·               table                kv@primary                                                                      ·             ·
+·               spans                FULL SCAN                                                                       ·             ·
 
 
 # Frames
@@ -250,38 +296,47 @@ sort            ·             ·                                               
 query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER () FROM kv
 ----
-·               distribution  local                                                            ·         ·
-·               vectorized    true                                                             ·         ·
-project         ·             ·                                                                (avg)     ·
- └── window     ·             ·                                                                (k, avg)  ·
-      │         window 0      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
-      └── scan  ·             ·                                                                (k)       ·
-·               table         kv@primary                                                       ·         ·
-·               spans         FULL SCAN                                                        ·         ·
+·               distribution         local                                                            ·         ·
+·               vectorized           true                                                             ·         ·
+project         ·                    ·                                                                (avg)     ·
+ │              estimated row count  1000 (missing stats)                                             ·         ·
+ └── window     ·                    ·                                                                (k, avg)  ·
+      │         estimated row count  1000 (missing stats)                                             ·         ·
+      │         window 0             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
+      └── scan  ·                    ·                                                                (k)       ·
+·               estimated row count  1000 (missing stats)                                             ·         ·
+·               table                kv@primary                                                       ·         ·
+·               spans                FULL SCAN                                                        ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM kv
 ----
-·               distribution  local                                                                    ·         ·
-·               vectorized    true                                                                     ·         ·
-project         ·             ·                                                                        (avg)     ·
- └── window     ·             ·                                                                        (k, avg)  ·
-      │         window 0      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·         ·
-      └── scan  ·             ·                                                                        (k)       ·
-·               table         kv@primary                                                               ·         ·
-·               spans         FULL SCAN                                                                ·         ·
+·               distribution         local                                                                    ·         ·
+·               vectorized           true                                                                     ·         ·
+project         ·                    ·                                                                        (avg)     ·
+ │              estimated row count  1000 (missing stats)                                                     ·         ·
+ └── window     ·                    ·                                                                        (k, avg)  ·
+      │         estimated row count  1000 (missing stats)                                                     ·         ·
+      │         window 0             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·         ·
+      └── scan  ·                    ·                                                                        (k)       ·
+·               estimated row count  1000 (missing stats)                                                     ·         ·
+·               table                kv@primary                                                               ·         ·
+·               spans                FULL SCAN                                                                ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM kv
 ----
-·               distribution  local                                                            ·         ·
-·               vectorized    true                                                             ·         ·
-project         ·             ·                                                                (avg)     ·
- └── window     ·             ·                                                                (k, avg)  ·
-      │         window 0      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
-      └── scan  ·             ·                                                                (k)       ·
-·               table         kv@primary                                                       ·         ·
-·               spans         FULL SCAN                                                        ·         ·
+·               distribution         local                                                            ·         ·
+·               vectorized           true                                                             ·         ·
+project         ·                    ·                                                                (avg)     ·
+ │              estimated row count  1000 (missing stats)                                             ·         ·
+ └── window     ·                    ·                                                                (k, avg)  ·
+      │         estimated row count  1000 (missing stats)                                             ·         ·
+      │         window 0             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·         ·
+      └── scan  ·                    ·                                                                (k)       ·
+·               estimated row count  1000 (missing stats)                                             ·         ·
+·               table                kv@primary                                                       ·         ·
+·               spans                FULL SCAN                                                        ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -301,26 +356,30 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-·                    distribution  local                                                                                    ·                                                                ·
-·                    vectorized    true                                                                                     ·                                                                ·
-project              ·             ·                                                                                        (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
- └── window          ·             ·                                                                                        (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)  ·
-      │              window 0      avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
-      │              window 1      avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
-      │              window 2      avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
-      │              window 3      avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
-      └── window     ·             ·                                                                                        (k, avg, avg, avg, avg, avg, avg, avg, avg)                      ·
-           │         window 0      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                  ·                                                                ·
-           │         window 1      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                          ·                                                                ·
-           │         window 2      avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                          ·                                                                ·
-           │         window 3      avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                                  ·                                                                ·
-           │         window 4      avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                   ·                                                                ·
-           │         window 5      avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                           ·                                                                ·
-           │         window 6      avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                           ·                                                                ·
-           │         window 7      avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                   ·                                                                ·
-           └── scan  ·             ·                                                                                        (k)                                                              ·
-·                    table         kv@primary                                                                               ·                                                                ·
-·                    spans         FULL SCAN                                                                                ·                                                                ·
+·                    distribution         local                                                                                    ·                                                                ·
+·                    vectorized           true                                                                                     ·                                                                ·
+project              ·                    ·                                                                                        (avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)     ·
+ │                   estimated row count  1000 (missing stats)                                                                     ·                                                                ·
+ └── window          ·                    ·                                                                                        (k, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg, avg)  ·
+      │              estimated row count  1000 (missing stats)                                                                     ·                                                                ·
+      │              window 0             avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)  ·                                                                ·
+      │              window 1             avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                                ·
+      │              window 2             avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)          ·                                                                ·
+      │              window 3             avg(k) OVER (ORDER BY k ASC GROUPS BETWEEN CURRENT ROW AND CURRENT ROW)                  ·                                                                ·
+      └── window     ·                    ·                                                                                        (k, avg, avg, avg, avg, avg, avg, avg, avg)                      ·
+           │         estimated row count  1000 (missing stats)                                                                     ·                                                                ·
+           │         window 0             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                  ·                                                                ·
+           │         window 1             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                          ·                                                                ·
+           │         window 2             avg(k) OVER (RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                          ·                                                                ·
+           │         window 3             avg(k) OVER (RANGE BETWEEN CURRENT ROW AND CURRENT ROW)                                  ·                                                                ·
+           │         window 4             avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)                   ·                                                                ·
+           │         window 5             avg(k) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                           ·                                                                ·
+           │         window 6             avg(k) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)                           ·                                                                ·
+           │         window 7             avg(k) OVER (ROWS BETWEEN CURRENT ROW AND CURRENT ROW)                                   ·                                                                ·
+           └── scan  ·                    ·                                                                                        (k)                                                              ·
+·                    estimated row count  1000 (missing stats)                                                                     ·                                                                ·
+·                    table                kv@primary                                                                               ·                                                                ·
+·                    spans                FULL SCAN                                                                                ·                                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -334,25 +393,30 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-·                    distribution  local                                                                    ·             ·
-·                    vectorized    false                                                                    ·             ·
-root                 ·             ·                                                                        (avg)         ·
- ├── project         ·             ·                                                                        (avg)         ·
- │    └── window     ·             ·                                                                        (v, w, avg)   ·
- │         │         window 0      avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
- │         └── scan  ·             ·                                                                        (v, w)        ·
- │                   table         kv@primary                                                               ·             ·
- │                   spans         FULL SCAN                                                                ·             ·
- └── subquery        ·             ·                                                                        ·             ·
-      │              id            @S1                                                                      ·             ·
-      │              original sql  (SELECT count(*) FROM kv)                                                ·             ·
-      │              exec mode     one row                                                                  ·             ·
-      └── group      ·             ·                                                                        (count_rows)  ·
-           │         aggregate 0   count_rows()                                                             ·             ·
-           │         scalar        ·                                                                        ·             ·
-           └── scan  ·             ·                                                                        ()            ·
-·                    table         kv@primary                                                               ·             ·
-·                    spans         FULL SCAN                                                                ·             ·
+·                    distribution         local                                                                    ·             ·
+·                    vectorized           false                                                                    ·             ·
+root                 ·                    ·                                                                        (avg)         ·
+ ├── project         ·                    ·                                                                        (avg)         ·
+ │    │              estimated row count  1000 (missing stats)                                                     ·             ·
+ │    └── window     ·                    ·                                                                        (v, w, avg)   ·
+ │         │         estimated row count  1000 (missing stats)                                                     ·             ·
+ │         │         window 0             avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
+ │         └── scan  ·                    ·                                                                        (v, w)        ·
+ │                   estimated row count  1000 (missing stats)                                                     ·             ·
+ │                   table                kv@primary                                                               ·             ·
+ │                   spans                FULL SCAN                                                                ·             ·
+ └── subquery        ·                    ·                                                                        ·             ·
+      │              id                   @S1                                                                      ·             ·
+      │              original sql         (SELECT count(*) FROM kv)                                                ·             ·
+      │              exec mode            one row                                                                  ·             ·
+      └── group      ·                    ·                                                                        (count_rows)  ·
+           │         estimated row count  1 (missing stats)                                                        ·             ·
+           │         aggregate 0          count_rows()                                                             ·             ·
+           │         scalar               ·                                                                        ·             ·
+           └── scan  ·                    ·                                                                        ()            ·
+·                    estimated row count  1000 (missing stats)                                                     ·             ·
+·                    table                kv@primary                                                               ·             ·
+·                    spans                FULL SCAN                                                                ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -364,14 +428,17 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-·               distribution  local                                                                                ·                        ·
-·               vectorized    true                                                                                 ·                        ·
-project         ·             ·                                                                                    (avg, avg, avg, avg)     ·
- └── window     ·             ·                                                                                    (k, avg, avg, avg, avg)  ·
-      │         window 0      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)  ·                        ·
-      │         window 1      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)        ·                        ·
-      │         window 2      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)         ·                        ·
-      │         window 3      avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                      ·                        ·
-      └── scan  ·             ·                                                                                    (k)                      ·
-·               table         kv@primary                                                                           ·                        ·
-·               spans         FULL SCAN                                                                            ·                        ·
+·               distribution         local                                                                                ·                        ·
+·               vectorized           true                                                                                 ·                        ·
+project         ·                    ·                                                                                    (avg, avg, avg, avg)     ·
+ │              estimated row count  1000 (missing stats)                                                                 ·                        ·
+ └── window     ·                    ·                                                                                    (k, avg, avg, avg, avg)  ·
+      │         estimated row count  1000 (missing stats)                                                                 ·                        ·
+      │         window 0             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)  ·                        ·
+      │         window 1             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)        ·                        ·
+      │         window 2             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)         ·                        ·
+      │         window 3             avg(k) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)                      ·                        ·
+      └── scan  ·                    ·                                                                                    (k)                      ·
+·               estimated row count  1000 (missing stats)                                                                 ·                        ·
+·               table                kv@primary                                                                           ·                        ·
+·               spans                FULL SCAN                                                                            ·                        ·

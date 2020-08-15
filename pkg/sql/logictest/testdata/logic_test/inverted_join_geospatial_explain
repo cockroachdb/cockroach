@@ -46,6 +46,7 @@ project                            ·                      ·
                      │             ·                      st_intersects(geom1, geom_inverted_key)
                      │             parallel               ·
                      └── scan      ·                      ·
+·                                  missing stats          ·
 ·                                  table                  ltable@primary
 ·                                  spans                  FULL SCAN
 
@@ -71,6 +72,7 @@ project                            ·                      ·
                      │             ·                      st_dwithin(geom1, geom_inverted_key, 5.0)
                      │             parallel               ·
                      └── scan      ·                      ·
+·                                  missing stats          ·
 ·                                  table                  ltable@primary
 ·                                  spans                  FULL SCAN
 
@@ -82,7 +84,9 @@ ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.g
 ·                                       distribution           local                                                                                 ·                                         ·
 ·                                       vectorized             true                                                                                  ·                                         ·
 project                                 ·                      ·                                                                                     (lk, rk1)                                 +lk,+rk1
+ │                                      estimated row count    333333 (missing stats)                                                                ·                                         ·
  └── project                            ·                      ·                                                                                     (lk, geom1, rk1, geom)                    +lk,+rk1
+      │                                 estimated row count    333333 (missing stats)                                                                ·                                         ·
       └── lookup join                   ·                      ·                                                                                     (lk, geom1, rk1, rk2, geom)               +lk,+rk1
            │                            table                  rtable@primary                                                                        ·                                         ·
            │                            type                   inner                                                                                 ·                                         ·
@@ -91,14 +95,17 @@ project                                 ·                      ·              
            │                            parallel               ·                                                                                     ·                                         ·
            │                            pred                   st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)                            ·                                         ·
            └── sort                     ·                      ·                                                                                     (lk, geom1, rk1, rk2)                     +lk,+rk1
+                │                       estimated row count    10000 (missing stats)                                                                 ·                                         ·
                 │                       order                  +lk,+rk1                                                                              ·                                         ·
                 └── project             ·                      ·                                                                                     (lk, geom1, rk1, rk2)                     ·
+                     │                  estimated row count    10000 (missing stats)                                                                 ·                                         ·
                      └── inverted join  ·                      ·                                                                                     (lk, geom1, rk1, rk2, geom_inverted_key)  ·
                           │             table                  rtable@geom_index                                                                     ·                                         ·
                           │             type                   inner                                                                                 ·                                         ·
                           │             ·                      st_intersects(geom1, geom_inverted_key) OR st_dwithin(geom1, geom_inverted_key, 2.0)  ·                                         ·
                           │             parallel               ·                                                                                     ·                                         ·
                           └── scan      ·                      ·                                                                                     (lk, geom1)                               ·
+·                                       estimated row count    1000 (missing stats)                                                                  ·                                         ·
 ·                                       table                  ltable@primary                                                                        ·                                         ·
 ·                                       spans                  FULL SCAN                                                                             ·                                         ·
 
@@ -110,9 +117,12 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.g
 ·                                       distribution           local                                                                                  ·                                         ·
 ·                                       vectorized             true                                                                                   ·                                         ·
 sort                                    ·                      ·                                                                                      (lk, rk1)                                 +lk,+rk1
+ │                                      estimated row count    10000 (missing stats)                                                                  ·                                         ·
  │                                      order                  +lk,+rk1                                                                               ·                                         ·
  └── project                            ·                      ·                                                                                      (lk, rk1)                                 ·
+      │                                 estimated row count    10000 (missing stats)                                                                  ·                                         ·
       └── project                       ·                      ·                                                                                      (lk, geom1, rk1, geom)                    ·
+           │                            estimated row count    10000 (missing stats)                                                                  ·                                         ·
            └── lookup join              ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom)               ·
                 │                       table                  rtable@primary                                                                         ·                                         ·
                 │                       type                   inner                                                                                  ·                                         ·
@@ -121,12 +131,14 @@ sort                                    ·                      ·              
                 │                       parallel               ·                                                                                      ·                                         ·
                 │                       pred                   st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)                            ·                                         ·
                 └── project             ·                      ·                                                                                      (lk, geom1, rk1, rk2)                     ·
+                     │                  estimated row count    10000 (missing stats)                                                                  ·                                         ·
                      └── inverted join  ·                      ·                                                                                      (lk, geom1, rk1, rk2, geom_inverted_key)  ·
                           │             table                  rtable@geom_index                                                                      ·                                         ·
                           │             type                   inner                                                                                  ·                                         ·
                           │             ·                      st_intersects(geom1, geom_inverted_key) AND st_dwithin(geom1, geom_inverted_key, 2.0)  ·                                         ·
                           │             parallel               ·                                                                                      ·                                         ·
                           └── scan      ·                      ·                                                                                      (lk, geom1)                               ·
+·                                       estimated row count    1000 (missing stats)                                                                   ·                                         ·
 ·                                       table                  ltable@primary                                                                         ·                                         ·
 ·                                       spans                  FULL SCAN                                                                              ·                                         ·
 
@@ -139,7 +151,9 @@ AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0
 ·                                  distribution           local                                                                                                                                                                                                                       ·                                                ·
 ·                                  vectorized             true                                                                                                                                                                                                                        ·                                                ·
 project                            ·                      ·                                                                                                                                                                                                                           (lk, rk1)                                        ·
+ │                                 estimated row count    3333 (missing stats)                                                                                                                                                                                                        ·                                                ·
  └── project                       ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, geom)                    ·
+      │                            estimated row count    3333 (missing stats)                                                                                                                                                                                                        ·                                                ·
       └── lookup join              ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2, geom)               ·
            │                       table                  rtable@primary                                                                                                                                                                                                              ·                                                ·
            │                       type                   inner                                                                                                                                                                                                                       ·                                                ·
@@ -148,11 +162,13 @@ project                            ·                      ·                   
            │                       parallel               ·                                                                                                                                                                                                                           ·                                                ·
            │                       pred                   (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))                                                      ·                                                ·
            └── project             ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2)                     ·
+                │                  estimated row count    10000 (missing stats)                                                                                                                                                                                                       ·                                                ·
                 └── inverted join  ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2, rk1, rk2, geom_inverted_key)  ·
                      │             table                  rtable@geom_index                                                                                                                                                                                                           ·                                                ·
                      │             type                   inner                                                                                                                                                                                                                       ·                                                ·
                      │             ·                      (st_intersects(geom1, geom_inverted_key) AND st_covers(geom2, geom_inverted_key)) AND (st_dfullywithin(geom1, geom_inverted_key, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom_inverted_key))  ·                                                ·
                      │             parallel               ·                                                                                                                                                                                                                           ·                                                ·
                      └── scan      ·                      ·                                                                                                                                                                                                                           (lk, geom1, geom2)                               ·
+·                                  estimated row count    1000 (missing stats)                                                                                                                                                                                                        ·                                                ·
 ·                                  table                  ltable@primary                                                                                                                                                                                                              ·                                                ·
 ·                                  spans                  FULL SCAN                                                                                                                                                                                                                   ·                                                ·
