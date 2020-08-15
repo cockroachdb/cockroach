@@ -35,4 +35,4 @@ index join  ·              ·
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          v@i
-·           spans          /3-/4
+·           spans          [/3 - /3]

@@ -252,7 +252,7 @@ update          ·                 ·
       └── scan  ·                 ·
 ·               missing stats     ·
 ·               table             kv@primary
-·               spans             -/2/#
+·               spans             [ - /2]
 ·               limit             1
 ·               locking strength  for update
 
@@ -430,7 +430,7 @@ update          ·                 ·
       └── scan  ·                 ·
 ·               missing stats     ·
 ·               table             kv@primary
-·               spans             /3-/3/#
+·               spans             [/3 - /3]
 ·               locking strength  for update
 
 query TTT
@@ -445,7 +445,7 @@ update     ·                 ·
  └── scan  ·                 ·
 ·          missing stats     ·
 ·          table             kv@primary
-·          spans             /2-/9/#
+·          spans             [/2 - /9]
 ·          parallel          ·
 ·          locking strength  for update
 
@@ -490,7 +490,7 @@ update                ·                 ·
            └── scan   ·                 ·
 ·                     missing stats     ·
 ·                     table             kv3@kv3_v_idx
-·                     spans             /10-/11
+·                     spans             [/10 - /10]
 ·                     locking strength  for update
 
 query TTT
@@ -508,7 +508,7 @@ update           ·                 ·
       └── scan   ·                 ·
 ·                missing stats     ·
 ·                table             kv3@kv3_v_idx
-·                spans             /2-/10
+·                spans             [/2 - /9]
 ·                locking strength  for update
 
 statement ok
@@ -527,7 +527,7 @@ update          ·              ·
       └── scan  ·              ·
 ·               missing stats  ·
 ·               table          kv@primary
-·               spans          /3-/3/#
+·               spans          [/3 - /3]
 
 query TTT
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
@@ -541,7 +541,7 @@ update     ·              ·
  └── scan  ·              ·
 ·          missing stats  ·
 ·          table          kv@primary
-·          spans          /2-/9/#
+·          spans          [/2 - /9]
 ·          parallel       ·
 
 query TTT
@@ -594,7 +594,7 @@ update          ·              ·
       └── scan  ·              ·
 ·               missing stats  ·
 ·               table          kv@primary
-·               spans          -/2/#
+·               spans          [ - /2]
 ·               limit          1
 
 query TTT
@@ -613,7 +613,7 @@ update                ·              ·
            └── scan   ·              ·
 ·                     missing stats  ·
 ·                     table          kv3@kv3_v_idx
-·                     spans          /10-/11
+·                     spans          [/10 - /10]
 
 query TTT
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
@@ -630,7 +630,7 @@ update           ·              ·
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          kv3@kv3_v_idx
-·                spans          /2-/10
+·                spans          [/2 - /9]
 
 # Update single column family.
 query TTT

@@ -1324,7 +1324,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/#
+·     spans          [/10 - /10]
 
 query TTT
 EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
@@ -1334,7 +1334,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 query TTT
@@ -1345,7 +1345,7 @@ EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 # Verify that consolidated point spans are still parallelized.
@@ -1357,7 +1357,7 @@ EXPLAIN SELECT * FROM a WHERE a in (10, 11)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/11/#
+·     spans          [/10 - /11]
 ·     parallel       ·
 
 query TTT
@@ -1368,7 +1368,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /11-/19/#
+·     spans          [/11 - /19]
 ·     parallel       ·
 
 # This ticks all the boxes for parallelization apart from the fact that there
@@ -1381,7 +1381,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /11-
+·     spans          [/11 - ]
 
 # Test non-int types.
 
@@ -1397,7 +1397,7 @@ index join  ·              ·
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          a@item
-·           spans          /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
+·           spans          [/'ball' - /'ball'] [/'sock' - /'sock']
 ·           parallel       ·
 
 # Range queries on non-int types are not parallel due to unbounded number of
@@ -1413,7 +1413,7 @@ index join  ·              ·
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          a@p
-·           spans          /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+·           spans          [/5.000000000000001 - /9.999999999999998] [/20.000000000000004 - /39.99999999999999]
 
 query TTT
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1423,7 +1423,7 @@ EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@primary
-·     spans          /10/10-/10/10/# /20/20-/20/20/#
+·     spans          [/10/10 - /10/10] [/20/20 - /20/20]
 ·     parallel       ·
 
 # This one isn't parallelizable because it's not a point lookup - only part of
@@ -1436,7 +1436,7 @@ EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@primary
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 
 # This one isn't parallelizable because it has a LIMIT clause.
 query TTT
@@ -1447,7 +1447,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     limit          1
 
 statement ok
@@ -1462,7 +1462,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_b_idx
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 
 statement ok
 CREATE UNIQUE INDEX on b(c)
@@ -1477,7 +1477,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_key
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 query TTT
@@ -1488,7 +1488,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_key
-·     spans          /!NULL-/2 /10-/11
+·     spans          (/NULL - /1] [/10 - /10]
 
 statement ok
 CREATE UNIQUE INDEX on b(d DESC)
@@ -1503,7 +1503,7 @@ EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_d_key
-·     spans          /10-/9 /1-/NULL
+·     spans          [/10 - /10] [/1 - /NULL)
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
@@ -1518,7 +1518,7 @@ EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_d_key
-·     spans          /NULL/1-/NULL/2 /10/10-/10/11
+·     spans          [/NULL/1 - /NULL/1] [/10/10 - /10/10]
 
 statement ok
 DROP INDEX b_b_idx
@@ -1535,7 +1535,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_b_key
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 statement ok

@@ -109,7 +109,7 @@ filter     ·              ·
  └── scan  ·              ·
 ·          missing stats  ·
 ·          table          parent@primary
-·          spans          /2-
+·          spans          [/2 - ]
 
 query TTT
 EXPLAIN SELECT y FROM parent WHERE x = 1 AND y = ARRAY[NULL, NULL]
@@ -121,7 +121,7 @@ filter     ·              ·
  └── scan  ·              ·
 ·          missing stats  ·
 ·          table          parent@primary
-·          spans          /1-/1/#
+·          spans          [/1 - /1]
 
 query TTT
 EXPLAIN SELECT z FROM child WHERE x = 1 AND y = ARRAY[NULL, NULL]
@@ -133,4 +133,4 @@ filter     ·              ·
  └── scan  ·              ·
 ·          missing stats  ·
 ·          table          child@primary
-·          spans          /1/#/56/1-/1/#/56/1/#
+·          spans          [/1 - /1]
