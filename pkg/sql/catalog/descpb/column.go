@@ -54,28 +54,6 @@ func (desc *ColumnDescriptor) DatumType() *types.T {
 	return desc.Type
 }
 
-// ColTypePrecision is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColTypePrecision() int {
-	if desc.Type.Family() == types.ArrayFamily {
-		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(desc.Type.ArrayContents().Precision())
-	}
-	return int(desc.Type.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColTypeWidth() int {
-	if desc.Type.Family() == types.ArrayFamily {
-		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(desc.Type.ArrayContents().Width())
-	}
-	return int(desc.Type.Width())
-}
-
 // IsHidden is part of the cat.Column interface.
 func (desc *ColumnDescriptor) IsHidden() bool {
 	return desc.Hidden

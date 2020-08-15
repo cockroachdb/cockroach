@@ -644,7 +644,17 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 
 		// Check whether the target column's type may require rounding of the
 		// input value.
-		props, overload := findRoundingFunction(col.DatumType(), col.ColTypePrecision())
+		colType := col.DatumType()
+		precision, width := colType.Precision(), colType.Width()
+		if colType.Family() == types.ArrayFamily {
+			innerType := colType.ArrayContents()
+			if innerType.Family() == types.ArrayFamily {
+				panic(errors.AssertionFailedf("column type should never be a nested array"))
+			}
+			precision, width = innerType.Precision(), innerType.Width()
+		}
+
+		props, overload := findRoundingFunction(colType, precision)
 		if props == nil {
 			continue
 		}
@@ -661,7 +671,7 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 			Overload:   overload,
 		}
 		variable := mb.b.factory.ConstructVariable(id)
-		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(col.ColTypeWidth())), types.Int)
+		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(width)), types.Int)
 		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
 
 		// Lazily create new scope and update the scope column to be rounded.
@@ -695,7 +705,9 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 //
 // NOTE: CRDB does not allow nested array storage types, so only one level of
 // array nesting needs to be checked.
-func findRoundingFunction(typ *types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
+func findRoundingFunction(
+	typ *types.T, precision int32,
+) (*tree.FunctionProperties, *tree.Overload) {
 	if precision == 0 {
 		// Unlimited precision decimal target type never needs rounding.
 		return nil, nil
