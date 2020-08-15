@@ -33,13 +33,7 @@ func constructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 ) (exec.Plan, error) {
-	res := &planTop{
-		// TODO(radu): these fields can be modified by planning various opaque
-		// statements. We should have a cleaner way of plumbing these.
-		avoidBuffering:  planner.curPlan.avoidBuffering,
-		auditEvents:     planner.curPlan.auditEvents,
-		instrumentation: planner.curPlan.instrumentation,
-	}
+	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
 		switch n := node.(type) {
 		case planNode:

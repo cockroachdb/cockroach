@@ -234,7 +234,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			// TODO(yuzefovich): think through whether subqueries or
 			// postqueries can be distributed. If that's the case, we might
 			// need to also look at the plan distribution of those.
-			m := plan.(*planTop).main
+			m := plan.(*planComponents).main
 			isPartiallyDistributed := m.physPlan.Distribution == physicalplan.PartiallyDistributedPlan
 			if isPartiallyDistributed && p.SessionData().PartiallyDistributedPlansDisabled {
 				// The planning has succeeded, but we've created a partially
@@ -270,15 +270,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		}
 	}
 
-	result := plan.(*planTop)
-	result.mem = execMemo
-	result.catalog = &opc.catalog
-	result.stmt = stmt
-	result.flags = opc.flags
-	if bld.IsDDL {
-		result.flags.Set(planFlagIsDDL)
-	}
-
+	result := plan.(*planComponents)
 	cols := result.main.planColumns()
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
@@ -286,7 +278,14 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		}
 	}
 
-	p.curPlan = *result
+	p.curPlan.planComponents = *result
+	p.curPlan.mem = execMemo
+	p.curPlan.catalog = &opc.catalog
+	p.curPlan.stmt = stmt
+	p.curPlan.flags = opc.flags
+	if bld.IsDDL {
+		p.curPlan.flags.Set(planFlagIsDDL)
+	}
 
 	return nil
 }
