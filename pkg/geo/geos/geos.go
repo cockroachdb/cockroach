@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// #cgo CXXFLAGS: -std=c++14
 // #cgo !windows LDFLAGS: -ldl
 //
 // #include "geos.h"

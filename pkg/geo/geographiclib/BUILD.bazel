@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "geodesic.c",
+        "geodesic.h",
+        "geographiclib.cc",
+        "geographiclib.go",
+        "geographiclib.h",
+    ],
+    cgo = True,
+    clinkopts = ["-lm"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geographiclib",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/golang/geo/s1:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["geographiclib_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//vendor/github.com/golang/geo/s1:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

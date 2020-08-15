@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["geogen.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geogen",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo:go_default_library",
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/geo/geoprojbase:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["geogen_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)

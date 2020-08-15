@@ -11,7 +11,6 @@
 // Package geographiclib is a wrapper around the GeographicLib library.
 package geographiclib
 
-// #cgo CXXFLAGS: -std=c++14
 // #cgo LDFLAGS: -lm
 //
 // #include "geodesic.h"

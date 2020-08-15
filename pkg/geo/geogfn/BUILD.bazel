@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "azimuth.go",
+        "best_projection.go",
+        "covers.go",
+        "distance.go",
+        "dwithin.go",
+        "geogfn.go",
+        "geographiclib.go",
+        "intersects.go",
+        "segmentize.go",
+        "topology_operations.go",
+        "unary_operators.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geogfn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo:go_default_library",
+        "//pkg/geo/geodist:go_default_library",
+        "//pkg/geo/geographiclib:go_default_library",
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/geo/geoprojbase:go_default_library",
+        "//pkg/geo/geosegmentize:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/golang/geo/r3:go_default_library",
+        "//vendor/github.com/golang/geo/s1:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "azimuth_test.go",
+        "best_projection_test.go",
+        "covers_test.go",
+        "distance_test.go",
+        "dwithin_test.go",
+        "geogfn_test.go",
+        "intersects_test.go",
+        "segmentize_test.go",
+        "topology_operations_test.go",
+        "unary_operators_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/geo:go_default_library",
+        "//pkg/geo/geoprojbase:go_default_library",
+        "//vendor/github.com/golang/geo/s1:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)

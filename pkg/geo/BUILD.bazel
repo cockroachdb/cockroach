@@ -1,0 +1,61 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "bbox.go",
+        "encode.go",
+        "errors.go",
+        "geo.go",
+        "hilbert.go",
+        "iterator.go",
+        "latlng.go",
+        "parse.go",
+        "summary.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geographiclib:go_default_library",
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/geo/geoprojbase:go_default_library",
+        "//pkg/geo/geos:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/protoutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/golang/geo/r1:go_default_library",
+        "//vendor/github.com/golang/geo/s1:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/pierrre/geohash:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/ewkb:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/ewkbhex:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/geojson:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/kml:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/wkb:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/wkbcommon:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/wkbhex:go_default_library",
+        "//vendor/github.com/twpayne/go-geom/encoding/wkt:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bbox_test.go",
+        "encode_test.go",
+        "geo_test.go",
+        "iterator_test.go",
+        "latlng_test.go",
+        "parse_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/geo/geopb:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)

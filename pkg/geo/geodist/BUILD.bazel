@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["geodist.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geodist",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/golang/geo/s2:go_default_library",
+        "//vendor/github.com/twpayne/go-geom:go_default_library",
+    ],
+)
