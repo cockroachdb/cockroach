@@ -41,6 +41,7 @@
 #include "storage/enginepb/mvcc3.pb.h"
 #include "util/hlc/timestamp.pb.h"
 #include "util/tracing/recorded_span.pb.h"
+#include <google/protobuf/any.pb.h>
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto 
 
@@ -602,12 +603,13 @@ const int ReadConsistencyType_ARRAYSIZE = ReadConsistencyType_MAX + 1;
 enum ScanFormat {
   KEY_VALUES = 0,
   BATCH_RESPONSE = 1,
+  COL_BATCH_RESPONSE = 2,
   ScanFormat_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   ScanFormat_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool ScanFormat_IsValid(int value);
 const ScanFormat ScanFormat_MIN = KEY_VALUES;
-const ScanFormat ScanFormat_MAX = BATCH_RESPONSE;
+const ScanFormat ScanFormat_MAX = COL_BATCH_RESPONSE;
 const int ScanFormat_ARRAYSIZE = ScanFormat_MAX + 1;
 
 enum ChecksumMode {
@@ -3159,6 +3161,18 @@ class ScanRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   // accessors -------------------------------------------------------
 
+  // repeated uint32 needed_columns = 8 [packed = true];
+  int needed_columns_size() const;
+  void clear_needed_columns();
+  static const int kNeededColumnsFieldNumber = 8;
+  ::google::protobuf::uint32 needed_columns(int index) const;
+  void set_needed_columns(int index, ::google::protobuf::uint32 value);
+  void add_needed_columns(::google::protobuf::uint32 value);
+  const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+      needed_columns() const;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+      mutable_needed_columns();
+
   bool has_header() const;
   void clear_header();
   static const int kHeaderFieldNumber = 1;
@@ -3169,6 +3183,18 @@ class ScanRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::roachpb::RequestHeader* release_header();
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  // .google.protobuf.Any scan_spec = 6;
+  bool has_scan_spec() const;
+  void clear_scan_spec();
+  static const int kScanSpecFieldNumber = 6;
+  private:
+  const ::google::protobuf::Any& _internal_scan_spec() const;
+  public:
+  const ::google::protobuf::Any& scan_spec() const;
+  ::google::protobuf::Any* release_scan_spec();
+  ::google::protobuf::Any* mutable_scan_spec();
+  void set_allocated_scan_spec(::google::protobuf::Any* scan_spec);
 
   // .cockroach.roachpb.ScanFormat scan_format = 4;
   void clear_scan_format();
@@ -3182,13 +3208,30 @@ class ScanRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::kv::kvserver::concurrency::lock::Strength key_locking() const;
   void set_key_locking(::cockroach::kv::kvserver::concurrency::lock::Strength value);
 
+  // bool projection = 7;
+  void clear_projection();
+  static const int kProjectionFieldNumber = 7;
+  bool projection() const;
+  void set_projection(bool value);
+
+  // uint64 tenant_id = 9;
+  void clear_tenant_id();
+  static const int kTenantIdFieldNumber = 9;
+  ::google::protobuf::uint64 tenant_id() const;
+  void set_tenant_id(::google::protobuf::uint64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ScanRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > needed_columns_;
+  mutable int _needed_columns_cached_byte_size_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::google::protobuf::Any* scan_spec_;
   int scan_format_;
   int key_locking_;
+  bool projection_;
+  ::google::protobuf::uint64 tenant_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -3432,6 +3475,18 @@ class ReverseScanRequest : public ::google::protobuf::MessageLite /* @@protoc_in
 
   // accessors -------------------------------------------------------
 
+  // repeated uint32 needed_columns = 8 [packed = true];
+  int needed_columns_size() const;
+  void clear_needed_columns();
+  static const int kNeededColumnsFieldNumber = 8;
+  ::google::protobuf::uint32 needed_columns(int index) const;
+  void set_needed_columns(int index, ::google::protobuf::uint32 value);
+  void add_needed_columns(::google::protobuf::uint32 value);
+  const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+      needed_columns() const;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+      mutable_needed_columns();
+
   bool has_header() const;
   void clear_header();
   static const int kHeaderFieldNumber = 1;
@@ -3442,6 +3497,18 @@ class ReverseScanRequest : public ::google::protobuf::MessageLite /* @@protoc_in
   ::cockroach::roachpb::RequestHeader* release_header();
   ::cockroach::roachpb::RequestHeader* mutable_header();
   void set_allocated_header(::cockroach::roachpb::RequestHeader* header);
+
+  // .google.protobuf.Any scan_spec = 6;
+  bool has_scan_spec() const;
+  void clear_scan_spec();
+  static const int kScanSpecFieldNumber = 6;
+  private:
+  const ::google::protobuf::Any& _internal_scan_spec() const;
+  public:
+  const ::google::protobuf::Any& scan_spec() const;
+  ::google::protobuf::Any* release_scan_spec();
+  ::google::protobuf::Any* mutable_scan_spec();
+  void set_allocated_scan_spec(::google::protobuf::Any* scan_spec);
 
   // .cockroach.roachpb.ScanFormat scan_format = 4;
   void clear_scan_format();
@@ -3455,13 +3522,30 @@ class ReverseScanRequest : public ::google::protobuf::MessageLite /* @@protoc_in
   ::cockroach::kv::kvserver::concurrency::lock::Strength key_locking() const;
   void set_key_locking(::cockroach::kv::kvserver::concurrency::lock::Strength value);
 
+  // bool projection = 7;
+  void clear_projection();
+  static const int kProjectionFieldNumber = 7;
+  bool projection() const;
+  void set_projection(bool value);
+
+  // uint64 tenant_id = 9;
+  void clear_tenant_id();
+  static const int kTenantIdFieldNumber = 9;
+  ::google::protobuf::uint64 tenant_id() const;
+  void set_tenant_id(::google::protobuf::uint64 value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReverseScanRequest)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint32 > needed_columns_;
+  mutable int _needed_columns_cached_byte_size_;
   ::cockroach::roachpb::RequestHeader* header_;
+  ::google::protobuf::Any* scan_spec_;
   int scan_format_;
   int key_locking_;
+  bool projection_;
+  ::google::protobuf::uint64 tenant_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -19624,6 +19708,112 @@ inline void ScanRequest::set_key_locking(::cockroach::kv::kvserver::concurrency:
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.key_locking)
 }
 
+// .google.protobuf.Any scan_spec = 6;
+inline bool ScanRequest::has_scan_spec() const {
+  return this != internal_default_instance() && scan_spec_ != NULL;
+}
+inline const ::google::protobuf::Any& ScanRequest::_internal_scan_spec() const {
+  return *scan_spec_;
+}
+inline const ::google::protobuf::Any& ScanRequest::scan_spec() const {
+  const ::google::protobuf::Any* p = scan_spec_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.scan_spec)
+  return p != NULL ? *p : *reinterpret_cast<const ::google::protobuf::Any*>(
+      &::google::protobuf::_Any_default_instance_);
+}
+inline ::google::protobuf::Any* ScanRequest::release_scan_spec() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ScanRequest.scan_spec)
+  
+  ::google::protobuf::Any* temp = scan_spec_;
+  scan_spec_ = NULL;
+  return temp;
+}
+inline ::google::protobuf::Any* ScanRequest::mutable_scan_spec() {
+  
+  if (scan_spec_ == NULL) {
+    auto* p = CreateMaybeMessage<::google::protobuf::Any>(GetArenaNoVirtual());
+    scan_spec_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ScanRequest.scan_spec)
+  return scan_spec_;
+}
+inline void ScanRequest::set_allocated_scan_spec(::google::protobuf::Any* scan_spec) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(scan_spec_);
+  }
+  if (scan_spec) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      scan_spec = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, scan_spec, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  scan_spec_ = scan_spec;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ScanRequest.scan_spec)
+}
+
+// bool projection = 7;
+inline void ScanRequest::clear_projection() {
+  projection_ = false;
+}
+inline bool ScanRequest::projection() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.projection)
+  return projection_;
+}
+inline void ScanRequest::set_projection(bool value) {
+  
+  projection_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.projection)
+}
+
+// repeated uint32 needed_columns = 8 [packed = true];
+inline int ScanRequest::needed_columns_size() const {
+  return needed_columns_.size();
+}
+inline void ScanRequest::clear_needed_columns() {
+  needed_columns_.Clear();
+}
+inline ::google::protobuf::uint32 ScanRequest::needed_columns(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.needed_columns)
+  return needed_columns_.Get(index);
+}
+inline void ScanRequest::set_needed_columns(int index, ::google::protobuf::uint32 value) {
+  needed_columns_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.needed_columns)
+}
+inline void ScanRequest::add_needed_columns(::google::protobuf::uint32 value) {
+  needed_columns_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ScanRequest.needed_columns)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+ScanRequest::needed_columns() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ScanRequest.needed_columns)
+  return needed_columns_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+ScanRequest::mutable_needed_columns() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ScanRequest.needed_columns)
+  return &needed_columns_;
+}
+
+// uint64 tenant_id = 9;
+inline void ScanRequest::clear_tenant_id() {
+  tenant_id_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 ScanRequest::tenant_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ScanRequest.tenant_id)
+  return tenant_id_;
+}
+inline void ScanRequest::set_tenant_id(::google::protobuf::uint64 value) {
+  
+  tenant_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ScanRequest.tenant_id)
+}
+
 // -------------------------------------------------------------------
 
 // ScanResponse
@@ -19885,6 +20075,112 @@ inline void ReverseScanRequest::set_key_locking(::cockroach::kv::kvserver::concu
   
   key_locking_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.key_locking)
+}
+
+// .google.protobuf.Any scan_spec = 6;
+inline bool ReverseScanRequest::has_scan_spec() const {
+  return this != internal_default_instance() && scan_spec_ != NULL;
+}
+inline const ::google::protobuf::Any& ReverseScanRequest::_internal_scan_spec() const {
+  return *scan_spec_;
+}
+inline const ::google::protobuf::Any& ReverseScanRequest::scan_spec() const {
+  const ::google::protobuf::Any* p = scan_spec_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.scan_spec)
+  return p != NULL ? *p : *reinterpret_cast<const ::google::protobuf::Any*>(
+      &::google::protobuf::_Any_default_instance_);
+}
+inline ::google::protobuf::Any* ReverseScanRequest::release_scan_spec() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.ReverseScanRequest.scan_spec)
+  
+  ::google::protobuf::Any* temp = scan_spec_;
+  scan_spec_ = NULL;
+  return temp;
+}
+inline ::google::protobuf::Any* ReverseScanRequest::mutable_scan_spec() {
+  
+  if (scan_spec_ == NULL) {
+    auto* p = CreateMaybeMessage<::google::protobuf::Any>(GetArenaNoVirtual());
+    scan_spec_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.ReverseScanRequest.scan_spec)
+  return scan_spec_;
+}
+inline void ReverseScanRequest::set_allocated_scan_spec(::google::protobuf::Any* scan_spec) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(scan_spec_);
+  }
+  if (scan_spec) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      scan_spec = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, scan_spec, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  scan_spec_ = scan_spec;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.ReverseScanRequest.scan_spec)
+}
+
+// bool projection = 7;
+inline void ReverseScanRequest::clear_projection() {
+  projection_ = false;
+}
+inline bool ReverseScanRequest::projection() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.projection)
+  return projection_;
+}
+inline void ReverseScanRequest::set_projection(bool value) {
+  
+  projection_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.projection)
+}
+
+// repeated uint32 needed_columns = 8 [packed = true];
+inline int ReverseScanRequest::needed_columns_size() const {
+  return needed_columns_.size();
+}
+inline void ReverseScanRequest::clear_needed_columns() {
+  needed_columns_.Clear();
+}
+inline ::google::protobuf::uint32 ReverseScanRequest::needed_columns(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.needed_columns)
+  return needed_columns_.Get(index);
+}
+inline void ReverseScanRequest::set_needed_columns(int index, ::google::protobuf::uint32 value) {
+  needed_columns_.Set(index, value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.needed_columns)
+}
+inline void ReverseScanRequest::add_needed_columns(::google::protobuf::uint32 value) {
+  needed_columns_.Add(value);
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.ReverseScanRequest.needed_columns)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >&
+ReverseScanRequest::needed_columns() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.ReverseScanRequest.needed_columns)
+  return needed_columns_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint32 >*
+ReverseScanRequest::mutable_needed_columns() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.ReverseScanRequest.needed_columns)
+  return &needed_columns_;
+}
+
+// uint64 tenant_id = 9;
+inline void ReverseScanRequest::clear_tenant_id() {
+  tenant_id_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 ReverseScanRequest::tenant_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReverseScanRequest.tenant_id)
+  return tenant_id_;
+}
+inline void ReverseScanRequest::set_tenant_id(::google::protobuf::uint64 value) {
+  
+  tenant_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReverseScanRequest.tenant_id)
 }
 
 // -------------------------------------------------------------------

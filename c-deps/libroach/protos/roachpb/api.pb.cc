@@ -16,6 +16,9 @@
 #endif
 // @@protoc_insertion_point(includes)
 
+namespace protobuf_google_2fprotobuf_2fany_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_google_2fprotobuf_2fany_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Any;
+}  // namespace protobuf_google_2fprotobuf_2fany_2eproto
 namespace protobuf_roachpb_2fapi_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_BulkOpSummary_EntryCountsEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_CheckConsistencyResponse_Result;
@@ -72,9 +75,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RequestLeaseResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ResolveIntentRangeResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ResolveIntentResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ReverseScanRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_RevertRangeResponse;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ScanRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TruncateLogRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TruncateLogResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteBatchResponse;
@@ -108,8 +109,10 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecoverTxnResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RefreshRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReverseScanRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ReverseScanResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RevertRangeRequest;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ScanRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ScanResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_SubsumeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_TransferLeaseRequest;
@@ -1196,9 +1199,10 @@ static void InitDefaultsScanRequest() {
   ::cockroach::roachpb::ScanRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ScanRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsScanRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ScanRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsScanRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_google_2fprotobuf_2fany_2eproto::scc_info_Any.base,}};
 
 static void InitDefaultsScanResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -1227,9 +1231,10 @@ static void InitDefaultsReverseScanRequest() {
   ::cockroach::roachpb::ReverseScanRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_ReverseScanRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsReverseScanRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_ReverseScanRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsReverseScanRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_google_2fprotobuf_2fany_2eproto::scc_info_Any.base,}};
 
 static void InitDefaultsReverseScanResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -3085,6 +3090,7 @@ bool ScanFormat_IsValid(int value) {
   switch (value) {
     case 0:
     case 1:
+    case 2:
       return true;
     default:
       return false;
@@ -7920,11 +7926,23 @@ void RevertRangeResponse::InternalSwap(RevertRangeResponse* other) {
 void ScanRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ScanRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_ScanRequest_default_instance_._instance.get_mutable()->scan_spec_ = const_cast< ::google::protobuf::Any*>(
+      ::google::protobuf::Any::internal_default_instance());
+}
+void ScanRequest::clear_scan_spec() {
+  if (GetArenaNoVirtual() == NULL && scan_spec_ != NULL) {
+    delete scan_spec_;
+  }
+  scan_spec_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ScanRequest::kHeaderFieldNumber;
 const int ScanRequest::kScanFormatFieldNumber;
 const int ScanRequest::kKeyLockingFieldNumber;
+const int ScanRequest::kScanSpecFieldNumber;
+const int ScanRequest::kProjectionFieldNumber;
+const int ScanRequest::kNeededColumnsFieldNumber;
+const int ScanRequest::kTenantIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ScanRequest::ScanRequest()
@@ -7936,23 +7954,29 @@ ScanRequest::ScanRequest()
 }
 ScanRequest::ScanRequest(const ScanRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      needed_columns_(from.needed_columns_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
   } else {
     header_ = NULL;
   }
+  if (from.has_scan_spec()) {
+    scan_spec_ = new ::google::protobuf::Any(*from.scan_spec_);
+  } else {
+    scan_spec_ = NULL;
+  }
   ::memcpy(&scan_format_, &from.scan_format_,
-    static_cast<size_t>(reinterpret_cast<char*>(&key_locking_) -
-    reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
+    static_cast<size_t>(reinterpret_cast<char*>(&tenant_id_) -
+    reinterpret_cast<char*>(&scan_format_)) + sizeof(tenant_id_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ScanRequest)
 }
 
 void ScanRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&key_locking_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(key_locking_));
+      reinterpret_cast<char*>(&tenant_id_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(tenant_id_));
 }
 
 ScanRequest::~ScanRequest() {
@@ -7962,6 +7986,7 @@ ScanRequest::~ScanRequest() {
 
 void ScanRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete scan_spec_;
 }
 
 void ScanRequest::SetCachedSize(int size) const {
@@ -7979,13 +8004,18 @@ void ScanRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  needed_columns_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && scan_spec_ != NULL) {
+    delete scan_spec_;
+  }
+  scan_spec_ = NULL;
   ::memset(&scan_format_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&key_locking_) -
-      reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
+      reinterpret_cast<char*>(&tenant_id_) -
+      reinterpret_cast<char*>(&scan_format_)) + sizeof(tenant_id_));
   _internal_metadata_.Clear();
 }
 
@@ -8046,6 +8076,65 @@ bool ScanRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .google.protobuf.Any scan_spec = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_scan_spec()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool projection = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &projection_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // repeated uint32 needed_columns = 8 [packed = true];
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, this->mutable_needed_columns())));
+        } else if (
+            static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 1, 66u, input, this->mutable_needed_columns())));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // uint64 tenant_id = 9;
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
+                 input, &tenant_id_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8089,6 +8178,33 @@ void ScanRequest::SerializeWithCachedSizes(
       5, this->key_locking(), output);
   }
 
+  // .google.protobuf.Any scan_spec = 6;
+  if (this->has_scan_spec()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      6, this->_internal_scan_spec(), output);
+  }
+
+  // bool projection = 7;
+  if (this->projection() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->projection(), output);
+  }
+
+  // repeated uint32 needed_columns = 8 [packed = true];
+  if (this->needed_columns_size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteTag(8, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
+    output->WriteVarint32(static_cast< ::google::protobuf::uint32>(
+        _needed_columns_cached_byte_size_));
+  }
+  for (int i = 0, n = this->needed_columns_size(); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32NoTag(
+      this->needed_columns(i), output);
+  }
+
+  // uint64 tenant_id = 9;
+  if (this->tenant_id() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(9, this->tenant_id(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ScanRequest)
@@ -8100,10 +8216,33 @@ size_t ScanRequest::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
+  // repeated uint32 needed_columns = 8 [packed = true];
+  {
+    size_t data_size = ::google::protobuf::internal::WireFormatLite::
+      UInt32Size(this->needed_columns_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+            static_cast< ::google::protobuf::int32>(data_size));
+    }
+    int cached_size = ::google::protobuf::internal::ToCachedSize(data_size);
+    GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+    _needed_columns_cached_byte_size_ = cached_size;
+    GOOGLE_SAFE_CONCURRENT_WRITES_END();
+    total_size += data_size;
+  }
+
   if (this->has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  // .google.protobuf.Any scan_spec = 6;
+  if (this->has_scan_spec()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *scan_spec_);
   }
 
   // .cockroach.roachpb.ScanFormat scan_format = 4;
@@ -8116,6 +8255,18 @@ size_t ScanRequest::ByteSizeLong() const {
   if (this->key_locking() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->key_locking());
+  }
+
+  // bool projection = 7;
+  if (this->projection() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // uint64 tenant_id = 9;
+  if (this->tenant_id() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::UInt64Size(
+        this->tenant_id());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -8135,14 +8286,24 @@ void ScanRequest::MergeFrom(const ScanRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  needed_columns_.MergeFrom(from.needed_columns_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
+  }
+  if (from.has_scan_spec()) {
+    mutable_scan_spec()->::google::protobuf::Any::MergeFrom(from.scan_spec());
   }
   if (from.scan_format() != 0) {
     set_scan_format(from.scan_format());
   }
   if (from.key_locking() != 0) {
     set_key_locking(from.key_locking());
+  }
+  if (from.projection() != 0) {
+    set_projection(from.projection());
+  }
+  if (from.tenant_id() != 0) {
+    set_tenant_id(from.tenant_id());
   }
 }
 
@@ -8163,9 +8324,13 @@ void ScanRequest::Swap(ScanRequest* other) {
 }
 void ScanRequest::InternalSwap(ScanRequest* other) {
   using std::swap;
+  needed_columns_.InternalSwap(&other->needed_columns_);
   swap(header_, other->header_);
+  swap(scan_spec_, other->scan_spec_);
   swap(scan_format_, other->scan_format_);
   swap(key_locking_, other->key_locking_);
+  swap(projection_, other->projection_);
+  swap(tenant_id_, other->tenant_id_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
@@ -8471,11 +8636,23 @@ void ScanResponse::InternalSwap(ScanResponse* other) {
 void ReverseScanRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_ReverseScanRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_ReverseScanRequest_default_instance_._instance.get_mutable()->scan_spec_ = const_cast< ::google::protobuf::Any*>(
+      ::google::protobuf::Any::internal_default_instance());
+}
+void ReverseScanRequest::clear_scan_spec() {
+  if (GetArenaNoVirtual() == NULL && scan_spec_ != NULL) {
+    delete scan_spec_;
+  }
+  scan_spec_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int ReverseScanRequest::kHeaderFieldNumber;
 const int ReverseScanRequest::kScanFormatFieldNumber;
 const int ReverseScanRequest::kKeyLockingFieldNumber;
+const int ReverseScanRequest::kScanSpecFieldNumber;
+const int ReverseScanRequest::kProjectionFieldNumber;
+const int ReverseScanRequest::kNeededColumnsFieldNumber;
+const int ReverseScanRequest::kTenantIdFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 ReverseScanRequest::ReverseScanRequest()
@@ -8487,23 +8664,29 @@ ReverseScanRequest::ReverseScanRequest()
 }
 ReverseScanRequest::ReverseScanRequest(const ReverseScanRequest& from)
   : ::google::protobuf::MessageLite(),
-      _internal_metadata_(NULL) {
+      _internal_metadata_(NULL),
+      needed_columns_(from.needed_columns_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_header()) {
     header_ = new ::cockroach::roachpb::RequestHeader(*from.header_);
   } else {
     header_ = NULL;
   }
+  if (from.has_scan_spec()) {
+    scan_spec_ = new ::google::protobuf::Any(*from.scan_spec_);
+  } else {
+    scan_spec_ = NULL;
+  }
   ::memcpy(&scan_format_, &from.scan_format_,
-    static_cast<size_t>(reinterpret_cast<char*>(&key_locking_) -
-    reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
+    static_cast<size_t>(reinterpret_cast<char*>(&tenant_id_) -
+    reinterpret_cast<char*>(&scan_format_)) + sizeof(tenant_id_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.ReverseScanRequest)
 }
 
 void ReverseScanRequest::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&key_locking_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(key_locking_));
+      reinterpret_cast<char*>(&tenant_id_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(tenant_id_));
 }
 
 ReverseScanRequest::~ReverseScanRequest() {
@@ -8513,6 +8696,7 @@ ReverseScanRequest::~ReverseScanRequest() {
 
 void ReverseScanRequest::SharedDtor() {
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete scan_spec_;
 }
 
 void ReverseScanRequest::SetCachedSize(int size) const {
@@ -8530,13 +8714,18 @@ void ReverseScanRequest::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  needed_columns_.Clear();
   if (GetArenaNoVirtual() == NULL && header_ != NULL) {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && scan_spec_ != NULL) {
+    delete scan_spec_;
+  }
+  scan_spec_ = NULL;
   ::memset(&scan_format_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&key_locking_) -
-      reinterpret_cast<char*>(&scan_format_)) + sizeof(key_locking_));
+      reinterpret_cast<char*>(&tenant_id_) -
+      reinterpret_cast<char*>(&scan_format_)) + sizeof(tenant_id_));
   _internal_metadata_.Clear();
 }
 
@@ -8597,6 +8786,65 @@ bool ReverseScanRequest::MergePartialFromCodedStream(
         break;
       }
 
+      // .google.protobuf.Any scan_spec = 6;
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(50u /* 50 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_scan_spec()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool projection = 7;
+      case 7: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(56u /* 56 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &projection_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // repeated uint32 needed_columns = 8 [packed = true];
+      case 8: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPackedPrimitive<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 input, this->mutable_needed_columns())));
+        } else if (
+            static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
+          DO_((::google::protobuf::internal::WireFormatLite::ReadRepeatedPrimitiveNoInline<
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                 1, 66u, input, this->mutable_needed_columns())));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // uint64 tenant_id = 9;
+      case 9: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(72u /* 72 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::uint64, ::google::protobuf::internal::WireFormatLite::TYPE_UINT64>(
+                 input, &tenant_id_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -8640,6 +8888,33 @@ void ReverseScanRequest::SerializeWithCachedSizes(
       5, this->key_locking(), output);
   }
 
+  // .google.protobuf.Any scan_spec = 6;
+  if (this->has_scan_spec()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      6, this->_internal_scan_spec(), output);
+  }
+
+  // bool projection = 7;
+  if (this->projection() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(7, this->projection(), output);
+  }
+
+  // repeated uint32 needed_columns = 8 [packed = true];
+  if (this->needed_columns_size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteTag(8, ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED, output);
+    output->WriteVarint32(static_cast< ::google::protobuf::uint32>(
+        _needed_columns_cached_byte_size_));
+  }
+  for (int i = 0, n = this->needed_columns_size(); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32NoTag(
+      this->needed_columns(i), output);
+  }
+
+  // uint64 tenant_id = 9;
+  if (this->tenant_id() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteUInt64(9, this->tenant_id(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.ReverseScanRequest)
@@ -8651,10 +8926,33 @@ size_t ReverseScanRequest::ByteSizeLong() const {
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
+  // repeated uint32 needed_columns = 8 [packed = true];
+  {
+    size_t data_size = ::google::protobuf::internal::WireFormatLite::
+      UInt32Size(this->needed_columns_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::Int32Size(
+            static_cast< ::google::protobuf::int32>(data_size));
+    }
+    int cached_size = ::google::protobuf::internal::ToCachedSize(data_size);
+    GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+    _needed_columns_cached_byte_size_ = cached_size;
+    GOOGLE_SAFE_CONCURRENT_WRITES_END();
+    total_size += data_size;
+  }
+
   if (this->has_header()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  // .google.protobuf.Any scan_spec = 6;
+  if (this->has_scan_spec()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *scan_spec_);
   }
 
   // .cockroach.roachpb.ScanFormat scan_format = 4;
@@ -8667,6 +8965,18 @@ size_t ReverseScanRequest::ByteSizeLong() const {
   if (this->key_locking() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->key_locking());
+  }
+
+  // bool projection = 7;
+  if (this->projection() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // uint64 tenant_id = 9;
+  if (this->tenant_id() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::UInt64Size(
+        this->tenant_id());
   }
 
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
@@ -8686,14 +8996,24 @@ void ReverseScanRequest::MergeFrom(const ReverseScanRequest& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  needed_columns_.MergeFrom(from.needed_columns_);
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
+  }
+  if (from.has_scan_spec()) {
+    mutable_scan_spec()->::google::protobuf::Any::MergeFrom(from.scan_spec());
   }
   if (from.scan_format() != 0) {
     set_scan_format(from.scan_format());
   }
   if (from.key_locking() != 0) {
     set_key_locking(from.key_locking());
+  }
+  if (from.projection() != 0) {
+    set_projection(from.projection());
+  }
+  if (from.tenant_id() != 0) {
+    set_tenant_id(from.tenant_id());
   }
 }
 
@@ -8714,9 +9034,13 @@ void ReverseScanRequest::Swap(ReverseScanRequest* other) {
 }
 void ReverseScanRequest::InternalSwap(ReverseScanRequest* other) {
   using std::swap;
+  needed_columns_.InternalSwap(&other->needed_columns_);
   swap(header_, other->header_);
+  swap(scan_spec_, other->scan_spec_);
   swap(scan_format_, other->scan_format_);
   swap(key_locking_, other->key_locking_);
+  swap(projection_, other->projection_);
+  swap(tenant_id_, other->tenant_id_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 

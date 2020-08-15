@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -205,10 +206,10 @@ type cFetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
-	mvccDecodeStrategy row.MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// fetcher is the underlying fetcher that provides KVs.
-	fetcher *row.KVFetcher
+	fetcher storage.NextKVer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -322,7 +323,7 @@ func (rf *cFetcher) Init(
 			sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
 			if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
 				table.timestampOutputIdx = idx
-				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 			}
 		}
 	}
@@ -480,6 +481,8 @@ func (rf *cFetcher) Init(
 	// Change the allocation size to be the same as the capacity of the batch
 	// we allocated above.
 	rf.table.da.AllocSize = coldata.BatchSize()
+
+	rf.machine.state[0] = stateInitFetch
 
 	return nil
 }
@@ -646,7 +649,7 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 			if newSpan {
-				rf.machine.curSpan = rf.fetcher.Span
+				rf.machine.curSpan = rf.fetcher.GetCurSpan()
 				// TODO(jordan): parse the logical longest common prefix of the span
 				// into a buffer. The logical longest common prefix is the longest
 				// common prefix that contains only full key components. For example,

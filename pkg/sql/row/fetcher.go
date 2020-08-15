@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,12 +42,12 @@ const DebugRowFetch = false
 // column is not part of the output.
 const noTimestampColumn = -1
 
-type kvBatchFetcher interface {
-	// nextBatch returns the next batch of rows. Returns false in the first
+type KVBatchFetcher interface {
+	// NextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
 	// version - both must be handled by calling code.
-	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
+	NextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
 		batchResponse []byte, origSpan roachpb.Span, err error)
 }
 
@@ -112,7 +113,7 @@ type tableInfo struct {
 	timestampOutputIdx int
 
 	// rowIsDeleted is true when the row has been deleted. This is only
-	// meaningful when kv deletion tombstones are returned by the kvBatchFetcher,
+	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
 	// changefeeds use this by providing raw kvs with tombstones unfiltered via
 	// `StartScanFrom`.
@@ -188,7 +189,7 @@ type Fetcher struct {
 	reverse bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
-	// out of all the tables. This is used to calculate the kvBatchFetcher's
+	// out of all the tables. This is used to calculate the KVBatchFetcher's
 	// firstBatchLimit.
 	maxKeysPerRow int
 
@@ -208,7 +209,7 @@ type Fetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
-	mvccDecodeStrategy MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// -- Fields updated during a scan --
 
@@ -343,7 +344,7 @@ func (rf *Fetcher) Init(
 				sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
 				if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
 					table.timestampOutputIdx = idx
-					rf.mvccDecodeStrategy = MVCCDecodingRequired
+					rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				}
 			}
 		}
@@ -483,18 +484,22 @@ func (rf *Fetcher) StartScan(
 	}
 
 	rf.traceKV = traceKV
-	f, err := makeKVBatchFetcher(
+	f, err := MakeKVBatchFetcher(
 		txn,
 		spans,
 		rf.reverse,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
+		roachpb.BATCH_RESPONSE,
+		ColFormatArgs{
+			TenantID: roachpb.SystemTenantID,
+		},
 		rf.lockStr,
 	)
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, f)
 }
 
 // StartInconsistentScan initializes and starts an inconsistent scan, where each
@@ -562,18 +567,12 @@ func (rf *Fetcher) StartInconsistentScan(
 	// on read transactions, but perhaps one day it will release some resources.
 
 	rf.traceKV = traceKV
-	f, err := makeKVBatchFetcherWithSendFunc(
-		sendFunc(sendFn),
-		spans,
-		rf.reverse,
-		limitBatches,
-		rf.firstBatchLimit(limitHint),
-		rf.lockStr,
-	)
+	f, err := makeKVBatchFetcherWithSendFunc(sendFunc(sendFn), spans, rf.reverse, limitBatches,
+		rf.firstBatchLimit(limitHint), roachpb.BATCH_RESPONSE, ColFormatArgs{TenantID: roachpb.SystemTenantID}, rf.lockStr)
 	if err != nil {
 		return err
 	}
-	return rf.StartScanFrom(ctx, &f)
+	return rf.StartScanFrom(ctx, f)
 }
 
 func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {
@@ -591,9 +590,9 @@ func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {
 	return limitHint*int64(rf.maxKeysPerRow) + 1
 }
 
-// StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
+// StartScanFrom initializes and starts a scan from the given KVBatchFetcher. Can be
 // used multiple times.
-func (rf *Fetcher) StartScanFrom(ctx context.Context, f kvBatchFetcher) error {
+func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher) error {
 	rf.indexKey = nil
 	rf.kvFetcher = newKVFetcher(f)
 	// Retrieve the first key.
@@ -1235,7 +1234,7 @@ func (rf *Fetcher) RowLastModified() hlc.Timestamp {
 
 // RowIsDeleted may only be called after NextRow has returned a non-nil row and
 // returns true if that row was most recently deleted. This method is only
-// meaningful when the configured kvBatchFetcher returns deletion tombstones, which
+// meaningful when the configured KVBatchFetcher returns deletion tombstones, which
 // the normal one (via `StartScan`) does not.
 func (rf *Fetcher) RowIsDeleted() bool {
 	return rf.rowReadyTable.rowIsDeleted

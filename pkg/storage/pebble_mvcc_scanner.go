@@ -28,6 +28,68 @@ const (
 	maxItersBeforeSeek = 10
 )
 
+// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
+// timestamps from returned KV's.
+type MVCCDecodingStrategy int
+
+const (
+	// MVCCDecodingNotRequired is used when timestamps aren't needed.
+	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
+	// MVCCDecodingRequired is used when timestamps are needed.
+	MVCCDecodingRequired
+)
+
+type results interface {
+	clear()
+	put(key MVCCKey, value []byte)
+	finish() [][]byte
+	getCount() int64
+	getBytes() int64
+	getLastKV() roachpb.KeyValue
+}
+
+type KeyValue struct {
+	key   MVCCKey
+	value []byte
+}
+
+type singleResults struct {
+	count, bytes int64
+	key          MVCCKey
+	value        []byte
+}
+
+func (s *singleResults) clear() {
+	*s = singleResults{}
+}
+
+func (s *singleResults) put(key MVCCKey, value []byte) {
+	s.count++
+	s.bytes += int64(len(key.Key) + len(value))
+	s.key = key
+	s.value = value
+}
+
+func (s *singleResults) finish() [][]byte {
+	// TODO(jordan)
+	return nil
+}
+
+func (s *singleResults) getCount() int64 {
+	return s.count
+}
+
+func (s *singleResults) getBytes() int64 {
+	return s.bytes
+}
+
+func (s *singleResults) getLastKV() roachpb.KeyValue {
+	return roachpb.KeyValue{
+		Key:   s.key.Key,
+		Value: roachpb.Value{RawBytes: s.value},
+	}
+}
+
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
@@ -37,8 +99,20 @@ type pebbleResults struct {
 	bufs  [][]byte
 }
 
+func (p *pebbleResults) getLastKV() roachpb.KeyValue {
+	panic("never should get here i hope")
+}
+
 func (p *pebbleResults) clear() {
 	*p = pebbleResults{}
+}
+
+func (p *pebbleResults) getCount() int64 {
+	return p.count
+}
+
+func (p *pebbleResults) getBytes() int64 {
+	return p.bytes
 }
 
 // The repr that MVCCScan / MVCCGet expects to provide as output goes:
@@ -124,7 +198,7 @@ type pebbleMVCCScanner struct {
 	// adding an intent from the intent history but is otherwise meaningful.
 	curKey   MVCCKey
 	curValue []byte
-	results  pebbleResults
+	results  results
 	intents  pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is above the scan
 	// timestamp. Only applicable if failOnMoreRecent is true. If set and no
@@ -148,6 +222,7 @@ var pebbleMVCCScannerPool = sync.Pool{
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(txn *roachpb.Transaction) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
+	p.results = &pebbleResults{}
 
 	if txn != nil {
 		p.txn = txn
@@ -169,6 +244,19 @@ func (p *pebbleMVCCScanner) get() {
 	p.maybeFailOnMoreRecent()
 }
 
+func (p *pebbleMVCCScanner) seekToStartOfScan() error {
+	if p.reverse {
+		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
+			return p.err
+		}
+	} else {
+		if !p.iterSeek(MVCCKey{Key: p.start}) {
+			return p.err
+		}
+	}
+	return nil
+}
+
 // scan iterates until maxKeys records are in results, or the underlying
 // iterator is exhausted, or an error is encountered.
 func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
@@ -188,7 +276,7 @@ func (p *pebbleMVCCScanner) scan() (*roachpb.Span, error) {
 	p.maybeFailOnMoreRecent()
 
 	var resume *roachpb.Span
-	if p.maxKeys > 0 && p.results.count == p.maxKeys && p.advanceKey() {
+	if p.maxKeys > 0 && p.results.getCount() == p.maxKeys && p.advanceKey() {
 		if p.reverse {
 			// curKey was not added to results, so it needs to be included in the
 			// resume span.
@@ -374,7 +462,7 @@ func (p *pebbleMVCCScanner) getAndAdvance() bool {
 		// historical timestamp < the intent timestamp. However, we
 		// return the intent separately; the caller may want to resolve
 		// it.
-		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+		if p.maxKeys > 0 && p.results.getCount() == p.maxKeys {
 			// We've already retrieved the desired number of keys and now
 			// we're adding the resume key. We don't want to add the
 			// intent here as the intents should only correspond to KVs
@@ -584,15 +672,15 @@ func (p *pebbleMVCCScanner) addAndAdvance(val []byte) bool {
 	// to include tombstones in the results.
 	if len(val) > 0 || p.tombstones {
 		p.results.put(p.curKey, val)
-		if p.targetBytes > 0 && p.results.bytes >= p.targetBytes {
+		if p.targetBytes > 0 && p.results.getBytes() >= p.targetBytes {
 			// When the target bytes are met or exceeded, stop producing more
 			// keys. We implement this by reducing maxKeys to the current
 			// number of keys.
 			//
 			// TODO(bilal): see if this can be implemented more transparently.
-			p.maxKeys = p.results.count
+			p.maxKeys = p.results.getCount()
 		}
-		if p.maxKeys > 0 && p.results.count == p.maxKeys {
+		if p.maxKeys > 0 && p.results.getCount() == p.maxKeys {
 			return false
 		}
 	}
