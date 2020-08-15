@@ -1820,7 +1820,7 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 bazel-clean:
 	@echo '=== Cleaning out bazel generated build files'
 	@find . -name '*.bazel' -not -path './.git/*' -not -path './BUILD.bazel' -not -path './c-deps/*' -not -path './vendor/*' -delete
-	@git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null
+	# @git submodule foreach 'git reset --hard; git clean -fdx' > /dev/null
 	@echo '=== SUCCESS'
 
 gazelle-generate:
