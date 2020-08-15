@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
@@ -119,6 +118,10 @@ func MakeUpdater(
 		// the indexed columns aren't changing. For example, an index entry must
 		// be added when an update to a non-indexed column causes a row to
 		// satisfy the partial index predicate when it did not before.
+		// TODO(mgartner): needsUpdate does not need to return true for every
+		// partial index. A partial index will never require updating if neither
+		// its indexed columns nor the columns referenced in its predicate
+		// expression are changing.
 		if index.IsPartial() {
 			return true
 		}
@@ -287,11 +290,8 @@ func (ru *Updater) UpdateRow(
 		// deletes of keys that aren't present. We choose to make this
 		// compromise in order to avoid having to read all values of
 		// the row that is being updated.
-		// TODO(mgartner): Add partial index IDs to ignoreIndexes that we should
-		// not delete entries from.
-		var ignoreIndexes util.FastIntSet
 		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(
-			ru.FetchColIDtoRowIndex, oldValues, ignoreIndexes, true /* includeEmpty */)
+			ru.FetchColIDtoRowIndex, oldValues, pm.IgnoreForDel, true /* includeEmpty */)
 		if err != nil {
 			return nil, err
 		}
