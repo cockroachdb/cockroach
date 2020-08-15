@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["diskqueuecfg.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/sql/colcontainer:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/storage/fs:go_default_library",
+        "//pkg/testutils:go_default_library",
+    ],
+)

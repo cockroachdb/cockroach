@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/workload",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/ccl/workloadccl/allccl:go_default_library",
+        "//pkg/ccl/workloadccl/cliccl:go_default_library",
+        "//pkg/workload/cli:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "workload",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

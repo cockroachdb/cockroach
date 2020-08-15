@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "clientmessagetype_string.go",
+        "conn.go",
+        "doc.go",
+        "encoding.go",
+        "formatcode_string.go",
+        "msg.go",
+        "pgnumericsign_string.go",
+        "preparetype_string.go",
+        "servererrfieldtype_string.go",
+        "servermessagetype_string.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/lex:go_default_library",
+        "//pkg/sql/oidext:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/bitarray:go_default_library",
+        "//pkg/util/duration:go_default_library",
+        "//pkg/util/errorutil/unimplemented:go_default_library",
+        "//pkg/util/ipaddr:go_default_library",
+        "//pkg/util/timeofday:go_default_library",
+        "//pkg/util/timeutil/pgdate:go_default_library",
+        "//pkg/util/uint128:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/jackc/pgx/pgtype:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+    ],
+)

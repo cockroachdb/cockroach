@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["pgconnect.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol/pgconnect",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgwirebase:go_default_library",
+        "//pkg/util/ctxgroup:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/jackc/pgx/pgproto3:go_default_library",
+    ],
+)

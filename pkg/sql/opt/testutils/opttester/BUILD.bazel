@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "explore_trace.go",
+        "forcing_opt.go",
+        "memo_groups.go",
+        "opt_steps.go",
+        "opt_tester.go",
+        "reorder_joins.go",
+        "stats_tester.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/opt/exec/execbuilder:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/norm:go_default_library",
+        "//pkg/sql/opt/optbuilder:go_default_library",
+        "//pkg/sql/opt/optgen/exprgen:go_default_library",
+        "//pkg/sql/opt/props/physical:go_default_library",
+        "//pkg/sql/opt/testutils/testcat:go_default_library",
+        "//pkg/sql/opt/xform:go_default_library",
+        "//pkg/sql/parser:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/stats:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/treeprinter:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/pmezard/go-difflib/difflib:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["opt_tester_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/testutils/testcat:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+    ],
+)

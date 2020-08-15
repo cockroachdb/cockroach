@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "intent_resolver.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/internal/client/requestbatcher:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvbase:go_default_library",
+        "//pkg/kv/kvserver/batcheval/result:go_default_library",
+        "//pkg/kv/kvserver/kvserverbase:go_default_library",
+        "//pkg/kv/kvserver/txnwait:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/util/contextutil:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/quotapool:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["intent_resolver_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver/batcheval/result:go_default_library",
+        "//pkg/kv/kvserver/kvserverbase:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/tracing:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+    ],
+)

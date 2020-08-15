@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["doc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/bench",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "fk_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/opt/exec:go_default_library",
+        "//pkg/sql/opt/exec/execbuilder:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/optbuilder:go_default_library",
+        "//pkg/sql/opt/testutils/testcat:go_default_library",
+        "//pkg/sql/opt/xform:go_default_library",
+        "//pkg/sql/parser:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+    ],
+)

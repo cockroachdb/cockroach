@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "client.go",
+        "entry.go",
+        "entry.pb.go",
+        "server.go",
+        "service.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/gogo/protobuf/sortkeys:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+    ],
+)

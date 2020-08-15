@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "doc.go",
+        "precomputedrand.go",
+        "random.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadimpl",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/exp/rand:go_default_library"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "precomputedrand_test.go",
+        "random_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/golang.org/x/exp/rand:go_default_library",
+    ],
+)

@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "alter_table.go",
+        "create_index.go",
+        "create_sequence.go",
+        "create_table.go",
+        "create_view.go",
+        "drop_index.go",
+        "drop_table.go",
+        "set_zone_config.go",
+        "test_catalog.go",
+        "vtable.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/geo/geoindex:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/parser:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/privilege:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/stats:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/sql/vtable:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/treeprinter:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+        "//vendor/gopkg.in/yaml.v2:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["test_catalog_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/opt/testutils/opttester:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+    ],
+)

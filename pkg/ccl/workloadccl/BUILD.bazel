@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["fixture.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/ctxgroup:go_default_library",
+        "//pkg/util/humanizeutil:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/retry:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//vendor/cloud.google.com/go/storage:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+        "//vendor/google.golang.org/api/iterator:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "fixture_test.go",
+        "main_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/ccl:go_default_library",
+        "//pkg/ccl/utilccl:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/sql/stats:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/tpcc:go_default_library",
+        "//vendor/cloud.google.com/go/storage:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/golang.org/x/oauth2/google:go_default_library",
+        "//vendor/google.golang.org/api/option:go_default_library",
+    ],
+)

@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["index_constraints.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/constraint:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/norm:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/json:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["index_constraints_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/exec/execbuilder:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/norm:go_default_library",
+        "//pkg/sql/opt/optbuilder:go_default_library",
+        "//pkg/sql/opt/optgen/exprgen:go_default_library",
+        "//pkg/sql/parser:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+    ],
+)

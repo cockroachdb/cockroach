@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "jobutils.go",
+        "license_check.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/ccl/utilccl/licenseccl:go_default_library",
+        "//pkg/jobs:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["license_check_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/ccl/utilccl/licenseccl:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+    ],
+)

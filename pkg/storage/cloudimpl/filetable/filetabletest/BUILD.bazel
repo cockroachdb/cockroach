@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "file_table_read_writer_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/sql:go_default_library",
+        "//pkg/sql/tests:go_default_library",
+        "//pkg/storage/cloudimpl/filetable:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

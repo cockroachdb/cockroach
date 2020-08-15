@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "debug.go",
+        "doc.go",
+        "fsm.go",
+        "match.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/fsm",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "example_test.go",
+        "fsm_test.go",
+        "match_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = ["//vendor/github.com/stretchr/testify/require:go_default_library"],
+)

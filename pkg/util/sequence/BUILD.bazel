@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["sequence.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/sequence",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/builtins:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sessiondata:go_default_library",
+    ],
+)

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["ccl_init.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/backupccl:go_default_library",
+        "//pkg/ccl/buildccl:go_default_library",
+        "//pkg/ccl/changefeedccl:go_default_library",
+        "//pkg/ccl/cliccl:go_default_library",
+        "//pkg/ccl/gssapiccl:go_default_library",
+        "//pkg/ccl/importccl:go_default_library",
+        "//pkg/ccl/kvccl:go_default_library",
+        "//pkg/ccl/partitionccl:go_default_library",
+        "//pkg/ccl/storageccl:go_default_library",
+        "//pkg/ccl/storageccl/engineccl:go_default_library",
+        "//pkg/ccl/utilccl:go_default_library",
+        "//pkg/ccl/workloadccl:go_default_library",
+    ],
+)

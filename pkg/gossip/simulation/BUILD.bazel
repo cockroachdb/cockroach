@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["network.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/gossip/simulation",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/gossip:go_default_library",
+        "//pkg/gossip/resolver:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/netutil:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/tracing:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+    ],
+)

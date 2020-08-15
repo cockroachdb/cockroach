@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "lease_status.pb.go",
+        "liveness.go",
+        "liveness.pb.go",
+        "log.go",
+        "log.pb.go",
+        "proposer_kv.go",
+        "proposer_kv.pb.go",
+        "state.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/gogo/protobuf/sortkeys:go_default_library",
+        "//vendor/github.com/gogo/protobuf/types:go_default_library",
+        "//vendor/google.golang.org/grpc/codes:go_default_library",
+        "//vendor/google.golang.org/grpc/status:go_default_library",
+    ],
+)

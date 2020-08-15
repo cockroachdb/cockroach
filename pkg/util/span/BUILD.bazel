@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["frontier.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/span",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/covering:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/interval:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["frontier_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

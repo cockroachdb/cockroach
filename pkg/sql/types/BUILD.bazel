@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "alias.go",
+        "oid.go",
+        "types.go",
+        "types.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/types",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/sql/lex:go_default_library",
+        "//pkg/sql/oidext:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/util/errorutil/unimplemented:go_default_library",
+        "//pkg/util/protoutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["types_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/sql/oidext:go_default_library",
+        "//pkg/util/protoutil:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+    ],
+)

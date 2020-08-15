@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "doc.go",
+        "group_by.go",
+        "limit.go",
+        "lookup_join.go",
+        "merge_join.go",
+        "mutation.go",
+        "ordering.go",
+        "project.go",
+        "row_number.go",
+        "scan.go",
+        "select.go",
+        "sort.go",
+        "statement.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/ordering",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/props:go_default_library",
+        "//pkg/sql/opt/props/physical:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "group_by_test.go",
+        "lookup_join_test.go",
+        "ordering_test.go",
+        "project_test.go",
+        "row_number_test.go",
+        "scan_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/opt/constraint:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/norm:go_default_library",
+        "//pkg/sql/opt/props:go_default_library",
+        "//pkg/sql/opt/props/physical:go_default_library",
+        "//pkg/sql/opt/testutils/testcat:go_default_library",
+        "//pkg/sql/opt/testutils/testexpr:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+    ],
+)

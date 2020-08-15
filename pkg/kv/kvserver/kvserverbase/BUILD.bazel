@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "base.go",
+        "bulk_adder.go",
+        "knobs.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver/kvserverpb:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+    ],
+)

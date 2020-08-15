@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "metrics.go",
+        "queue.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver/kvserverbase:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/retry:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["queue_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

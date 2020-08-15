@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "datum_vec.go",
+        "extended_column_factory.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldataext",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/col/typeconv:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/colexecbase/colexecerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["datum_vec_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/json:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

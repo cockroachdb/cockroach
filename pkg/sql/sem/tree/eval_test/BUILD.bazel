@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "eval_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/colexec:go_default_library",
+        "//pkg/sql/colexec/colbuilder:go_default_library",
+        "//pkg/sql/colexecbase:go_default_library",
+        "//pkg/sql/execinfra:go_default_library",
+        "//pkg/sql/execinfrapb:go_default_library",
+        "//pkg/sql/parser:go_default_library",
+        "//pkg/sql/rowexec:go_default_library",
+        "//pkg/sql/sem/builtins:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

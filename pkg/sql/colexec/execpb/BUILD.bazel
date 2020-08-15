@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "stats.go",
+        "stats.pb.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/execpb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/sql/execinfrapb:go_default_library",
+        "//pkg/util/humanizeutil:go_default_library",
+        "//pkg/util/tracing:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/gogo/protobuf/types:go_default_library",
+    ],
+)

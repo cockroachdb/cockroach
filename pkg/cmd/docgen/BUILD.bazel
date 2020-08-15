@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "diagrams.go",
+        "funcs.go",
+        "http.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/docgen/extract:go_default_library",
+        "//pkg/sql/sem/builtins:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/golang-commonmark/markdown:go_default_library",
+        "//vendor/github.com/pseudomuto/protoc-gen-doc:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "docgen",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

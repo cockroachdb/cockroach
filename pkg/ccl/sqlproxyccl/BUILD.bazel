@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "error.go",
+        "errorcode_string.go",
+        "proxy.go",
+        "server.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/jackc/pgproto3/v2:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["proxy_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/jackc/pgx/v4:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

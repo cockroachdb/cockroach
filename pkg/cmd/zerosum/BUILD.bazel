@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/zerosum",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/acceptance/cluster:go_default_library",
+        "//pkg/acceptance/localcluster:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/cockroach-go/crdb:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "zerosum",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

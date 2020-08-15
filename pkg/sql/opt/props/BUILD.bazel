@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cardinality.go",
+        "col_stats_map.go",
+        "func_dep.go",
+        "histogram.go",
+        "logical.go",
+        "multiplicity.go",
+        "statistics.go",
+        "verify.go",
+        "volatility.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/opt/constraint:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/olekukonko/tablewriter:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "cardinality_test.go",
+        "col_stats_map_test.go",
+        "func_dep_rand_test.go",
+        "func_dep_test.go",
+        "histogram_test.go",
+        "multiplicity_test.go",
+        "volatility_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/opt:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/opt/constraint:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

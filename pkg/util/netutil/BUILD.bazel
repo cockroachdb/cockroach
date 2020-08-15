@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "addr.go",
+        "net.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/netutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//vendor/github.com/cockroachdb/cmux:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/golang.org/x/net/http2:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["addr_test.go"],
+    embed = [":go_default_library"],
+    deps = ["//pkg/testutils:go_default_library"],
+)

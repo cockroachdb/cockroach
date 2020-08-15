@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["connector.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config:go_default_library",
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/kv/kvclient/kvcoord:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/rpc/nodedialer:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/retry:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["histogram.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/codahale/hdrhistogram:go_default_library",
+    ],
+)

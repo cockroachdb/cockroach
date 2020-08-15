@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["slprovider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlliveness:go_default_library",
+        "//pkg/sql/sqlliveness/slinstance:go_default_library",
+        "//pkg/sql/sqlliveness/slstorage:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/stop:go_default_library",
+    ],
+)

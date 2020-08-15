@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "btree_based_interval.go",
+        "bu23.go",
+        "interval.go",
+        "llrb_based_interval.go",
+        "range_group.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/interval",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//vendor/github.com/biogo/store/llrb:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "btree_based_interval_test.go",
+        "range_group_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+    ],
+)

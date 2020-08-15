@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["bank.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/bank",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/bufalloc:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/histogram:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+        "//vendor/golang.org/x/exp/rand:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bank_test.go",
+        "main_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/workload/workloadsql:go_default_library",
+    ],
+)

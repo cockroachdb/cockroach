@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cpu_bench.go",
+        "disk_bench.go",
+        "network_test_client.go",
+        "network_test_common.go",
+        "network_test_server.go",
+        "systembench_common.go",
+        "tests.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/systembench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cli/systembench/systembenchpb:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/sysutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/codahale/hdrhistogram:go_default_library",
+        "//vendor/github.com/dustin/go-humanize:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+    ],
+)

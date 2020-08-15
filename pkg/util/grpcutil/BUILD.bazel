@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "grpc_util.go",
+        "log.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/grpcutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/netutil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+        "//vendor/google.golang.org/grpc/codes:go_default_library",
+        "//vendor/google.golang.org/grpc/connectivity:go_default_library",
+        "//vendor/google.golang.org/grpc/grpclog:go_default_library",
+        "//vendor/google.golang.org/grpc/status:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "grpc_util_test.go",
+        "log_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/testutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+        "//vendor/google.golang.org/grpc/health/grpc_health_v1:go_default_library",
+    ],
+)

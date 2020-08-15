@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "foreachdb.go",
+        "query.go",
+        "setup.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/bench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//vendor/github.com/go-sql-driver/mysql:go_default_library",
+        "//vendor/github.com/lib/pq:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "main_test.go",
+        "pgbench_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/retry:go_default_library",
+        "//vendor/github.com/go-sql-driver/mysql:go_default_library",
+        "//vendor/github.com/lib/pq:go_default_library",
+    ],
+)

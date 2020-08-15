@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmp-sql",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/cockroachdb/apd/v2:go_default_library",
+        "//vendor/github.com/jackc/pgx:go_default_library",
+        "//vendor/github.com/jackc/pgx/pgtype:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "cmp-sql",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

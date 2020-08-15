@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["sqlsmith.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/sqlsmith",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/internal/sqlsmith:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/histogram:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+    ],
+)

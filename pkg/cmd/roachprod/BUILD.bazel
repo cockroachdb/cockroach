@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "hosts.go",
+        "main.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/roachprod/cloud:go_default_library",
+        "//pkg/cmd/roachprod/config:go_default_library",
+        "//pkg/cmd/roachprod/errors:go_default_library",
+        "//pkg/cmd/roachprod/install:go_default_library",
+        "//pkg/cmd/roachprod/ssh:go_default_library",
+        "//pkg/cmd/roachprod/ui:go_default_library",
+        "//pkg/cmd/roachprod/vm:go_default_library",
+        "//pkg/cmd/roachprod/vm/aws:go_default_library",
+        "//pkg/cmd/roachprod/vm/azure:go_default_library",
+        "//pkg/cmd/roachprod/vm/gce:go_default_library",
+        "//pkg/cmd/roachprod/vm/local:go_default_library",
+        "//pkg/util/flagutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+        "//vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        "//vendor/golang.org/x/sys/unix:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "roachprod",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

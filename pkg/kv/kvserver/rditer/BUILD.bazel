@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "replica_data_iter.go",
+        "stats.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/storage/enginepb:go_default_library",
+        "//pkg/util/bufalloc:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["replica_data_iter_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/kv/kvserver/spanset:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+    ],
+)

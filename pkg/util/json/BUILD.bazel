@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "contains.go",
+        "contains_testers.go",
+        "encode.go",
+        "encoded.go",
+        "iterator.go",
+        "jentry.go",
+        "json.go",
+        "random.go",
+        "tables.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/json",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo:go_default_library",
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/unique:go_default_library",
+        "//vendor/github.com/cockroachdb/apd/v2:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "encode_test.go",
+        "json_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/unique:go_default_library",
+        "//vendor/github.com/cockroachdb/apd/v2:go_default_library",
+    ],
+)

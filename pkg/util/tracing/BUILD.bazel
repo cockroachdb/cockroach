@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "annotate.go",
+        "annotate_nocgo.go",
+        "recorded_span.go",
+        "recorded_span.pb.go",
+        "shadow.go",
+        "tags.go",
+        "test_utils.go",
+        "tracer.go",
+        "tracer_span.go",
+    ],
+    cgo = True,
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/caller:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/cockroachdb/logtags:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/gogo/protobuf/sortkeys:go_default_library",
+        "//vendor/github.com/gogo/protobuf/types:go_default_library",
+        "//vendor/github.com/jaegertracing/jaeger/model/json:go_default_library",
+        "//vendor/github.com/lightstep/lightstep-tracer-go:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go/log:go_default_library",
+        "//vendor/github.com/openzipkin-contrib/zipkin-go-opentracing:go_default_library",
+        "//vendor/golang.org/x/net/trace:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "helpers_test.go",
+        "tags_test.go",
+        "tracer_span_test.go",
+        "tracer_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/cockroachdb/logtags:go_default_library",
+        "//vendor/github.com/lightstep/lightstep-tracer-go:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go/log:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

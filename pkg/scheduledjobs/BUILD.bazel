@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["env.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/scheduledjobs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/sqlutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+    ],
+)

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["queue.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/queue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/histogram:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+    ],
+)

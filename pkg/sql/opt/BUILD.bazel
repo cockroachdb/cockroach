@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "colset.go",
+        "column_meta.go",
+        "constants.go",
+        "doc.go",
+        "metadata.go",
+        "operator.go",
+        "operator.og.go",
+        "ordering.go",
+        "rule_name.go",
+        "rule_name.og.go",
+        "rule_name_string.go",
+        "table_meta.go",
+        "telemetry.go",
+        "view_dependencies.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/telemetry:go_default_library",
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/privilege:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/sqltelemetry:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "colset_test.go",
+        "metadata_test.go",
+        "operator_test.go",
+        "ordering_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/opt/cat:go_default_library",
+        "//pkg/sql/opt/memo:go_default_library",
+        "//pkg/sql/opt/testutils/testcat:go_default_library",
+        "//pkg/sql/privilege:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util:go_default_library",
+    ],
+)

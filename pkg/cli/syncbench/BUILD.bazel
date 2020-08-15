@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["syncbench.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/syncbench",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/sysutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/codahale/hdrhistogram:go_default_library",
+    ],
+)

@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cache.go",
+        "interval_skl.go",
+        "metrics.go",
+        "skl_impl.go",
+        "tree_impl.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/cache:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/interval:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/andy-kimball/arenaskl:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "cache_test.go",
+        "interval_skl_test.go",
+        "tree_impl_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/andy-kimball/arenaskl:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+    ],
+)

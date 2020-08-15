@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "external_storage.go",
+        "kms.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/storage/cloud",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/testutils/lint/passes/fmtsafe/testdata/src/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

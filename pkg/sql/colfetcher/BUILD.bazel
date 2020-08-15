@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cfetcher.go",
+        "colbatch_scan.go",
+        "fetcherstate_string.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/colfetcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/colencoding:go_default_library",
+        "//pkg/sql/colexec:go_default_library",
+        "//pkg/sql/colexecbase:go_default_library",
+        "//pkg/sql/colexecbase/colexecerror:go_default_library",
+        "//pkg/sql/colmem:go_default_library",
+        "//pkg/sql/execinfra:go_default_library",
+        "//pkg/sql/execinfrapb:go_default_library",
+        "//pkg/sql/row:go_default_library",
+        "//pkg/sql/scrub:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/apd/v2:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

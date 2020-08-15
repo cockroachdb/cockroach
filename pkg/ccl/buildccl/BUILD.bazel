@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["buildinfo.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/buildccl",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/build:go_default_library"],
+)

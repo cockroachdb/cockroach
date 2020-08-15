@@ -1,0 +1,50 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "client.go",
+        "local_storage.go",
+        "service.go",
+        "stream.go",
+        "testutils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/blobs/blobspb:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/rpc/nodedialer:go_default_library",
+        "//pkg/util/fileutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/google.golang.org/grpc/codes:go_default_library",
+        "//vendor/google.golang.org/grpc/metadata:go_default_library",
+        "//vendor/google.golang.org/grpc/status:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "client_test.go",
+        "local_storage_test.go",
+        "service_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/blobs/blobspb:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/rpc/nodedialer:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/netutil:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+    ],
+)

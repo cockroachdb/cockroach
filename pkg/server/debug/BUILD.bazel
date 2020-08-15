@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cpuprofile.go",
+        "logspy.go",
+        "server.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/debug",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/kv/kvserver:go_default_library",
+        "//pkg/server/debug/goroutineui:go_default_library",
+        "//pkg/server/debug/pprofui:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/cockroachdb/pebble/tool:go_default_library",
+        "//vendor/github.com/rcrowley/go-metrics:go_default_library",
+        "//vendor/github.com/rcrowley/go-metrics/exp:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+        "//vendor/golang.org/x/net/trace:go_default_library",
+        "//vendor/google.golang.org/grpc/metadata:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["logspy_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

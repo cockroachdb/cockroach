@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["cluster_settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings/cluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/tracing:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

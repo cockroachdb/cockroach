@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["oracle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvclient/kvcoord:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["oracle_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/gossip:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/stop:go_default_library",
+    ],
+)

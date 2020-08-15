@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "flags.go",
+        "test_main.go",
+        "util_cluster.go",
+        "util_docker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/acceptance",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/acceptance/cluster:go_default_library",
+        "//pkg/base:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/docker/docker/api/types:go_default_library",
+        "//vendor/github.com/docker/docker/api/types/container:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "adapter_test.go",
+        "cli_test.go",
+        "compose_test.go",
+        "debug_remote_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/acceptance/cluster:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/util/log:go_default_library",
+    ],
+)

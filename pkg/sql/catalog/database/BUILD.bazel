@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["database.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/database",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/catalog/catalogkv:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/util/log:go_default_library",
+    ],
+)

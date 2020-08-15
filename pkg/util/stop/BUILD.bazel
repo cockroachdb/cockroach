@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["stopper.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/stop",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/util/caller:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/quotapool:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/tracing:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "main_test.go",
+        "stopper_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/quotapool:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

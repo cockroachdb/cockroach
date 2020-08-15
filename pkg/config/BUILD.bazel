@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "keys.go",
+        "provider.go",
+        "system.go",
+        "system.pb.go",
+        "testutil.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "keys_test.go",
+        "main_test.go",
+        "system_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+    ],
+)

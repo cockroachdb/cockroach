@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "cassandra.go",
+        "cassandra_yaml.go",
+        "cluster_synced.go",
+        "cockroach.go",
+        "expander.go",
+        "install.go",
+        "iterm2.go",
+        "nodes.go",
+        "session.go",
+        "staging.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/install",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod/config:go_default_library",
+        "//pkg/cmd/roachprod/errors:go_default_library",
+        "//pkg/cmd/roachprod/ssh:go_default_library",
+        "//pkg/cmd/roachprod/ui:go_default_library",
+        "//pkg/util/envutil:go_default_library",
+        "//pkg/util/httputil:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/version:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+    ],
+)

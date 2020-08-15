@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "now_unix.go",
+        "now_windows.go",
+        "stopwatch.go",
+        "time.go",
+        "time_zone_util.go",
+        "timer.go",
+        "zoneinfo.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/timeutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/sys/windows:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "main_test.go",
+        "now_test.go",
+        "stopwatch_test.go",
+        "time_test.go",
+        "time_zone_util_test.go",
+        "timer_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

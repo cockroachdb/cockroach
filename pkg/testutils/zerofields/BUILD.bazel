@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["no_zero_field.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/zerofields",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors:go_default_library"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["no_zero_field_test.go"],
+    embed = [":go_default_library"],
+    deps = ["//vendor/github.com/cockroachdb/errors:go_default_library"],
+)

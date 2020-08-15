@@ -1,0 +1,60 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "datum_row_container.go",
+        "disk_row_container.go",
+        "hash_row_container.go",
+        "numbered_row_container.go",
+        "row_container.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowcontainer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/diskmap:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/mon:go_default_library",
+        "//pkg/util/ring:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "datum_row_container_test.go",
+        "disk_row_container_test.go",
+        "hash_row_container_test.go",
+        "numbered_row_container_test.go",
+        "row_container_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/kv/kvserver/diskmap:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/execinfra:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/mon:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

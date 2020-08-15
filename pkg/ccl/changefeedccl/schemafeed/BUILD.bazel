@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "schema_feed.go",
+        "table_event_filter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase:go_default_library",
+        "//pkg/jobs/jobspb:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/catalog/catalogkv:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/catalog/lease:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "schema_feed_test.go",
+        "table_event_filter_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/ccl/changefeedccl/schemafeed/schematestutils:go_default_library",
+        "//pkg/sql/catalog/descpb:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

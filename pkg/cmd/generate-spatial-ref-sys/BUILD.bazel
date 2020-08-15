@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-spatial-ref-sys",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/geo/geoproj:go_default_library",
+        "//pkg/geo/geoprojbase:go_default_library",
+        "//pkg/util/ctxgroup:go_default_library",
+        "//pkg/util/httputil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "generate-spatial-ref-sys",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

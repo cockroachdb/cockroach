@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/allocsim",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/acceptance/localcluster:go_default_library",
+        "//pkg/acceptance/localcluster/tc:go_default_library",
+        "//pkg/cli:go_default_library",
+        "//pkg/kv/kvserver:go_default_library",
+        "//pkg/server/serverpb:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "allocsim",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

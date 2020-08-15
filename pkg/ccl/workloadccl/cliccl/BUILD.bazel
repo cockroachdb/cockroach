@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["fixtures.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/workloadccl:go_default_library",
+        "//pkg/util/humanizeutil:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/cli:go_default_library",
+        "//pkg/workload/workloadsql:go_default_library",
+        "//vendor/cloud.google.com/go/storage:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/cobra:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+        "//vendor/google.golang.org/api/option:go_default_library",
+    ],
+)

@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "timeseries.go",
+        "timeseries.pb.go",
+        "timeseries.pb.gw.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ts/tspb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
+        "//vendor/github.com/golang/protobuf/descriptor:go_default_library",
+        "//vendor/github.com/golang/protobuf/proto:go_default_library",
+        "//vendor/github.com/grpc-ecosystem/grpc-gateway/runtime:go_default_library",
+        "//vendor/github.com/grpc-ecosystem/grpc-gateway/utilities:go_default_library",
+        "//vendor/google.golang.org/grpc:go_default_library",
+        "//vendor/google.golang.org/grpc/codes:go_default_library",
+        "//vendor/google.golang.org/grpc/grpclog:go_default_library",
+        "//vendor/google.golang.org/grpc/status:go_default_library",
+    ],
+)

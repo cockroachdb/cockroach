@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["local_test_cluster.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/clusterversion:go_default_library",
+        "//pkg/config:go_default_library",
+        "//pkg/config/zonepb:go_default_library",
+        "//pkg/gossip:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/rpc:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/storage:go_default_library",
+        "//pkg/util:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go:go_default_library",
+    ],
+)

@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "config.go",
+        "intpool.go",
+        "manual_time.go",
+        "notify_queue.go",
+        "quotapool.go",
+        "time.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/quotapool",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "example_test.go",
+        "int_rate_impl_test.go",
+        "int_rate_test.go",
+        "intpool_test.go",
+        "manual_time_test.go",
+        "node_size_test.go",
+        "notify_queue_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/ctxgroup:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+    ],
+)

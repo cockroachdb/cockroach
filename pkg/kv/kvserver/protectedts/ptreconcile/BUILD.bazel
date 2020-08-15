@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "metrics.go",
+        "reconciler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver:go_default_library",
+        "//pkg/kv/kvserver/protectedts:go_default_library",
+        "//pkg/kv/kvserver/protectedts/ptpb:go_default_library",
+        "//pkg/settings:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/util/hlc:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/metric:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/prometheus/client_model/go:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "main_test.go",
+        "reconciler_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/keys:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/kv/kvserver:go_default_library",
+        "//pkg/kv/kvserver/protectedts:go_default_library",
+        "//pkg/kv/kvserver/protectedts/ptpb:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/security:go_default_library",
+        "//pkg/security/securitytest:go_default_library",
+        "//pkg/server:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/sql:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/testutils/serverutils:go_default_library",
+        "//pkg/testutils/testcluster:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/uuid:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

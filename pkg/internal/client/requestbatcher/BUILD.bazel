@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["batcher.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher",
+    visibility = ["//pkg:__subpackages__"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/util/contextutil:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["batcher_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/roachpb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/stop:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/golang.org/x/sync/errgroup:go_default_library",
+    ],
+)

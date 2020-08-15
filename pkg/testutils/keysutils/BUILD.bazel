@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["pretty_scanner.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/keysutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+        "//pkg/util/keysutil:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["pretty_scanner_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/keys:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/util/encoding:go_default_library",
+    ],
+)

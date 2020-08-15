@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["mocking.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/storageutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverbase:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/syncutil/singleflight:go_default_library",
+    ],
+)

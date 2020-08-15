@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "hba.go",
+        "parser.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/util/errorutil/unimplemented:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/olekukonko/tablewriter:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "hba_test.go",
+        "scanner_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+        "//vendor/github.com/kr/pretty:go_default_library",
+    ],
+)

@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "compiler.go",
+        "data_type.go",
+        "doc.go",
+        "expr.go",
+        "expr.og.go",
+        "operator.og.go",
+        "operator_string.go",
+        "parser.go",
+        "scanner.go",
+        "token_string.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/cockroachdb/errors:go_default_library"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "compiler_test.go",
+        "parser_test.go",
+        "scanner_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)

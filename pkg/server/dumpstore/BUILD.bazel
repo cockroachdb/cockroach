@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["dumpstore.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/dumpstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings:go_default_library",
+        "//pkg/settings/cluster:go_default_library",
+        "//pkg/util/log:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["dumpstore_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

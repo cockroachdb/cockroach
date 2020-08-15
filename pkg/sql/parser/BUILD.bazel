@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "help.go",
+        "help_messages.go",
+        "lexer.go",
+        "parse.go",
+        "scan.go",
+        "show_syntax.go",
+        "sql.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/parser",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base:go_default_library",
+        "//pkg/geo/geopb:go_default_library",
+        "//pkg/roachpb:go_default_library",
+        "//pkg/sql/lex:go_default_library",
+        "//pkg/sql/pgwire/pgcode:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/privilege:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/sql/sessiondata:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/errorutil/unimplemented:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/lib/pq/oid:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "help_test.go",
+        "helpmap_test.go",
+        "lexer_test.go",
+        "parse_internal_test.go",
+        "parse_test.go",
+        "scan_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/sql/lex:go_default_library",
+        "//pkg/sql/pgwire/pgerror:go_default_library",
+        "//pkg/sql/sem/builtins:go_default_library",
+        "//pkg/sql/sem/tree:go_default_library",
+        "//pkg/testutils:go_default_library",
+        "//pkg/testutils/sqlutils:go_default_library",
+        "//pkg/util/leaktest:go_default_library",
+        "//pkg/util/log:go_default_library",
+        "//vendor/github.com/cockroachdb/datadriven:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/github.com/stretchr/testify/require:go_default_library",
+    ],
+)

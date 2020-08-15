@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "random_testutils.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/col/coldatatestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/col/coldata:go_default_library",
+        "//pkg/sql/colexecbase:go_default_library",
+        "//pkg/sql/colexecbase/colexecerror:go_default_library",
+        "//pkg/sql/colmem:go_default_library",
+        "//pkg/sql/execinfra:go_default_library",
+        "//pkg/sql/sqlbase:go_default_library",
+        "//pkg/sql/types:go_default_library",
+        "//pkg/util/duration:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+    ],
+)

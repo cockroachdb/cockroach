@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["roachmart.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/roachmartccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/randutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/workload:go_default_library",
+        "//pkg/workload/histogram:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+    ],
+)

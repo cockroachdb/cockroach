@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachvet",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/testutils/lint/passes/descriptormarshal:go_default_library",
+        "//pkg/testutils/lint/passes/errcmp:go_default_library",
+        "//pkg/testutils/lint/passes/fmtsafe:go_default_library",
+        "//pkg/testutils/lint/passes/hash:go_default_library",
+        "//pkg/testutils/lint/passes/nocopy:go_default_library",
+        "//pkg/testutils/lint/passes/returnerrcheck:go_default_library",
+        "//pkg/testutils/lint/passes/timer:go_default_library",
+        "//pkg/testutils/lint/passes/unconvert:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/asmdecl:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/assign:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/atomic:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/bools:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/buildtag:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/cgocall:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/composite:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/copylock:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/errorsas:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/httpresponse:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/loopclosure:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/lostcancel:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/nilfunc:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/printf:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/shadow:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/shift:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/stdmethods:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/structtag:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/tests:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unmarshal:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unreachable:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unsafeptr:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/passes/unusedresult:go_default_library",
+        "//vendor/golang.org/x/tools/go/analysis/unitchecker:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "roachvet",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

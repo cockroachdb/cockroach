@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "codec.go",
+        "generator.go",
+        "sql.go",
+        "uuid.go",
+        "uuid_wrapper.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/uuid",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//pkg/util/uint128:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "benchmark_fast_test.go",
+        "codec_test.go",
+        "generator_test.go",
+        "sql_test.go",
+        "uuid_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/testutils/skip:go_default_library",
+        "//pkg/util/timeutil:go_default_library",
+        "//vendor/github.com/cockroachdb/errors:go_default_library",
+    ],
+)
