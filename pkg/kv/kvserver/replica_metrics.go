@@ -161,7 +161,9 @@ func calcRangeCounter(
 	livenessMap IsLiveMap,
 	numReplicas int32,
 	clusterNodes int,
-) (rangeCounter, unavailable, underreplicated, underreplicatedForConfig, overreplicated, overreplicatedForConfig bool) {
+) (
+	rangeCounter, unavailable, underreplicated, underreplicatedForConfig, overreplicated, overreplicatedForConfig bool,
+) {
 	// It seems unlikely that a learner replica would be the first live one, but
 	// there's no particular reason to exclude them. Note that `All` returns the
 	// voters first.
