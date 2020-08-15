@@ -98,17 +98,15 @@ EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1
 query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
-·                         distribution   local
-·                         vectorized     true
-project                   ·              ·
- └── sort                 ·              ·
-      │                   order          +variance,+k
-      └── project         ·              ·
-           └── window     ·              ·
-                └── scan  ·              ·
-·                         missing stats  ·
-·                         table          kv@primary
-·                         spans          FULL SCAN
+·               distribution   local
+·               vectorized     true
+sort            ·              ·
+ │              order          +variance,+k
+ └── window     ·              ·
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          kv@primary
+·               spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
@@ -251,26 +249,25 @@ sort                      ·                    ·                              
 query TTTTT
 EXPLAIN (VERBOSE) SELECT lag(1) OVER (PARTITION BY 2), lead(2) OVER (PARTITION BY 1) FROM kv
 ----
-·                              distribution         local                                                                                                     ·                                                       ·
-·                              vectorized           true                                                                                                      ·                                                       ·
-project                        ·                    ·                                                                                                         (lag, lead)                                             ·
- │                             estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
- └── window                    ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)  ·
-      │                        estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
-      │                        window 0             lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                       ·
-      └── project              ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)        ·
-           └── window          ·                    ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1, lag)        ·
-                │              estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
-                │              window 0             lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                       ·
-                └── render     ·                    ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1)             ·
-                     │         estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
-                     │         render 0             1                                                                                                         ·                                                       ·
-                     │         render 1             CAST(NULL AS INT8)                                                                                        ·                                                       ·
-                     │         render 2             2                                                                                                         ·                                                       ·
-                     └── scan  ·                    ·                                                                                                         ()                                                      ·
-·                              estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
-·                              table                kv@primary                                                                                                ·                                                       ·
-·                              spans                FULL SCAN                                                                                                 ·                                                       ·
+·                         distribution         local                                                                                                     ·                                                       ·
+·                         vectorized           true                                                                                                      ·                                                       ·
+project                   ·                    ·                                                                                                         (lag, lead)                                             ·
+ │                        estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+ └── window               ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1, lead)  ·
+      │                   estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+      │                   window 0             lead(lag_1_partition_1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)  ·                                                       ·
+      └── window          ·                    ·                                                                                                         (lag, lag_1_arg1, lag_1_arg3, lag_1_partition_1)        ·
+           │              estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+           │              window 0             lag(lag_1_arg1, lag_1_arg1, lag_1_arg3) OVER (RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)          ·                                                       ·
+           └── render     ·                    ·                                                                                                         (lag_1_arg1, lag_1_arg3, lag_1_partition_1)             ·
+                │         estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+                │         render 0             1                                                                                                         ·                                                       ·
+                │         render 1             CAST(NULL AS INT8)                                                                                        ·                                                       ·
+                │         render 2             2                                                                                                         ·                                                       ·
+                └── scan  ·                    ·                                                                                                         ()                                                      ·
+·                         estimated row count  1000 (missing stats)                                                                                      ·                                                       ·
+·                         table                kv@primary                                                                                                ·                                                       ·
+·                         spans                FULL SCAN                                                                                                 ·                                                       ·
 
 # Ordering
 
