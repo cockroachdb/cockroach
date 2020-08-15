@@ -2792,6 +2792,10 @@ func RunLogicTestWithDefaultConfig(
 	defer logScope.Close(t)
 
 	verbose := testing.Verbose() || log.V(1)
+
+	// Only used in rewrite mode, where we don't need to run the same file through
+	// multiple configs.
+	seenPaths := make(map[string]struct{})
 	for idx, cfg := range logicTestConfigs {
 		paths := configPaths[idx]
 		if len(paths) == 0 {
@@ -2812,6 +2816,13 @@ func RunLogicTestWithDefaultConfig(
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
+					if *rewriteResultsInTestfiles {
+						if _, seen := seenPaths[path]; seen {
+							skip.IgnoreLint(t, "test file already rewritten")
+						}
+						seenPaths[path] = struct{}{}
+					}
+
 					// Run the test in parallel, unless:
 					//  - we're printing out all of the SQL interactions, or
 					//  - we're generating testfiles, or
