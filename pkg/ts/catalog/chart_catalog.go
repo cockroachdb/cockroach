@@ -426,7 +426,9 @@ var charts = []sectionDescription{
 					"ranges",
 					"ranges.unavailable",
 					"ranges.underreplicated",
+					"ranges.underreplicatedForConfig",
 					"ranges.overreplicated",
+					"ranges.overreplicatedForConfig",
 				},
 			},
 			{

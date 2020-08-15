@@ -34,18 +34,20 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100 /* storeID */, desc, IsLiveMap{
+		ctr, down, under, underForConfig, over, overForConfig := calcRangeCounter(1100 /* storeID */, desc, IsLiveMap{
 			1000: IsLiveMapEntry{IsLive: true}, // by NodeID
 		}, 3, 3)
 
 		require.True(t, ctr)
 		require.True(t, down)
 		require.True(t, under)
+		require.True(t, underForConfig)
 		require.False(t, over)
+		require.False(t, overForConfig)
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(1000, desc, IsLiveMap{
+		ctr, down, under, underForConfig, over, overForConfig := calcRangeCounter(1000, desc, IsLiveMap{
 			1000: IsLiveMapEntry{IsLive: false},
 		}, 3, 3)
 
@@ -54,6 +56,47 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, ctr)
 		require.False(t, down)
 		require.False(t, under)
+		require.False(t, underForConfig)
 		require.False(t, over)
+		require.False(t, overForConfig)
+	}
+
+	{
+		ctr, down, under, underForConfig, over, overForConfig := calcRangeCounter(11, desc, IsLiveMap{
+			10:   IsLiveMapEntry{IsLive: true},
+			100:  IsLiveMapEntry{IsLive: true},
+			1000: IsLiveMapEntry{IsLive: true},
+		}, 5, 4)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.True(t, underForConfig)
+		require.False(t, over)
+		require.False(t, overForConfig)
+	}
+
+	desc = roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
+		roachpb.MakeReplicaDescriptors([]roachpb.ReplicaDescriptor{
+			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 10000, StoreID: 11000, ReplicaID: 12000, Type: roachpb.ReplicaTypeVoterFull()},
+		}))
+
+	{
+		ctr, down, under, underForConfig, over, overForConfig := calcRangeCounter(11, desc, IsLiveMap{
+			10:    IsLiveMapEntry{IsLive: true},
+			100:   IsLiveMapEntry{IsLive: true},
+			1000:  IsLiveMapEntry{IsLive: true},
+			10000: IsLiveMapEntry{IsLive: true},
+		}, 3, 5)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.False(t, underForConfig)
+		require.True(t, over)
+		require.True(t, overForConfig)
 	}
 }
