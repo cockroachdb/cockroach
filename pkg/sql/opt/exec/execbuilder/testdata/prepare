@@ -11,13 +11,14 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query TTT
 EXECUTE change_index
 ----
-·          distribution  full
-·          vectorized    true
-filter     ·             ·
- │         filter        b = 10
- └── scan  ·             ·
-·          table         ab@primary
-·          spans         FULL SCAN
+·          distribution   full
+·          vectorized     true
+filter     ·              ·
+ │         filter         b = 10
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          ab@primary
+·          spans          FULL SCAN
 
 statement ok
 CREATE INDEX bindex ON ab (b)
@@ -25,11 +26,12 @@ CREATE INDEX bindex ON ab (b)
 query TTT
 EXECUTE change_index
 ----
-·     distribution  full
-·     vectorized    true
-scan  ·             ·
-·     table         ab@bindex
-·     spans         /10-/11
+·     distribution   full
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          ab@bindex
+·     spans          /10-/11
 
 statement ok
 DROP INDEX bindex
@@ -37,13 +39,14 @@ DROP INDEX bindex
 query TTT
 EXECUTE change_index
 ----
-·          distribution  full
-·          vectorized    true
-filter     ·             ·
- │         filter        b = 10
- └── scan  ·             ·
-·          table         ab@primary
-·          spans         FULL SCAN
+·          distribution   full
+·          vectorized     true
+filter     ·              ·
+ │         filter         b = 10
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          ab@primary
+·          spans          FULL SCAN
 
 ## Statistics change: Create statistics and ensure that the plan is recalculated.
 statement ok
@@ -64,9 +67,11 @@ merge join  ·                   ·
  │          right cols are key  ·
  │          mergeJoinOrder      +"(a=c)"
  ├── scan   ·                   ·
+ │          missing stats       ·
  │          table               ab@primary
  │          spans               FULL SCAN
  └── scan   ·                   ·
+·           missing stats       ·
 ·           table               cd@primary
 ·           spans               FULL SCAN
 
@@ -88,5 +93,6 @@ lookup join  ·                      ·
  │           equality cols are key  ·
  │           parallel               ·
  └── scan    ·                      ·
+·            estimated row count    1
 ·            table                  ab@primary
 ·            spans                  FULL SCAN

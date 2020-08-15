@@ -48,15 +48,16 @@ values  ·              ·                 (column1)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-·            distribution   local              ·                   ·
-·            vectorized     false              ·                   ·
-render       ·              ·                  (r)                 ·
- │           render 0       column1 + column2  ·                   ·
- └── values  ·              ·                  (column1, column2)  ·
-·            size           2 columns, 3 rows  ·                   ·
-·            row 0, expr 0  1                  ·                   ·
-·            row 0, expr 1  2                  ·                   ·
-·            row 1, expr 0  3                  ·                   ·
-·            row 1, expr 1  4                  ·                   ·
-·            row 2, expr 0  5                  ·                   ·
-·            row 2, expr 1  6                  ·                   ·
+·            distribution         local              ·                   ·
+·            vectorized           false              ·                   ·
+render       ·                    ·                  (r)                 ·
+ │           estimated row count  3                  ·                   ·
+ │           render 0             column1 + column2  ·                   ·
+ └── values  ·                    ·                  (column1, column2)  ·
+·            size                 2 columns, 3 rows  ·                   ·
+·            row 0, expr 0        1                  ·                   ·
+·            row 0, expr 1        2                  ·                   ·
+·            row 1, expr 0        3                  ·                   ·
+·            row 1, expr 1        4                  ·                   ·
+·            row 2, expr 0        5                  ·                   ·
+·            row 2, expr 1        6                  ·                   ·

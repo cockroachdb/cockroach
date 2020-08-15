@@ -51,6 +51,7 @@ root                                  ·                   ·
  │    └── buffer                      ·                   ·
  │         │                          label               buffer 1
  │         └── scan                   ·                   ·
+ │                                    missing stats       ·
  │                                    table               xy@primary
  │                                    spans               FULL SCAN
  └── fk-check                         ·                   ·
@@ -63,6 +64,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               parent@primary
 ·                                     spans               FULL SCAN
 
@@ -207,34 +209,35 @@ insert       ·             ·
 query TTT
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-·                                     distribution  local
-·                                     vectorized    false
-root                                  ·             ·
- ├── delete                           ·             ·
- │    │                               from          parent
- │    └── buffer                      ·             ·
- │         │                          label         buffer 1
- │         └── scan                   ·             ·
- │                                    table         parent@primary
- │                                    spans         /3-/3/#
- ├── fk-check                         ·             ·
- │    └── error if rows               ·             ·
- │         └── lookup join            ·             ·
- │              │                     table         child@child_p_idx
- │              │                     type          semi
- │              │                     equality      (p) = (p)
- │              └── project           ·             ·
- │                   └── scan buffer  ·             ·
- │                                    label         buffer 1
- └── fk-check                         ·             ·
-      └── error if rows               ·             ·
-           └── lookup join            ·             ·
-                │                     table         child_nullable@child_nullable_p_idx
-                │                     type          semi
-                │                     equality      (p) = (p)
-                └── project           ·             ·
-                     └── scan buffer  ·             ·
-·                                     label         buffer 1
+·                                     distribution   local
+·                                     vectorized     false
+root                                  ·              ·
+ ├── delete                           ·              ·
+ │    │                               from           parent
+ │    └── buffer                      ·              ·
+ │         │                          label          buffer 1
+ │         └── scan                   ·              ·
+ │                                    missing stats  ·
+ │                                    table          parent@primary
+ │                                    spans          /3-/3/#
+ ├── fk-check                         ·              ·
+ │    └── error if rows               ·              ·
+ │         └── lookup join            ·              ·
+ │              │                     table          child@child_p_idx
+ │              │                     type           semi
+ │              │                     equality       (p) = (p)
+ │              └── project           ·              ·
+ │                   └── scan buffer  ·              ·
+ │                                    label          buffer 1
+ └── fk-check                         ·              ·
+      └── error if rows               ·              ·
+           └── lookup join            ·              ·
+                │                     table          child_nullable@child_nullable_p_idx
+                │                     type           semi
+                │                     equality       (p) = (p)
+                └── project           ·              ·
+                     └── scan buffer  ·              ·
+·                                     label          buffer 1
 
 statement ok
 CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other), INDEX (p))
@@ -242,43 +245,44 @@ CREATE TABLE child2 (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(other),
 query TTT
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
-·                                     distribution  local
-·                                     vectorized    false
-root                                  ·             ·
- ├── delete                           ·             ·
- │    │                               from          parent
- │    └── buffer                      ·             ·
- │         │                          label         buffer 1
- │         └── scan                   ·             ·
- │                                    table         parent@primary
- │                                    spans         /3-/3/#
- ├── fk-check                         ·             ·
- │    └── error if rows               ·             ·
- │         └── lookup join            ·             ·
- │              │                     table         child@child_p_idx
- │              │                     type          semi
- │              │                     equality      (p) = (p)
- │              └── project           ·             ·
- │                   └── scan buffer  ·             ·
- │                                    label         buffer 1
- ├── fk-check                         ·             ·
- │    └── error if rows               ·             ·
- │         └── lookup join            ·             ·
- │              │                     table         child_nullable@child_nullable_p_idx
- │              │                     type          semi
- │              │                     equality      (p) = (p)
- │              └── project           ·             ·
- │                   └── scan buffer  ·             ·
- │                                    label         buffer 1
- └── fk-check                         ·             ·
-      └── error if rows               ·             ·
-           └── lookup join            ·             ·
-                │                     table         child2@child2_p_idx
-                │                     type          semi
-                │                     equality      (other) = (p)
-                └── project           ·             ·
-                     └── scan buffer  ·             ·
-·                                     label         buffer 1
+·                                     distribution   local
+·                                     vectorized     false
+root                                  ·              ·
+ ├── delete                           ·              ·
+ │    │                               from           parent
+ │    └── buffer                      ·              ·
+ │         │                          label          buffer 1
+ │         └── scan                   ·              ·
+ │                                    missing stats  ·
+ │                                    table          parent@primary
+ │                                    spans          /3-/3/#
+ ├── fk-check                         ·              ·
+ │    └── error if rows               ·              ·
+ │         └── lookup join            ·              ·
+ │              │                     table          child@child_p_idx
+ │              │                     type           semi
+ │              │                     equality       (p) = (p)
+ │              └── project           ·              ·
+ │                   └── scan buffer  ·              ·
+ │                                    label          buffer 1
+ ├── fk-check                         ·              ·
+ │    └── error if rows               ·              ·
+ │         └── lookup join            ·              ·
+ │              │                     table          child_nullable@child_nullable_p_idx
+ │              │                     type           semi
+ │              │                     equality       (p) = (p)
+ │              └── project           ·              ·
+ │                   └── scan buffer  ·              ·
+ │                                    label          buffer 1
+ └── fk-check                         ·              ·
+      └── error if rows               ·              ·
+           └── lookup join            ·              ·
+                │                     table          child2@child2_p_idx
+                │                     type           semi
+                │                     equality       (other) = (p)
+                └── project           ·              ·
+                     └── scan buffer  ·              ·
+·                                     label          buffer 1
 
 statement ok
 CREATE TABLE doubleparent (p1 INT, p2 INT, other INT, PRIMARY KEY (p1, p2))
@@ -295,24 +299,25 @@ CREATE TABLE doublechild (
 query TTT
 EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
 ----
-·                                distribution  local
-·                                vectorized    false
-root                             ·             ·
- ├── delete                      ·             ·
- │    │                          from          doubleparent
- │    └── buffer                 ·             ·
- │         │                     label         buffer 1
- │         └── scan              ·             ·
- │                               table         doubleparent@primary
- │                               spans         /10-/11
- └── fk-check                    ·             ·
-      └── error if rows          ·             ·
-           └── lookup join       ·             ·
-                │                table         doublechild@doublechild_p1_p2_idx
-                │                type          semi
-                │                equality      (p1, p2) = (p1,p2)
-                └── scan buffer  ·             ·
-·                                label         buffer 1
+·                                distribution   local
+·                                vectorized     false
+root                             ·              ·
+ ├── delete                      ·              ·
+ │    │                          from           doubleparent
+ │    └── buffer                 ·              ·
+ │         │                     label          buffer 1
+ │         └── scan              ·              ·
+ │                               missing stats  ·
+ │                               table          doubleparent@primary
+ │                               spans          /10-/11
+ └── fk-check                    ·              ·
+      └── error if rows          ·              ·
+           └── lookup join       ·              ·
+                │                table          doublechild@doublechild_p1_p2_idx
+                │                type           semi
+                │                equality       (p1, p2) = (p1,p2)
+                └── scan buffer  ·              ·
+·                                label          buffer 1
 
 # -- Tests with UPDATE --
 
@@ -330,6 +335,7 @@ root                                  ·                   ·
  │         └── project                ·                   ·
  │              └── render            ·                   ·
  │                   └── scan         ·                   ·
+ │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
  │                                    locking strength    for update
@@ -343,6 +349,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               parent@primary
 ·                                     spans               FULL SCAN
 
@@ -360,6 +367,7 @@ root                                  ·                      ·
  │         └── project                ·                      ·
  │              └── render            ·                      ·
  │                   └── scan         ·                      ·
+ │                                    missing stats          ·
  │                                    table                  child@primary
  │                                    spans                  /10-/10/#
  │                                    locking strength       for update
@@ -389,6 +397,7 @@ root                                            ·                   ·
  │         └── project                          ·                   ·
  │              └── render                      ·                   ·
  │                   └── scan                   ·                   ·
+ │                                              missing stats       ·
  │                                              table               parent@primary
  │                                              spans               FULL SCAN
  │                                              locking strength    for update
@@ -411,6 +420,7 @@ root                                            ·                   ·
  │                        │                     distinct on         p
  │                        │                     order key           p
  │                        └── scan              ·                   ·
+ │                                              missing stats       ·
  │                                              table               child@child_p_idx
  │                                              spans               FULL SCAN
  └── fk-check                                   ·                   ·
@@ -432,6 +442,7 @@ root                                            ·                   ·
                           │                     distinct on         p
                           │                     order key           p
                           └── scan              ·                   ·
+·                                               missing stats       ·
 ·                                               table               child_nullable@child_nullable_p_idx
 ·                                               spans               FULL SCAN
 
@@ -449,6 +460,7 @@ root                                       ·                 ·
  │         └── project                     ·                 ·
  │              └── render                 ·                 ·
  │                   └── scan              ·                 ·
+ │                                         missing stats     ·
  │                                         table             parent@parent_other_key
  │                                         spans             /10-/11
  │                                         locking strength  for update
@@ -496,6 +508,7 @@ root                                            ·                   ·
  │         └── project                          ·                   ·
  │              └── render                      ·                   ·
  │                   └── scan                   ·                   ·
+ │                                              missing stats       ·
  │                                              table               child@primary
  │                                              spans               FULL SCAN
  │                                              locking strength    for update
@@ -517,6 +530,7 @@ root                                            ·                   ·
                      └── distinct               ·                   ·
                           │                     distinct on         c
                           └── scan              ·                   ·
+·                                               missing stats       ·
 ·                                               table               grandchild@primary
 ·                                               spans               FULL SCAN
 
@@ -535,6 +549,7 @@ root                                  ·                   ·
  │         └── project                ·                   ·
  │              └── render            ·                   ·
  │                   └── scan         ·                   ·
+ │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
  │                                    locking strength    for update
@@ -548,6 +563,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               parent@primary
 ·                                     spans               FULL SCAN
 
@@ -564,6 +580,7 @@ root                                  ·                   ·
  │         │                          label               buffer 1
  │         └── project                ·                   ·
  │              └── scan              ·                   ·
+ │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
  │                                    locking strength    for update
@@ -577,6 +594,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               parent@primary
 ·                                     spans               FULL SCAN
 
@@ -594,6 +612,7 @@ root                                            ·                   ·
  │         └── project                          ·                   ·
  │              └── render                      ·                   ·
  │                   └── scan                   ·                   ·
+ │                                              missing stats       ·
  │                                              table               child@primary
  │                                              spans               FULL SCAN
  │                                              locking strength    for update
@@ -607,6 +626,7 @@ root                                            ·                   ·
  │              │    └── scan buffer            ·                   ·
  │              │                               label               buffer 1
  │              └── scan                        ·                   ·
+ │                                              missing stats       ·
  │                                              table               parent@primary
  │                                              spans               FULL SCAN
  └── fk-check                                   ·                   ·
@@ -627,6 +647,7 @@ root                                            ·                   ·
                      └── distinct               ·                   ·
                           │                     distinct on         c
                           └── scan              ·                   ·
+·                                               missing stats       ·
 ·                                               table               grandchild@primary
 ·                                               spans               FULL SCAN
 
@@ -648,6 +669,7 @@ root                                  ·                   ·
  │         └── project                ·                   ·
  │              └── render            ·                   ·
  │                   └── scan         ·                   ·
+ │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
  │                                    locking strength    for update
@@ -661,6 +683,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               parent@primary
 ·                                     spans               FULL SCAN
 
@@ -681,6 +704,7 @@ root                                  ·                   ·
  │         └── project                ·                   ·
  │              └── render            ·                   ·
  │                   └── scan         ·                   ·
+ │                                    missing stats       ·
  │                                    table               self@primary
  │                                    spans               FULL SCAN
  │                                    locking strength    for update
@@ -694,6 +718,7 @@ root                                  ·                   ·
                 │    └── scan buffer  ·                   ·
                 │                     label               buffer 1
                 └── scan              ·                   ·
+·                                     missing stats       ·
 ·                                     table               self@primary
 ·                                     spans               FULL SCAN
 
@@ -711,6 +736,7 @@ root                                            ·                   ·
  │         └── project                          ·                   ·
  │              └── render                      ·                   ·
  │                   └── scan                   ·                   ·
+ │                                              missing stats       ·
  │                                              table               self@primary
  │                                              spans               FULL SCAN
  │                                              locking strength    for update
@@ -732,6 +758,7 @@ root                                            ·                   ·
                      └── distinct               ·                   ·
                           │                     distinct on         y
                           └── scan              ·                   ·
+·                                               missing stats       ·
 ·                                               table               self@primary
 ·                                               spans               FULL SCAN
 
@@ -743,17 +770,18 @@ SET enable_insert_fast_path = true
 query TTTTT
 EXPLAIN (VERBOSE) INSERT INTO child VALUES (1,1), (2,2)
 ----
-·                 distribution   local              ·   ·
-·                 vectorized     false              ·   ·
-insert fast path  ·              ·                  ()  ·
-·                 into           child(c, p)        ·   ·
-·                 auto commit    ·                  ·   ·
-·                 FK check       parent@primary     ·   ·
-·                 size           2 columns, 2 rows  ·   ·
-·                 row 0, expr 0  1                  ·   ·
-·                 row 0, expr 1  1                  ·   ·
-·                 row 1, expr 0  2                  ·   ·
-·                 row 1, expr 1  2                  ·   ·
+·                 distribution         local              ·   ·
+·                 vectorized           false              ·   ·
+insert fast path  ·                    ·                  ()  ·
+·                 estimated row count  0 (missing stats)  ·   ·
+·                 into                 child(c, p)        ·   ·
+·                 auto commit          ·                  ·   ·
+·                 FK check             parent@primary     ·   ·
+·                 size                 2 columns, 2 rows  ·   ·
+·                 row 0, expr 0        1                  ·   ·
+·                 row 0, expr 1        1                  ·   ·
+·                 row 1, expr 0        2                  ·   ·
+·                 row 1, expr 1        2                  ·   ·
 
 # We shouldn't use the fast path if the VALUES columns are not in order.
 query B 
@@ -865,19 +893,21 @@ CREATE TABLE cascadechild (
 query TTTTT
 EXPLAIN (VERBOSE) DELETE FROM cascadeparent WHERE p > 1
 ----
-·                    distribution  local                   ·    ·
-·                    vectorized    false                   ·    ·
-root                 ·             ·                       ()   ·
- ├── delete          ·             ·                       ()   ·
- │    │              from          cascadeparent           ·    ·
- │    └── buffer     ·             ·                       (p)  ·
- │         │         label         buffer 1                ·    ·
- │         └── scan  ·             ·                       (p)  ·
- │                   table         cascadeparent@primary   ·    ·
- │                   spans         /2-                     ·    ·
- └── fk-cascade      ·             ·                       ·    ·
-·                    fk            fk_p_ref_cascadeparent  ·    ·
-·                    input         buffer 1                ·    ·
+·                    distribution         local                   ·    ·
+·                    vectorized           false                   ·    ·
+root                 ·                    ·                       ()   ·
+ ├── delete          ·                    ·                       ()   ·
+ │    │              estimated row count  0 (missing stats)       ·    ·
+ │    │              from                 cascadeparent           ·    ·
+ │    └── buffer     ·                    ·                       (p)  ·
+ │         │         label                buffer 1                ·    ·
+ │         └── scan  ·                    ·                       (p)  ·
+ │                   estimated row count  333 (missing stats)     ·    ·
+ │                   table                cascadeparent@primary   ·    ·
+ │                   spans                /2-                     ·    ·
+ └── fk-cascade      ·                    ·                       ·    ·
+·                    fk                   fk_p_ref_cascadeparent  ·    ·
+·                    input                buffer 1                ·    ·
 
 statement ok
 CREATE TABLE a (
@@ -923,9 +953,11 @@ project                        ·                   ·
                 ├── filter     ·                   ·
                 │    │         filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
                 │    └── scan  ·                   ·
+                │              missing stats       ·
                 │              table               b@idx
                 │              spans               /!NULL-
                 └── scan       ·                   ·
+·                              missing stats       ·
 ·                              table               a@primary
 ·                              spans               FULL SCAN
 

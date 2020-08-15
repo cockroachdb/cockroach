@@ -80,25 +80,31 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lVFr2zwUhu-_XyHOVQsqsW
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-·                    distribution        full                 ·            ·
-·                    vectorized          true                 ·            ·
-project              ·                   ·                    (x, str)     ·
- └── merge join      ·                   ·                    (x, y, str)  ·
-      │              type                inner                ·            ·
-      │              equality            (x) = (y)            ·            ·
-      │              left cols are key   ·                    ·            ·
-      │              right cols are key  ·                    ·            ·
-      │              mergeJoinOrder      +"(x=y)"             ·            ·
-      ├── filter     ·                   ·                    (x)          +x
-      │    │         filter              (x % 2) = 0          ·            ·
-      │    └── scan  ·                   ·                    (x)          +x
-      │              table               numtosquare@primary  ·            ·
-      │              spans               FULL SCAN            ·            ·
-      └── filter     ·                   ·                    (y, str)     +y
-           │         filter              (y % 2) = 0          ·            ·
-           └── scan  ·                   ·                    (y, str)     +y
-·                    table               numtostr@primary     ·            ·
-·                    spans               FULL SCAN            ·            ·
+·                    distribution         full                  ·            ·
+·                    vectorized           true                  ·            ·
+project              ·                    ·                     (x, str)     ·
+ │                   estimated row count  333 (missing stats)   ·            ·
+ └── merge join      ·                    ·                     (x, y, str)  ·
+      │              estimated row count  333 (missing stats)   ·            ·
+      │              type                 inner                 ·            ·
+      │              equality             (x) = (y)             ·            ·
+      │              left cols are key    ·                     ·            ·
+      │              right cols are key   ·                     ·            ·
+      │              mergeJoinOrder       +"(x=y)"              ·            ·
+      ├── filter     ·                    ·                     (x)          +x
+      │    │         estimated row count  333 (missing stats)   ·            ·
+      │    │         filter               (x % 2) = 0           ·            ·
+      │    └── scan  ·                    ·                     (x)          +x
+      │              estimated row count  1000 (missing stats)  ·            ·
+      │              table                numtosquare@primary   ·            ·
+      │              spans                FULL SCAN             ·            ·
+      └── filter     ·                    ·                     (y, str)     +y
+           │         estimated row count  333 (missing stats)   ·            ·
+           │         filter               (y % 2) = 0           ·            ·
+           └── scan  ·                    ·                     (y, str)     +y
+·                    estimated row count  1000 (missing stats)  ·            ·
+·                    table                numtostr@primary      ·            ·
+·                    spans                FULL SCAN             ·            ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
@@ -150,11 +156,12 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEEPk0AQhe_-isl4aZNtWG
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
 ----
-·     distribution  full                 ·    ·
-·     vectorized    true                 ·    ·
-scan  ·             ·                    (x)  ·
-·     table         numtosquare@primary  ·    ·
-·     spans         FULL SCAN            ·    ·
+·     distribution         full                  ·    ·
+·     vectorized           true                  ·    ·
+scan  ·                    ·                     (x)  ·
+·     estimated row count  1000 (missing stats)  ·    ·
+·     table                numtosquare@primary   ·    ·
+·     spans                FULL SCAN             ·    ·
 
 # Verifies that unused renders don't cause us to do rendering instead of a
 # simple projection.
@@ -166,36 +173,43 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT01L80AYvL-_YplT-7pi43
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
-·                    distribution  full               ·              ·
-·                    vectorized    true               ·              ·
-project              ·             ·                  (y, str, res)  ·
- └── sort            ·             ·                  (res, y, str)  +res
-      │              order         +res               ·              ·
-      └── render     ·             ·                  (res, y, str)  ·
-           │         render 0      repeat('test', y)  ·              ·
-           │         render 1      y                  ·              ·
-           │         render 2      str                ·              ·
-           └── scan  ·             ·                  (y, str)       ·
-·                    table         numtostr@primary   ·              ·
-·                    spans         FULL SCAN          ·              ·
+·                    distribution         full                  ·              ·
+·                    vectorized           true                  ·              ·
+project              ·                    ·                     (y, str, res)  ·
+ └── sort            ·                    ·                     (res, y, str)  +res
+      │              estimated row count  1000 (missing stats)  ·              ·
+      │              order                +res                  ·              ·
+      └── render     ·                    ·                     (res, y, str)  ·
+           │         estimated row count  1000 (missing stats)  ·              ·
+           │         render 0             repeat('test', y)     ·              ·
+           │         render 1             y                     ·              ·
+           │         render 2             str                   ·              ·
+           └── scan  ·                    ·                     (y, str)       ·
+·                    estimated row count  1000 (missing stats)  ·              ·
+·                    table                numtostr@primary      ·              ·
+·                    spans                FULL SCAN             ·              ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
 ----
-·                         distribution  full               ·              ·
-·                         vectorized    true               ·              ·
-project                   ·             ·                  (y, str, res)  ·
- └── limit                ·             ·                  (res, y, str)  ·
-      │                   count         10                 ·              ·
-      └── sort            ·             ·                  (res, y, str)  +res
-           │              order         +res               ·              ·
-           └── render     ·             ·                  (res, y, str)  ·
-                │         render 0      repeat('test', y)  ·              ·
-                │         render 1      y                  ·              ·
-                │         render 2      str                ·              ·
-                └── scan  ·             ·                  (y, str)       ·
-·                         table         numtostr@primary   ·              ·
-·                         spans         FULL SCAN          ·              ·
+·                         distribution         full                  ·              ·
+·                         vectorized           true                  ·              ·
+project                   ·                    ·                     (y, str, res)  ·
+ └── limit                ·                    ·                     (res, y, str)  ·
+      │                   estimated row count  10 (missing stats)    ·              ·
+      │                   count                10                    ·              ·
+      └── sort            ·                    ·                     (res, y, str)  +res
+           │              estimated row count  1000 (missing stats)  ·              ·
+           │              order                +res                  ·              ·
+           └── render     ·                    ·                     (res, y, str)  ·
+                │         estimated row count  1000 (missing stats)  ·              ·
+                │         render 0             repeat('test', y)     ·              ·
+                │         render 1             y                     ·              ·
+                │         render 2             str                   ·              ·
+                └── scan  ·                    ·                     (y, str)       ·
+·                         estimated row count  1000 (missing stats)  ·              ·
+·                         table                numtostr@primary      ·              ·
+·                         spans                FULL SCAN             ·              ·
 
 # Regression test for #20481.
 query T

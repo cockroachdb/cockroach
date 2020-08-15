@@ -32,19 +32,23 @@ NULL       /1       {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-·                distribution    full               ·             ·
-·                vectorized      true               ·             ·
-project          ·               ·                  (a, b)        ·
- └── merge join  ·               ·                  (a, b, a, b)  ·
-      │          type            inner              ·             ·
-      │          equality        (a, b) = (a, b)    ·             ·
-      │          mergeJoinOrder  +"(a=a)",+"(b=b)"  ·             ·
-      ├── scan   ·               ·                  (a, b)        +a,+b
-      │          table           data@primary       ·             ·
-      │          spans           FULL SCAN          ·             ·
-      └── scan   ·               ·                  (a, b)        +a,+b
-·                table           data@primary       ·             ·
-·                spans           FULL SCAN          ·             ·
+·                distribution         full                  ·             ·
+·                vectorized           true                  ·             ·
+project          ·                    ·                     (a, b)        ·
+ │               estimated row count  100 (missing stats)   ·             ·
+ └── merge join  ·                    ·                     (a, b, a, b)  ·
+      │          estimated row count  100 (missing stats)   ·             ·
+      │          type                 inner                 ·             ·
+      │          equality             (a, b) = (a, b)       ·             ·
+      │          mergeJoinOrder       +"(a=a)",+"(b=b)"     ·             ·
+      ├── scan   ·                    ·                     (a, b)        +a,+b
+      │          estimated row count  1000 (missing stats)  ·             ·
+      │          table                data@primary          ·             ·
+      │          spans                FULL SCAN             ·             ·
+      └── scan   ·                    ·                     (a, b)        +a,+b
+·                estimated row count  1000 (missing stats)  ·             ·
+·                table                data@primary          ·             ·
+·                spans                FULL SCAN             ·             ·
 
 # TODO(radu): enable these tests when joins pass through orderings on equality
 # columns.
@@ -110,19 +114,23 @@ project          ·               ·                  (a, b)        ·
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-·               distribution  full             ·             ·
-·               vectorized    true             ·             ·
-sort            ·             ·                (a, b, c, d)  +b,+a
- │              order         +b,+a            ·             ·
- └── hash join  ·             ·                (a, b, c, d)  ·
-      │         type          inner            ·             ·
-      │         equality      (a, b) = (c, d)  ·             ·
-      ├── scan  ·             ·                (a, b)        ·
-      │         table         data@primary     ·             ·
-      │         spans         FULL SCAN        ·             ·
-      └── scan  ·             ·                (c, d)        ·
-·               table         data@primary     ·             ·
-·               spans         FULL SCAN        ·             ·
+·               distribution         full                  ·             ·
+·               vectorized           true                  ·             ·
+sort            ·                    ·                     (a, b, c, d)  +b,+a
+ │              estimated row count  100 (missing stats)   ·             ·
+ │              order                +b,+a                 ·             ·
+ └── hash join  ·                    ·                     (a, b, c, d)  ·
+      │         estimated row count  100 (missing stats)   ·             ·
+      │         type                 inner                 ·             ·
+      │         equality             (a, b) = (c, d)       ·             ·
+      ├── scan  ·                    ·                     (a, b)        ·
+      │         estimated row count  1000 (missing stats)  ·             ·
+      │         table                data@primary          ·             ·
+      │         spans                FULL SCAN             ·             ·
+      └── scan  ·                    ·                     (c, d)        ·
+·               estimated row count  1000 (missing stats)  ·             ·
+·               table                data@primary          ·             ·
+·               spans                FULL SCAN             ·             ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)]
