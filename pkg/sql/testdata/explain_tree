@@ -6,9 +6,12 @@ CREATE TABLE t.orders (oid INT PRIMARY KEY, cid INT, value DECIMAL, date DATE)
 plan-string
 SELECT oid FROM t.orders WHERE oid = 123
 ----
-scan                         (oid int)
-      table  orders@primary
-      spans  /123-/123/#
+      distribution         local
+      vectorized           false
+scan                                          (oid int)
+      estimated row count  1 (missing stats)
+      table                orders@primary
+      spans                /123-/123/#
 
 plan-tree
 SELECT oid FROM t.orders WHERE oid = 123
@@ -24,13 +27,13 @@ children: []
 plan-string
 SELECT cid, date, value FROM t.orders
 ----
-render                               (cid int, date date, value decimal)
- │         render 0  (@1)[int]
- │         render 1  (@3)[date]
- │         render 2  (@2)[decimal]
- └── scan                            (cid int, value decimal, date date)
-           table     orders@primary
-           spans     FULL SCAN
+           distribution         local
+           vectorized           false
+project                                               (cid int, date date, value decimal)
+ └── scan                                             (cid int, value decimal, date date)
+           estimated row count  1000 (missing stats)
+           table                orders@primary
+           spans                FULL SCAN
 
 plan-tree
 SELECT cid, date, value FROM t.orders
@@ -55,26 +58,29 @@ children:
 plan-string
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
-render                                                                                      (cid int, sum decimal)
- │                                  render 0     (@2)[int]
- │                                  render 1     (@3)[decimal]
- └── sort                                                                                   (column7 decimal, cid int, sum decimal)  +column7
-      │                             order        +column7
-      └── render                                                                            (column7 decimal, cid int, sum decimal)
-           │                        render 0     ((1)[decimal] - (@2)[decimal])[decimal]
-           │                        render 1     (@1)[int]
-           │                        render 2     (@2)[decimal]
-           └── group                                                                        (cid int, sum decimal)
-                │                   aggregate 0  sum(value)
-                │                   group by     cid
-                └── render                                                                  (cid int, value decimal)
-                     │              render 0     (@1)[int]
-                     │              render 1     (@2)[decimal]
-                     └── filter                                                             (cid int, value decimal, date date)
-                          │         filter       ((@3)[date] > ('2015-01-01')[date])[bool]
-                          └── scan                                                          (cid int, value decimal, date date)
-                                    table        orders@primary
-                                    spans        FULL SCAN
+                                    distribution         local
+                                    vectorized           false
+project                                                                                               (cid int, sum decimal)
+ └── sort                                                                                             (column7 decimal, cid int, sum decimal)  +column7
+      │                             estimated row count  98 (missing stats)
+      │                             order                +column7
+      └── render                                                                                      (column7 decimal, cid int, sum decimal)
+           │                        estimated row count  98 (missing stats)
+           │                        render 0             ((1)[decimal] - (sum)[decimal])[decimal]
+           │                        render 1             (cid)[int]
+           │                        render 2             (sum)[decimal]
+           └── group                                                                                  (cid int, sum decimal)
+                │                   estimated row count  98 (missing stats)
+                │                   aggregate 0          sum(value)
+                │                   group by             cid
+                └── project                                                                           (cid int, value decimal)
+                     └── filter                                                                       (cid int, value decimal, date date)
+                          │         estimated row count  333 (missing stats)
+                          │         filter               ((date)[date] > ('2015-01-01')[date])[bool]
+                          └── scan                                                                    (cid int, value decimal, date date)
+                                    estimated row count  1000 (missing stats)
+                                    table                orders@primary
+                                    spans                FULL SCAN
 
 plan-tree
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
@@ -130,9 +136,12 @@ children:
 plan-string
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
-scan                         (value decimal)
-      table  orders@primary
-      spans  FULL SCAN
+      distribution         local
+      vectorized           false
+scan                                             (value decimal)
+      estimated row count  1000 (missing stats)
+      table                orders@primary
+      spans                FULL SCAN
 
 plan-tree
 SELECT value FROM (SELECT cid, date, value FROM t.orders)
@@ -148,22 +157,27 @@ children: []
 plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
-render                                                    (cid int, date date, value decimal)
- │                   render 0            (@1)[int]
- │                   render 1            (@3)[date]
- │                   render 2            (@2)[decimal]
- └── hash join                                            (cid int, value decimal, date date, date date)
-      │              type                inner
-      │              equality            (date) = (date)
-      │              right cols are key
-      ├── scan                                            (cid int, value decimal, date date)
-      │              table               orders@primary
-      │              spans               FULL SCAN
-      └── distinct                                        (date date)
-           │         distinct on         date
-           └── scan                                       (date date)
-                     table               orders@primary
-                     spans               FULL SCAN
+                          distribution         local
+                          vectorized           false
+project                                                              (cid int, date date, value decimal)
+ └── project                                                         (cid int, value decimal, date date)
+      │                   estimated row count  1000 (missing stats)
+      └── hash join                                                  (cid int, value decimal, date date, date date)
+           │              estimated row count  980 (missing stats)
+           │              type                 inner
+           │              equality             (date) = (date)
+           │              right cols are key
+           ├── scan                                                  (cid int, value decimal, date date)
+           │              estimated row count  1000 (missing stats)
+           │              table                orders@primary
+           │              spans                FULL SCAN
+           └── distinct                                              (date date)
+                │         estimated row count  100 (missing stats)
+                │         distinct on          date
+                └── scan                                             (date date)
+                          estimated row count  1000 (missing stats)
+                          table                orders@primary
+                          spans                FULL SCAN
 
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
@@ -225,24 +239,32 @@ CREATE TABLE t.actors (
 plan-string
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies
 ----
-root                                                                                    (movie_id int, title string, name string)
- ├── render                                                                             (movie_id int, title string, name string)
- │    │                   render 0      (@1)[int]
- │    │                   render 1      (@2)[string]
- │    │                   render 2      (@S1)[string]
- │    └── scan                                                                          (id int, title string)
- │                        table         movies@primary
- │                        spans         FULL SCAN
+                          distribution         local
+                          vectorized           false
+root                                                                                           (movie_id int, title string, name string)
+ ├── project                                                                                   (movie_id int, title string, name string)
+ │    └── render                                                                               (name string, id int, title string)
+ │         │              estimated row count  1000 (missing stats)
+ │         │              render 0             (@S1)[string]
+ │         │              render 1             (id)[int]
+ │         │              render 2             (title)[string]
+ │         └── scan                                                                            (id int, title string)
+ │                        estimated row count  1000 (missing stats)
+ │                        table                movies@primary
+ │                        spans                FULL SCAN
  └── subquery
-      │                   id            @S1
-      │                   original sql  (SELECT name FROM t.actors WHERE name = 'Foo')
-      │                   exec mode     one row
-      └── max1row                                                                       (name string)
-           └── filter                                                                   (name string)
-                │         filter        ((@1)[string] = ('Foo')[string])[bool]
-                └── scan                                                                (name string)
-                          table         actors@primary
-                          spans         FULL SCAN
+      │                   id                   @S1
+      │                   original sql         (SELECT name FROM t.actors WHERE name = 'Foo')
+      │                   exec mode            one row
+      └── max1row                                                                              (name string)
+           │              estimated row count  1
+           └── filter                                                                          (name string)
+                │         estimated row count  10 (missing stats)
+                │         filter               ((name)[string] = ('Foo')[string])[bool]
+                └── scan                                                                       (name string)
+                          estimated row count  1000 (missing stats)
+                          table                actors@primary
+                          spans                FULL SCAN
 
 plan-tree
 SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FROM t.movies

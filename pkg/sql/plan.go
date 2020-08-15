@@ -13,15 +13,19 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -277,6 +281,9 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog *optCatalog
 
+	// codec is populated during planning.
+	codec keys.SQLCodec
+
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -300,6 +307,7 @@ type planTop struct {
 	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
 	// will be saved in planString.
 	savePlanString bool
+	explainPlan    *explain.Plan
 	planString     string
 }
 
@@ -430,11 +438,37 @@ func (p *planTop) close(ctx context.Context) {
 			p.savedPlanForStats = planToTree(ctx, p)
 		}
 
-		if p.savePlanString {
-			p.planString = planToString(ctx, p)
+		if p.savePlanString && p.explainPlan != nil {
+			var err error
+			p.planString, err = p.formatExplain()
+			if err != nil {
+				p.planString = err.Error()
+			}
 		}
 	}
 	p.planComponents.close(ctx)
+}
+
+func (p *planTop) formatExplain() (string, error) {
+	if p.explainPlan == nil {
+		return "", errors.AssertionFailedf("no plan")
+	}
+	vectorized := p.flags.IsSet(planFlagVectorized)
+	distribution := physicalplan.LocalPlan
+	if p.flags.IsSet(planFlagFullyDistributed) {
+		distribution = physicalplan.FullyDistributedPlan
+	} else if p.flags.IsSet(planFlagPartiallyDistributed) {
+		distribution = physicalplan.PartiallyDistributedPlan
+	}
+
+	ob := explain.NewOutputBuilder(explain.Flags{
+		Verbose:   true,
+		ShowTypes: true,
+	})
+	if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+		return "", err
+	}
+	return ob.BuildString(), nil
 }
 
 // formatOptPlan returns a visual representation of the optimizer plan that was
