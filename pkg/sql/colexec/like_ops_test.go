@@ -105,7 +105,7 @@ func BenchmarkLikeOps(b *testing.B) {
 	ctx := context.Background()
 
 	typs := []*types.T{types.Bytes}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col := batch.ColVec(0).Bytes()
 	width := 64
 	for i := 0; i < coldata.BatchSize(); i++ {

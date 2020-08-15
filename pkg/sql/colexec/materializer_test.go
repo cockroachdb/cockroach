@@ -117,7 +117,7 @@ func BenchmarkMaterializer(b *testing.B) {
 					if hasNulls {
 						nullProb = nullProbability
 					}
-					batch := testAllocator.NewMemBatch(typs)
+					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 					for _, colVec := range batch.ColVecs() {
 						coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
 							Rand:             rng,

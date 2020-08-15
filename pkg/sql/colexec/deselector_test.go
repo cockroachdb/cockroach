@@ -88,7 +88,7 @@ func BenchmarkDeselector(b *testing.B) {
 		inputTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(inputTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(inputTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()

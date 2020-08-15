@@ -286,7 +286,7 @@ func TestOutboxInbox(t *testing.T) {
 				if outputBatch == coldata.ZeroBatch {
 					outputBatches.Add(coldata.ZeroBatch, typs)
 				} else {
-					batchCopy := testAllocator.NewMemBatchWithSize(typs, outputBatch.Length())
+					batchCopy := testAllocator.NewMemBatchWithFixedCapacity(typs, outputBatch.Length())
 					testAllocator.PerformOperation(batchCopy.ColVecs(), func() {
 						for i := range typs {
 							batchCopy.ColVec(i).Append(
@@ -560,7 +560,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	typs := []*types.T{types.Int}
 
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
 
 	input := colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)
@@ -621,7 +621,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	nextDone := make(chan struct{})
 	input := &colexecbase.CallbackOperator{NextCb: func(ctx context.Context) coldata.Batch {
-		b := testAllocator.NewMemBatchWithSize(typs, 0)
+		b := testAllocator.NewMemBatchWithFixedCapacity(typs, 0)
 		b.SetLength(0)
 		inTags = logtags.FromContext(ctx)
 		nextDone <- struct{}{}

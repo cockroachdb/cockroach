@@ -31,7 +31,7 @@ func TestCancelChecker(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	typs := []*types.T{types.Int}
-	batch := testAllocator.NewMemBatch(typs)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	op := NewCancelChecker(NewNoop(colexecbase.NewRepeatableBatchSource(testAllocator, batch, typs)))
 	cancel()
 	err := colexecerror.CatchVectorizedRuntimeError(func() {

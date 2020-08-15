@@ -81,11 +81,6 @@ func (c *Columnarizer) Init() {
 	// internal objects several times if Init method is called more than once, so
 	// we have this check in place.
 	if c.initStatus == OperatorNotInitialized {
-		c.batch = c.allocator.NewMemBatch(c.typs)
-		c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize())
-		for i := range c.buffered {
-			c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
-		}
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 		c.input.Start(c.ctx)
 		c.initStatus = OperatorInitialized
@@ -94,11 +89,24 @@ func (c *Columnarizer) Init() {
 
 // Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
-	c.batch.ResetInternalBatch()
+	var reallocated bool
+	c.batch, reallocated = c.allocator.ResetMaybeReallocate(c.typs, c.batch, 1 /* minCapacity */)
+	if reallocated {
+		oldRows := c.buffered
+		c.buffered = make(sqlbase.EncDatumRows, c.batch.Capacity())
+		for i := range c.buffered {
+			if len(oldRows) > 0 {
+				c.buffered[i] = oldRows[0]
+				oldRows = oldRows[1:]
+			} else {
+				c.buffered[i] = make(sqlbase.EncDatumRow, len(c.typs))
+			}
+		}
+	}
 	// Buffer up n rows.
 	nRows := 0
 	columnTypes := c.OutputTypes()
-	for ; nRows < coldata.BatchSize(); nRows++ {
+	for ; nRows < c.batch.Capacity(); nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
 			nRows--

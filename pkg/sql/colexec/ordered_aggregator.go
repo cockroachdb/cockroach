@@ -63,11 +63,6 @@ type orderedAggregator struct {
 		// resumeIdx is the index at which the aggregation functions should start
 		// writing to on the next iteration of Next().
 		resumeIdx int
-		// inputSize and outputSize are 2*coldata.BatchSize() and
-		// coldata.BatchSize(), respectively, by default but can be other values
-		// for tests.
-		inputSize  int
-		outputSize int
 	}
 
 	// unsafeBatch is a coldata.Batch returned when only a subset of the
@@ -159,27 +154,21 @@ func NewOrderedAggregator(
 	return a, nil
 }
 
-func (a *orderedAggregator) initWithOutputBatchSize(outputSize int) {
-	a.initWithInputAndOutputBatchSize(coldata.BatchSize(), outputSize)
-}
-
-func (a *orderedAggregator) initWithInputAndOutputBatchSize(inputSize, outputSize int) {
+func (a *orderedAggregator) Init() {
 	a.input.Init()
-
-	// Twice the input batchSize is allocated to avoid having to check for
-	// overflow when outputting.
-	a.scratch.inputSize = inputSize * 2
-	a.scratch.outputSize = outputSize
-	a.scratch.Batch = a.allocator.NewMemBatchWithSize(a.outputTypes, a.scratch.inputSize)
+	// Twice the batchSize is allocated to avoid having to check for overflow
+	// when outputting.
+	a.scratch.Batch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, 2*coldata.BatchSize())
 	for i := 0; i < len(a.outputTypes); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
 	}
-	a.unsafeBatch = a.allocator.NewMemBatchWithSize(a.outputTypes, outputSize)
-}
-
-func (a *orderedAggregator) Init() {
-	a.initWithInputAndOutputBatchSize(coldata.BatchSize(), coldata.BatchSize())
+	// Note that we use a batch with fixed capacity because aggregate functions
+	// hold onto the vectors passed in into their Init method, so we cannot
+	// simply reallocate the output batch.
+	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
+	// updating the output vector.
+	a.unsafeBatch = a.allocator.NewMemBatchWithFixedCapacity(a.outputTypes, coldata.BatchSize())
 }
 
 func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
@@ -191,10 +180,10 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.ResetInternalBatch()
 		a.scratch.shouldResetInternalBatch = false
 	}
-	if a.scratch.resumeIdx >= a.scratch.outputSize {
+	if a.scratch.resumeIdx >= coldata.BatchSize() {
 		// Copy the second part of the output batch into the first and resume from
 		// there.
-		newResumeIdx := a.scratch.resumeIdx - a.scratch.outputSize
+		newResumeIdx := a.scratch.resumeIdx - coldata.BatchSize()
 		a.allocator.PerformOperation(a.scratch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				vec := a.scratch.ColVec(i)
@@ -208,12 +197,12 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 					coldata.SliceArgs{
 						Src:         vec,
 						DestIdx:     0,
-						SrcStartIdx: a.scratch.outputSize,
+						SrcStartIdx: coldata.BatchSize(),
 						SrcEndIdx:   a.scratch.resumeIdx + 1,
 					},
 				)
 				// Now we need to restore the desired length for the Vec.
-				vec.SetLength(a.scratch.inputSize)
+				vec.SetLength(2 * coldata.BatchSize())
 				a.aggregateFuncs[i].SetOutputIndex(newResumeIdx)
 				// There might have been some NULLs set in the part that we
 				// have just copied over, so we need to unset the NULLs.
@@ -223,7 +212,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 		a.scratch.resumeIdx = newResumeIdx
 	}
 
-	for a.scratch.resumeIdx < a.scratch.outputSize {
+	for a.scratch.resumeIdx < coldata.BatchSize() {
 		batch := a.input.Next(ctx)
 		batchLength := batch.Length()
 		a.seenNonEmptyBatch = a.seenNonEmptyBatch || batchLength > 0
@@ -270,8 +259,8 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	}
 
 	batchToReturn := a.scratch.Batch
-	if a.scratch.resumeIdx > a.scratch.outputSize {
-		a.scratch.SetLength(a.scratch.outputSize)
+	if a.scratch.resumeIdx > coldata.BatchSize() {
+		a.scratch.SetLength(coldata.BatchSize())
 		a.allocator.PerformOperation(a.unsafeBatch.ColVecs(), func() {
 			for i := 0; i < len(a.outputTypes); i++ {
 				a.unsafeBatch.ColVec(i).Copy(

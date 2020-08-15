@@ -121,10 +121,10 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		}
 		heap.Init(o)
 	}
-	o.output.ResetInternalBatch()
+	o.resetOutput()
 	outputIdx := 0
 	o.allocator.PerformOperation(o.output.ColVecs(), func() {
-		for outputIdx < coldata.BatchSize() {
+		for outputIdx < o.output.Capacity() {
 			if o.Len() == 0 {
 				// All inputs exhausted.
 				break
@@ -253,81 +253,97 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	return o.output
 }
 
+func (o *OrderedSynchronizer) resetOutput() {
+	var reallocated bool
+	o.output, reallocated = o.allocator.ResetMaybeReallocate(o.typs, o.output, 1 /* minCapacity */)
+	if reallocated {
+		o.outBoolCols = o.outBoolCols[:0]
+		o.outBytesCols = o.outBytesCols[:0]
+		o.outDecimalCols = o.outDecimalCols[:0]
+		o.outInt16Cols = o.outInt16Cols[:0]
+		o.outInt32Cols = o.outInt32Cols[:0]
+		o.outInt64Cols = o.outInt64Cols[:0]
+		o.outFloat64Cols = o.outFloat64Cols[:0]
+		o.outTimestampCols = o.outTimestampCols[:0]
+		o.outIntervalCols = o.outIntervalCols[:0]
+		o.outDatumCols = o.outDatumCols[:0]
+		for i, outVec := range o.output.ColVecs() {
+			o.outNulls[i] = outVec.Nulls()
+			switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
+			case types.BoolFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outBoolCols)
+					o.outBoolCols = append(o.outBoolCols, outVec.Bool())
+				}
+			case types.BytesFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outBytesCols)
+					o.outBytesCols = append(o.outBytesCols, outVec.Bytes())
+				}
+			case types.DecimalFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outDecimalCols)
+					o.outDecimalCols = append(o.outDecimalCols, outVec.Decimal())
+				}
+			case types.IntFamily:
+				switch o.typs[i].Width() {
+				case 16:
+					o.outColsMap[i] = len(o.outInt16Cols)
+					o.outInt16Cols = append(o.outInt16Cols, outVec.Int16())
+				case 32:
+					o.outColsMap[i] = len(o.outInt32Cols)
+					o.outInt32Cols = append(o.outInt32Cols, outVec.Int32())
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outInt64Cols)
+					o.outInt64Cols = append(o.outInt64Cols, outVec.Int64())
+				}
+			case types.FloatFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outFloat64Cols)
+					o.outFloat64Cols = append(o.outFloat64Cols, outVec.Float64())
+				}
+			case types.TimestampTZFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outTimestampCols)
+					o.outTimestampCols = append(o.outTimestampCols, outVec.Timestamp())
+				}
+			case types.IntervalFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outIntervalCols)
+					o.outIntervalCols = append(o.outIntervalCols, outVec.Interval())
+				}
+			case typeconv.DatumVecCanonicalTypeFamily:
+				switch o.typs[i].Width() {
+				case -1:
+				default:
+					o.outColsMap[i] = len(o.outDatumCols)
+					o.outDatumCols = append(o.outDatumCols, outVec.Datum())
+				}
+			default:
+				colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
+			}
+		}
+	}
+}
+
 // Init is part of the Operator interface.
 func (o *OrderedSynchronizer) Init() {
 	o.inputIndices = make([]int, len(o.inputs))
-	o.output = o.allocator.NewMemBatch(o.typs)
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
-	for i, outVec := range o.output.ColVecs() {
-		o.outNulls[i] = outVec.Nulls()
-		switch typeconv.TypeFamilyToCanonicalTypeFamily(o.typs[i].Family()) {
-		case types.BoolFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outBoolCols)
-				o.outBoolCols = append(o.outBoolCols, outVec.Bool())
-			}
-		case types.BytesFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outBytesCols)
-				o.outBytesCols = append(o.outBytesCols, outVec.Bytes())
-			}
-		case types.DecimalFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outDecimalCols)
-				o.outDecimalCols = append(o.outDecimalCols, outVec.Decimal())
-			}
-		case types.IntFamily:
-			switch o.typs[i].Width() {
-			case 16:
-				o.outColsMap[i] = len(o.outInt16Cols)
-				o.outInt16Cols = append(o.outInt16Cols, outVec.Int16())
-			case 32:
-				o.outColsMap[i] = len(o.outInt32Cols)
-				o.outInt32Cols = append(o.outInt32Cols, outVec.Int32())
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outInt64Cols)
-				o.outInt64Cols = append(o.outInt64Cols, outVec.Int64())
-			}
-		case types.FloatFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outFloat64Cols)
-				o.outFloat64Cols = append(o.outFloat64Cols, outVec.Float64())
-			}
-		case types.TimestampTZFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outTimestampCols)
-				o.outTimestampCols = append(o.outTimestampCols, outVec.Timestamp())
-			}
-		case types.IntervalFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outIntervalCols)
-				o.outIntervalCols = append(o.outIntervalCols, outVec.Interval())
-			}
-		case typeconv.DatumVecCanonicalTypeFamily:
-			switch o.typs[i].Width() {
-			case -1:
-			default:
-				o.outColsMap[i] = len(o.outDatumCols)
-				o.outDatumCols = append(o.outDatumCols, outVec.Datum())
-			}
-		default:
-			colexecerror.InternalError(fmt.Sprintf("unhandled type %s", o.typs[i]))
-		}
-	}
 	for i := range o.inputs {
 		o.inputs[i].Op.Init()
 	}

@@ -203,7 +203,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	typs := []*types.T{types.Int}
 	batches := make([]coldata.Batch, numInputs)
 	for i := range batches {
-		batches[i] = testAllocator.NewMemBatch(typs)
+		batches[i] = testAllocator.NewMemBatchWithMaxCapacity(typs)
 		batches[i].SetLength(coldata.BatchSize())
 	}
 	for i := int64(0); i < int64(coldata.BatchSize())*numInputs; i++ {

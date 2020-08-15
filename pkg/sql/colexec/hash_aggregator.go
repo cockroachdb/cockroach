@@ -142,7 +142,12 @@ func NewHashAggregator(
 
 func (op *hashAggregator) Init() {
 	op.input.Init()
-	op.output = op.allocator.NewMemBatch(op.outputTypes)
+	// Note that we use a batch with fixed capacity because aggregate functions
+	// hold onto the vectors passed in into their Init method, so we cannot
+	// simply reallocate the output batch.
+	// TODO(yuzefovich): consider changing aggregateFunc interface to allow for
+	// updating the output vector.
+	op.output = op.allocator.NewMemBatchWithFixedCapacity(op.outputTypes, coldata.BatchSize())
 	op.scratch.eqChains = make([][]int, coldata.BatchSize())
 	op.scratch.intSlice = make([]int, coldata.BatchSize())
 	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
@@ -181,7 +186,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 		case hashAggregatorOutputting:
 			op.output.ResetInternalBatch()
 			curOutputIdx := 0
-			for curOutputIdx < coldata.BatchSize() && curOutputIdx < len(op.buckets) {
+			for curOutputIdx < op.output.Capacity() && curOutputIdx < len(op.buckets) {
 				bucket := op.buckets[curOutputIdx]
 				for _, fn := range bucket.fns {
 					fn.Flush(curOutputIdx)

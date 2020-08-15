@@ -47,6 +47,7 @@ type Inbox struct {
 	colexecbase.ZeroInputNode
 	typs []*types.T
 
+	allocator  *colmem.Allocator
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
@@ -120,6 +121,7 @@ func NewInbox(
 	}
 	i := &Inbox{
 		typs:       typs,
+		allocator:  allocator,
 		converter:  c,
 		serializer: s,
 		streamID:   streamID,
@@ -130,7 +132,6 @@ func NewInbox(
 		flowCtx:    ctx,
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
-	i.scratch.b = allocator.NewMemBatch(typs)
 	return i, nil
 }
 
@@ -300,6 +301,11 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes); err != nil {
 			colexecerror.InternalError(err)
 		}
+		i.scratch.b, _ = i.allocator.ResetMaybeReallocate(
+			// We don't support type-less schema, so len(i.scratch.data) is
+			// always at least 1.
+			i.typs, i.scratch.b, i.scratch.data[0].Len(),
+		)
 		if err := i.converter.ArrowToBatch(i.scratch.data, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}

@@ -204,7 +204,7 @@ func RandomBatch(
 	length int,
 	nullProbability float64,
 ) coldata.Batch {
-	batch := allocator.NewMemBatchWithSize(typs, capacity)
+	batch := allocator.NewMemBatchWithFixedCapacity(typs, capacity)
 	if length == 0 {
 		length = capacity
 	}

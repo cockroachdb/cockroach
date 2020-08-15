@@ -992,35 +992,24 @@ func TestHashJoiner(t *testing.T) {
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 
-	for _, outputBatchSize := range []int{1, 17, coldata.BatchSize()} {
-		if outputBatchSize > coldata.BatchSize() {
-			// It is possible for varied coldata.BatchSize() to be smaller than
-			// requested outputBatchSize. Such configuration is invalid, and we skip
-			// it.
-			continue
-		}
-		for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
-			for _, tc := range tcs {
-				for _, tc := range tc.mutateTypes() {
-					runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-						spec := createSpecForHashJoiner(tc)
-						args := &NewColOperatorArgs{
-							Spec:                spec,
-							Inputs:              sources,
-							StreamingMemAccount: testMemAcc,
-						}
-						args.TestingKnobs.UseStreamingMemAccountForBuffering = true
-						args.TestingKnobs.DiskSpillingDisabled = true
-						result, err := TestNewColOperator(ctx, flowCtx, args)
-						if err != nil {
-							return nil, err
-						}
-						if hj, ok := result.Op.(*hashJoiner); ok {
-							hj.outputBatchSize = outputBatchSize
-						}
-						return result.Op, nil
-					})
-				}
+	for _, tcs := range [][]*joinTestCase{hjTestCases, mjTestCases} {
+		for _, tc := range tcs {
+			for _, tc := range tc.mutateTypes() {
+				runHashJoinTestCase(t, tc, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+					spec := createSpecForHashJoiner(tc)
+					args := &NewColOperatorArgs{
+						Spec:                spec,
+						Inputs:              sources,
+						StreamingMemAccount: testMemAcc,
+					}
+					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
+					args.TestingKnobs.DiskSpillingDisabled = true
+					result, err := TestNewColOperator(ctx, flowCtx, args)
+					if err != nil {
+						return nil, err
+					}
+					return result.Op, nil
+				})
 			}
 		}
 	}
@@ -1035,7 +1024,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int
 	}
 
-	batch := testAllocator.NewMemBatch(sourceTypes)
+	batch := testAllocator.NewMemBatchWithMaxCapacity(sourceTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()

@@ -387,8 +387,8 @@ func NewExternalHashJoiner(
 	if ehj.memState.maxRightPartitionSizeToJoin < externalHJMinimalMaxRightPartitionSize {
 		ehj.memState.maxRightPartitionSizeToJoin = externalHJMinimalMaxRightPartitionSize
 	}
-	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
-	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatch(spec.left.sourceTypes)
+	ehj.scratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
+	ehj.recursiveScratch.leftBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.left.sourceTypes, coldata.BatchSize())
 	sameSourcesSchema := len(spec.left.sourceTypes) == len(spec.right.sourceTypes)
 	for i, leftType := range spec.left.sourceTypes {
 		if i < len(spec.right.sourceTypes) && !leftType.Identical(spec.right.sourceTypes[i]) {
@@ -401,8 +401,8 @@ func NewExternalHashJoiner(
 		ehj.scratch.rightBatch = ehj.scratch.leftBatch
 		ehj.recursiveScratch.rightBatch = ehj.recursiveScratch.leftBatch
 	} else {
-		ehj.scratch.rightBatch = unlimitedAllocator.NewMemBatch(spec.right.sourceTypes)
-		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatch(spec.right.sourceTypes)
+		ehj.scratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
+		ehj.recursiveScratch.rightBatch = unlimitedAllocator.NewMemBatchWithFixedCapacity(spec.right.sourceTypes, coldata.BatchSize())
 	}
 	ehj.testingKnobs.numForcedRepartitions = numForcedRepartitions
 	ehj.testingKnobs.delegateFDAcquisitions = delegateFDAcquisitions
