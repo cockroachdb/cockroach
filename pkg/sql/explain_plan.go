@@ -282,17 +282,6 @@ func observePlan(
 	return nil
 }
 
-// planToString builds a string representation of a plan using the EXPLAIN
-// infrastructure.
-func planToString(ctx context.Context, p *planTop) string {
-	var e explainer
-	e.init(explain.Flags{Verbose: true, ShowTypes: true}, p.flags.IsSet(planFlagTenant))
-	e.fmtFlags = tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true)
-
-	e.populate(ctx, &p.planComponents, explainSubqueryFmtFlags)
-	return e.ob.BuildString()
-}
-
 func getAttrForSpansAll(hardLimitSet bool) string {
 	if hardLimitSet {
 		return "LIMITED SCAN"

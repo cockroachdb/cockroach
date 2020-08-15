@@ -65,11 +65,14 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p := internalPlanner.(*planner)
 
 			p.stmt = &Statement{Statement: stmt}
+			p.curPlan.savePlanString = true
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if d.Cmd == "plan-string" {
-				return planToString(ctx, &p.curPlan)
+				p.curPlan.flags.Set(planFlagExecDone)
+				p.curPlan.close(ctx)
+				return p.curPlan.planString
 			}
 			tree := planToTree(ctx, &p.curPlan)
 			treeYaml, err := yaml.Marshal(tree)
