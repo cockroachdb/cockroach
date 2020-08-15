@@ -176,6 +176,18 @@ func columnDescToAvroSchema(colDesc *descpb.ColumnDescriptor) (*avroSchemaField,
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(x.(float64))), nil
 		}
+	case types.Box2DFamily:
+		avroType = avroSchemaString
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DBox2D).CartesianBoundingBox.Repr(), nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			b, err := geo.ParseCartesianBoundingBox(x.(string))
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDBox2D(b), nil
+		}
 	case types.GeographyFamily:
 		avroType = avroSchemaBytes
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {

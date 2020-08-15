@@ -109,6 +109,7 @@ func TestDatumOrdering(t *testing.T) {
 			`'2006-01-02 03:04:05.123122'`, `'2006-01-02 03:04:05.123124'`, `'-4713-11-24 00:00:00'`, `'294276-12-31 23:59:59.999999'`},
 
 		// Geospatial types
+		{`'BOX(1 2,3 4)'::box2d`, noPrev, noNext, noMin, noMax},
 		{`'POINT(1.0 1.0)'::geometry`, noPrev, noNext, noMin, noMax},
 		{`'POINT(1.0 1.0)'::geography`, noPrev, noNext, noMin, noMax},
 

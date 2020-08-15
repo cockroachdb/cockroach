@@ -19,6 +19,53 @@ import (
 	"github.com/twpayne/go-geom"
 )
 
+func TestParseCartesianBoundingBox(t *testing.T) {
+	testCases := []struct {
+		s             string
+		expected      *CartesianBoundingBox
+		expectedError bool
+	}{
+		{
+			s: "box(1 2,3 4)",
+			expected: &CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{
+					LoX: 1,
+					LoY: 2,
+					HiX: 3,
+					HiY: 4,
+				},
+			},
+		},
+		{
+			s: "BOX(1 2,3 4)",
+			expected: &CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{
+					LoX: 1,
+					LoY: 2,
+					HiX: 3,
+					HiY: 4,
+				},
+			},
+		},
+		{
+			s:             "invalid",
+			expectedError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.s, func(t *testing.T) {
+			ret, err := ParseCartesianBoundingBox(tc.s)
+			if tc.expectedError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, ret)
+			}
+		})
+	}
+}
+
 func TestBoundingBoxFromGeomT(t *testing.T) {
 	testCases := []struct {
 		soType   geopb.SpatialObjectType

@@ -757,6 +757,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"SELECT $1::TIMETZ", []preparedQueryTest{
 			baseTest.SetArgs("12:00:00+0330").Results("0000-01-01T12:00:00+03:30"),
 		}},
+		{"SELECT $1::BOX2D", []preparedQueryTest{
+			baseTest.SetArgs("BOX(1 2,3 4)").Results("BOX(1 2,3 4)"),
+		}},
 		{"SELECT $1::GEOGRAPHY", []preparedQueryTest{
 			baseTest.SetArgs("POINT(1.0 1.0)").Results("0101000020E6100000000000000000F03F000000000000F03F"),
 		}},

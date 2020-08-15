@@ -14,6 +14,7 @@ package types
 // which are on the public schema on PostgreSQL as they are available
 // as an extension.
 var PublicSchemaAliases = map[string]*T{
+	"box2d":     Box2D,
 	"geometry":  Geometry,
 	"geography": Geography,
 }
