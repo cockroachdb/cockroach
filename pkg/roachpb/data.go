@@ -1048,6 +1048,15 @@ func (t *Transaction) BumpEpoch() {
 	t.Epoch++
 }
 
+// Refresh reconfigures a transaction to account for a read refresh up to the
+// specified timestamp. For details about transaction read refreshes, see the
+// comment on txnSpanRefresher.
+func (t *Transaction) Refresh(timestamp hlc.Timestamp) {
+	t.WriteTimestamp.Forward(timestamp)
+	t.ReadTimestamp.Forward(t.WriteTimestamp)
+	t.WriteTooOld = false
+}
+
 // Update ratchets priority, timestamp and original timestamp values (among
 // others) for the transaction. If t.ID is empty, then the transaction is
 // copied from o.
@@ -1346,8 +1355,8 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 // already-existing Transaction with an incremented epoch, or a completely new
 // Transaction.
 //
-// The caller should generally check that the error was
-// meant for this Transaction before calling this.
+// The caller should generally check that the error was meant for this
+// Transaction before calling this.
 //
 // pri is the priority that should be used when giving the restarted transaction
 // the chance to get a higher priority. Not used when the transaction is being
@@ -1418,16 +1427,27 @@ func PrepareTransactionForRetry(
 	return txn
 }
 
-// CanTransactionRetryAtRefreshedTimestamp returns whether the transaction
-// specified in the supplied error can be retried at a refreshed timestamp to
-// avoid a client-side transaction restart. If true, returns a cloned, updated
-// Transaction object with the provisional commit timestamp and refreshed
-// timestamp set appropriately.
-func CanTransactionRetryAtRefreshedTimestamp(
-	ctx context.Context, pErr *Error,
-) (bool, *Transaction) {
+// PrepareTransactionForRefresh returns whether the transaction can be refreshed
+// to the specified timestamp to avoid a client-side transaction restart. If
+// true, returns a cloned, updated Transaction object with the provisional
+// commit timestamp and refreshed timestamp set appropriately.
+func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
+	if txn.CommitTimestampFixed {
+		return false, nil
+	}
+	newTxn := txn.Clone()
+	newTxn.Refresh(timestamp)
+	return true, newTxn
+}
+
+// CanTransactionRefresh returns whether the transaction specified in the
+// supplied error can be retried at a refreshed timestamp to avoid a client-side
+// transaction restart. If true, returns a cloned, updated Transaction object
+// with the provisional commit timestamp and refreshed timestamp set
+// appropriately.
+func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if txn == nil || txn.CommitTimestampFixed {
+	if txn == nil {
 		return false, nil
 	}
 	timestamp := txn.WriteTimestamp
@@ -1449,13 +1469,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	default:
 		return false, nil
 	}
-
-	newTxn := txn.Clone()
-	newTxn.WriteTimestamp.Forward(timestamp)
-	newTxn.ReadTimestamp.Forward(newTxn.WriteTimestamp)
-	newTxn.WriteTooOld = false
-
-	return true, newTxn
+	return PrepareTransactionForRefresh(txn, timestamp)
 }
 
 func readWithinUncertaintyIntervalRetryTimestamp(

@@ -1849,6 +1849,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.Put(ctx, "a", "put") // put to advance txn ts
 			},
+			// No retry, preemptive refresh before commit.
 		},
 		{
 			name: "forwarded timestamp with get and put after timestamp leaked",
@@ -1916,8 +1917,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.DelRange(ctx, "a", "b")
 			},
-			// Expect a transaction coord retry, which should succeed.
-			txnCoordRetry: true,
+			// No retry, preemptive refresh before commit.
 		},
 		{
 			name: "forwarded timestamp with put in batch commit",
@@ -1930,7 +1930,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("a", "put")
 				return txn.CommitInBatch(ctx, b)
 			},
-			// No retries, 1pc commit.
+			// No retries, server-side refresh, 1pc commit.
 		},
 		{
 			name: "forwarded timestamp with cput in batch commit",
@@ -1946,7 +1946,39 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("orig"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			// No retries, 1pc commit.
+			// No retries, server-side refresh, 1pc commit.
+		},
+		{
+			name: "forwarded timestamp with get before commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				// Advance timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				_, err := txn.Get(ctx, "a2")
+				return err
+			},
+			// No retry, preemptive refresh before get.
+		},
+		{
+			name: "forwarded timestamp with scan before commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				// Advance timestamp.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				_, err := txn.Scan(ctx, "a2", "a3", 0)
+				return err
+			},
+			// No retry, preemptive refresh before scan.
 		},
 		{
 			name: "forwarded timestamp with get in batch commit",
@@ -1963,8 +1995,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Get("a2")
 				return txn.CommitInBatch(ctx, b)
 			},
-			// Read-only request (Get) prevents server-side refresh.
-			txnCoordRetry: true,
+			// No retry, preemptive refresh before commit.
 		},
 		{
 			name: "forwarded timestamp with scan in batch commit",
@@ -1979,6 +2010,35 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				b := txn.NewBatch()
 				b.Scan("a2", "a3")
+				return txn.CommitInBatch(ctx, b)
+			},
+			// No retry, preemptive refresh before commit.
+		},
+		{
+			name: "forwarded timestamp with put and get in batch commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Get("a2")
+				b.Put("a", "put") // advance timestamp
+				return txn.CommitInBatch(ctx, b)
+			},
+			// Read-only request (Get) prevents server-side refresh.
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with put and scan in batch commit",
+			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				b := txn.NewBatch()
+				b.Scan("a2", "a3")
+				b.Put("a", "put") // advance timestamp
 				return txn.CommitInBatch(ctx, b)
 			},
 			// Read-only request (Scan) prevents server-side refresh.
@@ -2046,7 +2106,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CommitInBatch(ctx, b)
 			},
-			txnCoordRetry: true,
+			// No retry, preemptive refresh before commit.
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2082,7 +2142,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CommitInBatch(ctx, b)
 			},
-			txnCoordRetry: true,
+			// No retry, preemptive refresh before commit.
 		},
 		{
 			name: "write too old with put",
@@ -2090,6 +2150,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
+				fmt.Println("TXN IS", txn.TestingCloneTxn())
 				return txn.Put(ctx, "a", "put")
 			},
 		},
@@ -2440,7 +2501,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.Put("a", "new-put")
 				return txn.CommitInBatch(ctx, b) // will be a 1PC, won't get auto retry
 			},
-			// No retries, 1pc commit.
+			// No retries, server-side refresh, 1pc commit.
 		},
 		{
 			// This test is like the previous one in that the commit batch succeeds at
@@ -2865,7 +2926,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}
 
 			var metrics kvcoord.TxnMetrics
-			var lastRefreshes int64
+			var lastAutoRetries int64
 			var hadClientRetry bool
 			epoch := 0
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -2897,7 +2958,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 
 				metrics = txn.Sender().(*kvcoord.TxnCoordSender).TxnCoordSenderFactory.Metrics()
-				lastRefreshes = metrics.RefreshSuccess.Count()
+				lastAutoRetries = metrics.RefreshAutoRetries.Count()
 
 				return tc.retryable(ctx, txn)
 			}); err != nil {
@@ -2913,11 +2974,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// from the cluster setup are still ongoing and can experience
 			// their own retries, this might increase by more than one, so we
 			// can only check here that it's >= 1.
-			refreshes := metrics.RefreshSuccess.Count() - lastRefreshes
-			if tc.txnCoordRetry && refreshes == 0 {
-				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", refreshes)
-			} else if !tc.txnCoordRetry && refreshes != 0 {
-				t.Errorf("expected no txn coord sender auto retries; got %d", refreshes)
+			autoRetries := metrics.RefreshAutoRetries.Count() - lastAutoRetries
+			if tc.txnCoordRetry && autoRetries == 0 {
+				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", autoRetries)
+			} else if !tc.txnCoordRetry && autoRetries != 0 {
+				t.Errorf("expected no txn coord sender auto retries; got %d", autoRetries)
 			}
 			if tc.clientRetry && !hadClientRetry {
 				t.Errorf("expected but did not experience client retry")
