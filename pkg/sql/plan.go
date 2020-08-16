@@ -422,7 +422,7 @@ func (p *planTop) close(ctx context.Context) {
 		// specs directly in the optimizer (see #47474).
 		if p.appStats != nil && p.appStats.shouldSaveLogicalPlanDescription(
 			p.stmt,
-			p.flags.IsSet(planFlagDistributed),
+			p.flags.IsDistributed(),
 			p.flags.IsSet(planFlagVectorized),
 			p.flags.IsSet(planFlagImplicitTxn),
 			p.execErr,
@@ -530,13 +530,16 @@ const (
 	// did not find one.
 	planFlagOptCacheMiss
 
-	// planFlagDistributed is set if the plan is for the DistSQL engine, in
-	// distributed mode.
-	planFlagDistributed
+	// planFlagFullyDistributed is set if the query execution is is fully
+	// distributed.
+	planFlagFullyDistributed
 
-	// planFlagDistSQLLocal is set if the plan is for the DistSQL engine,
-	// but in local mode.
-	planFlagDistSQLLocal
+	// planFlagPartiallyDistributed is set if the query execution is is partially
+	// distributed (see physicalplan.PartiallyDistributedPlan).
+	planFlagPartiallyDistributed
+
+	// planFlagNotDistributed is set if the query execution is not distributed.
+	planFlagNotDistributed
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
@@ -562,4 +565,10 @@ func (pf planFlags) IsSet(flag planFlags) bool {
 
 func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
+}
+
+// IsDistributed returns true if either the fully or the partially distributed
+// flags is set.
+func (pf planFlags) IsDistributed() bool {
+	return pf.IsSet(planFlagFullyDistributed) || pf.IsSet(planFlagPartiallyDistributed)
 }
