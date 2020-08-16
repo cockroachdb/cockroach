@@ -299,6 +299,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		refreshFail:                   tc.metrics.RefreshFail,
 		refreshFailWithCondensedSpans: tc.metrics.RefreshFailWithCondensedSpans,
 		refreshMemoryLimitExceeded:    tc.metrics.RefreshMemoryLimitExceeded,
+		refreshAutoRetries:            tc.metrics.RefreshAutoRetries,
 	}
 	tc.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped:                 tc.wrapped,

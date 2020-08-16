@@ -28,6 +28,7 @@ type TxnMetrics struct {
 	RefreshFail                   *metric.Counter
 	RefreshFailWithCondensedSpans *metric.Counter
 	RefreshMemoryLimitExceeded    *metric.Counter
+	RefreshAutoRetries            *metric.Counter
 
 	Durations *metric.Histogram
 
@@ -97,6 +98,12 @@ var (
 		Help: "Number of transaction which exceed the refresh span bytes limit, causing " +
 			"their read spans to be condensed",
 		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRefreshAutoRetries = metric.Metadata{
+		Name:        "txn.refresh.auto_retries",
+		Help:        "Number of batch retries after successful refreshes",
+		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDurationsHistograms = metric.Metadata{
@@ -196,10 +203,11 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                       metric.NewCounter(metaCommitsRates),
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
+		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshFail:                   metric.NewCounter(metaRefreshFail),
 		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
-		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
