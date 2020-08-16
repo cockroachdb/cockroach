@@ -182,7 +182,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 	if ba.Txn == nil {
 		return false
 	}
-	if ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp) {
+	if ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
 		return false
 	}
 	arg, ok := ba.GetArg(roachpb.EndTxn)
@@ -190,8 +190,7 @@ func maybeBumpReadTimestampToWriteTimestamp(
 		return false
 	}
 	etArg := arg.(*roachpb.EndTxnRequest)
-	if batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg) &&
-		!batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
+	if ba.CanForwardReadTimestamp && !batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, etArg) {
 		return tryBumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp, latchSpans)
 	}
 	return false
