@@ -11,11 +11,15 @@
 package sqlbase
 
 import (
+	"context"
+	"runtime/debug"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -116,6 +120,7 @@ func NewUndefinedTypeError(name tree.NodeFormatter) error {
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
+	log.Error(context.TODO(), string(debug.Stack()))
 	return pgerror.Newf(pgcode.UndefinedTable,
 		"relation %q does not exist", tree.ErrString(name))
 }

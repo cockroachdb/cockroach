@@ -1118,16 +1118,15 @@ func releaseLease(lease *storedLease, m *Manager) {
 	}
 }
 
-// purgeOldVersions removes old unused descriptor versions older than
+// PurgeOldVersions removes old unused descriptor versions older than
 // minVersion and releases any associated leases.
 // If takenOffline is set, minVersion is ignored; no lease is acquired and all
 // existing unused versions are removed. The descriptor is further marked dropped,
 // which will cause existing in-use leases to be eagerly released once
 // they're not in use any more.
 // If t has no active leases, nothing is done.
-func purgeOldVersions(
+func PurgeOldVersions(
 	ctx context.Context,
-	db *kv.DB,
 	id descpb.ID,
 	takenOffline bool,
 	minVersion descpb.DescriptorVersion,
@@ -1557,6 +1556,7 @@ func (m *Manager) AcquireByName(
 					}
 				}
 			}
+			log.Infof(ctx, "returning cached descriptor %s %+v", descVersion.Descriptor.GetID(), descVersion.Descriptor)
 			return descVersion.Descriptor, descVersion.expiration, nil
 		}
 		if err := m.Release(descVersion); err != nil {
@@ -1852,8 +1852,7 @@ func (m *Manager) refreshLeases(
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
 					id, version, goingOffline)
-				if err := purgeOldVersions(
-					ctx, db, id, goingOffline, version, m); err != nil {
+				if err := PurgeOldVersions(ctx, id, goingOffline, version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 						id, name, err)
 				}

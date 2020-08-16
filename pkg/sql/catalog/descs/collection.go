@@ -14,6 +14,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -40,10 +40,13 @@ import (
 // UncommittedDatabase is a database that has been created/dropped
 // within the current transaction using the Collection. A rename
 // is a drop of the old name and creation of the new name.
+//
+// This is only used in the 20.1/20.2 mixed-version state.
 type UncommittedDatabase struct {
 	name    string
 	id      descpb.ID
-	dropped bool
+	action  DBAction
+	version descpb.DescriptorVersion
 }
 
 // uncommittedDescriptor is a descriptor that has been modified in the current
@@ -125,23 +128,16 @@ func (ld *leasedDescriptors) numDescriptors() int {
 }
 
 // MakeCollection constructs a Collection.
-func MakeCollection(
-	leaseMgr *lease.Manager,
-	settings *cluster.Settings,
-	dbCache *database.Cache,
-	dbCacheSubscriber DatabaseCacheSubscriber,
-) Collection {
+func MakeCollection(leaseMgr *lease.Manager, settings *cluster.Settings) Collection {
 	return Collection{
-		leaseMgr:          leaseMgr,
-		settings:          settings,
-		databaseCache:     dbCache,
-		dbCacheSubscriber: dbCacheSubscriber,
+		leaseMgr: leaseMgr,
+		settings: settings,
 	}
 }
 
 // NewCollection constructs a new *Collection.
 func NewCollection(leaseMgr *lease.Manager, settings *cluster.Settings) *Collection {
-	tc := MakeCollection(leaseMgr, settings, nil, nil)
+	tc := MakeCollection(leaseMgr, settings)
 	return &tc
 }
 
@@ -166,12 +162,6 @@ type Collection struct {
 	// Collection and invisible to other transactions.
 	uncommittedDescriptors []uncommittedDescriptor
 
-	// databaseCache is used as a cache for database names.
-	// This field is nil when the field is initialized for an internalPlanner.
-	// TODO(andrei): get rid of it and replace it with a leasing system for
-	// database descriptors.
-	databaseCache *database.Cache
-
 	// schemaCache maps {databaseID, schemaName} -> (schemaID, if exists, otherwise nil).
 	// TODO(sqlexec): replace with leasing system with custom schemas.
 	// This is currently never cleared, because there should only be unique schemas
@@ -179,12 +169,11 @@ type Collection struct {
 	// made, and you cannot read from other schema caches.
 	schemaCache sync.Map
 
-	// DatabaseCacheSubscriber is used to block until the node's database cache has been
-	// updated when ReleaseAll is called.
-	dbCacheSubscriber DatabaseCacheSubscriber
-
-	// Same as uncommittedDescriptors applying to databases modified within
-	// an uncommitted transaction.
+	// Metadata for databases updated in the transaction. Only populated in the
+	// 20.1/20.2 mixed-version state. All databases added in the "created" state
+	// are also present in uncommittedDescriptors. They are also included here so
+	// that the ordering of database creates/renames/drops within the transaction
+	// are recorded.
 	uncommittedDatabases []UncommittedDatabase
 
 	// allDescriptors is a slice of all available descriptors. The descriptors
@@ -211,6 +200,45 @@ type Collection struct {
 	// mixed version (19.2/20.1) clusters.
 	// TODO(solon): This field could maybe be removed in 20.2.
 	settings *cluster.Settings
+}
+
+// GetMutableDatabaseDescriptor returns a mutable database descriptor.
+func (tc *Collection) GetMutableDatabaseDescriptor(
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+) (*sqlbase.MutableDatabaseDescriptor, error) {
+	if log.V(2) {
+		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
+	}
+
+	// First try the uncommitted descriptors.
+
+	if refuseFurtherLookup, desc, err := tc.getUncommittedDatabaseDescriptor(
+		name, flags.Required,
+	); refuseFurtherLookup || err != nil {
+		return nil, err
+	} else if mut := desc.mutable; mut != nil {
+		db, ok := mut.(*sqlbase.MutableDatabaseDescriptor)
+		if !ok {
+			return nil, nil
+		}
+		log.VEventf(ctx, 2, "found uncommitted descriptor %d", db.GetID())
+		return db, nil
+	}
+
+	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
+	db, err := phyAccessor.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+	if err != nil || db == nil {
+		return nil, err
+	}
+	mutDesc, ok := db.(*sqlbase.MutableDatabaseDescriptor)
+	if !ok {
+		// TODO (lucy): Here and elsewhere in the Collection, we return a nil
+		// descriptor with a nil error if the type cast doesn't succeed, regardless
+		// of whether flags.Required is true. This seems like a potential source
+		// of bugs.
+		return nil, nil
+	}
+	return mutDesc, nil
 }
 
 // GetMutableTableDescriptor returns a mutable table descriptor.
@@ -243,40 +271,30 @@ func (tc *Collection) getMutableObjectDescriptor(
 		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
 	}
 
-	refuseFurtherLookup, dbID, err := tc.GetUncommittedDatabaseID(name.Catalog(), flags.Required)
-	if refuseFurtherLookup || err != nil {
+	// Resolve the database.
+	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+		tree.DatabaseLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	if err != nil || db == nil {
+		return nil, err
+	}
+	dbID := db.GetID()
+
+	// Resolve the schema to the ID of the schema.
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
+	if err != nil || !foundSchema {
 		return nil, err
 	}
 
-	if dbID == descpb.InvalidID && tc.DatabaseCache() != nil {
-		// Resolve the database from the database cache when the transaction
-		// hasn't modified the database.
-		dbID, err = tc.DatabaseCache().GetDatabaseID(ctx, tc.leaseMgr.DB().Txn, name.Catalog(), flags.Required)
-		if err != nil || dbID == descpb.InvalidID {
-			// dbID can still be invalid if required is false and the database is not found.
-			return nil, err
-		}
-	}
-
-	// The following checks only work if the dbID is not invalid.
-	if dbID != descpb.InvalidID {
-		// Resolve the schema to the ID of the schema.
-		foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
-		if err != nil || !foundSchema {
-			return nil, err
-		}
-
-		if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
-			dbID,
-			resolvedSchema.ID,
-			name.Object(),
-			flags.Required,
-		); refuseFurtherLookup || err != nil {
-			return nil, err
-		} else if mut := desc.mutable; mut != nil {
-			log.VEventf(ctx, 2, "found uncommitted descriptor %d", mut.GetID())
-			return mut, nil
-		}
+	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
+		dbID,
+		resolvedSchema.ID,
+		name.Object(),
+		flags.Required,
+	); refuseFurtherLookup || err != nil {
+		return nil, err
+	} else if mut := desc.mutable; mut != nil {
+		log.VEventf(ctx, 2, "found uncommitted descriptor %d", mut.GetID())
+		return mut, nil
 	}
 
 	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
@@ -332,6 +350,107 @@ func (tc *Collection) ResolveSchema(
 	return exists, resolved, err
 }
 
+// GetDatabaseVersion returns a database descriptor with a version suitable for
+// the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
+// The table must be released by calling tc.ReleaseAll().
+//
+// If flags.required is false, GetTableVersion() will gracefully
+// return a nil descriptor and no error if the table does not exist.
+//
+// It might also add a transaction deadline to the transaction that is
+// enforced at the KV layer to ensure that the transaction doesn't violate
+// the validity window of the table descriptor version returned.
+//
+// TODO (lucy): This logic is quite similar to GetObjectVersion. Think about
+// unifying once we also have support for schemas.
+func (tc *Collection) GetDatabaseVersion(
+	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+
+	readFromStore := func() (*sqlbase.ImmutableDatabaseDescriptor, error) {
+		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
+		desc, err := phyAccessor.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
+		if err != nil || desc == nil {
+			return nil, err
+		}
+		return desc.(*sqlbase.ImmutableDatabaseDescriptor), nil
+	}
+
+	if refuseFurtherLookup, desc, err := tc.getUncommittedDatabaseDescriptor(
+		name, flags.Required,
+	); refuseFurtherLookup || err != nil {
+		return nil, err
+	} else if immut := desc.immutable; immut != nil {
+		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
+		db, ok := immut.(*sqlbase.ImmutableDatabaseDescriptor)
+		if !ok {
+			if flags.Required {
+				return nil, sqlbase.NewUndefinedDatabaseError(name)
+			}
+			return nil, nil
+		}
+		return db, nil
+	}
+
+	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
+		name == sqlbase.SystemDatabaseName
+	if avoidCache {
+		return readFromStore()
+	}
+
+	// First, look to see if we already have the descriptor.
+	// This ensures that, once a SQL transaction resolved name N to id X, it will
+	// continue to use N to refer to X even if N is renamed during the
+	// transaction.
+	if desc := tc.leasedDescriptors.getByName(keys.RootNamespaceID, keys.RootNamespaceID, name); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+		if !ok {
+			if flags.Required {
+				return nil, sqlbase.NewUndefinedDatabaseError(name)
+			}
+			return nil, nil
+		}
+		return db, nil
+	}
+
+	readTimestamp := txn.ReadTimestamp()
+	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, keys.RootNamespaceID, keys.RootNamespaceID, name)
+	if err != nil {
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if catalog.HasInactiveDescriptorError(err) ||
+			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			return readFromStore()
+		}
+		// Lease acquisition failed with some other error. This we don't
+		// know how to deal with, so propagate the error.
+		return nil, err
+	}
+	db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+	if !ok {
+		if flags.Required {
+			return nil, sqlbase.NewUndefinedDatabaseError(name)
+		}
+		return nil, nil
+	}
+
+	if expiration.LessEq(readTimestamp) {
+		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	}
+
+	tc.leasedDescriptors.add(desc)
+	log.VEventf(ctx, 2, "added database descriptor '%s' to collection: %+v", name, desc)
+
+	// If the descriptor we just acquired expires before the txn's deadline,
+	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
+	// timestamp, so we need to set a deadline on the transaction to prevent it
+	// from committing beyond the version's expiration time.
+	txn.UpdateDeadlineMaybe(ctx, expiration)
+	return db, nil
+}
+
 // GetTableVersion returns a table descriptor with a version suitable for
 // the transaction: table.ModificationTime <= txn.Timestamp < expirationTime.
 // The table must be released by calling tc.ReleaseAll().
@@ -385,25 +504,13 @@ func (tc *Collection) getObjectVersion(
 		)
 	}
 
-	refuseFurtherLookup, dbID, err := tc.GetUncommittedDatabaseID(name.Catalog(), flags.Required)
-	if refuseFurtherLookup || err != nil {
+	// Resolve the database.
+	db, err := tc.GetDatabaseVersion(ctx, txn, name.Catalog(),
+		tree.DatabaseLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
+	if err != nil || db == nil {
 		return nil, err
 	}
-
-	if dbID == descpb.InvalidID && tc.DatabaseCache() != nil {
-		// Resolve the database from the database cache when the transaction
-		// hasn't modified the database.
-		dbID, err = tc.DatabaseCache().GetDatabaseID(ctx, tc.leaseMgr.DB().Txn, name.Catalog(), flags.Required)
-		if err != nil || dbID == descpb.InvalidID {
-			// dbID can still be invalid if required is false and the database is not found.
-			return nil, err
-		}
-	}
-
-	// If at this point we have an InvalidID, we should immediately try read from store.
-	if dbID == descpb.InvalidID {
-		return readObjectFromStore()
-	}
+	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
 	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
@@ -485,11 +592,30 @@ func (tc *Collection) getObjectVersion(
 	return desc, nil
 }
 
+// GetDatabaseVersionID returns a database descriptor valid for the transaction.
+// See GetDatabaseVersion.
+func (tc *Collection) GetDatabaseVersionByID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
+) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	if err != nil {
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+		}
+		return nil, err
+	}
+	db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+	if !ok {
+		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+	}
+	return db, nil
+}
+
 // GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
 func (tc *Collection) GetTableVersionByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedRelationError(
@@ -510,7 +636,7 @@ func (tc *Collection) GetTableVersionByID(
 }
 
 func (tc *Collection) getDescriptorVersionByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.ObjectLookupFlags, setTxnDeadline bool,
+	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
 	if flags.AvoidCached || lease.TestingTableLeasesAreDisabled() {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id, catalogkv.Immutable,
@@ -629,8 +755,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			// TODO (lucy): This database access should go through the collection.
-			dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, tc.codec(), desc.ParentID)
+			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
+				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -659,8 +785,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			// TODO (lucy): This database access should go through the collection.
-			dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, tc.codec(), desc.ParentID)
+			dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, desc.ParentID,
+				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
@@ -714,39 +840,6 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.uncommittedDescriptors = nil
 	tc.uncommittedDatabases = nil
 	tc.releaseAllDescriptors()
-}
-
-// WaitForCacheToDropDatabases waits until the database cache has been updated
-// to properly reflect all dropped databases, so that future commands on the
-// same gateway node observe the dropped databases.
-func (tc *Collection) WaitForCacheToDropDatabases(ctx context.Context) {
-	for _, uc := range tc.uncommittedDatabases {
-		if !uc.dropped {
-			continue
-		}
-		// Wait until the database cache has been updated to properly
-		// reflect a dropped database, so that future commands on the
-		// same gateway node observe the dropped database.
-		tc.dbCacheSubscriber.WaitForCacheState(
-			func(dc *database.Cache) bool {
-				// Resolve the database name from the database cache.
-				dbID, err := dc.GetCachedDatabaseID(uc.name)
-				if err != nil || dbID == descpb.InvalidID {
-					// dbID can still be 0 if required is false and
-					// the database is not found. Swallowing error here
-					// because it was felt there was no value in returning
-					// it to a higher layer only to be swallow there. This
-					// entire codepath is only called from one place so
-					// it's better to swallow it here.
-					return true
-				}
-
-				// If the database name still exists but it now references another
-				// db with a more recent id, we're good - it means that the database
-				// name has been reused.
-				return dbID > uc.id
-			})
-	}
 }
 
 // HasUncommittedTables returns true if the Collection contains uncommitted
@@ -878,7 +971,7 @@ func (tc *Collection) GetTypeVersion(
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*sqlbase.ImmutableTypeDescriptor, error) {
-	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags, true /* setTxnDeadline */)
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
@@ -895,25 +988,31 @@ func (tc *Collection) GetTypeVersionByID(
 }
 
 // DBAction is an operation to an uncommitted database.
-type DBAction bool
+type DBAction int
 
 const (
-	// DBCreated notes that the database has been created.
-	DBCreated DBAction = false
+	// DBCreated notes that the database has been created or updated.
+	DBCreated DBAction = iota
 	// DBDropped notes that the database has been dropped.
-	DBDropped DBAction = true
+	DBDropped
+	// DBDropped notes that the database has been renamed. The entry stores the
+	// old name.
+	DBRenamed
 )
 
 // AddUncommittedDatabase stages the database action for the relevant database.
-func (tc *Collection) AddUncommittedDatabase(name string, id descpb.ID, action DBAction) {
-	db := UncommittedDatabase{name: name, id: id, dropped: action == DBDropped}
+// Only relevant to the 20.1/20.2 mixed state.
+func (tc *Collection) AddUncommittedDatabase(
+	name string, id descpb.ID, action DBAction, version descpb.DescriptorVersion,
+) {
+	db := UncommittedDatabase{name: name, id: id, action: action, version: version}
 	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
 	tc.releaseAllDescriptors()
 }
 
-// GetUncommittedDatabaseID returns a database ID for the requested tablename
-// if the requested tablename is for a database modified within the transaction
-// affiliated with the LeaseCollection.
+// GetUncommittedDatabaseID returns a database ID for the requested name
+// if the requested name is for a database modified within the transaction
+// affiliated with the Collection.
 func (tc *Collection) GetUncommittedDatabaseID(
 	requestedDbName string, required bool,
 ) (c bool, res descpb.ID, err error) {
@@ -923,7 +1022,7 @@ func (tc *Collection) GetUncommittedDatabaseID(
 	for i := len(tc.uncommittedDatabases) - 1; i >= 0; i-- {
 		db := tc.uncommittedDatabases[i]
 		if requestedDbName == db.name {
-			if db.dropped {
+			if db.action == DBDropped || db.action == DBRenamed {
 				if required {
 					return true, descpb.InvalidID, sqlbase.NewUndefinedDatabaseError(requestedDbName)
 				}
@@ -933,6 +1032,17 @@ func (tc *Collection) GetUncommittedDatabaseID(
 		}
 	}
 	return false, descpb.InvalidID, nil
+}
+
+func (tc *Collection) getUncommittedDatabaseDescriptor(
+	name string, required bool,
+) (refuseFurtherLookup bool, desc uncommittedDescriptor, err error) {
+	refuseFurtherLookup, dbID, err := tc.GetUncommittedDatabaseID(name, required)
+	if refuseFurtherLookup || err != nil || dbID == descpb.InvalidID {
+		log.Infof(context.TODO(), "bypassing uncommitted descs for %s", name)
+		return refuseFurtherLookup, uncommittedDescriptor{}, err
+	}
+	return tc.getUncommittedDescriptor(keys.RootNamespaceID, keys.RootNamespaceID, name, required)
 }
 
 // getUncommittedDescriptor returns a descriptor for the requested name
@@ -1158,14 +1268,31 @@ func (tc *Collection) LeaseManager() *lease.Manager {
 	return tc.leaseMgr
 }
 
-// DatabaseCache returns the database.Cache.
-func (tc *Collection) DatabaseCache() *database.Cache {
-	return tc.databaseCache
-}
+func (tc *Collection) ReleaseOldDatabaseLeases(ctx context.Context) error {
+	if tc.uncommittedDatabases == nil {
+		return nil
+	}
 
-// ResetDatabaseCache resets the table collection's database.Cache.
-func (tc *Collection) ResetDatabaseCache(dbCache *database.Cache) {
-	tc.databaseCache = dbCache
+	var dbsToPurge []UncommittedDatabase
+	ids := make(map[descpb.ID]struct{})
+	for _, db := range tc.uncommittedDatabases {
+		id := db.id
+		if _, ok := ids[id]; !ok {
+			ids[id] = struct{}{}
+			dbsToPurge = append(dbsToPurge, db)
+		}
+	}
+
+	for _, db := range dbsToPurge {
+		log.Infof(ctx, "purging old database versions post-transaction: %v", db)
+		dropped := db.action == DBDropped
+		if err := lease.PurgeOldVersions(
+			ctx, db.id, dropped, db.version, tc.leaseMgr,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ResetSchemaCache resets the table collection's schema cache.
@@ -1198,14 +1325,6 @@ type migrationSchemaChangeRequiredHint struct{}
 // ErrSchemaChangeDisallowedInMixedState signifies that an attempted schema
 // change was disallowed from running in a mixed-version
 var ErrSchemaChangeDisallowedInMixedState = errors.New("schema change cannot be initiated in this version until the version upgrade is finalized")
-
-// DatabaseCacheSubscriber allows the connExecutor to wait for a callback.
-type DatabaseCacheSubscriber interface {
-	// WaitForCacheState takes a callback depending on the cache state and blocks
-	// until the callback declares success. The callback is repeatedly called as
-	// the cache is updated.
-	WaitForCacheState(cond func(*database.Cache) bool)
-}
 
 // DistSQLTypeResolverFactory is an object that constructs TypeResolver objects
 // that are bound under a transaction. These TypeResolvers access descriptors
@@ -1277,7 +1396,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		ctx,
 		dt.txn,
 		id,
-		tree.ObjectLookupFlagsWithRequired(),
+		tree.CommonLookupFlags{Required: true},
 		false, /* setTxnDeadline */
 	)
 	if err != nil {

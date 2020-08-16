@@ -32,13 +32,10 @@ type alterSchemaNode struct {
 var _ planNode = &alterSchemaNode{n: nil}
 
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
-	// TODO (rohany, lucy): There should be an API to get a MutableSchemaDescriptor
-	//  by name from the descs.Collection.
-	db, err := p.ResolveUncachedDatabaseByName(ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
 	if err != nil {
 		return nil, err
 	}
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
 	found, schema, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.ID, n.Schema)
 	if err != nil {
 		return nil, err
@@ -55,7 +52,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		if err != nil {
 			return nil, err
 		}
-		return &alterSchemaNode{n: n, db: mutDB, desc: desc}, nil
+		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown schema kind")
 	}
@@ -95,17 +92,6 @@ func (p *planner) renameSchema(
 	oldName := desc.Name
 	desc.SetName(newName)
 
-	// Write a new namespace entry for the new name.
-	nameKey := sqlbase.NewSchemaKey(desc.ParentID, newName).Key(p.execCfg.Codec)
-	b := p.txn.NewBatch()
-	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, desc.ID)
-	}
-	b.CPut(nameKey, desc.ID, nil)
-	if err := p.txn.Run(ctx, b); err != nil {
-		return err
-	}
-
 	// Update the schema mapping in the parent database.
 
 	// First, ensure that the new name isn't present, and that we have an entry
@@ -135,7 +121,20 @@ func (p *planner) renameSchema(
 		ID:      desc.ID,
 		Dropped: false,
 	}
-	if err := p.writeDatabaseChange(ctx, db); err != nil {
+
+	// Write a new namespace entry for the new name.
+	nameKey := sqlbase.NewSchemaKey(desc.ParentID, newName).Key(p.execCfg.Codec)
+	b := p.txn.NewBatch()
+	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+		log.VEventf(ctx, 2, "CPut %s -> %d", nameKey, desc.ID)
+	}
+	b.CPut(nameKey, desc.ID, nil)
+
+	if err := p.writeDatabaseChangeToBatch(ctx, db, b); err != nil {
+		return err
+	}
+
+	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
 

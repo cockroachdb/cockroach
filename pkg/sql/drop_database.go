@@ -35,7 +35,7 @@ import (
 
 type dropDatabaseNode struct {
 	n                       *tree.DropDatabase
-	dbDesc                  *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc                  *sqlbase.MutableDatabaseDescriptor
 	td                      []toDelete
 	schemasToDelete         []string
 	allTableObjectsToDelete []*sqlbase.MutableTableDescriptor
@@ -60,7 +60,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), !n.IfExists)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), !n.IfExists)
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +263,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 	}
 	b.Del(descKey)
+	log.Infof(ctx, "deleted database descriptor %s %+v", n.dbDesc.GetName(), n.dbDesc)
 
 	for _, schemaToDelete := range n.schemasToDelete {
 		if err := catalogkv.RemoveSchemaNamespaceEntry(
@@ -294,7 +295,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	}
 
-	p.Descriptors().AddUncommittedDatabase(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
+	p.Descriptors().AddUncommittedDatabase(
+		n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped, n.dbDesc.OriginalVersion()+1)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err

@@ -90,7 +90,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 	oldTn := n.oldTn
 	prevDBID := tableDesc.ParentID
 
-	var targetDbDesc *UncachedDatabaseDescriptor
+	var targetDbDesc *ImmutableDatabaseDescriptor
 	// If the target new name has no qualifications, then assume that the table
 	// is intended to be renamed into the same database and schema.
 	newTn := n.newTn
@@ -118,7 +118,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		newUn := newTn.ToUnresolvedObjectName()
 		var prefix tree.ObjectNamePrefix
 		var err error
-		targetDbDesc, prefix, err = p.ResolveUncachedDatabase(ctx, newUn)
+		targetDbDesc, prefix, err = p.ResolveTargetForObject(ctx, newUn)
 		if err != nil {
 			return err
 		}

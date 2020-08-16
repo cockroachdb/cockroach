@@ -45,10 +45,11 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	flags tree.DatabaseLookupFlags,
 ) (desc sqlbase.DatabaseDescriptor, err error) {
 	if name == sqlbase.SystemDatabaseName {
-		// We can't return a direct reference to SystemDB, because the
-		// caller expects a private object that can be modified in-place.
-		sysDB := sqlbase.MakeSystemDatabaseDesc()
-		return sysDB, nil
+		if flags.RequireMutable {
+			return sqlbase.NewMutableExistingDatabaseDescriptor(
+				*sqlbase.MakeSystemDatabaseDesc().DatabaseDesc()), nil
+		}
+		return sqlbase.SystemDB, nil
 	}
 
 	found, descID, err := LookupDatabaseID(ctx, txn, codec, name)
@@ -63,14 +64,15 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 	// NB: Take care to actually return nil here rather than a typed nil which
 	// will not compare to nil when wrapped in the returned interface.
-	desc, err = GetDatabaseDescByID(ctx, txn, codec, descID)
+	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, descID, Mutability(flags.RequireMutable))
 	if err != nil {
 		return nil, err
 	}
-	if desc == nil {
+	db, ok := untypedDesc.(sqlbase.DatabaseDescriptor)
+	if !ok {
 		return nil, nil
 	}
-	return desc, err
+	return db, nil
 }
 
 // GetSchema implements the Accessor interface.

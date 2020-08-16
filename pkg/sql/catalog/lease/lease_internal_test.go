@@ -203,8 +203,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
-	if err := purgeOldVersions(
-		context.Background(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+	if err := PurgeOldVersions(context.Background(), tableDesc.ID, false, 2, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 
@@ -223,7 +222,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatalf("wrong lease expiration survived purge")
 	}
 
-	// Test that purgeOldVersions correctly removes a table version
+	// Test that PurgeOldVersions correctly removes a table version
 	// without a lease.
 	ts.mu.Lock()
 	tableVersion := &descriptorVersionState{
@@ -235,8 +234,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if numLeases := getNumVersions(ts); numLeases != 2 {
 		t.Fatalf("found %d versions instead of 2", numLeases)
 	}
-	if err := purgeOldVersions(
-		context.Background(), kvDB, tableDesc.ID, false, 2 /* minVersion */, leaseManager); err != nil {
+	if err := PurgeOldVersions(context.Background(), tableDesc.ID, false, 2, leaseManager); err != nil {
 		t.Fatal(err)
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
