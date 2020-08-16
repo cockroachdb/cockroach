@@ -425,11 +425,10 @@ func (r *Replica) evaluate1PC(
 
 	arg, _ := ba.GetArg(roachpb.EndTxn)
 	etArg := arg.(*roachpb.EndTxnRequest)
-	canFwdTimestamp := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, etArg)
 
 	// Evaluate strippedBa. If the transaction allows, permit refreshes.
 	ms := new(enginepb.MVCCStats)
-	if canFwdTimestamp {
+	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
 			ctx, idKey, rec, ms, &strippedBa, latchSpans, etArg.Deadline)
 	} else {
@@ -437,7 +436,7 @@ func (r *Replica) evaluate1PC(
 			ctx, idKey, rec, ms, &strippedBa, latchSpans)
 	}
 
-	if pErr != nil || (!canFwdTimestamp && ba.Timestamp != br.Timestamp) {
+	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
 		if pErr != nil {
 			log.VEventf(ctx, 2,
 				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
