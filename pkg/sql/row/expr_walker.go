@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -96,18 +97,15 @@ const (
 	overrideVolatile  overrideVolatility = true
 )
 
-type sequenceChunk struct {
-	startVal int64
-	size     int64
-	startRow int64
-	currVal  int64
-}
-
 type rowSequence struct {
 	id              descpb.ID
 	table           *sqlbase.ImmutableTableDescriptor
-	instancesPerRow int
-	chunk           *sequenceChunk
+	instancesPerRow int64
+	chunk           *jobspb.ChunkInfo
+	oldChunks       *jobspb.SequenceChunkArray
+	newChunks       *jobspb.SequenceChunkArray
+	currVal         int64
+	instancePos     int64
 }
 
 // cellInfoAddr is the address used to store relevant information
@@ -132,6 +130,9 @@ func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
 	c.sourceID = sourceID
 	c.rowID = rowID
 	c.uniqueRowIDInstance = 0
+	for _, rowSeq := range c.sequenceMap {
+		rowSeq.instancePos = 0
+	}
 }
 
 // We don't want to call unique_rowid() for columns with such default expressions
@@ -207,9 +208,16 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	seqChunk := seqMap.chunk
 	chunkSize := int64(0)
 	if seqChunk != nil {
-		chunkSize = seqChunk.size
+		chunkSize = seqChunk.ChunkSize
 	}
-	if seqChunk == nil || seqChunk.currVal == seqChunk.startVal+seqChunk.size {
+	if seqChunk == nil || seqMap.currVal == seqChunk.ChunkStart+seqChunk.ChunkSize-seqMap.instancePos {
+		done := false
+		for _, chunk := range seqMap.oldChunks.Chunks {
+			if chunk.RowNum <= c.rowID && (c.rowID-chunk.RowNum)*seqMap.instancesPerRow < chunk.ChunkSize && !done {
+				seqChunk = chunk
+				done = true
+			}
+		}
 		// Request a new Chunk.
 		newChunkSize := 10 * chunkSize
 		if newChunkSize == 0 {
@@ -221,15 +229,16 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 		if err != nil {
 			return nil, err
 		}
-		seqMap.chunk = &sequenceChunk{
-			startVal: val - newChunkSize,
-			size:     newChunkSize,
-			startRow: c.rowID,
-			currVal:  val - newChunkSize,
+		seqMap.chunk = &jobspb.ChunkInfo{
+			ChunkStart: val - newChunkSize,
+			ChunkSize:  newChunkSize,
+			RowNum:     c.rowID,
 		}
+		seqMap.newChunks.Chunks = append(seqMap.newChunks.Chunks, seqMap.chunk)
 	}
-	seqMap.chunk.currVal++
-	return tree.NewDInt(tree.DInt(c.sequenceMap[name].chunk.currVal)), nil
+	seqMap.currVal++
+	seqMap.instancePos++
+	return tree.NewDInt(tree.DInt(c.sequenceMap[name].currVal)), nil
 }
 
 func importCurrVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
@@ -239,7 +248,7 @@ func importCurrVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	// TODO: this definitely needs to be changed
 	currVal := int64(0)
 	if seqChunk == nil {
-		currVal = seqChunk.currVal
+		currVal = c.sequenceMap[name].currVal
 	}
 	return tree.NewDInt(tree.DInt(currVal)), nil
 }
@@ -297,8 +306,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"random": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["random"],
@@ -312,8 +326,13 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 		),
 	},
 	"gen_random_uuid": {
-		visitorSideEffect: func(annot *tree.Annotations) {
+		visitorSideEffect: func(
+			annot *tree.Annotations,
+			exprs tree.Exprs,
+			evalCtx *tree.EvalContext,
+		) error {
 			getCellInfoAnnotation(annot).randInstancePerRow++
+			return nil
 		},
 		override: makeBuiltinOverride(
 			tree.FunDefs["gen_random_uuid"],

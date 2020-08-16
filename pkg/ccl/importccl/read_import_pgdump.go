@@ -538,7 +538,8 @@ func newPgDumpReader(
 			for i, col := range tableDesc.VisibleColumns() {
 				colSubMap[col.Name] = i
 			}
-			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, kvCh)
+			// TODO: populate defaultValueMetaData.
+			conv, err := row.NewDatumRowConverter(ctx, tableDesc, targetCols, evalCtx, nil, kvCh)
 			if err != nil {
 				return nil, err
 			}

@@ -133,6 +133,7 @@ message ReadImportDataSpec {
   optional string user = 15 [(gogoproto.nullable) = false];
 
   // NEXTID: 16
+  map<int32, cockroach.sql.jobs.jobspb.DefaultExprMetaData> defaultExprMetaData = 17;
 }
 
 message BackupDataSpec {
