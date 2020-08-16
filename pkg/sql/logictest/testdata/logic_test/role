@@ -1210,3 +1210,16 @@ INSERT INTO publicdb.publictable VALUES (1)
 query TTTI
 SHOW TABLES FROM publicdb
 ----
+
+# Test that non-admin users cannot drop admins.
+user root
+
+statement ok
+CREATE USER myadmin;
+GRANT admin TO myadmin;
+ALTER USER testuser CREATEROLE
+
+user testuser
+
+statement error must be superuser to drop superusers
+DROP USER myadmin
