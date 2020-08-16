@@ -159,7 +159,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	ex.statsCollector.recordStatement(
-		stmt, planner.curPlan.instrumentation.savedPlanForStats,
+		stmt, planner.curPlan.savedPlanForStats,
 		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,

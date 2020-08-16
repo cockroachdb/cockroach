@@ -121,7 +121,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := runPlanInsidePlan(params, newPlan.(*planTop), n.workingRows); err != nil {
+	if err := runPlanInsidePlan(params, newPlan.(*planComponents), n.workingRows); err != nil {
 		return false, err
 	}
 	n.nextRowIdx = 1
