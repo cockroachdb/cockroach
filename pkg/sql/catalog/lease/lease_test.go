@@ -1022,7 +1022,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// The transaction read at one timestamp and wrote at another so it
 	// has to be restarted because the spans read were modified by the backfill.
 	if err := txReadWrite.Commit(); !testutils.IsError(err,
-		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)") {
+		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh\\)") {
 		t.Fatalf("err = %v", err)
 	}
 

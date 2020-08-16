@@ -2115,7 +2115,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	if _, err := txnOld.Inc(ctx, keyA, 4); err != nil {
 		t.Fatal(err)
 	}
-	const exp = `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`
+	const exp = `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`
 	if err := txnOld.Commit(ctx); !testutils.IsError(err, exp) {
 		t.Fatalf("expected retry error, got: %v; did we write under a read?", err)
 	}
