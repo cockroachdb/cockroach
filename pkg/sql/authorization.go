@@ -49,11 +49,14 @@ type AuthorizationAccessor interface {
 	// CheckAnyPrivilege returns nil if user has any privileges at all.
 	CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Descriptor) error
 
-	// HasAdminRole returns tuple of bool and error:
+	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
 	// (false, nil) means that the user has NO admin role
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
+	UserHasAdminRole(ctx context.Context, user string) (bool, error)
+
+	// HasAdminRole returns UserHasAdminRole for the current user.
 	HasAdminRole(ctx context.Context) (bool, error)
 
 	// RequireAdminRole is a wrapper on top of HasAdminRole.
@@ -208,6 +211,12 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 // Requires a valid transaction to be open.
 func (p *planner) HasAdminRole(ctx context.Context) (bool, error) {
 	user := p.SessionData().User
+	return p.UserHasAdminRole(ctx, user)
+}
+
+// UserHasAdminRole implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) UserHasAdminRole(ctx context.Context, user string) (bool, error) {
 	if user == "" {
 		return false, errors.AssertionFailedf("empty user")
 	}
