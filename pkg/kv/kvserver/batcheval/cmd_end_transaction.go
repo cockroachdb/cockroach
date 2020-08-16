@@ -417,22 +417,6 @@ func IsEndTxnTriggeringRetryError(
 	return retry, reason, extraMsg
 }
 
-// CanForwardCommitTimestampWithoutRefresh returns whether a txn can be
-// safely committed with a timestamp above its read timestamp without
-// requiring a read refresh (see txnSpanRefresher). This requires that
-// the transaction's timestamp has not leaked and that the transaction
-// has encountered no spans which require refreshing at the forwarded
-// timestamp. If either of those conditions are true, a client-side
-// retry is required.
-//
-// Note that when deciding whether a transaction can be bumped to a particular
-// timestamp, the transaction's deadling must also be taken into account.
-func CanForwardCommitTimestampWithoutRefresh(
-	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
-) bool {
-	return !txn.CommitTimestampFixed && args.CanCommitAtHigherTimestamp
-}
-
 const lockResolutionBatchSize = 500
 
 // resolveLocalLocks synchronously resolves any locks that are local to this

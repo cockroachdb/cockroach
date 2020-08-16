@@ -164,10 +164,6 @@ func (sr *txnSpanRefresher) SendLocked(
 	// Set the batch's CanForwardReadTimestamp flag.
 	canFwdRTS := sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
 	ba.CanForwardReadTimestamp = canFwdRTS
-	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
-		et := rArgs.(*roachpb.EndTxnRequest)
-		et.CanCommitAtHigherTimestamp = canFwdRTS
-	}
 
 	maxAttempts := maxTxnRefreshAttempts
 	if knob := sr.knobs.MaxTxnRefreshAttempts; knob != 0 {
@@ -429,9 +425,17 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 }
 
 // canForwardReadTimestampWithoutRefresh returns whether the transaction can
-// forward its read timestamp without refreshing any read spans. This allows
-// for the "server-side refresh" optimization, where batches are re-evaluated
-// at a higher read-timestamp without returning to transaction coordinator.
+// forward its read timestamp without refreshing any read spans. This allows for
+// the "server-side refresh" optimization, where batches are re-evaluated at a
+// higher read-timestamp without returning to transaction coordinator.
+//
+// This requires that the transaction has encountered no spans which require
+// refreshing at the forwarded timestamp and that the transaction's timestamp
+// has not leaked. If either of those conditions are true, a client-side refresh
+// is required.
+//
+// Note that when deciding whether a transaction can be bumped to a particular
+// timestamp, the transaction's deadling must also be taken into account.
 func (sr *txnSpanRefresher) canForwardReadTimestampWithoutRefresh(txn *roachpb.Transaction) bool {
 	return sr.canAutoRetry && !sr.refreshInvalid && sr.refreshFootprint.empty() && !txn.CommitTimestampFixed
 }

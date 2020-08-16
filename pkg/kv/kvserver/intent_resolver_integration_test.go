@@ -84,11 +84,12 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 			txnCh1 <- pErr.GoError()
 			return
 		}
-		et, _ := endTxnArgs(txn1, true)
+
+		et, h := endTxnArgs(txn1, true)
 		et.LockSpans = []roachpb.Span{spanA, spanB}
-		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn1, &et)
-		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et)
+		h.CanForwardReadTimestamp = true
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), h, &et)
 		txnCh1 <- pErr.GoError()
 	}()
 
@@ -112,13 +113,14 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 			txnCh2 <- pErr.GoError()
 			return
 		}
+
 		txn2Copy := *repl.Header().Txn
 		txn2 = &txn2Copy
-		et, _ := endTxnArgs(txn2, true)
+		et, h := endTxnArgs(txn2, true)
 		et.LockSpans = []roachpb.Span{spanB}
-		et.CanCommitAtHigherTimestamp = true
 		assignSeqNumsForReqs(txn2, &et)
-		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
+		h.CanForwardReadTimestamp = true
+		_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), h, &et)
 		txnCh2 <- pErr.GoError()
 	}()
 
