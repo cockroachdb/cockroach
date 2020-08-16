@@ -62,6 +62,9 @@ func (p *planner) Analyze(ctx context.Context, n *tree.Analyze) (planNode, error
 	}, nil
 }
 
+const defaultHistogramBuckets = 200
+const nonIndexColHistogramBuckets = 2
+
 // createStatsNode is a planNode implemented in terms of a function. The
 // startJob function starts a Job during Start, and the remainder of the
 // CREATE STATISTICS planning and execution is performed within the jobs
@@ -219,14 +222,16 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			ColumnIDs: columnIDs,
 			// By default, create histograms on all explicitly requested column stats
 			// with a single column that doesn't use an inverted index.
-			HasHistogram: len(columnIDs) == 1 && !isInvIndex,
+			HasHistogram:        len(columnIDs) == 1 && !isInvIndex,
+			HistogramMaxBuckets: defaultHistogramBuckets,
 		}}
 		// Make histograms for inverted index column types.
 		if len(columnIDs) == 1 && isInvIndex {
 			colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-				ColumnIDs:    columnIDs,
-				HasHistogram: true,
-				Inverted:     true,
+				ColumnIDs:           columnIDs,
+				HasHistogram:        true,
+				Inverted:            true,
+				HistogramMaxBuckets: defaultHistogramBuckets,
 			})
 		}
 	}
@@ -322,8 +327,9 @@ func createStatsDefaultColumns(
 		}
 
 		colStat := jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:    colList,
-			HasHistogram: !isInverted,
+			ColumnIDs:           colList,
+			HasHistogram:        !isInverted,
+			HistogramMaxBuckets: defaultHistogramBuckets,
 		}
 		colStats = append(colStats, colStat)
 
@@ -418,9 +424,18 @@ func createStatsDefaultColumns(
 			continue
 		}
 
+		// Non-index columns have very small histograms since it's not worth the
+		// overhead of storing large histograms for these columns. Since bool and
+		// enum types only have a few values anyway, include all possible values
+		// for those types, up to defaultHistogramBuckets.
+		maxHistBuckets := uint32(nonIndexColHistogramBuckets)
+		if col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily {
+			maxHistBuckets = defaultHistogramBuckets
+		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
-			ColumnIDs:    colList,
-			HasHistogram: col.Type.Family() == types.BoolFamily || col.Type.Family() == types.EnumFamily,
+			ColumnIDs:           colList,
+			HasHistogram:        !sqlbase.ColumnTypeIsInvertedIndexable(col.Type),
+			HistogramMaxBuckets: maxHistBuckets,
 		})
 		nonIdxCols++
 	}
