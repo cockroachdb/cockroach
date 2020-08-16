@@ -41,8 +41,8 @@ type explainNewPlanNodeRun struct {
 func (e *explainNewPlanNode) startExec(params runParams) error {
 	ob := explain.NewOutputBuilder(e.flags)
 
-	realPlan := e.plan.WrappedPlan.(*planTop)
-	distribution, willVectorize := explainGetDistributedAndVectorized(params, &realPlan.planComponents)
+	realPlan := e.plan.WrappedPlan.(*planComponents)
+	distribution, willVectorize := explainGetDistributedAndVectorized(params, realPlan)
 	ob.AddField("distribution", distribution.String())
 	ob.AddField("vectorized", fmt.Sprintf("%t", willVectorize))
 

@@ -905,7 +905,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
 	planner.curPlan.init(planner.stmt, ex.appStats)
 	if planner.collectBundle {
-		planner.curPlan.instrumentation.savePlanString = true
+		planner.curPlan.savePlanString = true
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {

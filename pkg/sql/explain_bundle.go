@@ -223,7 +223,7 @@ func (b *stmtBundleBuilder) addOptPlans() {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan() {
-	if plan := b.plan.instrumentation.planString; plan != "" {
+	if plan := b.plan.planString; plan != "" {
 		b.z.AddFile("plan.txt", plan)
 	}
 }
