@@ -126,10 +126,11 @@ func makeImportReaderSpecs(
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos: walltime,
-				Uri:           make(map[int32]string),
-				ResumePos:     make(map[int32]int64),
-				User:          user,
+				WalltimeNanos:       walltime,
+				Uri:                 make(map[int32]string),
+				ResumePos:           make(map[int32]int64),
+				User:                user,
+				DefaultExprMetaData: make(map[int32]*jobspb.DefaultExprMetaData),
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}
@@ -137,6 +138,9 @@ func makeImportReaderSpecs(
 		inputSpecs[n].Uri[int32(i)] = input
 		if importProgress.ResumePos != nil {
 			inputSpecs[n].ResumePos[int32(i)] = importProgress.ResumePos[int32(i)]
+		}
+		if importProgress.DefaultExprMetaData != nil {
+			inputSpecs[n].DefaultExprMetaData[int32(i)] = importProgress.DefaultExprMetaData[int32(i)]
 		}
 	}
 
@@ -229,6 +233,14 @@ func DistIngest(
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
 			prog.ResumePos = make([]int64, len(from))
+			prog.DefaultExprMetaData = make([]*jobspb.DefaultExprMetaData, len(from))
+			for i := range prog.DefaultExprMetaData {
+				prog.DefaultExprMetaData[i] = &jobspb.DefaultExprMetaData{
+					SequenceMap: &jobspb.SequenceChunkMap{
+						Chunks: make(map[int32]*jobspb.SequenceChunkArray),
+					},
+				}
+			}
 			return 0.0
 		},
 	); err != nil {
@@ -237,6 +249,7 @@ func DistIngest(
 
 	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
+	defaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(from))
 
 	updateJobProgress := func() error {
 		return job.FractionProgressed(ctx,
@@ -251,6 +264,9 @@ func DistIngest(
 					prog.ReadProgress[i] = fileProgress
 					overall += fileProgress
 				}
+				for i := range defaultExprMetaData {
+					prog.DefaultExprMetaData[i] = defaultExprMetaData[i]
+				}
 				return overall / float32(len(from))
 			},
 		)
@@ -263,6 +279,9 @@ func DistIngest(
 			}
 			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
 				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
+			}
+			for i, v := range meta.BulkProcessorProgress.DefaultExprMetaData {
+				defaultExprMetaData[i] = v
 			}
 
 			if alwaysFlushProgress {

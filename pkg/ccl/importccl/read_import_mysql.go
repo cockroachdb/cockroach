@@ -70,8 +70,9 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
+		// TODO: populate the default value metadata.
 		conv, err := row.NewDatumRowConverter(ctx, sqlbase.NewImmutableTableDescriptor(*table.Desc),
-			nil /* targetColNames */, evalCtx, kvCh)
+			nil /* targetColNames */, evalCtx, nil, kvCh)
 		if err != nil {
 			return nil, err
 		}

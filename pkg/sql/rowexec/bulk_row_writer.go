@@ -101,8 +101,9 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	kvCh := make(chan row.KVBatch, 10)
 	var g ctxgroup.Group
 
+	// TODO (anzoteh96): try populating defaultValueMetaData.
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh)
+		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, nil, kvCh)
 	if err != nil {
 		return err
 	}

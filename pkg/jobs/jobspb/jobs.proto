@@ -199,6 +199,33 @@ message ImportDetails {
   ];
 }
 
+// chunkInfo is a metadata that denotes the chunk (often due to nextVal of a
+// sequence).
+message chunkInfo {
+  int64  chunkStart = 1;
+  int64  chunkSize = 2;
+  int64  rowNum = 3;
+}
+
+// sequenceChunkArray specifies an array of chunks, corresponding to a specific sequence.
+// This is useful
+message sequenceChunkArray {
+  repeated chunkInfo chunks = 1;
+}
+
+// sequenceMap is a metadata that stores mapping from sequence IDs to sequenceChunkArray.
+message sequenceChunkMap {
+  map<int32, sequenceChunkArray> chunks = 1;
+}
+
+// DefaultValMetaData is a metadata that stores anything we need for the values of
+// default expressions to be communicated between row converter and progress adder.
+// Currently, this only has sequenceChunkMap as nextval() is the only default values
+// supported that require this communication. This will then be added as necessary.
+message DefaultExprMetaData {
+  sequenceChunkMap sequenceMap = 1;
+}
+
 message ImportProgress {
   repeated float sampling_progress = 1;
   repeated float read_progress = 2;
@@ -212,6 +239,7 @@ message ImportProgress {
   // been flushed, we can advance the count here and then on resume skip over
   // that many rows without needing to convert/process them at all.
   repeated int64 resume_pos = 5; // Only set by direct import.
+  repeated DefaultExprMetaData defaultExprMetaData = 6;
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.

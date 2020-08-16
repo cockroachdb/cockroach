@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -178,6 +179,8 @@ type KVBatch struct {
 	Progress float32
 	// KVs is the actual converted KV data.
 	KVs []roachpb.KeyValue
+	// Chunks denote the new chunks being created.
+	DefaultMetaData *jobspb.DefaultExprMetaData
 }
 
 // DatumRowConverter converts Datums into kvs and streams it to the destination
@@ -210,6 +213,8 @@ type DatumRowConverter struct {
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
 	FractionFn     func() float32
+
+	// DefaultMetaData jobspb.DefaultExprMetaData
 }
 
 var kvDatumRowConverterBatchSize = 5000
@@ -229,6 +234,7 @@ func NewDatumRowConverter(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
+	defaultValueMetaData *jobspb.DefaultExprMetaData,
 	kvCh chan<- KVBatch,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
@@ -318,9 +324,23 @@ func NewDatumRowConverter(
 		if err != nil {
 			return nil, err
 		}
+		oldChunks := &jobspb.SequenceChunkArray{
+			Chunks: make([]*jobspb.ChunkInfo, 0),
+		}
+		if defaultValueMetaData != nil {
+			seqMapFromJob := defaultValueMetaData.SequenceMap.Chunks
+			chunks, _ := seqMapFromJob[int32(id)]
+			if chunks != nil {
+				oldChunks = chunks
+			}
+		}
 		rowSeqForAnnot[*tree.NewDString(seqTable.Name)] = &rowSequence{
-			id:    id,
-			table: seqTable,
+			id:        id,
+			table:     seqTable,
+			oldChunks: oldChunks,
+			newChunks: &jobspb.SequenceChunkArray{
+				Chunks: make([]*jobspb.ChunkInfo, 0),
+			},
 		}
 	}
 	annot.Set(cellInfoAddr, &cellInfoAnnotation{
@@ -430,6 +450,12 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	); err != nil {
 		return errors.Wrap(err, "insert row")
 	}
+	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
+		for _, chunk := range seq.newChunks.Chunks {
+			seq.oldChunks.Chunks = append(seq.oldChunks.Chunks, chunk)
+		}
+		seq.newChunks.Chunks = make([]*jobspb.ChunkInfo, 0)
+	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
@@ -455,6 +481,14 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	case c.KvCh <- c.KvBatch:
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+	c.KvBatch.DefaultMetaData = &jobspb.DefaultExprMetaData{
+		SequenceMap: &jobspb.SequenceChunkMap{
+			Chunks: make(map[int32]*jobspb.SequenceChunkArray),
+		},
+	}
+	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
+		c.KvBatch.DefaultMetaData.SequenceMap.Chunks[int32(seq.id)] = seq.oldChunks
 	}
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 	return nil

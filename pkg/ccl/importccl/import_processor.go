@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -150,22 +151,22 @@ func makeInputConverter(
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx), nil
+			singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), evalCtx)
+			int(spec.ReaderParallelism), evalCtx, spec.DefaultExprMetaData)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
@@ -237,6 +238,8 @@ func ingestKvs(
 	// `atomic` so the progress reporting go goroutine can read them.
 	writtenRow := make([]int64, len(spec.Uri))
 	writtenFraction := make([]uint32, len(spec.Uri))
+	pkDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
+	idxDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
 
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
@@ -272,6 +275,7 @@ func ingestKvs(
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
+		prog.DefaultExprMetaData = make(map[int32]*jobspb.DefaultExprMetaData)
 		for file, offset := range offsets {
 			pk := atomic.LoadInt64(&pkFlushedRow[offset])
 			idx := atomic.LoadInt64(&idxFlushedRow[offset])
@@ -279,10 +283,14 @@ func ingestKvs(
 			// PK and index adders have flushed KVs.
 			if idx > pk {
 				prog.ResumePos[file] = pk
+				prog.DefaultExprMetaData[file] = pkDefaultExprMetaData[offset]
 			} else {
 				prog.ResumePos[file] = idx
+				prog.DefaultExprMetaData[file] = idxDefaultExprMetaData[offset]
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+			// TODO: change this part.
+			prog.DefaultExprMetaData[file] = nil
 		}
 		progCh <- prog
 	}
