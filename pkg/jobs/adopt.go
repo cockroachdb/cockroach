@@ -37,7 +37,9 @@ WHERE claim_session_id IS NULL ORDER BY created DESC LIMIT $3 RETURNING id`,
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
-		log.Infof(ctx, "claimed %d jobs", len(rows))
+		if log.ExpensiveLogEnabled(ctx, 1) || len(rows) > 0 {
+			log.Infof(ctx, "claimed %d jobs", len(rows))
+		}
 		return nil
 	})
 }
