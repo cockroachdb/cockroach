@@ -95,6 +95,7 @@ func (rl *limiter) init(
 		if req.writeBytes > 0 {
 			rl.metrics.writeBytesAdmitted.Inc(req.writeBytes)
 		}
+		rl.metrics.requestsAdmitted.Inc(1)
 	}))
 	rl.qp = quotapool.New(tenantID.String(), &buckets, options...)
 	buckets.clock = rl.qp.TimeSource()
