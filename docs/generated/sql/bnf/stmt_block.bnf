@@ -2214,6 +2214,7 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by
+	| 'OWNER' 'TO' role_spec
 
 var_set_list ::=
 	( var_name '=' 'COPY' 'FROM' 'PARENT' | var_name '=' var_value ) ( ( ',' var_name '=' var_value | ',' var_name '=' 'COPY' 'FROM' 'PARENT' ) )*
@@ -2481,6 +2482,11 @@ opt_validate_behavior ::=
 audit_mode ::=
 	'READ' 'WRITE'
 	| 'OFF'
+
+role_spec ::=
+	non_reserved_word_or_sconst
+	| 'CURRENT_USER'
+	| 'SESSION_USER'
 
 signed_iconst64 ::=
 	signed_iconst

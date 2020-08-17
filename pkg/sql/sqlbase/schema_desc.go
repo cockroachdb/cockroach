@@ -55,6 +55,8 @@ const (
 type ResolvedSchema struct {
 	// Marks what kind of schema this is. It is always set.
 	Kind ResolvedSchemaKind
+	// Name of the resolved schema. It is always set.
+	Name string
 	// The ID of the resolved schema. This field is only set for schema kinds
 	// SchemaPublic, SchemaUserDefined and SchemaTemporary.
 	ID descpb.ID

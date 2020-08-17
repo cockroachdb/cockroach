@@ -274,6 +274,56 @@ func ResolveSchemaNameByID(
 	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
 }
 
+// ResolveSchemaByID resolves a schema based on it's ID.
+// TODO(rohany,lucy-zhang): Move this into descs.Collection.
+func ResolveSchemaByID(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
+) (sqlbase.ResolvedSchema, error) {
+	if schemaID == keys.PublicSchemaID {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaPublic,
+			ID:   schemaID,
+			Name: staticSchemaIDMap[schemaID],
+		}, nil
+	}
+
+	// We have already considered if the schemaID is PublicSchemaID,
+	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
+	if scName, ok := staticSchemaIDMap[schemaID]; ok {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaVirtual,
+			ID:   schemaID,
+			Name: scName,
+		}, nil
+	}
+
+	// We have already considered public schemas and virtual schemas.
+	// The schema must be user-defined or temporary.
+	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, schemaID, catalogkv.Immutable,
+		catalogkv.SchemaDescriptorKind, false)
+	if err != nil {
+		return sqlbase.ResolvedSchema{}, err
+	}
+
+	// TODO(rohany, lucy-zhang, ajwerner): Handle resolving temporary schemas.
+	// #52904 is the issue corresponding to this.
+	// We should store temp schema IDs when we create it in the session data so
+	// that we can check if the schemaID corresponds to a temp schema.
+
+	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	if !ok {
+		return sqlbase.ResolvedSchema{},
+			errors.AssertionFailedf("could not get ImmutableSchemaDescriptor from %v", schemaDesc)
+	}
+
+	return sqlbase.ResolvedSchema{
+		Kind: sqlbase.SchemaUserDefined,
+		ID:   schemaID,
+		Desc: schemaDesc,
+		Name: schemaDesc.Name,
+	}, nil
+}
+
 // ResolveTypeDescByID resolves a TypeDescriptor and fully qualified name
 // from an ID.
 // TODO (rohany): Once we start to cache type descriptors, this needs to
