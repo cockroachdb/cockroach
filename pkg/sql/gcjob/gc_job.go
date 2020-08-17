@@ -123,7 +123,7 @@ func (r schemaChangeGCResumer) Resume(
 	if len(allTables) == 0 {
 		return nil
 	}
-	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+	expired, earliestDeadline := refreshTables(ctx, execCfg, allTables, tableDropTimes, indexDropTimes, r.jobID, details, progress)
 	timerDuration := timeutil.Until(earliestDeadline)
 	if expired {
 		timerDuration = 0
@@ -159,7 +159,7 @@ func (r schemaChangeGCResumer) Resume(
 			if len(remainingTables) == 0 {
 				return nil
 			}
-			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, details, progress)
 			timerDuration := time.Until(earliestDeadline)
 			if expired {
 				timerDuration = 0
@@ -175,12 +175,12 @@ func (r schemaChangeGCResumer) Resume(
 			}
 			// Refresh the status of all tables in case any GC TTLs have changed.
 			remainingTables := getAllTablesWaitingForGC(details, progress)
-			_, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+			_, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, details, progress)
 
 			if didWork, err := performGC(ctx, execCfg, details, progress); err != nil {
 				return err
 			} else if didWork {
-				persistProgress(ctx, execCfg, r.jobID, progress)
+				persistProgress(ctx, execCfg, r.jobID, details, progress)
 			}
 
 			if isDoneGC(progress) {

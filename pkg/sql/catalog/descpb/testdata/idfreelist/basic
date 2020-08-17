@@ -1,0 +1,57 @@
+new-free-list
+----
+
+insert elems=5,7
+----
+[(5, 6), (7, 8)]
+
+# Test inserts at the front.
+insert elems=2
+----
+[(2, 3), (5, 6), (7, 8)]
+
+insert elems=1
+----
+[(1, 3), (5, 6), (7, 8)]
+
+# Test inserts at the end.
+insert elems=11
+----
+[(1, 3), (5, 6), (7, 8), (11, 12)]
+
+insert elems=12
+----
+[(1, 3), (5, 6), (7, 8), (11, 13)]
+
+# Test an insertion in the middle of the list that doesn't collapse any intervals.
+insert elems=9
+----
+[(1, 3), (5, 6), (7, 8), (9, 10), (11, 13)]
+
+# Test insertions that collapse intervals.
+insert elems=4
+----
+[(1, 3), (4, 6), (7, 8), (9, 10), (11, 13)]
+
+insert elems=6
+----
+[(1, 3), (4, 8), (9, 10), (11, 13)]
+
+insert elems=3
+----
+[(1, 8), (9, 10), (11, 13)]
+
+insert elems=15
+----
+[(1, 8), (9, 10), (11, 13), (15, 16)]
+
+insert elems=13
+----
+[(1, 8), (9, 10), (11, 14), (15, 16)]
+
+dump
+----
+1 2 3 4 5 6 7 9 11 12 13 15
+
+
+

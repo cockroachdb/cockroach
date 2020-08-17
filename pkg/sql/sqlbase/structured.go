@@ -1240,6 +1240,16 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	return false
 }
 
+func (desc *MutableTableDescriptor) GetNextIndexID() descpb.IndexID {
+	next, ok := desc.IndexIDFreeList.GetNextFree()
+	if ok {
+		return descpb.IndexID(next)
+	}
+	res := desc.NextIndexID
+	desc.NextIndexID++
+	return res
+}
+
 func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]descpb.ColumnID) error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
@@ -1284,8 +1294,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]desc
 			// This index has already been populated. Nothing to do.
 			continue
 		}
-		index.ID = desc.NextIndexID
-		desc.NextIndexID++
+		index.ID = desc.GetNextIndexID()
 
 		for j, colName := range index.ColumnNames {
 			if len(index.ColumnIDs) <= j {

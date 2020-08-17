@@ -42,6 +42,7 @@ func refreshTables(
 	tableDropTimes map[descpb.ID]int64,
 	indexDropTimes map[descpb.IndexID]int64,
 	jobID int64,
+	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, earliestDeadline time.Time) {
 	earliestDeadline = timeutil.Unix(0, math.MaxInt64)
@@ -63,7 +64,7 @@ func refreshTables(
 	}
 
 	if expired {
-		persistProgress(ctx, execCfg, jobID, progress)
+		persistProgress(ctx, execCfg, jobID, details, progress)
 	}
 
 	return expired, earliestDeadline

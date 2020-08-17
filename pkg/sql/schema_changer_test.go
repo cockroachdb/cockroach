@@ -3863,6 +3863,66 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 }
 
+func TestIndexIDsAreReused(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+	// Create a table with some indexes.
+	_, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT, y INT, INDEX i (x, y));
+INSERT INTO t.test VALUES (1, 2), (3, 4);
+`)
+	require.NoError(t, err)
+
+	// Get the TableDescriptor.
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	idxID := desc.Indexes[0].ID
+
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, desc.ID)
+	require.NoError(t, err)
+
+	// Drop the index and let the GC clear it.
+	_, err = sqlDB.Exec(`DROP INDEX t.test@i`)
+	require.NoError(t, err)
+
+	// Wait for the index data to be cleared away by the GC job and the free
+	// ID gets registered.
+	testutils.SucceedsSoon(t, func() error {
+		start := keys.SystemSQLCodec.IndexPrefix(uint32(desc.ID), uint32(idxID))
+		end := start.PrefixEnd()
+		if kvs, err := kvDB.Scan(ctx, start, end, 0); err != nil {
+			t.Fatal(err)
+		} else if len(kvs) != 0 {
+			return errors.Newf("expected 0 kvs found %d", len(kvs))
+		}
+
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		if len(desc.IndexIDFreeList.Ranges) == 0 {
+			return errors.New("expected elements in the index free list")
+		}
+		return nil
+	})
+
+	// Now, creating a new index on the table should reuse the ID.
+	_, err = sqlDB.Exec(`CREATE INDEX i2 ON t.test (x, y)`)
+	require.NoError(t, err)
+
+	descWithNewIndex := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+
+	require.Equal(t, idxID, descWithNewIndex.Indexes[0].ID)
+	require.Equal(t, "i2", descWithNewIndex.Indexes[0].Name)
+}
+
 // Test that a table TRUNCATE leaves the database in the correct state
 // for the asynchronous schema changer to eventually execute it.
 func TestTruncateInternals(t *testing.T) {

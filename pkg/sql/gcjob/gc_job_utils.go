@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -166,6 +168,7 @@ func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	jobID int64,
+	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) {
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -181,6 +184,28 @@ func persistProgress(
 	}); err != nil {
 		log.Warningf(ctx, "failed to update job's progress payload err: %+v", err)
 	}
+
+	// Once we've persisted that the GC has been performed, add any GC'd indexes
+	// to the table descriptor index free list.
+	if len(progress.Indexes) > 0 {
+		if _, err := execCfg.LeaseManager.Publish(
+			ctx,
+			details.ParentID,
+			func(desc catalog.MutableDescriptor) error {
+				tbl := desc.(*sqlbase.MutableTableDescriptor).TableDesc()
+				for _, idx := range progress.Indexes {
+					if idx.Status == jobspb.SchemaChangeGCProgress_DELETED {
+						tbl.IndexIDFreeList.AddElement(uint32(idx.IndexID))
+					}
+				}
+				return nil
+			},
+			func(*kv.Txn) error { return nil },
+		); err != nil {
+			log.Warningf(ctx, "failed to add ids to freelist")
+		}
+	}
+
 }
 
 // getDropTimes returns the data stored in details as a map for convenience.

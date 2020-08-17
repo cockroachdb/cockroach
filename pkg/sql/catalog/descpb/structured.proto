@@ -627,6 +627,22 @@ message DescriptorMutation {
   optional bool rollback = 7 [(gogoproto.nullable) = false];
 }
 
+// IDRange is a range of two ID's. It is used to manage a free list of descriptor
+// or index IDs.
+message IDRange {
+  option (gogoproto.equal) = true;
+  // start is the start of the range, inclusive.
+  optional uint32 start = 1 [(gogoproto.nullable) = false];
+  // end is the end of the range, exclusive.
+  optional uint32 end = 2 [(gogoproto.nullable) = false];
+}
+
+// IDFreeList is a free list of IDs.
+message IDFreeList {
+  option (gogoproto.equal) = true;
+  repeated IDRange ranges = 1 [(gogoproto.nullable) = false];
+}
+
 // A table descriptor is named through a name map stored in the
 // system.namespace table: a map from {parent_id, table_name} -> id.
 // This name map can be cached for performance on a node in the cluster
@@ -791,6 +807,8 @@ message TableDescriptor {
   // next_index_id is used to ensure that deleted index ids are not reused.
   optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
+  // IndexIDFreeList is a free list of index IDs to allocate IDs from.
+  optional IDFreeList index_id_free_list = 42 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexIDFreeList"];
   optional PrivilegeDescriptor privileges = 13;
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
