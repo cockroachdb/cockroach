@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -94,3 +95,13 @@ func AddressResolver(c Connector) nodedialer.AddressResolver {
 		return nd.CheckedTenantAddress(), nil
 	}
 }
+
+// GossipSubscriptionSystemConfigMask filters a system config down to just the
+// keys that a tenant SQL process needs access to. All system tenant objects are
+// filtered out (e.g. system tenant descriptors and users).
+var GossipSubscriptionSystemConfigMask = config.MakeSystemConfigMask(
+	// Tenant SQL processes need just enough of the zone hierarchy to understand
+	// which zone configurations apply to their keyspace.
+	config.MakeZoneKey(keys.RootNamespaceID),
+	config.MakeZoneKey(keys.TenantsRangesID),
+)
