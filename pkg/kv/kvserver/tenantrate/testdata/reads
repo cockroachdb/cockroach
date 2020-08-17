@@ -8,17 +8,28 @@ readbytes: { rate: 10, burst: 100 }
 00:00:00.000
 
 get_tenants
+- 1
 - 2
 ----
-[2#1]
+[2#1, system#1]
 
 # Read the entire burst worth of bytes plus 4 which should put the limiter
-# in debt by 4.
+# in debt by 4. Also record a system read. We'll verify both show up in metrics.
 
 record_read
+- { tenant: 1, readbytes: 10 }
 - { tenant: 2, readbytes: 104 }
 ----
 []
+
+# Verify that the above reads made it to the metrics.
+
+metrics
+kv_tenant_rate_limit_read_bytes_admitted
+----
+kv_tenant_rate_limit_read_bytes_admitted 114
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 104
+kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 10
 
 # Launch a request which will block on the lack of available readbytes as it
 # tries to read its 1 courtesy byte.
