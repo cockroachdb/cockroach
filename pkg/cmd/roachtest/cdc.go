@@ -65,9 +65,6 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING changefeed.push.enabled = true`); err != nil {
-		t.Fatal(err)
-	}
 	kafka := kafkaManager{
 		c:     c,
 		nodes: kafkaNode,
