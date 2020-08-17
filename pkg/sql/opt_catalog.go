@@ -543,16 +543,12 @@ func (os *optSequence) SequenceMarker() {}
 type optTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
-	// systemColumnDescs is the set of implicit system columns for the table.
-	// It contains column definitions for system columns like the MVCC Timestamp
-	// column and others. System columns have ordinals larger than the ordinals
-	// of physical columns and columns in mutations.
-	systemColumnDescs []cat.Column
-
-	// virtualColumns is the set of virtual columns, which correspond to inverted
-	// indexes. The virtual columns have ordinals larger than the system column
-	// ordinals.
-	virtualColumns []optVirtualColumn
+	// columns contains all the columns presented to the catalog. This includes:
+	//  - ordinary table columns (those in the table descriptor)
+	//  - MVCC timestamp system column
+	//  - virtual columns (for inverted indexes).
+	// They are stored in this order, though we shouldn't rely on that anywhere.
+	columns []cat.Column
 
 	// indexes are the inlined wrappers for the table's primary and secondary
 	// indexes.
@@ -609,31 +605,89 @@ func newOptTable(
 		zone:     tblZone,
 	}
 
+	// First, determine how many columns we will potentially need.
+	colDescs := ot.desc.DeletableColumns()
+	numCols := len(colDescs)
+	// One for the MVCC timestamp system column.
+	numCols++
+	// One for each inverted index virtual column.
+	secondaryIndexes := ot.desc.DeletableIndexes()
+	for i := range secondaryIndexes {
+		if secondaryIndexes[i].Type == descpb.IndexDescriptor_INVERTED {
+			numCols++
+		}
+	}
+
+	ot.columns = make([]cat.Column, len(colDescs), numCols)
+	numOrdinary := len(ot.desc.Columns)
+	numWritable := len(ot.desc.WritableColumns())
+	for i := range colDescs {
+		desc := colDescs[i]
+
+		var kind cat.ColumnKind
+		switch {
+		case i < numOrdinary:
+			kind = cat.Ordinary
+		case i < numWritable:
+			kind = cat.WriteOnly
+		default:
+			kind = cat.DeleteOnly
+		}
+
+		ot.columns[i].InitNonVirtual(
+			i,
+			cat.StableID(desc.ID),
+			tree.Name(desc.Name),
+			kind,
+			desc.Type,
+			desc.Nullable,
+			desc.Hidden,
+			desc.DefaultExpr,
+			desc.ComputeExpr,
+		)
+	}
+
+	newColumn := func() (col *cat.Column, ordinal int) {
+		ordinal = len(ot.columns)
+		ot.columns = ot.columns[:ordinal+1]
+		return &ot.columns[ordinal], ordinal
+	}
+
 	// Set up the MVCC timestamp system column. However, we won't add it
 	// in case a column with the same name already exists in the table.
 	// Note that the column does not exist when err != nil. This check is done
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
 	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
-		ot.systemColumnDescs = append(ot.systemColumnDescs, &sqlbase.MVCCTimestampColumnDesc)
+		col, ord := newColumn()
+		col.InitNonVirtual(
+			ord,
+			cat.StableID(sqlbase.MVCCTimestampColumnID),
+			tree.Name(sqlbase.MVCCTimestampColumnName),
+			cat.System,
+			sqlbase.MVCCTimestampColumnType,
+			true, /* nullable */
+			true, /* hidden */
+			nil,  /* defaultExpr */
+			nil,  /* computedExpr */
+		)
 	}
 
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
 	ot.colMap = make(map[descpb.ColumnID]int, ot.ColumnCount())
-	for i, n := 0, ot.ColumnCount(); i < n; i++ {
-		ot.colMap[descpb.ColumnID(ot.Column(i).ColID())] = i
+	for i := range ot.columns {
+		ot.colMap[descpb.ColumnID(ot.columns[i].ColID())] = i
 	}
 
-	// Build the indexes (add 1 to account for lack of primary index in
-	// DeletableIndexes slice).
-	ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
+	// Build the indexes.
+	ot.indexes = make([]optIndex, 1+len(secondaryIndexes))
 
 	for i := range ot.indexes {
 		var idxDesc *descpb.IndexDescriptor
 		if i == 0 {
 			idxDesc = &desc.PrimaryIndex
 		} else {
-			idxDesc = &ot.desc.DeletableIndexes()[i-1]
+			idxDesc = &secondaryIndexes[i-1]
 		}
 
 		// If there is a subzone that applies to the entire index, use that,
@@ -648,7 +702,6 @@ func newOptTable(
 				idxZone = &copyZone
 			}
 		}
-		virtualColOrd := -1
 		if idxDesc.Type == descpb.IndexDescriptor_INVERTED {
 			// The first column of an inverted index is special: in the descriptors,
 			// it looks as if the table column is part of the index; in fact the key
@@ -657,20 +710,25 @@ func newOptTable(
 			invertedSourceColOrdinal, _ := ot.lookupColumnOrdinal(idxDesc.ColumnIDs[0])
 
 			// Add a virtual column that refers to the inverted index key.
-			virtualColOrd = ot.ColumnCount()
-			ot.virtualColumns = append(ot.virtualColumns, optVirtualColumn{
-				ordinal: virtualColOrd,
-				name:    string(ot.Column(invertedSourceColOrdinal).ColName()) + "_inverted_key",
-				// TODO(radu, mjibson): figure out what the type should be here. Geo is Int,
-				// but JSON isn't anything decodable (including Bytes). The disk fetecher will
-				// need to be taught about inverted indexes and dump the read data directly
-				// into a DBytes (i.e., don't call encoding.DecodeBytesAscending).
-				typ:                      ot.Column(invertedSourceColOrdinal).DatumType(),
-				nullable:                 false,
-				invertedSourceColOrdinal: invertedSourceColOrdinal,
-			})
+			virtualCol, virtualColOrd := newColumn()
+
+			// TODO(radu, mjibson): figure out what the type should be here. Geo is
+			// Int, but JSON isn't anything decodable (including Bytes). The disk
+			// fetecher will need to be taught about inverted indexes and dump the
+			// read data directly into a DBytes (i.e., don't call
+			// encoding.DecodeBytesAscending).
+			typ := ot.Column(invertedSourceColOrdinal).DatumType()
+			virtualCol.InitVirtual(
+				virtualColOrd,
+				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),
+				typ,
+				false, /* nullable */
+				invertedSourceColOrdinal,
+			)
+			ot.indexes[i].init(ot, i, idxDesc, idxZone, virtualColOrd)
+		} else {
+			ot.indexes[i].init(ot, i, idxDesc, idxZone, -1 /* virtualColOrd */)
 		}
-		ot.indexes[i].init(ot, i, idxDesc, idxZone, virtualColOrd)
 	}
 
 	for i := range ot.desc.OutboundFKs {
@@ -711,11 +769,11 @@ func newOptTable(
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []cat.CheckConstraint
 	for i := 0; i < ot.ColumnCount(); i++ {
-		// We do not synthesize check constraints for mutation columns.
-		if cat.IsMutationColumn(ot, i) {
+		col := ot.Column(i)
+		if col.IsMutation() {
+			// We do not synthesize check constraints for mutation columns.
 			continue
 		}
-		col := ot.Column(i)
 		colType := col.DatumType()
 		if colType.UserDefined() {
 			switch colType.Family() {
@@ -864,55 +922,23 @@ func (ot *optTable) IsMaterializedView() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
-	return len(ot.desc.DeletableColumns()) + len(ot.systemColumnDescs) + len(ot.virtualColumns)
+	return len(ot.columns)
 }
 
 // Column is part of the cat.Table interface.
-func (ot *optTable) Column(i int) cat.Column {
-	{
-		n := len(ot.desc.DeletableColumns())
-		if i < n {
-			return &ot.desc.DeletableColumns()[i]
-		}
-		i -= n
-	}
-	{
-		n := len(ot.systemColumnDescs)
-		if i < n {
-			return ot.systemColumnDescs[i]
-		}
-		i -= n
-	}
-	return &ot.virtualColumns[i]
+func (ot *optTable) Column(i int) *cat.Column {
+	return &ot.columns[i]
 }
 
-// ColumnKind is part of the cat.Table interface.
-func (ot *optTable) ColumnKind(i int) cat.ColumnKind {
-	switch {
-	case i < len(ot.desc.Columns):
-		return cat.Ordinary
-	case i < len(ot.desc.WritableColumns()):
-		return cat.WriteOnly
-	case i < len(ot.desc.DeletableColumns()):
-		return cat.DeleteOnly
+// getColDesc is part of optCatalogTableInterface.
+func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
+	if i < len(ot.desc.DeletableColumns()) {
+		return &ot.desc.DeletableColumns()[i]
 	}
-	i -= len(ot.desc.DeletableColumns())
-	{
-		n := len(ot.systemColumnDescs)
-		if i < n {
-			return cat.System
-		}
-		i -= n
+	if ot.columns[i].ColID() == cat.StableID(sqlbase.MVCCTimestampColumnID) {
+		return &sqlbase.MVCCTimestampColumnDesc
 	}
-	{
-		n := len(ot.virtualColumns)
-		if i < n {
-			return cat.Virtual
-		}
-		i -= n
-	}
-
-	panic(errors.AssertionFailedf("invalid column ordinal"))
+	return nil
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -1146,7 +1172,6 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 		}
 		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
-			Ordinal:    ord,
 			Descending: oi.desc.ColumnDirections[i] == descpb.IndexDescriptor_DESC,
 		}
 	}
@@ -1155,12 +1180,12 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+		return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 	}
 
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	return cat.IndexColumn{Column: oi.tab.Column(ord), Descending: false}
 }
 
 // Zone is part of the cat.Index interface.
@@ -1243,88 +1268,6 @@ func (oi *optIndex) InterleavedBy(i int) (table, index cat.StableID) {
 // GeoConfig is part of the cat.Index interface.
 func (oi *optIndex) GeoConfig() *geoindex.Config {
 	return &oi.desc.GeoConfig
-}
-
-type optVirtualColumn struct {
-	// ordinal of the virtual column itself.
-	ordinal int
-	name    string
-	// typ is the type reported by the virtual column via DatumType. For now it is
-	// the same as the source column, but this is not really correct.
-	// TODO(radu): we need to fix execution to wrap the index keys in a DBytes and
-	// then we should change this to DBytes.
-	typ      *types.T
-	nullable bool
-	// invertedSourceColOrdinal is the ordinal of the physical table column from
-	// which the inverted index keys are derived.
-	invertedSourceColOrdinal int
-}
-
-var _ cat.Column = &optVirtualColumn{}
-
-// ColID is part of the cat.Index interface.
-func (vc *optVirtualColumn) ColID() cat.StableID {
-	panic(errors.AssertionFailedf("virtual columns have no StableID"))
-}
-
-// IsNullable is part of the cat.Column interface.
-func (vc *optVirtualColumn) IsNullable() bool {
-	return vc.nullable
-}
-
-// ColName is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColName() tree.Name {
-	return tree.Name(vc.name)
-}
-
-// DatumType is part of the cat.Column interface.
-func (vc *optVirtualColumn) DatumType() *types.T {
-	return vc.typ
-}
-
-// ColTypePrecision is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypePrecision() int {
-	return int(vc.typ.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypeWidth() int {
-	return int(vc.typ.Width())
-}
-
-// ColTypeStr is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypeStr() string {
-	return vc.typ.SQLString()
-}
-
-// IsHidden is part of the cat.Column interface.
-func (vc *optVirtualColumn) IsHidden() bool {
-	return true
-}
-
-// HasDefault is part of the cat.Column interface.
-func (vc *optVirtualColumn) HasDefault() bool {
-	return false
-}
-
-// IsComputed is part of the cat.Column interface.
-func (vc *optVirtualColumn) IsComputed() bool {
-	return false
-}
-
-// DefaultExprStr is part of the cat.Column interface.
-func (vc *optVirtualColumn) DefaultExprStr() string {
-	return ""
-}
-
-// ComputedExprStr is part of the cat.Column interface.
-func (vc *optVirtualColumn) ComputedExprStr() string {
-	return ""
-}
-
-// InvertedSourceColumnOrdinal is part of the cat.Column interface.
-func (vc *optVirtualColumn) InvertedSourceColumnOrdinal() int {
-	return vc.invertedSourceColOrdinal
 }
 
 type optTableStat struct {
@@ -1533,6 +1476,10 @@ func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction 
 type optVirtualTable struct {
 	desc *sqlbase.ImmutableTableDescriptor
 
+	// columns contains all the columns presented to the catalog. This includes
+	// the dummy PK column and the columns in the table descriptor.
+	columns []cat.Column
+
 	// A virtual table can effectively have multiple instances, with different
 	// contents. For example `db1.pg_catalog.pg_sequence` contains info about
 	// sequences in db1, whereas `db2.pg_catalog.pg_sequence` contains info about
@@ -1603,10 +1550,38 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
+	ot.columns = make([]cat.Column, len(desc.Columns)+1)
+	// Init dummy PK column.
+	ot.columns[0].InitNonVirtual(
+		0,
+		math.MaxInt64, /* stableID */
+		"crdb_internal_vtable_pk",
+		cat.Ordinary,
+		types.Int,
+		false, /* nullable */
+		true,  /* hidden */
+		nil,   /* defaultExpr */
+		nil,   /* computedExpr */
+	)
+	for i := range desc.Columns {
+		d := desc.Columns[i]
+		ot.columns[i+1].InitNonVirtual(
+			i+1,
+			cat.StableID(d.ID),
+			tree.Name(d.Name),
+			cat.Ordinary,
+			d.Type,
+			d.Nullable,
+			d.Hidden,
+			d.DefaultExpr,
+			d.ComputeExpr,
+		)
+	}
+
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
 	ot.colMap = make(map[descpb.ColumnID]int, ot.ColumnCount())
-	for i, n := 0, ot.ColumnCount(); i < n; i++ {
-		ot.colMap[descpb.ColumnID(ot.Column(i).ColID())] = i
+	for i := range ot.columns {
+		ot.colMap[descpb.ColumnID(ot.columns[i].ColID())] = i
 	}
 
 	ot.name.ExplicitSchema = true
@@ -1692,21 +1667,20 @@ func (ot *optVirtualTable) IsMaterializedView() bool {
 
 // ColumnCount is part of the cat.Table interface.
 func (ot *optVirtualTable) ColumnCount() int {
-	return len(ot.desc.Columns) + 1
+	return len(ot.columns)
 }
 
 // Column is part of the cat.Table interface.
-func (ot *optVirtualTable) Column(i int) cat.Column {
-	if i == 0 {
-		// Column 0 is a dummy PK column.
-		return optDummyVirtualPKColumn{}
-	}
-	return &ot.desc.Columns[i-1]
+func (ot *optVirtualTable) Column(i int) *cat.Column {
+	return &ot.columns[i]
 }
 
-// ColumnKind is part of the cat.Table interface.
-func (ot *optVirtualTable) ColumnKind(i int) cat.ColumnKind {
-	return cat.Ordinary
+// getColDesc is part of optCatalogTableInterface.
+func (ot *optVirtualTable) getColDesc(i int) *descpb.ColumnDescriptor {
+	if i > 0 && i <= len(ot.desc.Columns) {
+		return &ot.desc.Columns[i-1]
+	}
+	return nil
 }
 
 // IndexCount is part of the cat.Table interface.
@@ -1786,75 +1760,6 @@ func (ot *optVirtualTable) InboundForeignKey(i int) cat.ForeignKeyConstraint {
 	panic("no FKs")
 }
 
-type optDummyVirtualPKColumn struct{}
-
-var _ cat.Column = optDummyVirtualPKColumn{}
-
-// ColID is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColID() cat.StableID {
-	return math.MaxInt64
-}
-
-// ColName is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColName() tree.Name {
-	return "crdb_internal_vtable_pk"
-}
-
-// DatumType is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) DatumType() *types.T {
-	return types.Int
-}
-
-// ColTypePrecision is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypePrecision() int {
-	return int(types.Int.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypeWidth() int {
-	return int(types.Int.Width())
-}
-
-// ColTypeStr is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypeStr() string {
-	return types.Int.SQLString()
-}
-
-// IsNullable is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) IsNullable() bool {
-	return false
-}
-
-// IsHidden is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) IsHidden() bool {
-	return true
-}
-
-// HasDefault is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) HasDefault() bool {
-	return false
-}
-
-// DefaultExprStr is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) DefaultExprStr() string {
-	return ""
-}
-
-// IsComputed is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) IsComputed() bool {
-	return false
-}
-
-// ComputedExprStr is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ComputedExprStr() string {
-	return ""
-}
-
-// InvertedSourceColumnOrdinal is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) InvertedSourceColumnOrdinal() int {
-	panic(errors.AssertionFailedf("not a virtual column"))
-}
-
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -1925,24 +1830,23 @@ func (ot *optVirtualTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, erro
 // Column is part of the cat.Index interface.
 func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 	if oi.isPrimary {
-		return cat.IndexColumn{Column: oi.tab.Column(i), Ordinal: i}
+		return cat.IndexColumn{Column: oi.tab.Column(i)}
 	}
 	if i == oi.ColumnCount()-1 {
 		// The special bogus PK column goes at the end. It has ID 0.
-		return cat.IndexColumn{Column: oi.tab.Column(0), Ordinal: 0}
+		return cat.IndexColumn{Column: oi.tab.Column(0)}
 	}
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
 		return cat.IndexColumn{
-			Column:  oi.tab.Column(ord),
-			Ordinal: ord,
+			Column: oi.tab.Column(ord),
 		}
 	}
 
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
-	return cat.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+	return cat.IndexColumn{Column: oi.tab.Column(ord)}
 }
 
 // Zone is part of the cat.Index interface.
@@ -2031,3 +1935,12 @@ func (oi *optVirtualFamily) Column(i int) cat.FamilyColumn {
 func (oi *optVirtualFamily) Table() cat.Table {
 	return oi.tab
 }
+
+type optCatalogTableInterface interface {
+	// getColDesc returns the column descriptor that is backing a given column,
+	// (or nil if it is a virtual column).
+	getColDesc(i int) *descpb.ColumnDescriptor
+}
+
+var _ optCatalogTableInterface = &optTable{}
+var _ optCatalogTableInterface = &optVirtualTable{}

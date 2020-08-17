@@ -409,7 +409,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		var partitionFilters, inBetweenFilters memo.FiltersExpr
 
 		indexColumns := tabMeta.IndexKeyColumns(iter.IndexOrdinal())
-		firstIndexCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+		firstIndexCol := scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
 			// Calculate any partition filters if appropriate (see below).
 			partitionFilters, inBetweenFilters = c.partitionValuesFilters(scanPrivate.Table, iter.Index())
@@ -796,7 +796,7 @@ func (c *CustomFuncs) columnComparison(
 	scalarValues := make(memo.ScalarListExpr, len(values))
 
 	for i, val := range values {
-		colID := tabID.ColumnID(index.Column(i).Ordinal)
+		colID := tabID.IndexColumnID(index, i)
 		columnVariables[i] = c.e.f.ConstructVariable(colID)
 		scalarValues[i] = c.e.f.ConstructConstVal(val, val.ResolvedType())
 	}
@@ -1022,7 +1022,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// inverted filter.
 		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
-		invertedCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+		invertedCol := scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		if spanExpr != nil {
 			newScanPrivate.Cols.Add(invertedCol)
 		}
@@ -1067,7 +1067,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 	var notNullCols opt.ColSet
 	for i := range columns {
 		col := index.Column(i)
-		ordinal := col.Ordinal
+		ordinal := col.Ordinal()
 		nullable := col.IsNullable()
 		if isInverted && i == 0 {
 			// We pass the real column to the index constraint generator (instead of
@@ -1075,7 +1075,7 @@ func (c *CustomFuncs) initIdxConstraintForIndex(
 			// TODO(radu): improve the inverted index constraint generator to handle
 			// this internally.
 			ordinal = col.InvertedSourceColumnOrdinal()
-			nullable = tab.Column(ordinal).IsNullable()
+			nullable = col.IsNullable()
 		}
 		colID := tabID.ColumnID(ordinal)
 		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
@@ -1164,7 +1164,7 @@ func (c *CustomFuncs) canMaybeConstrainNonInvertedIndex(
 
 		// If the filter involves the first index column, then the index can
 		// possibly be constrained.
-		firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
+		firstIndexCol := tabID.IndexColumnID(index, 0)
 		if filterProps.OuterCols.Contains(firstIndexCol) {
 			return true
 		}
@@ -1461,7 +1461,7 @@ func indexHasOrderingSequence(
 	fds.CopyFrom(&scan.Relational().FuncDeps)
 	prefixCols := opt.ColSet{}
 	for i := 0; i < keyLength; i++ {
-		col := sp.Table.ColumnID(index.Column(i).Ordinal)
+		col := sp.Table.IndexColumnID(index, i)
 		prefixCols.Add(col)
 	}
 	fds.AddConstants(prefixCols)
@@ -1717,7 +1717,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// it is constrained to a constant value. This check doesn't guarantee that
 		// we will find lookup join key columns, but it avoids the unnecessary work
 		// in most cases.
-		firstIdxCol := scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+		firstIdxCol := scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
 			if _, _, ok := c.findConstantFilter(on, firstIdxCol); !ok {
 				continue
@@ -1737,7 +1737,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// All the lookup conditions must apply to the prefix of the index and so
 		// the projected columns created must be created in order.
 		for j := 0; j < numIndexKeyCols; j++ {
-			idxCol := scanPrivate.Table.ColumnID(iter.Index().Column(j).Ordinal)
+			idxCol := scanPrivate.Table.IndexColumnID(iter.Index(), j)
 			if eqIdx, ok := rightEq.Find(idxCol); ok {
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
 				rightSideCols = append(rightSideCols, idxCol)
@@ -1824,7 +1824,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			pkIndex := md.Table(scanPrivate.Table).Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
-				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+				pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
 			}
 		}
 
@@ -1933,7 +1933,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			pkIndex := tab.Index(cat.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
-				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+				pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
 			}
 		}
 
@@ -1948,7 +1948,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.IndexOrdinal()
 		lookupJoin.InvertedExpr = invertedExpr
-		lookupJoin.InvertedCol = scanPrivate.Table.ColumnID(iter.Index().Column(0).Ordinal)
+		lookupJoin.InvertedCol = scanPrivate.Table.IndexColumnID(iter.Index(), 0)
 		lookupJoin.Cols = indexCols.Union(inputCols)
 
 		var indexJoin memo.LookupJoinExpr
@@ -2033,21 +2033,21 @@ func eqColsForZigzag(
 	i, leftCnt := 0, leftIndex.LaxKeyColumnCount()
 	j, rightCnt := 0, rightIndex.LaxKeyColumnCount()
 	for ; i < leftCnt; i++ {
-		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
+		colID := tabID.IndexColumnID(leftIndex, i)
 		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
 	for ; j < rightCnt; j++ {
-		colID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
+		colID := tabID.IndexColumnID(rightIndex, j)
 		if !fixedCols.Contains(colID) {
 			break
 		}
 	}
 
 	for i < leftCnt && j < rightCnt {
-		leftColID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
-		rightColID := tabID.ColumnID(rightIndex.Column(j).Ordinal)
+		leftColID := tabID.IndexColumnID(leftIndex, i)
+		rightColID := tabID.IndexColumnID(rightIndex, j)
 		i++
 		j++
 
@@ -2084,7 +2084,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 	index cat.Index, tabID opt.TableID, filters memo.FiltersExpr,
 ) (fixedCols opt.ColList, vals memo.ScalarListExpr, typs []*types.T) {
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
-		colID := tabID.ColumnID(index.Column(i).Ordinal)
+		colID := tabID.IndexColumnID(index, i)
 		val := memo.ExtractValueForConstColumn(filters, c.e.mem, c.e.evalCtx, colID)
 		if val == nil {
 			break
@@ -2133,7 +2133,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// don't generate any if some system columns are requested.
 	foundSystemCol := false
 	scanPrivate.Cols.ForEach(func(colID opt.ColumnID) {
-		if cat.IsSystemColumn(tab, scanPrivate.Table.ColumnOrdinal(colID)) {
+		if tab.Column(scanPrivate.Table.ColumnOrdinal(colID)).Kind() == cat.System {
 			foundSystemCol = true
 		}
 	})
@@ -2234,7 +2234,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
 			pkColsFound := true
 			for i := range pkCols {
-				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+				pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
 
 				if _, ok := leftEqCols.Find(pkCols[i]); !ok {
 					pkColsFound = false
@@ -2348,7 +2348,7 @@ func (c *CustomFuncs) indexConstrainedCols(
 ) opt.ColSet {
 	var constrained opt.ColSet
 	for i, n := 0, idx.ColumnCount(); i < n; i++ {
-		col := tab.ColumnID(idx.Column(i).Ordinal)
+		col := tab.IndexColumnID(idx, i)
 		if allFixedCols.Contains(col) {
 			constrained.Add(col)
 		} else {
@@ -2453,7 +2453,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		zigzagJoin.LeftEqCols = make(opt.ColList, eqColLen)
 		zigzagJoin.RightEqCols = make(opt.ColList, eqColLen)
 		for i := minPrefix; i < iter.Index().ColumnCount(); i++ {
-			colID := scanPrivate.Table.ColumnID(iter.Index().Column(i).Ordinal)
+			colID := scanPrivate.Table.IndexColumnID(iter.Index(), i)
 			zigzagJoin.LeftEqCols[i-minPrefix] = colID
 			zigzagJoin.RightEqCols[i-minPrefix] = colID
 		}
@@ -2465,7 +2465,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// it makes little sense.
 		zigzagCols := iter.IndexColumns()
 		for i, cnt := 0, iter.Index().KeyColumnCount(); i < cnt; i++ {
-			colID := scanPrivate.Table.ColumnID(iter.Index().Column(i).Ordinal)
+			colID := scanPrivate.Table.IndexColumnID(iter.Index(), i)
 			zigzagCols.Remove(colID)
 		}
 
@@ -2473,7 +2473,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		pkIndex := tab.Index(cat.PrimaryIndex)
 		pkCols := make(opt.ColList, pkIndex.KeyColumnCount())
 		for i := range pkCols {
-			pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
+			pkCols[i] = scanPrivate.Table.IndexColumnID(pkIndex, i)
 			// Ensure primary key columns are always retrieved from the zigzag
 			// join.
 			zigzagCols.Add(pkCols[i])
@@ -2597,7 +2597,7 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	primaryIndex := md.Table(indexPrivate.Table).Index(cat.PrimaryIndex)
 	lookupCols := make(opt.ColList, primaryIndex.KeyColumnCount())
 	for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-		lookupCols[i] = indexPrivate.Table.ColumnID(primaryIndex.Column(i).Ordinal)
+		lookupCols[i] = indexPrivate.Table.IndexColumnID(primaryIndex, i)
 	}
 
 	return &memo.LookupJoinPrivate{
@@ -2984,7 +2984,7 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(sp *memo.ScanPrivate, cols 
 		// intersect with the index's key columns.
 		index := iter.Index()
 		for i, n := 0, index.KeyColumnCount(); i < n; i++ {
-			ord := index.Column(i).Ordinal
+			ord := index.Column(i).Ordinal()
 			if i == 0 && index.IsInverted() {
 				ord = index.Column(i).InvertedSourceColumnOrdinal()
 			}

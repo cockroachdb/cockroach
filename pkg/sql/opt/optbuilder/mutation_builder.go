@@ -305,7 +305,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		// key columns.
 		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal]
+			pkCol := mb.outScope.cols[primaryIndex.Column(i).Ordinal()]
 
 			// If the primary key column is hidden, then we don't need to use it
 			// for the distinct on.
@@ -398,7 +398,7 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 		// add it as a target column.
 		if ord := findPublicTableColumnByName(mb.tab, name); ord != -1 {
 			// System columns are invalid target columns.
-			if cat.IsSystemColumn(mb.tab, ord) {
+			if mb.tab.Column(ord).Kind() == cat.System {
 				panic(pgerror.Newf(pgcode.InvalidColumnReference, "cannot modify system column %q", name))
 			}
 			mb.addTargetCol(ord)
@@ -415,7 +415,7 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	tabCol := mb.tab.Column(ord)
 
 	// Don't allow targeting of mutation columns.
-	if cat.IsMutationColumn(mb.tab, ord) {
+	if tabCol.IsMutation() {
 		panic(makeBackfillError(tabCol.ColName()))
 	}
 
@@ -547,7 +547,8 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 	var projectionsScope *scope
 
 	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		kind := mb.tab.ColumnKind(i)
+		tabCol := mb.tab.Column(i)
+		kind := tabCol.Kind()
 		// Skip delete-only mutation columns, since they are ignored by all
 		// mutation operators that synthesize columns.
 		if kind == cat.DeleteOnly {
@@ -574,7 +575,6 @@ func (mb *mutationBuilder) addSynthesizedCols(colIDs opt.ColList, addCol func(co
 			projectionsScope.appendColumnsFromScope(mb.outScope)
 		}
 		tabColID := mb.tabID.ColumnID(i)
-		tabCol := mb.tab.Column(i)
 		expr := mb.parseDefaultOrComputedExpr(tabColID)
 		texpr := mb.outScope.resolveAndRequireType(expr, tabCol.DatumType())
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
@@ -644,7 +644,17 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 
 		// Check whether the target column's type may require rounding of the
 		// input value.
-		props, overload := findRoundingFunction(col.DatumType(), col.ColTypePrecision())
+		colType := col.DatumType()
+		precision, width := colType.Precision(), colType.Width()
+		if colType.Family() == types.ArrayFamily {
+			innerType := colType.ArrayContents()
+			if innerType.Family() == types.ArrayFamily {
+				panic(errors.AssertionFailedf("column type should never be a nested array"))
+			}
+			precision, width = innerType.Precision(), innerType.Width()
+		}
+
+		props, overload := findRoundingFunction(colType, precision)
 		if props == nil {
 			continue
 		}
@@ -661,7 +671,7 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 			Overload:   overload,
 		}
 		variable := mb.b.factory.ConstructVariable(id)
-		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(col.ColTypeWidth())), types.Int)
+		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(width)), types.Int)
 		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
 
 		// Lazily create new scope and update the scope column to be rounded.
@@ -695,7 +705,9 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.ColList, roundComputedC
 //
 // NOTE: CRDB does not allow nested array storage types, so only one level of
 // array nesting needs to be checked.
-func findRoundingFunction(typ *types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
+func findRoundingFunction(
+	typ *types.T, precision int32,
+) (*tree.FunctionProperties, *tree.Overload) {
 	if precision == 0 {
 		// Unlimited precision decimal target type never needs rounding.
 		return nil, nil
@@ -854,7 +866,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	if needResults {
 		private.ReturnCols = make(opt.ColList, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			if mb.tab.ColumnKind(i) != cat.Ordinary {
+			if mb.tab.Column(i).Kind() != cat.Ordinary {
 				// Only non-mutation and non-system columns are output columns.
 				continue
 			}
@@ -979,19 +991,16 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 		exprStr = tabCol.ComputedExprStr()
 	case tabCol.HasDefault():
 		exprStr = tabCol.DefaultExprStr()
-	case tabCol.IsNullable():
-		return tree.DNull
-	default:
+	case tabCol.IsMutation() && !tabCol.IsNullable():
 		// Synthesize default value for NOT NULL mutation column so that it can be
 		// set when in the write-only state. This is only used when no other value
 		// is possible (no default value available, NULL not allowed).
-		if cat.IsMutationColumn(mb.tab, ord) {
-			datum, err := tree.NewDefaultDatum(mb.b.evalCtx, tabCol.DatumType())
-			if err != nil {
-				panic(err)
-			}
-			return datum
+		datum, err := tree.NewDefaultDatum(mb.b.evalCtx, tabCol.DatumType())
+		if err != nil {
+			panic(err)
 		}
+		return datum
+	default:
 		return tree.DNull
 	}
 
@@ -1010,7 +1019,7 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 func getIndexLaxKeyOrdinals(index cat.Index) util.FastIntSet {
 	var keyOrds util.FastIntSet
 	for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
-		keyOrds.Add(index.Column(i).Ordinal)
+		keyOrds.Add(index.Column(i).Ordinal())
 	}
 	return keyOrds
 }
@@ -1022,7 +1031,7 @@ func findNotNullIndexCol(index cat.Index) int {
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		indexCol := index.Column(i)
 		if !indexCol.IsNullable() {
-			return indexCol.Ordinal
+			return indexCol.Ordinal()
 		}
 	}
 	panic(errors.AssertionFailedf("should have found not null column in index"))
@@ -1048,7 +1057,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 // be different (eg. TEXT and VARCHAR will fit the same scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
+func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 	if typ.Equivalent(col.DatumType()) {
 		return
 	}

@@ -1010,11 +1010,11 @@ func (b *Builder) tryBuildInterleavedJoin(join *memo.MergeJoinExpr) (_ execPlan,
 		return execPlan{}, false, nil
 	}
 	for i := range join.LeftEq {
-		if join.LeftEq[i].ID() != leftScan.Table.ColumnID(leftIdx.Column(i).Ordinal) {
+		if join.LeftEq[i].ID() != leftScan.Table.ColumnID(leftIdx.Column(i).Ordinal()) {
 			// Condition 5 is not satisfied.
 			return execPlan{}, false, nil
 		}
-		if join.RightEq[i].ID() != rightScan.Table.ColumnID(rightIdx.Column(i).Ordinal) {
+		if join.RightEq[i].ID() != rightScan.Table.ColumnID(rightIdx.Column(i).Ordinal()) {
 			// Condition 5 is not satisfied.
 			return execPlan{}, false, nil
 		}
@@ -1487,7 +1487,7 @@ func (b *Builder) buildIndexJoin(join *memo.IndexJoinExpr) (execPlan, error) {
 	pri := tab.Index(cat.PrimaryIndex)
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
-		keyCols[i] = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal))
+		keyCols[i] = input.getNodeColumnOrdinal(join.Table.ColumnID(pri.Column(i).Ordinal()))
 	}
 
 	cols := join.Cols

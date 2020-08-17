@@ -262,6 +262,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	}
 	var invKeys [][]byte
 	invRow := sqlbase.EncDatumRow{sqlbase.EncDatum{}}
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
 
 	for {
 		row, meta := s.input.Next()
@@ -317,10 +319,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					if wait > maxIdleSleepTime {
 						wait = maxIdleSleepTime
 					}
-					timer := time.NewTimer(wait)
-					defer timer.Stop()
+					timer.Reset(wait)
 					select {
 					case <-timer.C:
+						timer.Read = true
 						break
 					case <-s.flowCtx.Stopper().ShouldStop():
 						break

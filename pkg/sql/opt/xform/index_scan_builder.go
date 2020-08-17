@@ -63,7 +63,7 @@ func (b *indexScanBuilder) primaryKeyCols() opt.ColSet {
 	if b.pkCols.Empty() {
 		primaryIndex := b.c.e.mem.Metadata().Table(b.tabID).Index(cat.PrimaryIndex)
 		for i, cnt := 0, primaryIndex.KeyColumnCount(); i < cnt; i++ {
-			b.pkCols.Add(b.tabID.ColumnID(primaryIndex.Column(i).Ordinal))
+			b.pkCols.Add(b.tabID.IndexColumnID(primaryIndex, i))
 		}
 	}
 	return b.pkCols

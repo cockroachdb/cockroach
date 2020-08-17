@@ -594,10 +594,10 @@ func (b *Builder) tryBuildDeleteRangeOnInterleaving(
 				return execPlan{}, false, nil
 			}
 			for i := 0; i < numCols; i++ {
-				if fk.OriginColumnOrdinal(child, i) != childIdx.Column(i).Ordinal {
+				if fk.OriginColumnOrdinal(child, i) != childIdx.Column(i).Ordinal() {
 					return execPlan{}, false, nil
 				}
-				if fk.ReferencedColumnOrdinal(parent, i) != parentIdx.Column(i).Ordinal {
+				if fk.ReferencedColumnOrdinal(parent, i) != parentIdx.Column(i).Ordinal() {
 					return execPlan{}, false, nil
 				}
 			}
@@ -722,7 +722,7 @@ func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
 		colID := private.Table.ColumnID(i)
 		// System columns should not be included in mutations.
-		if outCols.Contains(colID) && !cat.IsSystemColumn(tab, i) {
+		if outCols.Contains(colID) && tab.Column(i).Kind() != cat.System {
 			colMap.Set(int(colID), ord)
 			ord++
 		}
