@@ -1296,16 +1296,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
 
-				if _, hasPut := ba.GetArg(roachpb.Put); hasPut {
-					if _, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest); !ok {
-						t.Fatalf("expected Put")
-					}
-					union := &br.Responses[0] // avoid operating on copy
-					union.MustSetInner(&roachpb.PutResponse{})
-					if ba.Txn != nil && br.Txn == nil {
-						br.Txn.Status = roachpb.PENDING
-					}
-				} else if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
+				if et, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 					if et.(*roachpb.EndTxnRequest).Commit {
 						commit.Store(true)
 						if test.errFn != nil {
@@ -1314,8 +1305,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
 					}
 					abort.Store(true)
-				} else {
-					t.Fatalf("unexpected batch: %s", ba)
 				}
 				return br, nil
 			}
