@@ -12,12 +12,63 @@ package row
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+// reseedRandEveryN is the number of calls before reseeding happens.
+// TODO (anzoteh96): setting reseedRandEveryN presents the tradeoff
+// between the frequency of re-seeding and the number of calls to
+// Float64() needed upon every resume. Therefore it will be useful to
+// tune this parameter.
+const reseedRandEveryN = 1000
+
+type importRand struct {
+	*rand.Rand
+	pos int64
+}
+
+func newImportRand(pos int64) *importRand {
+	adjPos := (pos / reseedRandEveryN) * reseedRandEveryN
+	rnd := rand.New(rand.NewSource(adjPos))
+	for i := int(pos % reseedRandEveryN); i > 0; i-- {
+		_ = rnd.Float64()
+	}
+	return &importRand{rnd, pos}
+}
+
+func (r *importRand) advancePos() {
+	r.pos++
+	if r.pos%reseedRandEveryN == 0 {
+		// Time to reseed.
+		r.Rand = rand.New(rand.NewSource(r.pos))
+	}
+}
+
+func (r *importRand) Float64() float64 {
+	randNum := r.Rand.Float64()
+	r.advancePos()
+	return randNum
+}
+
+func (r *importRand) Int63() int64 {
+	randNum := r.Rand.Int63()
+	r.advancePos()
+	return randNum
+}
+
+func getSeedForImportRand(rowID int64, sourceID int32, numInstances int) int64 {
+	// We expect r.pos to increment by numInstances for each row.
+	// Therefore, assuming that rowID increments by 1 for every row,
+	// we will initialize the position as rowID * numInstances + sourceID << rowIDBits.
+	rowIDWithMultiplier := int64(numInstances) * rowID
+	return (int64(sourceID) << rowIDBits) ^ rowIDWithMultiplier
+}
 
 // For some functions (specifically the volatile ones), we do
 // not want to use the provided builtin. Instead, we opt for
@@ -51,6 +102,8 @@ type cellInfoAnnotation struct {
 	rowID               int64
 	uniqueRowIDInstance int
 	uniqueRowIDTotal    int
+	randSource          *importRand
+	randInstancePerRow  int
 }
 
 func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
@@ -108,6 +161,27 @@ func importUniqueRowID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 	return tree.NewDInt(tree.DInt(avoidCollisionsWithSQLsIDs | returnIndex)), nil
 }
 
+func importRandom(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	if c.randSource == nil {
+		c.randSource = newImportRand(getSeedForImportRand(
+			c.rowID, c.sourceID, c.randInstancePerRow))
+	}
+	return tree.NewDFloat(tree.DFloat(c.randSource.Float64())), nil
+}
+
+func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	c := getCellInfoAnnotation(evalCtx.Annotations)
+	if c.randSource == nil {
+		c.randSource = newImportRand(getSeedForImportRand(
+			c.rowID, c.sourceID, c.randInstancePerRow))
+	}
+	gen := c.randSource.Int63()
+	id := uuid.MakeV4()
+	id.DeterministicV4(uint64(gen), uint64(1<<63))
+	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
+}
+
 // Besides overriding, there are also counters that we want to keep track
 // of as we walk through the expressions in a row (at datumRowConverter creation
 // time). This will be handled by the visitorSideEffect field: it will be
@@ -147,6 +221,37 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 				ReturnType: tree.FixedReturnType(types.Int),
 				Fn:         importUniqueRowID,
 				Info:       "Returns a unique rowid based on row position and time",
+				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"random": {
+		visitorSideEffect: func(annot *tree.Annotations) {
+			getCellInfoAnnotation(annot).randInstancePerRow++
+		},
+		override: makeBuiltinOverride(
+			tree.FunDefs["random"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.Float),
+				Fn:         importRandom,
+				Info:       "Returns a random number between 0 and 1 based on row position and time.",
+				Volatility: tree.VolatilityVolatile,
+			},
+		),
+	},
+	"gen_random_uuid": {
+		visitorSideEffect: func(annot *tree.Annotations) {
+			getCellInfoAnnotation(annot).randInstancePerRow++
+		},
+		override: makeBuiltinOverride(
+			tree.FunDefs["gen_random_uuid"],
+			tree.Overload{
+				Types:      tree.ArgTypes{},
+				ReturnType: tree.FixedReturnType(types.Uuid),
+				Fn:         importGenUUID,
+				Info: "Generates a random UUID based on row position and time, " +
+					"and returns it as a value of UUID type.",
 				Volatility: tree.VolatilityVolatile,
 			},
 		),
