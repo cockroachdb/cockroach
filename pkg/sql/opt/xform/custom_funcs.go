@@ -1927,6 +1927,16 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		if scanPrivate.Flags.NoIndexJoin {
 			continue
 		}
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
+			// We cannot use a non-covering index for semi and anti join. Note that
+			// since the semi/anti join doesn't pass through any columns, "non
+			// covering" here means that not all columns in the ON condition are
+			// available.
+			//
+			// TODO(rytaft): We could create a semi/anti join on top of an inner/left
+			//  join if we wrap it with a DISTINCT ON the key of the left side.
+			continue
+		}
 
 		if pkCols == nil {
 			tab := c.e.mem.Metadata().Table(scanPrivate.Table)

@@ -3412,6 +3412,51 @@ project
       └── filters
            └── st_covers(c.geom:10, n.geom:16) OR (name:15 LIKE 'Upper%') [outer=(10,15,16), immutable]
 
+# We don't yet support inverted joins with semi- or anti-joins.
+opt expect=GenerateInvertedJoins
+SELECT *
+FROM nyc_census_blocks AS c
+WHERE EXISTS (
+  SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+)
+----
+semi-join (cross)
+ ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-10)
+ ├── scan c
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-10)
+ ├── scan n
+ │    ├── columns: n.geom:16
+ │    └── flags: force-index=nyc_neighborhoods_geo_idx
+ └── filters
+      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT *
+FROM nyc_census_blocks AS c
+WHERE NOT EXISTS (
+  SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
+)
+----
+anti-join (cross)
+ ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-10)
+ ├── scan c
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-10)
+ ├── scan n
+ │    ├── columns: n.geom:16
+ │    └── flags: force-index=nyc_neighborhoods_geo_idx
+ └── filters
+      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+
 # --------------------------------------------------
 # GenerateZigZagJoins
 # --------------------------------------------------
