@@ -3400,6 +3400,14 @@ func BenchmarkRandomSeeding(b *testing.B) {
 // BenchmarkImportDefault/default-constant-function-8     	      14	  85936498 ns/op
 // BenchmarkImportDefault/default-now-8                   	      14	  81087965 ns/op
 // BenchmarkImportDefault/default-rowid-8                 	      13	  81303242 ns/op
+
+// BenchmarkImportDefault/no-default-expression-8         	      14	  77496270 ns/op
+// BenchmarkImportDefault/default-but-targeted-8          	      15	  72295152 ns/op
+// BenchmarkImportDefault/default-constant-literal-8      	      14	  72798783 ns/op
+// BenchmarkImportDefault/default-constant-function-8     	      14	  74197137 ns/op
+// BenchmarkImportDefault/default-now-8                   	      13	  81855587 ns/op
+// BenchmarkImportDefault/default-rowid-8                 	      13	  82149503 ns/op
+// BenchmarkImportDefault/random-8                        	      14	  83986288 ns/op
 func BenchmarkImportDefault(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -3463,6 +3471,12 @@ func BenchmarkImportDefault(b *testing.B) {
 		{
 			name:       "default-rowid",
 			create:     "a INT, b STRING, c INT DEFAULT unique_rowid()",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "random",
+			create:     "a INT, b STRING, c FLOAT DEFAULT random()",
 			targetCols: "a, b",
 			format:     "CSV",
 		},
