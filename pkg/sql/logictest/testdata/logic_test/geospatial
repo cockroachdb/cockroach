@@ -4265,3 +4265,25 @@ LINESTRING (10 10, -1 3)
 LINESTRING (0 0, 1 1, 10 10)
 LINESTRING (0 0, 1 1, 2 2, 10 10)
 LINESTRING (10 10, 1 1, 2 2, 3 3)
+
+subtest ST_PointFromGeoHash
+query T
+SELECT ST_AsText(ST_PointFromGeoHash('s000000000000000'))
+----
+POINT (0 0)
+
+query T
+SELECT ST_AsText(ST_PointFromGeoHash('kkqnpkue9ktbpe5'))
+----
+POINT (20.012345 -20.012345)
+
+query T
+SELECT ST_AsText(ST_PointFromGeoHash('w000000000000000',16))
+----
+POINT (90 0)
+
+statement error pq: st_pointfromgeohash\(\): geohash decode '----': invalid character at index 0
+SELECT ST_AsText(ST_PointFromGeoHash('----'));
+
+statement error pq: st_pointfromgeohash\(\): Length of geohash must be greater than 0
+SELECT ST_AsText(ST_PointFromGeoHash(''));
