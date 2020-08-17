@@ -11,7 +11,6 @@
 package batcheval
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -56,10 +55,12 @@ func QueryTxn(
 	}
 	if h.Timestamp.Less(args.Txn.WriteTimestamp) {
 		// This condition must hold for the timestamp cache access to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.WriteTimestamp)
+		return result.Result{}, errors.Errorf("QueryTxn request timestamp %s less than txn timestamp %s",
+			h.Timestamp, args.Txn.WriteTimestamp)
 	}
-	if !bytes.Equal(args.Key, args.Txn.Key) {
-		return result.Result{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
+	if !args.Key.Equal(args.Txn.Key) {
+		return result.Result{}, errors.Errorf("QueryTxn request key %s does not match txn key %s",
+			args.Key, args.Txn.Key)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
