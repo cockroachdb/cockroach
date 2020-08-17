@@ -779,6 +779,11 @@ func (r *Replica) AdminMerge(
 	// have to use our own retry loop.
 	for {
 		txn := kv.NewTxn(ctx, r.store.DB(), r.NodeID())
+		if r.store.TestingKnobs().MergeRangesAtMaxPriority {
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return reply, roachpb.NewErrorf("error while setting merge txn priority: %s", err)
+			}
+		}
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)

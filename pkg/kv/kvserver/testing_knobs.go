@@ -244,6 +244,9 @@ type StoreTestingKnobs struct {
 	// RangeFeedPushTxnsAge overrides the default value for
 	// rangefeed.Config.PushTxnsAge.
 	RangeFeedPushTxnsAge time.Duration
+	// MergeRangesAtMaxPriority causes range merge transactions to be executed at
+	// `MaxUserPriority` in order to prevent it from retrying.
+	MergeRangesAtMaxPriority bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
