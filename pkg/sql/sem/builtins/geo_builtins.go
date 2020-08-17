@@ -1313,6 +1313,56 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 	),
 
 	//
+	// Aggregates.
+	//
+
+	"st_makeline": makeBuiltin(
+		tree.FunctionProperties{
+			Class:        tree.ContainsAggregateClass,
+			NullableArgs: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.DNull, nil
+				}
+				agg := &stMakeLineAgg{}
+				err := agg.Add(ctx.Context, args[0])
+				if err != nil {
+					return nil, err
+				}
+				err = agg.Add(ctx.Context, args[1])
+				if err != nil {
+					return nil, err
+				}
+				return agg.Result()
+			},
+			Info: infoBuilder{
+				info: "Forms a LineString from two Points, MultiPoints or LineStrings. Other shapes will be ignored.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Geometry,
+			func(
+				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+			) tree.AggregateFunc {
+				return &stMakeLineAgg{}
+			},
+			infoBuilder{
+				info: "Forms a LineString from Points, MultiPoints or LineStrings. Other shapes will be ignored.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
+
+	//
 	// Unary functions.
 	//
 

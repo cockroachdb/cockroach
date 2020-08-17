@@ -2185,7 +2185,6 @@ CREATE TABLE pg_catalog.pg_proc (
 						continue
 					}
 					props, overloads := builtins.GetBuiltinProperties(name)
-					isAggregate := props.Class == tree.AggregateClass
 					isWindow := props.Class == tree.WindowClass
 					for _, builtin := range overloads {
 						dName := tree.NewDName(name)
@@ -2252,36 +2251,36 @@ CREATE TABLE pg_catalog.pg_proc (
 						provolatile, proleakproof := builtin.Volatility.ToPostgres()
 
 						err := addRow(
-							h.BuiltinOid(name, &builtin),             // oid
-							dName,                                    // proname
-							nspOid,                                   // pronamespace
-							tree.DNull,                               // proowner
-							oidZero,                                  // prolang
-							tree.DNull,                               // procost
-							tree.DNull,                               // prorows
-							variadicType,                             // provariadic
-							tree.DNull,                               // protransform
-							tree.MakeDBool(tree.DBool(isAggregate)),  // proisagg
-							tree.MakeDBool(tree.DBool(isWindow)),     // proiswindow
-							tree.DBoolFalse,                          // prosecdef
-							tree.MakeDBool(tree.DBool(proleakproof)), // proleakproof
-							tree.DBoolFalse,                          // proisstrict
-							tree.MakeDBool(tree.DBool(isRetSet)),     // proretset
-							tree.NewDString(provolatile),             // provolatile
-							tree.DNull,                               // proparallel
-							tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
-							tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
-							retType,                                         // prorettype
-							tree.NewDOidVectorFromDArray(dArgTypes),         // proargtypes
-							tree.DNull,                                      // proallargtypes
-							argmodes,                                        // proargmodes
-							tree.DNull,                                      // proargnames
-							tree.DNull,                                      // proargdefaults
-							tree.DNull,                                      // protrftypes
-							dSrc,                                            // prosrc
-							tree.DNull,                                      // probin
-							tree.DNull,                                      // proconfig
-							tree.DNull,                                      // proacl
+							h.BuiltinOid(name, &builtin), // oid
+							dName,                        // proname
+							nspOid,                       // pronamespace
+							tree.DNull,                   // proowner
+							oidZero,                      // prolang
+							tree.DNull,                   // procost
+							tree.DNull,                   // prorows
+							variadicType,                 // provariadic
+							tree.DNull,                   // protransform
+							tree.MakeDBool(tree.DBool(builtin.AggregateFunc != nil)), // proisagg
+							tree.MakeDBool(tree.DBool(isWindow)),                     // proiswindow
+							tree.DBoolFalse,                                          // prosecdef
+							tree.MakeDBool(tree.DBool(proleakproof)),                 // proleakproof
+							tree.DBoolFalse,                                          // proisstrict
+							tree.MakeDBool(tree.DBool(isRetSet)),                     // proretset
+							tree.NewDString(provolatile),                             // provolatile
+							tree.DNull,                                               // proparallel
+							tree.NewDInt(tree.DInt(builtin.Types.Length())),          // pronargs
+							tree.NewDInt(tree.DInt(0)),                               // pronargdefaults
+							retType,                                                  // prorettype
+							tree.NewDOidVectorFromDArray(dArgTypes),                  // proargtypes
+							tree.DNull,                                               // proallargtypes
+							argmodes,                                                 // proargmodes
+							tree.DNull,                                               // proargnames
+							tree.DNull,                                               // proargdefaults
+							tree.DNull,                                               // protrftypes
+							dSrc,                                                     // prosrc
+							tree.DNull,                                               // probin
+							tree.DNull,                                               // proconfig
+							tree.DNull,                                               // proacl
 						)
 						if err != nil {
 							return err

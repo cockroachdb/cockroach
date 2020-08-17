@@ -915,8 +915,12 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			break
 		}
 
-		if isAggregate(def) && t.WindowDef == nil {
-			expr = s.replaceAggregate(t, def)
+		if (isContainsAggregate(def) || isAggregate(def)) && t.WindowDef == nil {
+			if replacedExpr, ok := s.replaceAggregate(t, def); ok {
+				expr = replacedExpr
+			} else if isAggregate(def) {
+				panic(errors.AssertionFailedf("expected %s to be replaced with an aggregate", def.Name))
+			}
 			break
 		}
 
@@ -1039,7 +1043,8 @@ func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefiniti
 // replaceAggregate returns an aggregateInfo that can be used to replace a raw
 // aggregate function. When an aggregateInfo is encountered during the build
 // process, it is replaced with a reference to the column returned by the
-// aggregation.
+// aggregation. A bool is also attached to indicate whether an aggregate
+// function was resolved.
 //
 // replaceAggregate also stores the aggregateInfo in the aggregation scope for
 // this aggregate, using the aggOutScope.groupby.aggs slice. The aggregation
@@ -1047,7 +1052,7 @@ func isOrderedSetAggregate(def *tree.FunctionDefinition) (*tree.FunctionDefiniti
 // the variables referenced by the aggregate (or the current scope if the
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
-func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) (tree.Expr, bool) {
 	f, def = s.replaceCount(f, def)
 
 	// We need to save and restore the previous value of the field in
@@ -1084,12 +1089,6 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 	expr := fCopy.Walk(s)
 
-	// Update this scope to indicate that we are now inside an aggregate function
-	// so that any nested aggregates referencing this scope from a subquery will
-	// return an appropriate error. The returned tempScope will be used for
-	// building aggregate function arguments below in buildAggregateFunction.
-	tempScope := s.startAggFunc()
-
 	// We need to do this check here to ensure that we check the usage of special
 	// functions with the right error message.
 	if f.Filter != nil {
@@ -1110,10 +1109,21 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		panic(err)
 	}
 	if typedFunc == tree.DNull {
-		return tree.DNull
+		return tree.DNull, true
 	}
 
 	f = typedFunc.(*tree.FuncExpr)
+
+	// If we resolved the overload and found it to not contain an aggregate, exit early.
+	if f.ResolvedOverload() != nil && f.ResolvedOverload().AggregateFunc == nil {
+		return nil, false
+	}
+
+	// Update this scope to indicate that we are now inside an aggregate function
+	// so that any nested aggregates referencing this scope from a subquery will
+	// return an appropriate error. The returned tempScope will be used for
+	// building aggregate function arguments below in buildAggregateFunction.
+	tempScope := s.startAggFunc()
 
 	private := memo.FunctionPrivate{
 		Name:       def.Name,
@@ -1121,7 +1131,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 		Overload:   f.ResolvedOverload(),
 	}
 
-	return s.builder.buildAggregateFunction(f, &private, tempScope, s)
+	return s.builder.buildAggregateFunction(f, &private, tempScope, s), true
 }
 
 func (s *scope) lookupWindowDef(name tree.Name) *tree.WindowDef {

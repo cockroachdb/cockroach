@@ -4011,8 +4011,12 @@ SELECT ST_Intersects('abc'::string, 'POINT(1 0)'::string)
 statement error Unknown type: 'ABC'
 SELECT ST_Intersects('POINT(1 0)'::string, 'abc'::string)
 
-query T
-SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
+query ITT
+SELECT
+  COUNT(*),
+  ST_AsEWKT(ST_MakeLine(g::geometry)),
+  ST_AsEWKT(ST_MakeLine(g::geometry) FILTER (WHERE st_numpoints(g::geometry) > 0))
+FROM ( VALUES
   (NULL),
   ('POINT (30 10)'), -- value is used
   ('POINT EMPTY'),
@@ -4026,12 +4030,31 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
   ('GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 20 20, 10 40), POLYGON ((40 40, 20 45, 45 30, 40 40)))')
 ) t(g)
 ----
-LINESTRING (30 10, 30 10, 10 30, 40 40, 10 40, 40 30, 20 20, 30 10)
+11  LINESTRING (30 10, 30 10, 10 30, 40 40, 10 40, 40 30, 20 20, 30 10)  LINESTRING (30 10, 10 30, 40 40)
 
 query T
 SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
   (NULL)
 ) t(g)
+----
+NULL
+
+query T
+SELECT ST_AsEWKT(ST_MakeLine(ST_MakePoint(1, 2), ST_MakePoint(3, 4)))
+----
+LINESTRING (1 2, 3 4)
+
+query T
+SELECT ST_AsEWKT(ST_MakeLine(st_makeline(t.g::geometry), st_makepoint(1, 2))) FROM ( VALUES
+  (NULL),
+  ('POINT (30 10)'),
+  ('POINT(40 10)')
+) t(g)
+----
+LINESTRING (30 10, 40 10, 1 2)
+
+query T
+SELECT ST_AsEWKT(ST_MakeLine(ST_MakePoint(1, 2), NULL))
 ----
 NULL
 

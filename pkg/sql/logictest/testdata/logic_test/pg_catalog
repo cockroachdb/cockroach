@@ -2170,6 +2170,7 @@ query O colnames
 SELECT oid::REGPROC FROM pg_proc WHERE proisagg = true EXCEPT SELECT aggfnoid FROM pg_aggregate
 ----
 oid
+st_makeline
 
 # Check whether correct operator's oid is set for max and bool_or.
 query OTO colnames

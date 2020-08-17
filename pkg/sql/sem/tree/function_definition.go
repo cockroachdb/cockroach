@@ -122,6 +122,8 @@ const (
 	// should also include a definition for Overload.Fn, which is executed
 	// like a NormalClass function and returns a Datum.
 	SQLClass
+	// ContainsAggregateClass is a builtin which may contain an aggregate function.
+	ContainsAggregateClass
 )
 
 // Avoid vet warning about unused enum value.
