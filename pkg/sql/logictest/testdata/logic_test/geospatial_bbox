@@ -120,3 +120,18 @@ linestring from origin to 1 1  box from origin to 1 1  true   true   true   true
 point 0.5 0.5                  NULL                    NULL   NULL   NULL   NULL
 point 0.5 0.5                  box at origin           false  false  false  false
 point 0.5 0.5                  box from origin to 1 1  true   true   false  true
+
+subtest st_combinebbox
+
+query T
+SELECT st_combinebbox(b::box2d, g::geometry) FROM ( VALUES
+  (NULL, NULL),
+  ('box(-1 -1, 1 1)', NULL),
+  (NULL, st_makepoint(4, -5)),
+  ('box(-1 -1, 1 1)', st_makepoint(4, -5))
+) tbl(b, g)
+----
+NULL
+BOX(-1 -1,1 1)
+BOX(4 -5,4 -5)
+BOX(-1 -5,4 1)

@@ -31,14 +31,7 @@ type CartesianBoundingBox struct {
 // NewCartesianBoundingBox returns a properly initialized empty bounding box
 // for carestian plane types.
 func NewCartesianBoundingBox() *CartesianBoundingBox {
-	return &CartesianBoundingBox{
-		BoundingBox: geopb.BoundingBox{
-			LoX: math.MaxFloat64,
-			HiX: -math.MaxFloat64,
-			LoY: math.MaxFloat64,
-			HiY: -math.MaxFloat64,
-		},
-	}
+	return nil
 }
 
 // Repr is the string representation of the CartesianBoundingBox.
@@ -98,12 +91,58 @@ func (b *CartesianBoundingBox) Compare(o *CartesianBoundingBox) int {
 	return 0
 }
 
-// AddPoint adds a point to the BoundingBox coordinates.
-func (b *CartesianBoundingBox) AddPoint(x, y float64) {
-	b.LoX = math.Min(b.LoX, x)
-	b.HiX = math.Max(b.HiX, x)
-	b.LoY = math.Min(b.LoY, y)
-	b.HiY = math.Max(b.HiY, y)
+// withPoint includes a new point to the CartesianBoundingBox.
+// It will edit any bounding box in place.
+func (b *CartesianBoundingBox) withPoint(x, y float64) *CartesianBoundingBox {
+	if b == nil {
+		return &CartesianBoundingBox{
+			BoundingBox: geopb.BoundingBox{
+				LoX: x,
+				HiX: x,
+				LoY: y,
+				HiY: y,
+			},
+		}
+	}
+	b.BoundingBox = geopb.BoundingBox{
+		LoX: math.Min(b.LoX, x),
+		HiX: math.Max(b.HiX, x),
+		LoY: math.Min(b.LoY, y),
+		HiY: math.Max(b.HiY, y),
+	}
+	return b
+}
+
+// AddPoint adds a point to the CartesianBoundingBox coordinates.
+// Returns a copy of the CartesianBoundingBox.
+func (b *CartesianBoundingBox) AddPoint(x, y float64) *CartesianBoundingBox {
+	if b == nil {
+		return &CartesianBoundingBox{
+			BoundingBox: geopb.BoundingBox{
+				LoX: x,
+				HiX: x,
+				LoY: y,
+				HiY: y,
+			},
+		}
+	}
+	return &CartesianBoundingBox{
+		BoundingBox: geopb.BoundingBox{
+			LoX: math.Min(b.LoX, x),
+			HiX: math.Max(b.HiX, x),
+			LoY: math.Min(b.LoY, y),
+			HiY: math.Max(b.HiY, y),
+		},
+	}
+}
+
+// Combine combines two bounding boxes together.
+// Returns a copy of the CartesianBoundingBox.
+func (b *CartesianBoundingBox) Combine(o *CartesianBoundingBox) *CartesianBoundingBox {
+	if o == nil {
+		return b
+	}
+	return b.AddPoint(o.LoX, o.LoY).AddPoint(o.HiX, o.HiY)
 }
 
 // Buffer adds n units to each side of the bounding box.
@@ -188,13 +227,12 @@ func BoundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 			if shapeBBox == nil {
 				continue
 			}
-			bbox.AddPoint(shapeBBox.LoX, shapeBBox.LoY)
-			bbox.AddPoint(shapeBBox.HiX, shapeBBox.HiY)
+			bbox = bbox.withPoint(shapeBBox.LoX, shapeBBox.LoY).withPoint(shapeBBox.HiX, shapeBBox.HiY)
 		}
 	default:
 		flatCoords := g.FlatCoords()
 		for i := 0; i < len(flatCoords); i += g.Stride() {
-			bbox.AddPoint(flatCoords[i], flatCoords[i+1])
+			bbox = bbox.withPoint(flatCoords[i], flatCoords[i+1])
 		}
 	}
 	return bbox
