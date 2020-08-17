@@ -3561,6 +3561,36 @@ Bottom Left.`,
 	),
 
 	//
+	// BoundingBox
+	//
+
+	"st_combinebbox": makeBuiltin(
+		tree.FunctionProperties{NullableArgs: true},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull && args[1] == tree.DNull {
+					return tree.DNull, nil
+				}
+				if args[0] == tree.DNull {
+					return tree.NewDBox2D(tree.MustBeDGeometry(args[1]).CartesianBoundingBox()), nil
+				}
+				if args[1] == tree.DNull {
+					return args[0], nil
+				}
+				bbox := tree.MustBeDBox2D(args[0])
+				g := tree.MustBeDGeometry(args[1])
+				return tree.NewDBox2D(bbox.Combine(g.CartesianBoundingBox())), nil
+			},
+			Info: infoBuilder{
+				info: "Combines the current bounding box with the bounding box of the Geometry.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	//
 	// Schema changes
 	//
 	"addgeometrycolumn": makeBuiltin(
