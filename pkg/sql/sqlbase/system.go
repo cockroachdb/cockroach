@@ -34,7 +34,7 @@ func ShouldSplitAtDesc(rawDesc *roachpb.Value) bool {
 	}
 	switch t := desc.GetUnion().(type) {
 	case *descpb.Descriptor_Table:
-		if t.Table.IsView() {
+		if t.Table.IsView() && !t.Table.IsMaterializedView {
 			return false
 		}
 		return true
