@@ -1176,7 +1176,48 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
-
+	"st_pointfromgeohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := args[1].(*tree.DInt)
+				ret, err := geo.NewGeometryPointFromGeoHash(string(*g), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a Geometry point from a GeoHash string with supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := len(string(*g))
+				ret, err := geo.NewGeometryPointFromGeoHash(string(*g), p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a Geometry point from a GeoHash string with max precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_asgeojson": makeBuiltin(
 		defProps(),
 		tree.Overload{
