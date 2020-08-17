@@ -144,11 +144,14 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 			// Convert the metadata opt.ColumnID to its ordinal position in the table.
 			colOrdinal := colMeta.Table.ColumnOrdinal(col.ID)
 			// Use that ordinal position to retrieve the column's stable ID.
-			switch col := tab.Column(colOrdinal).(type) {
-			case *descpb.ColumnDescriptor:
-				resultCols[i].PGAttributeNum = col.GetPGAttributeNum()
-			default:
-				resultCols[i].PGAttributeNum = uint32(col.ColID())
+			var desc *descpb.ColumnDescriptor
+			if catTable, ok := tab.(optCatalogTableInterface); ok {
+				desc = catTable.getColDesc(colOrdinal)
+			}
+			if desc != nil {
+				resultCols[i].PGAttributeNum = desc.GetPGAttributeNum()
+			} else {
+				resultCols[i].PGAttributeNum = uint32(tab.Column(colOrdinal).ColID())
 			}
 		}
 	}

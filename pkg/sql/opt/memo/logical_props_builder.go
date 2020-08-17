@@ -1591,7 +1591,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		// If index has a separate lax key, add a lax key FD. Otherwise, add a
 		// strict key. See the comment for cat.Index.LaxKeyColumnCount.
 		for col := 0; col < index.LaxKeyColumnCount(); col++ {
-			ord := index.Column(col).Ordinal
+			ord := index.Column(col).Ordinal()
 			keyCols.Add(tabID.ColumnID(ord))
 		}
 		if index.LaxKeyColumnCount() < index.KeyColumnCount() {
@@ -1739,7 +1739,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 		// Include the key columns in the output columns.
 		index := md.Table(join.Table).Index(join.Index)
 		for i := range join.KeyCols {
-			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
 			relational.OutputCols.Add(indexColID)
 		}
 
@@ -1826,9 +1826,10 @@ func tableNotNullCols(md *opt.Metadata, tabID opt.TableID) opt.ColSet {
 
 	// Only iterate over non-mutation columns, since even non-null mutation
 	// columns can be null during backfill.
-	for i := 0; i < tab.ColumnCount(); i++ {
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		col := tab.Column(i)
 		// Non-null mutation columns can be null during backfill.
-		if !cat.IsMutationColumn(tab, i) && !tab.Column(i).IsNullable() {
+		if !col.IsMutation() && !col.IsNullable() {
 			cs.Add(tabID.ColumnID(i))
 		}
 	}
@@ -1879,7 +1880,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.KeyCols {
-			indexColID := join.Table.ColumnID(index.Column(i).Ordinal)
+			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
 			h.filterNotNullCols.Add(colID)
 			h.filterNotNullCols.Add(indexColID)
 			h.filtersFD.AddEquivalency(colID, indexColID)

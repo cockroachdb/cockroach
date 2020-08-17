@@ -11,20 +11,11 @@
 package descpb
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
-
-var _ cat.Column = &ColumnDescriptor{}
-
-// IsNullable is part of the cat.Column interface.
-func (desc *ColumnDescriptor) IsNullable() bool {
-	return desc.Nullable
-}
 
 // HasNullDefault checks that the column descriptor has a default of NULL.
 func (desc *ColumnDescriptor) HasNullDefault() bool {
@@ -39,76 +30,19 @@ func (desc *ColumnDescriptor) HasNullDefault() bool {
 	return defaultExpr == tree.DNull
 }
 
-// ColID is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColID() cat.StableID {
-	return cat.StableID(desc.ID)
-}
-
-// ColName is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColName() tree.Name {
-	return tree.Name(desc.Name)
-}
-
-// DatumType is part of the cat.Column interface.
-func (desc *ColumnDescriptor) DatumType() *types.T {
-	return desc.Type
-}
-
-// ColTypePrecision is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColTypePrecision() int {
-	if desc.Type.Family() == types.ArrayFamily {
-		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(desc.Type.ArrayContents().Precision())
-	}
-	return int(desc.Type.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColTypeWidth() int {
-	if desc.Type.Family() == types.ArrayFamily {
-		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(desc.Type.ArrayContents().Width())
-	}
-	return int(desc.Type.Width())
-}
-
-// ColTypeStr is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ColTypeStr() string {
-	return desc.Type.SQLString()
-}
-
-// IsHidden is part of the cat.Column interface.
-func (desc *ColumnDescriptor) IsHidden() bool {
-	return desc.Hidden
-}
-
-// HasDefault is part of the cat.Column interface.
+// HasDefault returns true if the column has a default value.
 func (desc *ColumnDescriptor) HasDefault() bool {
 	return desc.DefaultExpr != nil
 }
 
-// IsComputed is part of the cat.Column interface.
+// IsComputed returns true if this is a computed column.
 func (desc *ColumnDescriptor) IsComputed() bool {
 	return desc.ComputeExpr != nil
 }
 
-// DefaultExprStr is part of the cat.Column interface.
-func (desc *ColumnDescriptor) DefaultExprStr() string {
-	return *desc.DefaultExpr
-}
-
-// ComputedExprStr is part of the cat.Column interface.
-func (desc *ColumnDescriptor) ComputedExprStr() string {
-	return *desc.ComputeExpr
-}
-
-// InvertedSourceColumnOrdinal is part of the cat.Column interface.
-func (desc *ColumnDescriptor) InvertedSourceColumnOrdinal() int {
-	panic(errors.AssertionFailedf("not a virtual column"))
+// ColName returns the name of the column as a tree.Name.
+func (desc *ColumnDescriptor) ColName() tree.Name {
+	return tree.Name(desc.Name)
 }
 
 // CheckCanBeFKRef returns whether the given column is computed.

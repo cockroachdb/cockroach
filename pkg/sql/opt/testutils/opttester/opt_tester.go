@@ -1403,19 +1403,24 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 	// Create each of the columns and their estimated stats for the test catalog
 	// table.
-	columns := make([]*testcat.Column, outputCols.Len())
+	columns := make([]cat.Column, outputCols.Len())
 	jsonStats := make([]stats.JSONStatistic, outputCols.Len())
 	i := 0
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
 		colMeta := rel.Memo().Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
-		columns[i] = &testcat.Column{
-			Ordinal:  i,
-			Name:     colName,
-			Type:     colMeta.Type,
-			Nullable: !relProps.NotNullCols.Contains(col),
-		}
+		columns[i].InitNonVirtual(
+			i,
+			cat.StableID(i+1),
+			tree.Name(colName),
+			cat.Ordinary,
+			colMeta.Type,
+			!relProps.NotNullCols.Contains(col),
+			false, /* hidden */
+			nil,   /* defaultExpr */
+			nil,   /* computedExpr */
+		)
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)

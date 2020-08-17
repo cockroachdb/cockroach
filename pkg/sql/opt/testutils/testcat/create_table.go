@@ -98,14 +98,19 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	}
 
 	if !hasPrimaryIndex {
-		rowid := &Column{
-			Ordinal:                  tab.ColumnCount(),
-			Name:                     "rowid",
-			Type:                     types.Int,
-			Hidden:                   true,
-			DefaultExpr:              &uniqueRowIDString,
-			InvertedSourceColOrdinal: -1,
-		}
+		var rowid cat.Column
+		ordinal := len(tab.Columns)
+		rowid.InitNonVirtual(
+			ordinal,
+			cat.StableID(1+ordinal),
+			"rowid",
+			cat.Ordinary,
+			types.Int,
+			false,              /* nullable */
+			true,               /* hidden */
+			&uniqueRowIDString, /* defaultExpr */
+			nil,                /* computedExpr */
+		)
 		tab.Columns = append(tab.Columns, rowid)
 	}
 
@@ -120,15 +125,20 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	}
 
 	// Add the MVCC timestamp system column.
-	tab.Columns = append(tab.Columns, &Column{
-		Ordinal:                  len(tab.Columns),
-		Name:                     sqlbase.MVCCTimestampColumnName,
-		Type:                     sqlbase.MVCCTimestampColumnType,
-		Nullable:                 true,
-		Hidden:                   true,
-		Kind:                     cat.System,
-		InvertedSourceColOrdinal: -1,
-	})
+	var mvcc cat.Column
+	ordinal := len(tab.Columns)
+	mvcc.InitNonVirtual(
+		ordinal,
+		cat.StableID(1+ordinal),
+		sqlbase.MVCCTimestampColumnName,
+		cat.System,
+		sqlbase.MVCCTimestampColumnType,
+		true, /* nullable */
+		true, /* hidden */
+		nil,  /* defaultExpr */
+		nil,  /* computedExpr */
+	)
+	tab.Columns = append(tab.Columns, mvcc)
 
 	// Add the primary index.
 	if hasPrimaryIndex {
@@ -197,10 +207,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		tab.Families = []*Family{{FamName: "primary", Ordinal: 0, table: tab}}
 	}
 OuterLoop:
-	for colOrd, col := range tab.Columns {
+	for colOrd := range tab.Columns {
+		col := &tab.Columns[colOrd]
 		for _, fam := range tab.Families {
 			for _, famCol := range fam.Columns {
-				if col.Name == string(famCol.ColName()) {
+				if col.ColName() == famCol.ColName() {
 					continue OuterLoop
 				}
 			}
@@ -234,14 +245,20 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 	}
 
 	// Add the dummy PK column.
-	tab.Columns = []*Column{{
-		Ordinal:                  0,
-		Hidden:                   true,
-		Nullable:                 false,
-		Name:                     "crdb_internal_vtable_pk",
-		Type:                     types.Int,
-		InvertedSourceColOrdinal: -1,
-	}}
+	var pk cat.Column
+	pk.InitNonVirtual(
+		0, /* ordinal */
+		0, /* stableID */
+		"crdb_internal_vtable_pk",
+		cat.Ordinary,
+		types.Int,
+		false, /* nullable */
+		true,  /* hidden */
+		nil,   /* defaultExpr */
+		nil,   /* computedExpr */
+	)
+
+	tab.Columns = []cat.Column{pk}
 
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
@@ -251,12 +268,12 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 	}
 
 	tab.Families = []*Family{{FamName: "primary", Ordinal: 0, table: tab}}
-	for colOrd, col := range tab.Columns {
+	for colOrd := range tab.Columns {
 		tab.Families[0].Columns = append(tab.Families[0].Columns,
-			cat.FamilyColumn{Column: col, Ordinal: colOrd})
+			cat.FamilyColumn{Column: &tab.Columns[colOrd], Ordinal: colOrd})
 	}
 
-	tab.addPrimaryColumnIndex(tab.Columns[0].Name)
+	tab.addPrimaryColumnIndex(string(tab.Columns[0].ColName()))
 	return tab
 }
 
@@ -265,20 +282,26 @@ func (tc *Catalog) createVirtualTable(stmt *tree.CreateTable) *Table {
 // AS <query> syntax. In addition to the provided columns, CreateTableAs adds a
 // unique rowid column as the primary key. It returns a pointer to the new
 // table.
-func (tc *Catalog) CreateTableAs(name tree.TableName, columns []*Column) *Table {
+func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&name)
 
 	tab := &Table{TabID: tc.nextStableID(), TabName: name, Catalog: tc, Columns: columns}
 
-	rowid := &Column{
-		Ordinal:                  tab.ColumnCount(),
-		Name:                     "rowid",
-		Type:                     types.Int,
-		Hidden:                   true,
-		DefaultExpr:              &uniqueRowIDString,
-		InvertedSourceColOrdinal: -1,
-	}
+	var rowid cat.Column
+	ordinal := len(columns)
+	rowid.InitNonVirtual(
+		ordinal,
+		cat.StableID(1+ordinal),
+		"rowid",
+		cat.Ordinary,
+		types.Int,
+		false,              /* nullable */
+		true,               /* hidden */
+		&uniqueRowIDString, /* defaultExpr */
+		nil,                /* computedExpr */
+	)
+
 	tab.Columns = append(tab.Columns, rowid)
 	tab.addPrimaryColumnIndex("rowid")
 
@@ -338,7 +361,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			return false
 		}
 		for i := range cols {
-			if idx.Column(i).Ordinal != cols[i] {
+			if idx.Column(i).Ordinal() != cols[i] {
 				return false
 			}
 		}
@@ -399,35 +422,45 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 }
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
+	ordinal := len(tt.Columns)
 	nullable := !def.PrimaryKey.IsPrimaryKey && def.Nullable.Nullability != tree.NotNull
-	col := &Column{
-		Ordinal:                  tt.ColumnCount(),
-		Name:                     string(def.Name),
-		Type:                     tree.MustBeStaticallyKnownType(def.Type),
-		Nullable:                 nullable,
-		Kind:                     cat.Ordinary,
-		InvertedSourceColOrdinal: -1,
-	}
+	typ := tree.MustBeStaticallyKnownType(def.Type)
+
+	name := def.Name
+	kind := cat.Ordinary
 
 	// Look for name suffixes indicating this is a mutation column.
-	if name, ok := extractWriteOnlyColumn(def); ok {
-		col.Name = name
-		col.Kind = cat.WriteOnly
-	} else if name, ok := extractDeleteOnlyColumn(def); ok {
-		col.Name = name
-		col.Kind = cat.DeleteOnly
+	if n, ok := extractWriteOnlyColumn(def); ok {
+		name = n
+		kind = cat.WriteOnly
+	} else if n, ok := extractDeleteOnlyColumn(def); ok {
+		name = n
+		kind = cat.DeleteOnly
 	}
 
+	var defaultExpr, computedExpr *string
 	if def.DefaultExpr.Expr != nil {
 		s := serializeTableDefExpr(def.DefaultExpr.Expr)
-		col.DefaultExpr = &s
+		defaultExpr = &s
 	}
 
 	if def.Computed.Expr != nil {
 		s := serializeTableDefExpr(def.Computed.Expr)
-		col.ComputedExpr = &s
+		computedExpr = &s
 	}
 
+	var col cat.Column
+	col.InitNonVirtual(
+		ordinal,
+		cat.StableID(1+ordinal),
+		name,
+		kind,
+		typ,
+		nullable,
+		false, /* hidden */
+		defaultExpr,
+		computedExpr,
+	)
 	tt.Columns = append(tt.Columns, col)
 }
 
@@ -456,16 +489,37 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	for i, colDef := range def.Columns {
 		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, keyCol)
 
-		if typ == primaryIndex {
-			col.Nullable = false
+		if typ == primaryIndex && col.IsNullable() {
+			// Reinitialize the column to make it non-nullable.
+			// TODO(radu): this is very hacky
+			var defaultExpr, computedExpr *string
+			if col.HasDefault() {
+				e := col.DefaultExprStr()
+				defaultExpr = &e
+			}
+			if col.IsComputed() {
+				e := col.ComputedExprStr()
+				computedExpr = &e
+			}
+			col.InitNonVirtual(
+				col.Ordinal(),
+				col.ColID(),
+				col.ColName(),
+				col.Kind(),
+				col.DatumType(),
+				false, /* nullable */
+				col.IsHidden(),
+				defaultExpr,
+				computedExpr,
+			)
 		}
 
-		if col.Nullable {
+		if col.IsNullable() {
 			notNullIndex = false
 		}
 
 		if i == 0 && def.Inverted {
-			switch tt.Columns[col.InvertedSourceColOrdinal].Type.Family() {
+			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
 				idx.geoConfig = &geoindex.Config{
@@ -500,11 +554,11 @@ func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
 	if typ == primaryIndex {
 		var pkOrdinals util.FastIntSet
 		for _, c := range idx.Columns {
-			pkOrdinals.Add(c.Ordinal)
+			pkOrdinals.Add(c.Ordinal())
 		}
 		// Add the rest of the columns in the table.
 		for i, col := range tt.Columns {
-			if !pkOrdinals.Contains(i) && col.Kind != cat.Virtual {
+			if !pkOrdinals.Contains(i) && col.Kind() != cat.Virtual {
 				idx.addColumnByOrdinal(tt, i, tree.Ascending, nonKeyCol)
 			}
 		}
@@ -612,26 +666,26 @@ func (tt *Table) addFamily(def *tree.FamilyTableDef) {
 
 func (ti *Index) addColumn(
 	tt *Table, name string, direction tree.Direction, colType colType,
-) *Column {
+) *cat.Column {
 	ordinal := tt.FindOrdinal(name)
 	if ti.Inverted && len(ti.Columns) == 0 {
 		// First column of an inverted index is special: the index key does not
 		// contain values from the column itself, but contains inverted index
 		// entries derived from that column. Create a virtual column to be able to
 		// refer to it separately.
-		col := &Column{
-			Ordinal: len(tt.Columns),
-			Name:    name + "_inverted_key",
-			// TODO(radu,mjibson): update this when the corresponding type in the real
-			// catalog is fixed (see sql.newOptTable).
-			Type:                     tt.Columns[ordinal].DatumType(),
-			Hidden:                   true,
-			Nullable:                 false,
-			InvertedSourceColOrdinal: ordinal,
-			Kind:                     cat.Virtual,
-		}
+		var col cat.Column
+		// TODO(radu,mjibson): update this when the corresponding type in the real
+		// catalog is fixed (see sql.newOptTable).
+		typ := tt.Columns[ordinal].DatumType()
+		col.InitVirtual(
+			len(tt.Columns),
+			tree.Name(name+"_inverted_key"),
+			typ,
+			false,   /* nullable */
+			ordinal, /* invertedSourceColumnOrdinal */
+		)
 		tt.Columns = append(tt.Columns, col)
-		ordinal = col.Ordinal
+		ordinal = col.Ordinal()
 	}
 
 	return ti.addColumnByOrdinal(tt, ordinal, direction, colType)
@@ -639,11 +693,10 @@ func (ti *Index) addColumn(
 
 func (ti *Index) addColumnByOrdinal(
 	tt *Table, ord int, direction tree.Direction, colType colType,
-) *Column {
+) *cat.Column {
 	col := tt.Column(ord)
 	idxCol := cat.IndexColumn{
 		Column:     col,
-		Ordinal:    ord,
 		Descending: direction == tree.Descending,
 	}
 	ti.Columns = append(ti.Columns, idxCol)
@@ -660,7 +713,7 @@ func (ti *Index) addColumnByOrdinal(
 		ti.KeyCount++
 	}
 
-	return col.(*Column)
+	return col
 }
 
 func (tt *Table) addPrimaryColumnIndex(colName string) {
@@ -670,18 +723,18 @@ func (tt *Table) addPrimaryColumnIndex(colName string) {
 	tt.addIndex(&def, primaryIndex)
 }
 
-func extractWriteOnlyColumn(def *tree.ColumnTableDef) (name string, ok bool) {
+func extractWriteOnlyColumn(def *tree.ColumnTableDef) (name tree.Name, ok bool) {
 	if !strings.HasSuffix(string(def.Name), ":write-only") {
 		return "", false
 	}
-	return strings.TrimSuffix(string(def.Name), ":write-only"), true
+	return tree.Name(strings.TrimSuffix(string(def.Name), ":write-only")), true
 }
 
-func extractDeleteOnlyColumn(def *tree.ColumnTableDef) (name string, ok bool) {
+func extractDeleteOnlyColumn(def *tree.ColumnTableDef) (name tree.Name, ok bool) {
 	if !strings.HasSuffix(string(def.Name), ":delete-only") {
 		return "", false
 	}
-	return strings.TrimSuffix(string(def.Name), ":delete-only"), true
+	return tree.Name(strings.TrimSuffix(string(def.Name), ":delete-only")), true
 }
 
 func isMutationColumn(def *tree.ColumnTableDef) bool {
