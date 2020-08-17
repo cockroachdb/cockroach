@@ -1,5 +1,5 @@
 statement ok
-CREATE TABLE bbox_encoding_test(
+CREATE TABLE box2d_encoding_test(
   id int primary key,
   box_a box2d,
   orphan box2d,
@@ -8,12 +8,115 @@ CREATE TABLE bbox_encoding_test(
 )
 
 statement ok
-INSERT INTO bbox_encoding_test VALUES
+INSERT INTO box2d_encoding_test VALUES
   (1, 'BOX(1 2,3 4)', 'BOX(3 4,5 6)', array['BOX(-1 -2,-3 -4)']),
   (2, 'BOX(10.1 20.1,30.5 40.6)', 'BOX(30 40,50 60)', array['BOX(-1 -2,-3 -4)'::box2d, 'BOX(3 -4,5 -6)'::box2d])
 
 query ITTT
-SELECT * FROM bbox_encoding_test ORDER BY id ASC
+SELECT * FROM box2d_encoding_test ORDER BY id ASC
 ----
 1  BOX(1 2,3 4)              BOX(3 4,5 6)      {"BOX(-1 -2,-3 -4)"}
 2  BOX(10.1 20.1,30.5 40.6)  BOX(30 40,50 60)  {"BOX(-1 -2,-3 -4)","BOX(3 -4,5 -6)"}
+
+subtest comparison_ops
+
+statement ok
+CREATE TABLE geometry_tbl(
+  dsc string PRIMARY KEY,
+  g GEOMETRY
+)
+
+statement ok
+INSERT INTO geometry_tbl VALUES
+  ('NULL', NULL),
+  ('empty point', 'POINT EMPTY'),
+  ('point 0.5 0.5', 'POINT(0.5 0.5)'),
+  ('linestring from origin to 1 1', 'LINESTRING(0 0, 1 1)');
+
+statement ok
+CREATE TABLE box2d_tbl (
+  dsc string PRIMARY KEY,
+  b box2d
+)
+
+statement ok
+INSERT INTO box2d_tbl VALUES
+  ('NULL', NULL),
+  ('box at origin', 'box(0 0, 0 0)'),
+  ('box from origin to 1 1', 'box(0 0, 1 1)');
+
+query TTBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  a.g && b.g,
+  b.g && a.g,
+  a.g ~ b.g,
+  b.g ~ a.g
+FROM geometry_tbl a
+JOIN geometry_tbl b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+NULL                           NULL                           NULL   NULL   NULL   NULL
+NULL                           empty point                    NULL   NULL   NULL   NULL
+NULL                           linestring from origin to 1 1  NULL   NULL   NULL   NULL
+NULL                           point 0.5 0.5                  NULL   NULL   NULL   NULL
+empty point                    NULL                           NULL   NULL   NULL   NULL
+empty point                    empty point                    false  false  false  false
+empty point                    linestring from origin to 1 1  false  false  false  false
+empty point                    point 0.5 0.5                  false  false  false  false
+linestring from origin to 1 1  NULL                           NULL   NULL   NULL   NULL
+linestring from origin to 1 1  empty point                    false  false  false  false
+linestring from origin to 1 1  linestring from origin to 1 1  true   true   true   true
+linestring from origin to 1 1  point 0.5 0.5                  true   true   true   false
+point 0.5 0.5                  NULL                           NULL   NULL   NULL   NULL
+point 0.5 0.5                  empty point                    false  false  false  false
+point 0.5 0.5                  linestring from origin to 1 1  true   true   false  true
+point 0.5 0.5                  point 0.5 0.5                  true   true   true   true
+
+query TTBBBB
+SELECT
+  a.dsc,
+  b.dsc,
+  a.b && b.b,
+  b.b && a.b,
+  a.b ~ b.b,
+  b.b ~ a.b
+FROM box2d_tbl a
+JOIN box2d_tbl b ON (1=1)
+ORDER BY a.dsc, b.dsc
+----
+NULL                    NULL                    NULL  NULL  NULL   NULL
+NULL                    box at origin           NULL  NULL  NULL   NULL
+NULL                    box from origin to 1 1  NULL  NULL  NULL   NULL
+box at origin           NULL                    NULL  NULL  NULL   NULL
+box at origin           box at origin           true  true  true   true
+box at origin           box from origin to 1 1  true  true  false  true
+box from origin to 1 1  NULL                    NULL  NULL  NULL   NULL
+box from origin to 1 1  box at origin           true  true  true   false
+box from origin to 1 1  box from origin to 1 1  true  true  true   true
+
+query TTBBBB
+SELECT
+  geometry_tbl.dsc,
+  box2d_tbl.dsc,
+  geometry_tbl.g && box2d_tbl.b,
+  box2d_tbl.b && geometry_tbl.g,
+  geometry_tbl.g ~ box2d_tbl.b,
+  box2d_tbl.b ~ geometry_tbl.g
+FROM geometry_tbl
+JOIN box2d_tbl ON (1=1)
+ORDER BY geometry_tbl.dsc, box2d_tbl.dsc
+----
+NULL                           NULL                    NULL   NULL   NULL   NULL
+NULL                           box at origin           NULL   NULL   NULL   NULL
+NULL                           box from origin to 1 1  NULL   NULL   NULL   NULL
+empty point                    NULL                    NULL   NULL   NULL   NULL
+empty point                    box at origin           false  false  false  false
+empty point                    box from origin to 1 1  false  false  false  false
+linestring from origin to 1 1  NULL                    NULL   NULL   NULL   NULL
+linestring from origin to 1 1  box at origin           true   true   true   false
+linestring from origin to 1 1  box from origin to 1 1  true   true   true   true
+point 0.5 0.5                  NULL                    NULL   NULL   NULL   NULL
+point 0.5 0.5                  box at origin           false  false  false  false
+point 0.5 0.5                  box from origin to 1 1  true   true   false  true
