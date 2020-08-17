@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,7 +88,6 @@ type ParallelUnorderedSynchronizer struct {
 	// allows the ParallelUnorderedSynchronizer to wait only on internal
 	// goroutines.
 	internalWaitGroup *sync.WaitGroup
-	cancelFn          context.CancelFunc
 	batchCh           chan *unorderedSynchronizerMsg
 	errCh             chan error
 
@@ -155,7 +151,12 @@ func NewParallelUnorderedSynchronizer(
 		nextBatch:         make([]func(), len(inputs)),
 		externalWaitGroup: wg,
 		internalWaitGroup: &sync.WaitGroup{},
-		batchCh:           make(chan *unorderedSynchronizerMsg, len(inputs)),
+		// batchCh is a buffered channel in order to offer non-blocking writes to
+		// input goroutines. During normal operation, this channel will have at most
+		// len(inputs) messages. However, during DrainMeta, inputs might need to
+		// push an extra metadata message without blocking, hence the need to double
+		// the size of this channel.
+		batchCh: make(chan *unorderedSynchronizerMsg, len(inputs)*2),
 		// errCh is buffered so that writers do not block. If errCh is full, the
 		// input goroutines will not push an error and exit immediately, given that
 		// the Next goroutine will read an error and panic anyway.
@@ -187,19 +188,6 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
-	s.setState(parallelUnorderedSynchronizerStateRunning)
-	var (
-		cancelFn context.CancelFunc
-		// internalCancellation is an atomic that will be set to 1 if cancelFn is
-		// called (i.e. this is an internal cancellation), so that input goroutines
-		// know not propagate this cancellation.
-		internalCancellation int32
-	)
-	ctx, cancelFn = contextutil.WithCancel(ctx)
-	s.cancelFn = func() {
-		atomic.StoreInt32(&internalCancellation, 1)
-		cancelFn()
-	}
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
@@ -223,21 +211,6 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				s.externalWaitGroup.Done()
 			}()
 			sendErr := func(err error) {
-				ctxCanceled := errors.Is(err, context.Canceled)
-				grpcCtxCanceled := grpcutil.IsContextCanceled(err)
-				queryCanceled := errors.Is(err, sqlbase.QueryCanceledError)
-				// TODO(yuzefovich): should we be swallowing flow and stream
-				// context cancellation errors regardless whether the
-				// cancellation is internal? The reasoning is that if another
-				// operator encounters an error, the context is likely to get
-				// canceled with this synchronizer seeing the "fallout".
-				if atomic.LoadInt32(&internalCancellation) == 1 && (ctxCanceled || grpcCtxCanceled || queryCanceled) {
-					// If the synchronizer performed the internal cancellation,
-					// we need to swallow context cancellation and "query
-					// canceled" errors since they could occur as part of
-					// "graceful" shutdown of synchronizer's inputs.
-					return
-				}
 				select {
 				// Non-blocking write to errCh, if an error is present the main
 				// goroutine will use that and cancel all inputs.
@@ -315,6 +288,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 		case parallelUnorderedSynchronizerStateDone:
 			return coldata.ZeroBatch
 		case parallelUnorderedSynchronizerStateUninitialized:
+			s.setState(parallelUnorderedSynchronizerStateRunning)
 			s.init(ctx)
 		case parallelUnorderedSynchronizerStateRunning:
 			// Signal the input whose batch we returned in the last call to Next that it
@@ -328,10 +302,9 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 		select {
 		case err := <-s.errCh:
 			if err != nil {
-				// If we got an error from one of our inputs, cancel all inputs and
-				// propagate this error through a panic.
-				s.cancelFn()
-				s.internalWaitGroup.Wait()
+				// If we got an error from one of our inputs, propagate this error
+				// through a panic. The caller should then proceed to call DrainMeta,
+				// which will take care of closing any inputs.
 				colexecerror.InternalError(err)
 			}
 		case msg := <-s.batchCh:
@@ -380,29 +353,47 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	s.setState(parallelUnorderedSynchronizerStateDraining)
 	if prevState == parallelUnorderedSynchronizerStateUninitialized {
 		s.init(ctx)
-	} else {
-		// The inputs were initialized in Next. This means that the inputs will
-		// either read the new draining state and exit, or have yet to read the
-		// state, in which case they are either pushing a batch or waiting for a
-		// signal to get the next batch. These latter inputs are preempted below by
-		// draining batchCh and sending a signal to the inputs whose batches have
-		// been read.
-		// However, there is also a case where a batch was read in Next and that
-		// input is waiting for preemption, so do that here.
-		// Note that if this is not the case (i.e. inputs were initialized but the
-		// synchronizer immediately transitioned to draining) this preemption won't
-		// hurt.
-		s.notifyInputToReadNextBatch(s.lastReadInputIdx)
 	}
-	for msg := <-s.batchCh; msg != nil; msg = <-s.batchCh {
-		if msg.meta == nil {
-			// This input goroutine pushed a batch to the batchCh and is waiting to be
-			// told to proceed. Notify it that it is ok to do so.
-			s.notifyInputToReadNextBatch(msg.inputIdx)
-			continue
+
+	// Non-blocking drain of batchCh. This is important mostly because of the
+	// following edge case: all n inputs have pushed batches to the batchCh, so
+	// there are currently n messages. Next notifies the last read input to
+	// retrieve the next batch but encounters an error. There are now n+1 messages
+	// in batchCh. Notifying all these inputs to read the next batch would result
+	// in 2n+1 messages on batchCh, which would cause a deadlock since this
+	// goroutine blocks on the wait group, but an input will block on writing to
+	// batchCh. This is a best effort, but note that for this scenario to occur,
+	// there *must* be at least one message in batchCh (the message belonging to
+	// the input that was notified).
+	for batchChDrained := false; !batchChDrained; {
+		select {
+		case msg := <-s.batchCh:
+			if msg == nil {
+				batchChDrained = true
+			} else if msg.meta != nil {
+				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+			}
+		default:
+			batchChDrained = true
 		}
-		s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
 	}
+
+	// Unblock any goroutines currently waiting to be told to read the next batch.
+	// This will force all inputs to observe the new draining state.
+	for _, ch := range s.readNextBatch {
+		close(ch)
+	}
+
+	// Wait for all inputs to exit.
+	s.internalWaitGroup.Wait()
+
+	// Drain the batchCh, this reads the metadata that was pushed.
+	for msg := <-s.batchCh; msg != nil; msg = <-s.batchCh {
+		if msg.meta != nil {
+			s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+		}
+	}
+
 	// Buffer any errors that may have happened without blocking on the channel.
 	for exitLoop := false; !exitLoop; {
 		select {
@@ -412,6 +403,8 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 			exitLoop = true
 		}
 	}
+
+	// Done.
 	s.setState(parallelUnorderedSynchronizerStateDone)
 	return s.bufferedMeta
 }
