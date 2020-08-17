@@ -1436,6 +1436,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return buf.String()
 	case BoolFamily:
 		return "boolean"
+	case Box2DFamily:
+		return "box2d"
 	case BytesFamily:
 		return "bytea"
 	case DateFamily:
