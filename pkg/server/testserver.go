@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,10 +86,6 @@ func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg.Insecure = false
 	// Configure test storage engine.
 	baseCfg.StorageEngine = storage.DefaultStorageEngine
-	// Resolve the storage engine to a specific type if it's the default value.
-	if baseCfg.StorageEngine == enginepb.EngineTypeDefault {
-		baseCfg.StorageEngine = enginepb.EngineTypePebble
-	}
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)
 	// in their init to mock out the file system calls for calls to AssetFS,
