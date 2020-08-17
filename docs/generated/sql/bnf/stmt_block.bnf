@@ -865,6 +865,7 @@ unreserved_keyword ::=
 	| 'NOCONTROLCHANGEFEED'
 	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
+	| 'NOVIEWACTIVITY'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
@@ -995,6 +996,7 @@ unreserved_keyword ::=
 	| 'VALUE'
 	| 'VARYING'
 	| 'VIEW'
+	| 'VIEWACTIVITY'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1980,6 +1982,8 @@ role_option ::=
 	| 'NOCREATEDB'
 	| 'CREATELOGIN'
 	| 'NOCREATELOGIN'
+	| 'VIEWACTIVITY'
+	| 'NOVIEWACTIVITY'
 	| password_clause
 	| valid_until_clause
 
