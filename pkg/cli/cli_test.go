@@ -307,7 +307,7 @@ func isSQLCommand(args []string) bool {
 	case "sql", "dump", "workload", "nodelocal", "userfile", "statement-diag":
 		return true
 	case "node":
-		if len(args) == 0 {
+		if len(args) == 1 {
 			return false
 		}
 		switch args[1] {
