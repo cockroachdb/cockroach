@@ -89,7 +89,7 @@ release_stmt ::=
 	'RELEASE' savepoint_name
 
 refresh_stmt ::=
-	'REFRESH' 'MATERIALIZED' 'VIEW' view_name
+	'REFRESH' 'MATERIALIZED' 'VIEW' opt_concurrently view_name
 
 nonpreparable_set_stmt ::=
 	set_transaction_stmt
@@ -289,6 +289,10 @@ prep_type_clause ::=
 savepoint_name ::=
 	'SAVEPOINT' name
 	| name
+
+opt_concurrently ::=
+	'CONCURRENTLY'
+	| 
 
 view_name ::=
 	table_name
@@ -1594,10 +1598,6 @@ opt_lc_ctype_clause ::=
 
 opt_unique ::=
 	'UNIQUE'
-	| 
-
-opt_concurrently ::=
-	'CONCURRENTLY'
 	| 
 
 opt_index_name ::=

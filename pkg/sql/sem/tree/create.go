@@ -1582,7 +1582,8 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 
 // RefreshMaterializedView represents a REFRESH MATERIALIZED VIEW statement.
 type RefreshMaterializedView struct {
-	Name *UnresolvedObjectName
+	Name         *UnresolvedObjectName
+	Concurrently bool
 }
 
 var _ Statement = &RefreshMaterializedView{}
@@ -1590,6 +1591,9 @@ var _ Statement = &RefreshMaterializedView{}
 // Format implements the NodeFormatter interface.
 func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
 	ctx.WriteString("REFRESH MATERIALIZED VIEW ")
+	if node.Concurrently {
+		ctx.WriteString("CONCURRENTLY ")
+	}
 	ctx.FormatNode(node.Name)
 }
 

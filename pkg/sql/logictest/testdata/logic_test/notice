@@ -46,3 +46,11 @@ query T noticetrace
 ALTER TYPE color ADD VALUE IF NOT EXISTS 'black'
 ----
 NOTICE: enum label "black" already exists, skipping
+
+statement ok
+CREATE MATERIALIZED VIEW v AS SELECT 1
+
+query T noticetrace
+REFRESH MATERIALIZED VIEW CONCURRENTLY v
+----
+NOTICE: CONCURRENTLY is not required as views are refreshed concurrently
