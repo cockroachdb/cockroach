@@ -316,6 +316,11 @@ func isSQLCommand(args []string) bool {
 		default:
 			return false
 		}
+	case "debug":
+		if len(args) < 3 {
+			return false
+		}
+		return args[1] == "doctor" && args[2] == "cluster"
 	default:
 		return false
 	}
