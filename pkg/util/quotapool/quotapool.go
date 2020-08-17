@@ -265,7 +265,6 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		tryAgainTimerC = tryAgainTimer.Ch()
 	}
 	tryAcquire := func() (fulfilled bool) {
-		stopTryAgainTimer()
 		fulfilled, tryAgainAfter = qp.tryAcquireOnNotify(ctx, r, n)
 		if fulfilled {
 			return true
