@@ -385,10 +385,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						require.NotNil(t, meta.Err)
 						id, err := strconv.Atoi(meta.Err.Error())
 						require.NoError(t, err)
-						require.False(t, receivedMetaFromID[id])
 						receivedMetaFromID[id] = true
 					}
-					require.Equal(t, streamID, metaCount, fmt.Sprintf("received metadata from Outbox %+v", receivedMetaFromID))
+					for id, received := range receivedMetaFromID {
+						require.True(t, received, "did not receive metadata from Outbox %d", id)
+					}
 				case consumerClosed:
 					materializer.ConsumerClosed()
 				}
