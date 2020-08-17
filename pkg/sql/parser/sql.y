@@ -1073,6 +1073,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <str> unrestricted_name type_function_name type_function_name_no_crdb_extra
 %type <str> non_reserved_word
 %type <str> non_reserved_word_or_sconst
+%type <str> role_spec
 %type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
@@ -1856,6 +1857,13 @@ alter_table_cmd:
     /* SKIP DOC */
     $$.val = &tree.AlterTableInjectStats{
       Stats: $3.expr(),
+    }
+  }
+  // ALTER TABLE <name> OWNER TO <newowner>
+| OWNER TO role_spec
+  {
+    $$.val = &tree.AlterTableOwner{
+      Owner: $3,
     }
   }
 

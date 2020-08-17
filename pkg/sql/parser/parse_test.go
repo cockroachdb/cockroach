@@ -1320,6 +1320,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE a SET SCHEMA s`},
 		{`ALTER TABLE IF EXISTS a SET SCHEMA s`},
 
+		{`ALTER TABLE a OWNER TO foo`},
+		{`ALTER TABLE IF EXISTS a OWNER TO foo`},
+
 		{`ALTER VIEW v SET SCHEMA s`},
 		{`ALTER VIEW IF EXISTS a SET SCHEMA s`},
 
