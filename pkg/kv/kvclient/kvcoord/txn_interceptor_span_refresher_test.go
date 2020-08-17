@@ -12,10 +12,13 @@ package kvcoord
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -322,7 +325,6 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	br, pErr := tsr.SendLocked(ctx, ba)
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
-
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
@@ -533,6 +535,291 @@ func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
 	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
+}
+
+// TestTxnSpanRefresherSplitEndTxnOnAutoRetry tests that EndTxn requests are
+// split into their own sub-batch on auto-retries after a successful refresh.
+// This is done to avoid starvation.
+func TestTxnSpanRefresherSplitEndTxnOnAutoRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	txn := makeTxnProto()
+	origTs := txn.ReadTimestamp
+	pushedTs1 := txn.ReadTimestamp.Add(1, 0)
+	pushedTs2 := txn.ReadTimestamp.Add(2, 0)
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	etArgs := roachpb.EndTxnRequest{Commit: true}
+
+	// Run the test with two slightly different configurations. When priorReads
+	// is true, issue a {Put, EndTxn} batch after having previously accumulated
+	// refresh spans due to a Scan. When priorReads is false, issue a {Scan,
+	// Put, EndTxn} batch with no previously accumulated refresh spans.
+	testutils.RunTrueAndFalse(t, "prior_reads", func(t *testing.T, priorReads bool) {
+		var mockFns []func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+		if priorReads {
+			// Hook up a chain of mocking functions. Expected order of requests:
+			// 1. {Put, EndTxn} -> retry error with pushed timestamp
+			// 2. {Refresh}     -> successful
+			// 3. {Put}         -> successful with pushed timestamp
+			// 4. {Refresh}     -> successful
+			// 5. {EndTxn}      -> successful
+			onPutAndEndTxn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 2)
+				require.False(t, ba.CanForwardReadTimestamp)
+				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[1].GetInner())
+
+				pushedTxn := ba.Txn.Clone()
+				pushedTxn.WriteTimestamp = pushedTs1
+				return nil, roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+			}
+			onRefresh1 := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+				refReq := ba.Requests[0].GetRefreshRange()
+				require.Equal(t, scanArgs.Span(), refReq.Span())
+				require.Equal(t, origTs, refReq.RefreshFrom)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			}
+			onPut := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.False(t, ba.CanForwardReadTimestamp)
+				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.WriteTimestamp = pushedTs2
+				return br, nil
+			}
+			onRefresh2 := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+				refReq := ba.Requests[0].GetRefreshRange()
+				require.Equal(t, scanArgs.Span(), refReq.Span())
+				require.Equal(t, pushedTs1, refReq.RefreshFrom)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			}
+			onEndTxn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.False(t, ba.CanForwardReadTimestamp)
+				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.Status = roachpb.COMMITTED
+				return br, nil
+			}
+			mockFns = append(mockFns, onPutAndEndTxn, onRefresh1, onPut, onRefresh2, onEndTxn)
+		} else {
+			// Hook up a chain of mocking functions. Expected order of requests:
+			// 1. {Scan, Put, EndTxn} -> retry error with pushed timestamp
+			// 3. {Scan, Put}         -> successful with pushed timestamp
+			// 4. {Refresh}           -> successful
+			// 5. {EndTxn}            -> successful
+			onScanPutAndEndTxn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 3)
+				require.True(t, ba.CanForwardReadTimestamp)
+				require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[2].GetInner())
+
+				pushedTxn := ba.Txn.Clone()
+				pushedTxn.WriteTimestamp = pushedTs1
+				return nil, roachpb.NewErrorWithTxn(
+					roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, ""), pushedTxn)
+			}
+			onScanAndPut := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 2)
+				require.True(t, ba.CanForwardReadTimestamp)
+				require.Equal(t, pushedTs1, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.WriteTimestamp = pushedTs2
+				return br, nil
+			}
+			onRefresh := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+				refReq := ba.Requests[0].GetRefreshRange()
+				require.Equal(t, scanArgs.Span(), refReq.Span())
+				require.Equal(t, pushedTs1, refReq.RefreshFrom)
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn
+				return br, nil
+			}
+			onEndTxn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				require.Len(t, ba.Requests, 1)
+				// IMPORTANT! CanForwardReadTimestamp should no longer be set
+				// for EndTxn batch, because the Scan in the earlier batch needs
+				// to be refreshed if the read timestamp changes.
+				require.False(t, ba.CanForwardReadTimestamp)
+				require.Equal(t, pushedTs2, ba.Txn.ReadTimestamp)
+				require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+				br := ba.CreateReply()
+				br.Txn = ba.Txn.Clone()
+				br.Txn.Status = roachpb.COMMITTED
+				return br, nil
+			}
+			mockFns = append(mockFns, onScanPutAndEndTxn, onScanAndPut, onRefresh, onEndTxn)
+		}
+
+		// Iterate over each RPC to inject an error to test error propagation.
+		// Include a test case where no error is returned and the entire chain
+		// of requests succeeds.
+		for errIdx := 0; errIdx <= len(mockFns); errIdx++ {
+			errIdxStr := strconv.Itoa(errIdx)
+			if errIdx == len(mockFns) {
+				errIdxStr = "none"
+			}
+			t.Run(fmt.Sprintf("error_index=%s", errIdxStr), func(t *testing.T) {
+				ctx := context.Background()
+				tsr, mockSender := makeMockTxnSpanRefresher()
+
+				var ba roachpb.BatchRequest
+				if priorReads {
+					// Collect some refresh spans first.
+					ba.Header = roachpb.Header{Txn: &txn}
+					ba.Add(&scanArgs)
+
+					br, pErr := tsr.SendLocked(ctx, ba)
+					require.Nil(t, pErr)
+					require.NotNil(t, br)
+					require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+					require.False(t, tsr.refreshInvalid)
+					require.Equal(t, br.Txn.ReadTimestamp, tsr.refreshedTimestamp)
+
+					ba.Requests = nil
+					ba.Add(&putArgs, &etArgs)
+				} else {
+					// No refresh spans to begin with.
+					require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
+
+					ba.Header = roachpb.Header{Txn: &txn}
+					ba.Add(&scanArgs, &putArgs, &etArgs)
+				}
+
+				// Construct the mock sender chain, injecting an error where
+				// appropriate. Make a copy of mockFns to avoid sharing state
+				// between subtests.
+				mockFnsCpy := append([]func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)(nil), mockFns...)
+				if errIdx < len(mockFnsCpy) {
+					errFn := mockFnsCpy[errIdx]
+					newErrFn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+						_, _ = errFn(ba)
+						return nil, roachpb.NewErrorf("error")
+					}
+					mockFnsCpy[errIdx] = newErrFn
+				}
+				unexpected := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+					require.Fail(t, "unexpected")
+					return nil, nil
+				}
+				mockSender.ChainMockSend(append(mockFnsCpy, unexpected)...)
+
+				br, pErr := tsr.SendLocked(ctx, ba)
+				if priorReads {
+					if errIdx < 5 {
+						require.Nil(t, br)
+						require.NotNil(t, pErr)
+					} else {
+						require.Nil(t, pErr)
+						require.NotNil(t, br)
+						require.Len(t, br.Responses, 2)
+						require.IsType(t, &roachpb.PutResponse{}, br.Responses[0].GetInner())
+						require.IsType(t, &roachpb.EndTxnResponse{}, br.Responses[1].GetInner())
+						require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
+						require.Equal(t, pushedTs2, br.Txn.ReadTimestamp)
+						require.Equal(t, pushedTs2, br.Txn.WriteTimestamp)
+					}
+
+					var expSuccess, expFail, expAutoRetries int64
+					switch errIdx {
+					case 0:
+						expSuccess, expFail, expAutoRetries = 0, 0, 0
+					case 1:
+						expSuccess, expFail, expAutoRetries = 0, 1, 0
+					case 2:
+						expSuccess, expFail, expAutoRetries = 1, 0, 1
+					case 3:
+						expSuccess, expFail, expAutoRetries = 1, 1, 1
+					case 4, 5:
+						expSuccess, expFail, expAutoRetries = 2, 0, 1
+					default:
+						require.Fail(t, "unexpected")
+					}
+					require.Equal(t, expSuccess, tsr.refreshSuccess.Count())
+					require.Equal(t, expFail, tsr.refreshFail.Count())
+					require.Equal(t, expAutoRetries, tsr.refreshAutoRetries.Count())
+
+					require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+					require.False(t, tsr.refreshInvalid)
+				} else {
+					if errIdx < 4 {
+						require.Nil(t, br)
+						require.NotNil(t, pErr)
+					} else {
+						require.Nil(t, pErr)
+						require.NotNil(t, br)
+						require.Len(t, br.Responses, 3)
+						require.IsType(t, &roachpb.ScanResponse{}, br.Responses[0].GetInner())
+						require.IsType(t, &roachpb.PutResponse{}, br.Responses[1].GetInner())
+						require.IsType(t, &roachpb.EndTxnResponse{}, br.Responses[2].GetInner())
+						require.Equal(t, roachpb.COMMITTED, br.Txn.Status)
+						require.Equal(t, pushedTs2, br.Txn.ReadTimestamp)
+						require.Equal(t, pushedTs2, br.Txn.WriteTimestamp)
+					}
+
+					var expSuccess, expFail, expAutoRetries int64
+					switch errIdx {
+					case 0:
+						expSuccess, expFail, expAutoRetries = 0, 0, 0
+					case 1:
+						expSuccess, expFail, expAutoRetries = 1, 0, 1
+					case 2:
+						expSuccess, expFail, expAutoRetries = 1, 1, 1
+					case 3, 4:
+						expSuccess, expFail, expAutoRetries = 2, 0, 1
+					default:
+						require.Fail(t, "unexpected")
+					}
+					require.Equal(t, expSuccess, tsr.refreshSuccess.Count())
+					require.Equal(t, expFail, tsr.refreshFail.Count())
+					require.Equal(t, expAutoRetries, tsr.refreshAutoRetries.Count())
+
+					if errIdx < 2 {
+						require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
+					} else {
+						require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+					}
+					require.False(t, tsr.refreshInvalid)
+				}
+			})
+		}
+	})
 }
 
 type singleRangeIterator struct{}
