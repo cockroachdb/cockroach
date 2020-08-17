@@ -139,13 +139,17 @@ func (f *Factory) ConstructPlan(
 	for i := range wrappedSubqueries {
 		wrappedSubqueries[i].Root = wrappedSubqueries[i].Root.(*Node).WrappedNode()
 	}
+	wrappedCascades := append([]exec.Cascade(nil), cascades...)
+	for i := range wrappedCascades {
+		wrappedCascades[i].Buffer = wrappedCascades[i].Buffer.(*Node).WrappedNode()
+	}
 	wrappedChecks := make([]exec.Node, len(checks))
 	for i := range wrappedChecks {
 		wrappedChecks[i] = checks[i].(*Node).WrappedNode()
 	}
 	var err error
 	p.WrappedPlan, err = f.wrappedFactory.ConstructPlan(
-		p.Root.WrappedNode(), wrappedSubqueries, cascades, wrappedChecks,
+		p.Root.WrappedNode(), wrappedSubqueries, wrappedCascades, wrappedChecks,
 	)
 	if err != nil {
 		return nil, err
