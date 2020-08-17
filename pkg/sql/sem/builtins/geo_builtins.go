@@ -3257,6 +3257,29 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_reverse": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				geometry := args[0].(*tree.DGeometry)
+
+				ret, err := geomfn.Reverse(geometry.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified geometry by reversing the order of its vertices.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_segmentize": makeBuiltin(
 		defProps(),
 		tree.Overload{
