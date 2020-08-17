@@ -114,7 +114,7 @@ func ScanDecodeKeyValueNoTS(repr []byte) (key []byte, value []byte, orepr []byte
 	rawKey := repr[kvLenSize:keyEnd]
 	key, _, ok = SplitMVCCKey(rawKey)
 	if !ok {
-		return nil, nil, nil, errors.Errorf("invalid encoded mvcc key: %x", rawKey)
+		return nil, nil, nil, errors.Errorf("invalid encoded mvcc key: %x, input: %x", rawKey, repr)
 	}
 	return key, value, ret, err
 }

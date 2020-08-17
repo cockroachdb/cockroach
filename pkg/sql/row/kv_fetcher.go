@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -74,6 +75,9 @@ func (f *KVFetcher) NextKV(
 			var err error
 			key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			if err != nil {
+				if err != nil {
+					log.Errorf(ctx, "ScanDecodeKeyValueNoTS err %+v", ctx)
+				}
 				return false, kv, false, err
 			}
 			return true, roachpb.KeyValue{
