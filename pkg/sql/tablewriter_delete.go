@@ -153,8 +153,12 @@ func (td *tableDeleter) deleteAllRowsScan(
 			resume = roachpb.Span{}
 			break
 		}
-		// TODO(mgartner): Add partial index IDs to pm that we should not delete
-		// entries from.
+		// An empty PartialIndexUpdateHelper is passed here, meaning that DEL
+		// operations will be issued for every partial index, regardless of
+		// whether or not the row is indexed by the partial index.
+		// TODO(mgartner): Try evaluating each partial index predicate
+		// expression for each row and benchmark to determine if it is faster
+		// than simply issuing DEL operations for entries that do not exist.
 		var pm row.PartialIndexUpdateHelper
 		if err = td.row(ctx, datums, pm, traceKV); err != nil {
 			return resume, err
