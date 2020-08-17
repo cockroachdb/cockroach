@@ -618,7 +618,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLJOB NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLJOB NOCREATEROLE NOLOGIN NOVIEWACTIVITY NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -652,7 +652,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIRTUAL
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -6322,17 +6322,17 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCREATEROLE
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | LOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | NOLOGIN
-	{
-		$$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
-	}
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
 | CONTROLJOB
   {
    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
@@ -6340,6 +6340,14 @@ role_option:
 | NOCONTROLJOB
   {
    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| VIEWACTIVITY
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOVIEWACTIVITY
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | password_clause
 | valid_until_clause
@@ -6356,14 +6364,14 @@ role_options:
   }
 
 opt_role_options:
-	opt_with role_options
-	{
-		$$.val = $2.kvOptions()
-	}
+  opt_with role_options
+  {
+    $$.val = $2.kvOptions()
+  }
 | /* EMPTY */
-	{
-		$$.val = nil
-	}
+  {
+    $$.val = nil
+  }
 
 valid_until_clause:
   VALID UNTIL string_or_placeholder
@@ -11302,6 +11310,7 @@ unreserved_keyword:
 | NOCREATEROLE
 | NOCONTROLJOB
 | NOLOGIN
+| NOVIEWACTIVITY
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
@@ -11432,6 +11441,7 @@ unreserved_keyword:
 | VALUE
 | VARYING
 | VIEW
+| VIEWACTIVITY
 | WITHIN
 | WITHOUT
 | WRITE

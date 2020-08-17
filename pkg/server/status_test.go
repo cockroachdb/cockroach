@@ -1692,9 +1692,18 @@ func TestStatusAPIStatements(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt.stmt)
 	}
 
-	// Hit query endpoint.
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
 	var resp serverpb.StatementsResponse
-	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	// Grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, "ALTER USER $1 VIEWACTIVITY", authenticatedUserNameNoAdmin)
+
+	// Hit query endpoint.
+	if err := getStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1718,6 +1727,10 @@ func TestStatusAPIStatements(t *testing.T) {
 		if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
 			// We ignore internal queries, these are not relevant for the
 			// validity of this test.
+			continue
+		}
+		if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
+			// Ignore the ALTER USER ... VIEWACTIVITY statement.
 			continue
 		}
 		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
