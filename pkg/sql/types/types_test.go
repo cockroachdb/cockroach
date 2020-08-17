@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTypes(t *testing.T) {
@@ -971,6 +972,14 @@ func TestOidSetDuringUpgrade(t *testing.T) {
 			err := input.upgradeType()
 			assert.NoError(t, err)
 			assert.Equal(t, Oid, input.Oid())
+		})
+	}
+}
+
+func TestSQLStandardName(t *testing.T) {
+	for _, typ := range Scalar {
+		t.Run(typ.Name(), func(t *testing.T) {
+			require.NotEmpty(t, typ.SQLStandardName())
 		})
 	}
 }
