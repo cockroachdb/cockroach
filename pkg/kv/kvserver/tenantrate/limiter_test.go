@@ -28,10 +28,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
+
+func TestCloser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	start := timeutil.Now()
+	timeSource := quotapool.NewManualTime(start)
+	factory := tenantrate.NewLimiterFactory(st, &tenantrate.TestingKnobs{
+		TimeSource: timeSource,
+	})
+	tenant := roachpb.MakeTenantID(2)
+	closer := make(chan struct{})
+	limiter := factory.GetTenant(tenant, closer)
+	ctx := context.Background()
+	// First Wait call will not block.
+	require.NoError(t, limiter.Wait(ctx, 1))
+	errCh := make(chan error, 1)
+	go func() { errCh <- limiter.Wait(ctx, 1<<30) }()
+	testutils.SucceedsSoon(t, func() error {
+		if timers := timeSource.Timers(); len(timers) != 1 {
+			return errors.Errorf("expected 1 timer, found %d", len(timers))
+		}
+		return nil
+	})
+	close(closer)
+	require.Regexp(t, "closer", <-errCh)
+}
 
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -402,7 +431,7 @@ func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
 		id := roachpb.MakeTenantID(tenantIDs[i])
-		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(id))
+		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(id, nil /* closer */))
 	}
 	return ts.FormatTenants()
 }
