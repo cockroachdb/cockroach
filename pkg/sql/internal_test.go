@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -193,6 +194,51 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 				t.Fatalf("expected %q admin %v, got %v", tc.user, tc.expAdmin, isAdmin)
 			}
 		})
+	}
+}
+
+func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	user := "testuser"
+	if _, err := db.Exec("CREATE USER $1 VIEWACTIVITY", user); err != nil {
+		t.Fatal(err)
+	}
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	for _, tc := range []struct {
+		option      string
+		expected    bool
+		expectedErr string
+	}{
+		{roleoption.VIEWACTIVITY.String(), true, ""},
+		{roleoption.CREATEROLE.String(), false, ""},
+		{"nonexistent", false, "unrecognized role option"},
+	} {
+		rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: user},
+			"SELECT crdb_internal.has_role_option($1)", tc.option)
+		if tc.expectedErr != "" {
+			if !testutils.IsError(err, tc.expectedErr) {
+				t.Fatalf("expected error %q, got %q", tc.expectedErr, err)
+			}
+			continue
+		}
+		if len(rows) != 1 || len(cols) != 1 {
+			t.Fatalf("unexpected result shape %d, %d", len(rows), len(cols))
+		}
+		hasRoleOption := bool(*rows[0][0].(*tree.DBool))
+		if hasRoleOption != tc.expected {
+			t.Fatalf(
+				"expected %q has_role_option('%s') %v, got %v", user, "VIEWACTIVITY", tc.expected,
+				hasRoleOption)
+		}
 	}
 }
 

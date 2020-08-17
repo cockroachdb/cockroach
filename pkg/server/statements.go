@@ -28,7 +28,7 @@ func (s *statusServer) Statements(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.admin.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 

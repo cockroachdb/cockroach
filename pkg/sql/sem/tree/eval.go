@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -3004,6 +3005,10 @@ type EvalSessionAccessor interface {
 
 	// HasAdminRole returns true iff the current session user has the admin role.
 	HasAdminRole(ctx context.Context) (bool, error)
+
+	// HasAdminRole returns nil iff the current session user has the specified
+	// role option.
+	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 }
 
 // ClientNoticeSender is a limited interface to send notices to the

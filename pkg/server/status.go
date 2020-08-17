@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -1630,12 +1631,16 @@ func (s *statusServer) ListLocalSessions(
 	if err != nil {
 		return nil, err
 	}
+	hasViewActivity, err := s.admin.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return nil, err
+	}
 
 	if !debug.GatewayRemoteAllowed(ctx, s.st) {
 		return nil, remoteDebuggingErr
 	}
 
-	if !isAdmin {
+	if !isAdmin && !hasViewActivity {
 		// For non-superusers, requests with an empty username is
 		// implicitly a request for the client's own sessions.
 		if req.Username == "" {
