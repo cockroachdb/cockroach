@@ -86,11 +86,6 @@ type Column interface {
 	// TODO(andyk): Switch calling code to use DatumType.
 	ColTypeWidth() int
 
-	// ColTypeStr returns the SQL data type of the column, as a string. Note that
-	// this is sometimes different than DatumType().String(), since datum types
-	// are a subset of column types.
-	ColTypeStr() string
-
 	// IsNullable returns true if the column is nullable.
 	IsNullable() bool
 

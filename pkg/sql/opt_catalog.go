@@ -1292,11 +1292,6 @@ func (vc *optVirtualColumn) ColTypeWidth() int {
 	return int(vc.typ.Width())
 }
 
-// ColTypeStr is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypeStr() string {
-	return vc.typ.SQLString()
-}
-
 // IsHidden is part of the cat.Column interface.
 func (vc *optVirtualColumn) IsHidden() bool {
 	return true
@@ -1813,11 +1808,6 @@ func (optDummyVirtualPKColumn) ColTypePrecision() int {
 // ColTypeWidth is part of the cat.Column interface.
 func (optDummyVirtualPKColumn) ColTypeWidth() int {
 	return int(types.Int.Width())
-}
-
-// ColTypeStr is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypeStr() string {
-	return types.Int.SQLString()
 }
 
 // IsNullable is part of the cat.Column interface.

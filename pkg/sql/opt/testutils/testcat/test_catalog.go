@@ -979,11 +979,6 @@ func (tc *Column) ColTypeWidth() int {
 	return int(tc.Type.Width())
 }
 
-// ColTypeStr is part of the cat.Column interface.
-func (tc *Column) ColTypeStr() string {
-	return tc.Type.SQLString()
-}
-
 // IsHidden is part of the cat.Column interface.
 func (tc *Column) IsHidden() bool {
 	return tc.Hidden
