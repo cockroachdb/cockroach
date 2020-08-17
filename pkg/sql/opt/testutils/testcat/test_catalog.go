@@ -957,28 +957,6 @@ func (tc *Column) DatumType() *types.T {
 	return tc.Type
 }
 
-// ColTypePrecision is part of the cat.Column interface.
-func (tc *Column) ColTypePrecision() int {
-	if tc.Type.Family() == types.ArrayFamily {
-		if tc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(tc.Type.ArrayContents().Precision())
-	}
-	return int(tc.Type.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (tc *Column) ColTypeWidth() int {
-	if tc.Type.Family() == types.ArrayFamily {
-		if tc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(errors.AssertionFailedf("column type should never be a nested array"))
-		}
-		return int(tc.Type.ArrayContents().Width())
-	}
-	return int(tc.Type.Width())
-}
-
 // IsHidden is part of the cat.Column interface.
 func (tc *Column) IsHidden() bool {
 	return tc.Hidden

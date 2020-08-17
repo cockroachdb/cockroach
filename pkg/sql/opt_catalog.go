@@ -1282,16 +1282,6 @@ func (vc *optVirtualColumn) DatumType() *types.T {
 	return vc.typ
 }
 
-// ColTypePrecision is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypePrecision() int {
-	return int(vc.typ.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (vc *optVirtualColumn) ColTypeWidth() int {
-	return int(vc.typ.Width())
-}
-
 // IsHidden is part of the cat.Column interface.
 func (vc *optVirtualColumn) IsHidden() bool {
 	return true
@@ -1798,16 +1788,6 @@ func (optDummyVirtualPKColumn) ColName() tree.Name {
 // DatumType is part of the cat.Column interface.
 func (optDummyVirtualPKColumn) DatumType() *types.T {
 	return types.Int
-}
-
-// ColTypePrecision is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypePrecision() int {
-	return int(types.Int.Precision())
-}
-
-// ColTypeWidth is part of the cat.Column interface.
-func (optDummyVirtualPKColumn) ColTypeWidth() int {
-	return int(types.Int.Width())
 }
 
 // IsNullable is part of the cat.Column interface.
