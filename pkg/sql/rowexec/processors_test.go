@@ -853,11 +853,6 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		vectorizeOpt := "off"
 		if vectorize {
 			vectorizeOpt = "on"
-			// Occasionally, the vectorized engine propagates either flow's or
-			// stream's context canceled error instead of the expected one, so
-			// we temporarily skip such config.
-			// TODO(yuzefovich): remove this.
-			skip.WithIssue(t, 52057)
 		}
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {

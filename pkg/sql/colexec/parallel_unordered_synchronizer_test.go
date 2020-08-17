@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -147,6 +148,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const expectedErr = "first input error"
+	ctx := context.Background()
 
 	inputs := make([]SynchronizerInput, 6)
 	inputs[0].Op = &colexecbase.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
@@ -155,25 +157,38 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		return nil
 	}}
 	for i := 1; i < len(inputs); i++ {
-		inputs[i].Op = &colexecbase.CallbackOperator{
-			NextCb: func(ctx context.Context) coldata.Batch {
-				<-ctx.Done()
-				colexecerror.InternalError(ctx.Err())
-				// This code is unreachable, but the compiler cannot infer that.
-				return nil
-			},
-		}
+		acc := testMemMonitor.MakeBoundAccount()
+		defer acc.Close(ctx)
+		func(allocator *colmem.Allocator) {
+			inputs[i].Op = &colexecbase.CallbackOperator{
+				NextCb: func(ctx context.Context) coldata.Batch {
+					// All inputs that do not encounter an error will continue to return
+					// batches.
+					b := allocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
+					b.SetLength(1)
+					return b
+				},
+			}
+		}(
+			// Make a separate allocator per input, since each input will call Next in
+			// a different goroutine.
+			colmem.NewAllocator(ctx, &acc, coldata.StandardColumnFactory),
+		)
 	}
 
-	var (
-		ctx = context.Background()
-		wg  sync.WaitGroup
-	)
+	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) })
+	for {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) }); err != nil {
+			require.True(t, testutils.IsError(err, expectedErr), err)
+			break
+		}
+		// Loop until we get an error.
+	}
+	// The caller must call DrainMeta on error.
+	require.Zero(t, len(s.DrainMeta(ctx)))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
-	require.True(t, testutils.IsError(err, expectedErr), err)
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
