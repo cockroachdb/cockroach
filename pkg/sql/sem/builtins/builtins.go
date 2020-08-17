@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -4016,6 +4017,39 @@ may increase either contention or retry errors, or both.`,
 				return tree.MakeDBool(tree.DBool(isAdmin)), nil
 			},
 			Info:       "Retrieves the current user's admin status.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
+	// Returns true iff the current user has the specified role option.
+	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
+	"crdb_internal.has_role_option": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         categorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"option", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SessionAccessor == nil {
+					return nil, errors.AssertionFailedf("session accessor not set")
+				}
+				optionStr := string(tree.MustBeDString(args[0]))
+				option, ok := roleoption.ByName[optionStr]
+				if !ok {
+					return nil, errors.Newf("unrecognized role option %s", optionStr)
+				}
+				ctx := evalCtx.Ctx()
+				ok, err := evalCtx.SessionAccessor.HasRoleOption(ctx, option)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ok)), nil
+			},
+			Info:       "Returns whether the current user has the specified role option",
 			Volatility: tree.VolatilityStable,
 		},
 	),
