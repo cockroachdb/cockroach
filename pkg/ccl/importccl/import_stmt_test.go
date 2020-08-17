@@ -3115,34 +3115,10 @@ func TestImportDefault(t *testing.T) {
 			expectedResults: [][]string{{"1", "102"}, {"2", "102"}},
 		},
 		{
-			name:          "random",
-			data:          "1\n2",
-			create:        `a INT, b FLOAT DEFAULT random()`,
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
 			name:          "nextval",
 			sequence:      "testseq",
 			data:          "1\n2",
 			create:        "a INT, b INT DEFAULT nextval('testseq')",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
-			name:          "random_plus_timestamp",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT (100*random())::int + current_timestamp()::int",
-			targetCols:    "a",
-			format:        "CSV",
-			expectedError: "unsafe for import",
-		},
-		{
-			name:          "deep_nesting_with_random",
-			data:          "1\n2",
-			create:        "a INT, b INT DEFAULT (1 + 2 + (100 * round(3 + random())::int)) * 5 + 3",
 			targetCols:    "a",
 			format:        "CSV",
 			expectedError: "unsafe for import",
@@ -3334,6 +3310,69 @@ func TestImportDefault(t *testing.T) {
 				require.Equal(t, numDistinctRows, len(test.rowIDCols)*numRows)
 			})
 
+		}
+	})
+	t.Run("random-related", func(t *testing.T) {
+		testCases := []struct {
+			name       string
+			create     string
+			targetCols []string
+			randomCols []string
+			data       string
+		}{
+			{
+				name:       "random-multiple",
+				create:     "a INT, b FLOAT DEFAULT random(), c STRING, d FLOAT DEFAULT random()",
+				targetCols: []string{"a", "c"},
+				randomCols: []string{selectNotNull("b"), selectNotNull("d")},
+			},
+			{
+				name:       "gen_random_uuid",
+				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid()",
+				targetCols: []string{"a", "b"},
+				randomCols: []string{selectNotNull("c")},
+			},
+			{
+				name:       "mixed_random_uuid",
+				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid(), d FLOAT DEFAULT random()",
+				targetCols: []string{"a", "b"},
+				randomCols: []string{selectNotNull("c")},
+			},
+			{
+				name:       "random_with_targeted",
+				create:     "a INT, b FLOAT DEFAULT random(), d FLOAT DEFAULT random()",
+				targetCols: []string{"a", "b"},
+				randomCols: []string{selectNotNull("d")},
+				data:       "1,0.37\n2,0.455\n3,3.14\n4,0.246\n5,0.42",
+			},
+			// TODO (anzoteh96): create a testcase for AVRO once we manage to extract
+			// targeted columns from the AVRO schema.
+		}
+		for _, test := range testCases {
+			t.Run(test.name, func(t *testing.T) {
+				defer sqlDB.Exec(t, `DROP TABLE t`)
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t(%s)`, test.create))
+				fileName := strings.Join(testFiles.files, ", ")
+				if test.data != "" {
+					data = test.data
+					fileName = fmt.Sprintf(`%q`, srv.URL)
+				}
+				// Let's do 3 IMPORTs for each test case to ensure that the values produced
+				// do not overlap.
+				for i := 0; i < 3; i++ {
+					sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA (%s)`,
+						strings.Join(test.targetCols, ", "),
+						fileName))
+				}
+				var numDistinctRows int
+				sqlDB.QueryRow(t,
+					fmt.Sprintf(`SELECT DISTINCT COUNT (*) FROM (%s)`,
+						strings.Join(test.randomCols, " UNION ")),
+				).Scan(&numDistinctRows)
+				var numRows int
+				sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
+				require.Equal(t, numDistinctRows, len(test.randomCols)*numRows)
+			})
 		}
 	})
 }
