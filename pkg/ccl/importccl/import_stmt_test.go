@@ -3377,6 +3377,112 @@ func TestImportDefault(t *testing.T) {
 	})
 }
 
+// BenchmarkRandomSeeding/reseed-every-time-8         	1000000000	         0.000010 ns/op
+// BenchmarkRandomSeeding/call-random-without-reseeding-8         	1000000000	         0.000001 ns/op
+func BenchmarkRandomSeeding(b *testing.B) {
+	b.Run("reseed-every-time", func(b *testing.B) {
+		b.ResetTimer()
+		_ = rand.New(rand.NewSource(int64(357)))
+	})
+	b.Run("call-random-without-reseeding", func(b *testing.B) {
+		b.ResetTimer()
+		_ = rand.Float64()
+	})
+}
+
+// BenchmarkImportDefault/no-default-expression-8         	1000000000	         0.298 ns/op
+// BenchmarkImportDefault/default-but-targeted-8          	1000000000	         0.345 ns/op
+// BenchmarkImportDefault/default-constant-literal-8      	1000000000	         0.330 ns/op
+// BenchmarkImportDefault/default-constant-function-8     	1000000000	         0.335 ns/op
+// BenchmarkImportDefault/default-now-8                   	1000000000	         0.528 ns/op
+// BenchmarkImportDefault/default-rowid-8                 	1000000000	         0.718 ns/op
+func BenchmarkImportDefault(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	const nodes = 3
+	numFiles := nodes + 2
+	rowsPerFile := 1000
+	rowsPerRaceFile := 16
+	testFiles := makeCSVData(b, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "csv")
+	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+	testCases := []struct {
+		name       string
+		create     string
+		targetCols string
+		format     string
+	}{
+		{
+			name:       "no-default-expression",
+			create:     "a INT, b STRING",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "default-but-targeted",
+			create:     "a INT DEFAULT 3, b STRING",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "default-constant-literal",
+			create:     "a INT, b STRING, c INT DEFAULT 33",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "default-constant-function",
+			create:     "a INT, b STRING, c FLOAT DEFAULT pi()",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "default-now",
+			create:     "a INT, b STRING, c TIMESTAMP DEFAULT now()",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+		{
+			name:       "default-rowid",
+			create:     "a INT, b STRING, c INT DEFAULT unique_rowid()",
+			targetCols: "a, b",
+			format:     "CSV",
+		},
+	}
+	for _, test := range testCases {
+		b.Run(test.name, func(b *testing.B) {
+			b.ResetTimer()
+			defer sqlDB.Exec(b, `DROP TABLE t`)
+			sqlDB.Exec(b, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+			// Try importing 3 times within each test.
+			for i := 0; i < 3; i++ {
+				sqlDB.Exec(b, fmt.Sprintf(
+					`IMPORT INTO t (%s) %s DATA (%s)`,
+					test.targetCols,
+					test.format,
+					strings.Join(testFiles.files, ", "),
+				),
+				)
+			}
+		})
+
+	}
+}
+
 // goos: darwin
 // goarch: amd64
 // pkg: github.com/cockroachdb/cockroach/pkg/ccl/importccl
