@@ -172,3 +172,47 @@ project                            ·                      ·                   
 ·                                  estimated row count    1000 (missing stats)                                                                                                                                                                                                        ·                                                ·
 ·                                  table                  ltable@primary                                                                                                                                                                                                              ·                                                ·
 ·                                  spans                  FULL SCAN                                                                                                                                                                                                                   ·                                                ·
+
+# The following queries perform semi- and anti-joins, and don't currently use
+# an inverted join.
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+----
+·                distribution         local                       ·            ·
+·                vectorized           true                        ·            ·
+project          ·                    ·                           (lk)         ·
+ │               estimated row count  10 (missing stats)          ·            ·
+ └── cross join  ·                    ·                           (lk, geom2)  ·
+      │          estimated row count  10 (missing stats)          ·            ·
+      │          type                 semi                        ·            ·
+      │          pred                 st_intersects(geom2, geom)  ·            ·
+      ├── scan   ·                    ·                           (lk, geom2)  ·
+      │          estimated row count  1000 (missing stats)        ·            ·
+      │          table                ltable@primary              ·            ·
+      │          spans                FULL SCAN                   ·            ·
+      └── scan   ·                    ·                           (geom)       ·
+·                estimated row count  1000 (missing stats)        ·            ·
+·                table                rtable@primary              ·            ·
+·                spans                FULL SCAN                   ·            ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
+----
+·                distribution         local                       ·            ·
+·                vectorized           true                        ·            ·
+project          ·                    ·                           (lk)         ·
+ │               estimated row count  990 (missing stats)         ·            ·
+ └── cross join  ·                    ·                           (lk, geom2)  ·
+      │          estimated row count  990 (missing stats)         ·            ·
+      │          type                 anti                        ·            ·
+      │          pred                 st_intersects(geom2, geom)  ·            ·
+      ├── scan   ·                    ·                           (lk, geom2)  ·
+      │          estimated row count  1000 (missing stats)        ·            ·
+      │          table                ltable@primary              ·            ·
+      │          spans                FULL SCAN                   ·            ·
+      └── scan   ·                    ·                           (geom)       ·
+·                estimated row count  1000 (missing stats)        ·            ·
+·                table                rtable@primary              ·            ·
+·                spans                FULL SCAN                   ·            ·
