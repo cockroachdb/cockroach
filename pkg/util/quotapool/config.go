@@ -76,11 +76,20 @@ func WithTimeSource(ts TimeSource) Option {
 	})
 }
 
+// WithCloser allows the client to provide a channel which will lead to the
+// QuotaPool being closed.
+func WithCloser(closer <-chan struct{}) Option {
+	return optionFunc(func(cfg *config) {
+		cfg.closer = closer
+	})
+}
+
 type config struct {
 	onAcquisition            AcquisitionFunc
 	onSlowAcquisition        SlowAcquisitionFunc
 	slowAcquisitionThreshold time.Duration
 	timeSource               TimeSource
+	closer                   <-chan struct{}
 }
 
 var defaultConfig = config{
