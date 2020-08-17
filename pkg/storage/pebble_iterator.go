@@ -32,9 +32,13 @@ type pebbleIterator struct {
 	// Reusable buffer for MVCC key encoding.
 	keyBuf []byte
 	// Buffers for copying iterator bounds to. Note that the underlying memory
-	// is not GCed upon Close(), to reduce the number of overall allocations.
-	lowerBoundBuf []byte
-	upperBoundBuf []byte
+	// is not GCed upon Close(), to reduce the number of overall allocations. We
+	// use two slices for each of the bounds since this caller should not change
+	// the slice holding the current bounds, that the callee (pebble.Iterator)
+	// is currently using, until after the caller has made the SetBounds call.
+	lowerBoundBuf [2][]byte
+	upperBoundBuf [2][]byte
+	curBuf        int
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC key when true.
 	prefix bool
@@ -80,18 +84,18 @@ func (p *pebbleIterator) init(handle pebble.Reader, opts IterOptions) {
 
 	if opts.LowerBound != nil {
 		// This is the same as
-		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[:0], MVCCKey{Key: opts.LowerBound}) .
+		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound}) .
 		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
 		// the NUL byte instead of calling EncodeKey which will do the same thing.
-		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
-		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
-		p.options.LowerBound = p.lowerBoundBuf
+		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0][:0], opts.LowerBound...)
+		p.lowerBoundBuf[0] = append(p.lowerBoundBuf[0], 0x00)
+		p.options.LowerBound = p.lowerBoundBuf[0]
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
-		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
-		p.options.UpperBound = p.upperBoundBuf
+		p.upperBoundBuf[0] = append(p.upperBoundBuf[0][:0], opts.UpperBound...)
+		p.upperBoundBuf[0] = append(p.upperBoundBuf[0], 0x00)
+		p.options.UpperBound = p.upperBoundBuf[0]
 	}
 
 	if opts.MaxTimestampHint != (hlc.Timestamp{}) {
@@ -142,20 +146,22 @@ func (p *pebbleIterator) setOptions(opts IterOptions) {
 	}
 
 	p.prefix = opts.Prefix
+	p.curBuf = (p.curBuf + 1) % 2
+	i := p.curBuf
 	if opts.LowerBound != nil {
 		// This is the same as
-		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[:0], MVCCKey{Key: opts.LowerBound}) .
+		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[i][:0], MVCCKey{Key: opts.LowerBound}) .
 		// Since we are encoding zero-timestamp MVCC Keys anyway, we can just append
 		// the NUL byte instead of calling EncodeKey which will do the same thing.
-		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
-		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
-		p.options.LowerBound = p.lowerBoundBuf
+		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], opts.LowerBound...)
+		p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i], 0x00)
+		p.options.LowerBound = p.lowerBoundBuf[i]
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
-		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
-		p.options.UpperBound = p.upperBoundBuf
+		p.upperBoundBuf[i] = append(p.upperBoundBuf[i][:0], opts.UpperBound...)
+		p.upperBoundBuf[i] = append(p.upperBoundBuf[i], 0x00)
+		p.options.UpperBound = p.upperBoundBuf[i]
 	}
 	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 }
@@ -414,9 +420,13 @@ func (p *pebbleIterator) FindSplitKey(
 
 // SetUpperBound implements the Iterator interface.
 func (p *pebbleIterator) SetUpperBound(upperBound roachpb.Key) {
-	p.upperBoundBuf = append(p.upperBoundBuf[:0], upperBound...)
-	p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
-	p.options.UpperBound = p.upperBoundBuf
+	p.curBuf = (p.curBuf + 1) % 2
+	i := p.curBuf
+	p.lowerBoundBuf[i] = append(p.lowerBoundBuf[i][:0], p.options.LowerBound...)
+	p.options.LowerBound = p.lowerBoundBuf[i]
+	p.upperBoundBuf[i] = append(p.upperBoundBuf[i][:0], upperBound...)
+	p.upperBoundBuf[i] = append(p.upperBoundBuf[i], 0x00)
+	p.options.UpperBound = p.upperBoundBuf[i]
 	p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 }
 
