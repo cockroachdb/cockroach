@@ -3377,25 +3377,29 @@ func TestImportDefault(t *testing.T) {
 	})
 }
 
-// BenchmarkRandomSeeding/reseed-every-time-8         	1000000000	         0.000010 ns/op
-// BenchmarkRandomSeeding/call-random-without-reseeding-8         	1000000000	         0.000001 ns/op
+// BenchmarkRandomSeeding/reseed-every-time-8         	  145256	      7805 ns/op
+// BenchmarkRandomSeeding/call-random-without-reseeding-8         	71686162	        16.0 ns/op
 func BenchmarkRandomSeeding(b *testing.B) {
 	b.Run("reseed-every-time", func(b *testing.B) {
 		b.ResetTimer()
-		_ = rand.New(rand.NewSource(int64(357)))
+		for i := 0; i < b.N; i++ {
+			_ = rand.New(rand.NewSource(int64(357)))
+		}
 	})
 	b.Run("call-random-without-reseeding", func(b *testing.B) {
 		b.ResetTimer()
-		_ = rand.Float64()
+		for i := 0; i < b.N; i++ {
+			_ = rand.Float64()
+		}
 	})
 }
 
-// BenchmarkImportDefault/no-default-expression-8         	1000000000	         0.298 ns/op
-// BenchmarkImportDefault/default-but-targeted-8          	1000000000	         0.345 ns/op
-// BenchmarkImportDefault/default-constant-literal-8      	1000000000	         0.330 ns/op
-// BenchmarkImportDefault/default-constant-function-8     	1000000000	         0.335 ns/op
-// BenchmarkImportDefault/default-now-8                   	1000000000	         0.528 ns/op
-// BenchmarkImportDefault/default-rowid-8                 	1000000000	         0.718 ns/op
+// BenchmarkImportDefault/no-default-expression-8         	      15	  69169645 ns/op
+// BenchmarkImportDefault/default-but-targeted-8          	      16	  68679306 ns/op
+// BenchmarkImportDefault/default-constant-literal-8      	      16	  69942406 ns/op
+// BenchmarkImportDefault/default-constant-function-8     	      14	  85936498 ns/op
+// BenchmarkImportDefault/default-now-8                   	      14	  81087965 ns/op
+// BenchmarkImportDefault/default-rowid-8                 	      13	  81303242 ns/op
 func BenchmarkImportDefault(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -3465,11 +3469,11 @@ func BenchmarkImportDefault(b *testing.B) {
 	}
 	for _, test := range testCases {
 		b.Run(test.name, func(b *testing.B) {
-			b.ResetTimer()
 			defer sqlDB.Exec(b, `DROP TABLE t`)
 			sqlDB.Exec(b, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+			b.ResetTimer()
 			// Try importing 3 times within each test.
-			for i := 0; i < 3; i++ {
+			for i := 0; i < b.N; i++ {
 				sqlDB.Exec(b, fmt.Sprintf(
 					`IMPORT INTO t (%s) %s DATA (%s)`,
 					test.targetCols,
