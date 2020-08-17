@@ -2954,6 +2954,30 @@ func ParseDBox2D(str string) (*DBox2D, error) {
 	return &DBox2D{CartesianBoundingBox: b}, nil
 }
 
+// AsDBox2D attempts to retrieve a *DBox2D from an Expr, returning a
+// *DBox2D and a flag signifying whether the assertion was successful. The
+// function should be used instead of direct type assertions wherever a
+// *DBox2D wrapped by a *DOidWrapper is possible.
+func AsDBox2D(e Expr) (*DBox2D, bool) {
+	switch t := e.(type) {
+	case *DBox2D:
+		return t, true
+	case *DOidWrapper:
+		return AsDBox2D(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDBox2D attempts to retrieve a *DBox2D from an Expr, panicking
+// if the assertion fails.
+func MustBeDBox2D(e Expr) *DBox2D {
+	i, ok := AsDBox2D(e)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DBox2D, found %T", e))
+	}
+	return i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DBox2D) ResolvedType() *types.T {
 	return types.Box2D
