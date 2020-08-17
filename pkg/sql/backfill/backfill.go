@@ -349,7 +349,7 @@ func ConvertBackfillError(
 type IndexBackfiller struct {
 	backfiller
 
-	added []descpb.IndexDescriptor
+	added []*descpb.IndexDescriptor
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[descpb.ColumnID]int
 
@@ -364,7 +364,7 @@ type IndexBackfiller struct {
 	// indexesToEncode is a list of indexes to encode entries for a given row.
 	// It is a field of IndexBackfiller to avoid allocating a slice for each row
 	// backfilled.
-	indexesToEncode []descpb.IndexDescriptor
+	indexesToEncode []*descpb.IndexDescriptor
 }
 
 // ContainsInvertedIndex returns true if backfilling an inverted index.
@@ -510,7 +510,7 @@ func (ib *IndexBackfiller) initIndexes(desc *sqlbase.ImmutableTableDescriptor) u
 		}
 		if IndexMutationFilter(m) {
 			idx := m.GetIndex()
-			ib.added = append(ib.added, *idx)
+			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].ID
 				if idx.ContainsColumnID(id) ||
@@ -540,7 +540,7 @@ func (ib *IndexBackfiller) init(
 	// reset in BuildIndexEntriesChunk for every row added.
 	ib.indexesToEncode = ib.added
 	if len(ib.predicates) > 0 {
-		ib.indexesToEncode = make([]descpb.IndexDescriptor, 0, len(ib.added))
+		ib.indexesToEncode = make([]*descpb.IndexDescriptor, 0, len(ib.added))
 	}
 
 	ib.types = make([]*types.T, len(ib.cols))
@@ -623,12 +623,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes that the current row should be added to.
 		if len(ib.predicates) > 0 {
 			ib.indexesToEncode = ib.indexesToEncode[:0]
-			for i := range ib.added {
-				idx := &ib.added[i]
+			for _, idx := range ib.added {
 				if !idx.IsPartial() {
 					// If the index is not a partial index, all rows should have
 					// an entry.
-					ib.indexesToEncode = append(ib.indexesToEncode, *idx)
+					ib.indexesToEncode = append(ib.indexesToEncode, idx)
 					continue
 				}
 
@@ -642,7 +641,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				}
 
 				if val == tree.DBoolTrue {
-					ib.indexesToEncode = append(ib.indexesToEncode, *idx)
+					ib.indexesToEncode = append(ib.indexesToEncode, idx)
 				}
 			}
 		}
