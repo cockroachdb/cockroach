@@ -437,6 +437,11 @@ message CreateStatsDetails {
 
     // Indicates whether this column stat is over an inverted index.
     bool inverted = 3;
+
+    // If this column stat includes a histogram, indicates the maximum number
+    // of buckets that should be created. If this field is unset, a default
+    // maximum of 200 buckets are created.
+    uint32 histogram_max_buckets = 4;
   }
   string name = 1;
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];

@@ -203,8 +203,6 @@ SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
 statement ok
 CREATE STATISTICS s3 FROM data
 
-# With default column statistics, only index columns (plus boolean columns)
-# have a histogram_id (specifically the first column in each index).
 query TIIIB colnames
 SELECT column_names, row_count, distinct_count, null_count, histogram_id IS NOT NULL AS has_histogram
 FROM [SHOW STATISTICS FOR TABLE data]
@@ -253,8 +251,6 @@ DROP INDEX data@c_idx; DROP INDEX data@data_c_b_idx
 statement ok
 CREATE STATISTICS s5 FROM [53]
 
-# We should still get stats for column c, but now column c is added later as a
-# non-index column, resulting in a different ordering of the rows.
 query TIII colnames
 SELECT column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data]
@@ -691,7 +687,6 @@ SELECT count(*)
 statement ok
 SET tracing=off
 
-
 query TTIIIB colnames
 SELECT
   statistics_name,
@@ -706,13 +701,13 @@ ORDER BY
   statistics_name, column_names
 ----
 statistics_name  column_names    row_count  distinct_count  null_count  has_histogram
-s                {last_updated}  5          1               0           false
+s                {last_updated}  5          1               0           true
 s                {profile_id}    5          5               0           true
 s                {user_profile}  5          4               1           true
 
 
 # Test that individual columns in primary keys always have histograms collected
-# for them.
+# for them, with up to 200 buckets.
 
 statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = false
@@ -739,8 +734,20 @@ s                {a}           3          0           true
 s                {b}           3          0           true
 s                {c}           3          0           true
 
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE prim]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
 # Test that individual columns in secondary indexes always have histograms
-# collected for them.
+# collected for them, with up to 200 buckets.
 statement ok
 CREATE TABLE sec (a INT, b INT, c INT, INDEX (a, b, c));
 INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
@@ -764,8 +771,20 @@ s                {b}           3          0           true
 s                {c}           3          0           true
 s                {rowid}       3          0           true
 
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE sec]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
 # Test that columns referenced in partial index predicates always have
-# histograms collected for them.
+# histograms collected for them, with up to 200 buckets.
 statement ok
 SET experimental_partial_indexes=on;
 CREATE TABLE partial (a INT, b INT, c INT, INDEX (a) WHERE b > 0 OR c > 0);
@@ -789,3 +808,51 @@ s                {a}           3          0           true
 s                {b}           3          0           true
 s                {c}           3          0           true
 s                {rowid}       3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE partial]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+2            0           0                    1
+3            0           0                    1
+
+# Test that non-index columns have histograms collected for them, with
+# up to 2 buckets.
+statement ok
+CREATE TABLE noind (a INT, b INT, c INT);
+INSERT INTO noind VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+CREATE STATISTICS s FROM noind
+
+query TTIIB colnames,rowsort
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE noind]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {a}           3          0           true
+s                {b}           3          0           true
+s                {c}           3          0           true
+s                {rowid}       3          0           true
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE noind]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+1            0           0                    1
+3            1           1                    1
