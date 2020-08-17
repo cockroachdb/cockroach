@@ -106,8 +106,8 @@ func TestPauseUnpauseJob(t *testing.T) {
 	loaded := h.loadSchedule(t, j.ScheduleID())
 	// Paused jobs have next run time set to NULL
 	require.True(t, loaded.IsPaused())
-	require.Equal(t, 1, len(loaded.rec.ScheduleChanges.Changes))
-	require.Equal(t, "just because", loaded.rec.ScheduleChanges.Changes[0].Reason)
+	require.Equal(t, 1, len(loaded.rec.ScheduleMeta.Changes))
+	require.Equal(t, "just because", loaded.rec.ScheduleMeta.Changes[0].Reason)
 
 	// Un-pausing the job resets next run time.
 	require.NoError(t, j.Unpause("we are back"))
@@ -118,7 +118,7 @@ func TestPauseUnpauseJob(t *testing.T) {
 	// Running schedules have nextRun set to non-null value
 	require.False(t, loaded.IsPaused())
 	require.False(t, loaded.NextRun().Equal(time.Time{}))
-	require.Equal(t, 2, len(loaded.rec.ScheduleChanges.Changes))
-	require.Equal(t, "just because", loaded.rec.ScheduleChanges.Changes[0].Reason)
-	require.Equal(t, "we are back", loaded.rec.ScheduleChanges.Changes[1].Reason)
+	require.Equal(t, 2, len(loaded.rec.ScheduleMeta.Changes))
+	require.Equal(t, "just because", loaded.rec.ScheduleMeta.Changes[0].Reason)
+	require.Equal(t, "we are back", loaded.rec.ScheduleMeta.Changes[1].Reason)
 }
