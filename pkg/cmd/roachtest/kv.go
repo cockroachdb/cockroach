@@ -192,7 +192,7 @@ func registerKVContention(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("kv/contention/nodes=%d", nodes),
 		Owner:      OwnerKV,
-		MinVersion: "v19.2.0",
+		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(nodes + 1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
