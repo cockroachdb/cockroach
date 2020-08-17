@@ -40,7 +40,6 @@ type requestedStat struct {
 }
 
 const histogramSamples = 10000
-const histogramBuckets = 200
 
 // maxTimestampAge is the maximum allowed age of a scan timestamp during table
 // stats collection, used when creating statistics AS OF SYSTEM TIME. The
@@ -226,10 +225,14 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
+		histogramMaxBuckets := defaultHistogramBuckets
+		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
+			histogramMaxBuckets = int(details.ColumnStats[i].HistogramMaxBuckets)
+		}
 		reqStats[i] = requestedStat{
 			columns:             details.ColumnStats[i].ColumnIDs,
 			histogram:           histogram,
-			histogramMaxBuckets: histogramBuckets,
+			histogramMaxBuckets: histogramMaxBuckets,
 			name:                details.Name,
 			inverted:            details.ColumnStats[i].Inverted,
 		}
