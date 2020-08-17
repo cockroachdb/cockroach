@@ -2196,10 +2196,37 @@ message GossipSubscriptionEvent {
   Error error = 4;
 }
 
+// JoinNodeRequest is used to specify to the server node what the client's
+// MinimumSupportedVersion is. If it's not compatible with the rest of the
+// cluster, the join attempt is refused.
+message JoinNodeRequest {
+  // TODO(irfansharif): Actually make use of this min supported version.
+  roachpb.Version min_supported_version = 1;
+}
+
+// JoinNodeResponse informs the joining node what the cluster id is and what
+// node id was allocated to it.
+//
+// TODO(irfansharif): Think about the semantics for how store IDs get allocated.
+// When letting a node join, we could return back at most (least?) one store ID,
+// and entrust the node itself to allocate IDs for the remaining stores.
+//
+// TODO(irfansharif): We should use this RPC to tell us the right cluster
+// version to use (instead of using the minimum possible version and relying on
+// gossip to bump to for us).
+message JoinNodeResponse {
+  bytes cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
+  int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
+}
+
 // Batch and RangeFeed service implemeted by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
   rpc RangeFeed          (RangeFeedRequest)          returns (stream RangeFeedEvent)          {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  // Join a bootstrapped cluster. If the target node is itself not part of a
+  // bootstrapped cluster, an appropriate error is returned.
+  rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
 }

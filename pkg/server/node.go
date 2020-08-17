@@ -163,6 +163,8 @@ type Node struct {
 	perReplicaServer kvserver.Server
 }
 
+var _ roachpb.InternalServer = &Node{}
+
 // allocateNodeID increments the node id generator key to allocate
 // a new, unique node id.
 func allocateNodeID(ctx context.Context, db *kv.DB) (roachpb.NodeID, error) {
@@ -1096,4 +1098,29 @@ func (n *Node) GossipSubscription(
 			return ctx.Err()
 		}
 	}
+}
+
+// Join implements the roachpb.InternalServer service. This is the
+// "connectivity" API; individual CRDB servers are passed in a --join list and
+// the join targets are addressed through this API.
+//
+// TODO(irfansharif): Perhaps we could opportunistically create a liveness
+// record here so as to no longer have to worry about the liveness record not
+// existing for a given node.
+func (n *Node) Join(
+	ctx context.Context, _ *roachpb.JoinNodeRequest,
+) (*roachpb.JoinNodeResponse, error) {
+	ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-node-id")
+	defer span.Finish()
+
+	nodeID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infof(ctxWithSpan, "allocated node ID: n%d", nodeID)
+	return &roachpb.JoinNodeResponse{
+		ClusterID: n.clusterID.Get().GetBytes(),
+		NodeID:    int32(nodeID),
+	}, nil
 }

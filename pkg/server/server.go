@@ -1068,7 +1068,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// Set up the init server. We have to do this relatively early because we
 	// can't call RegisterInitServer() after `grpc.Serve`, which is called in
 	// startRPCServer (and for the loopback grpc-gw connection).
-	initConfig := initServerCfg{wrapped: s.cfg}
+	initConfig := newInitServerConfig(s.cfg)
 	inspectState, err := inspectEngines(
 		ctx,
 		s.engines,
@@ -1079,7 +1079,14 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 
-	initServer, err := newInitServer(s.cfg.AmbientCtx, s.rpcContext, inspectState, s.db, initConfig)
+	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
+	// uniquely in-process connection.
+	dialOpts, err := s.rpcContext.GRPCDialOptions()
+	if err != nil {
+		return err
+	}
+
+	initServer, err := newInitServer(s.cfg.AmbientCtx, dialOpts, inspectState, initConfig)
 	if err != nil {
 		return err
 	}
@@ -1216,12 +1223,6 @@ func (s *Server) Start(ctx context.Context) error {
 		netutil.FatalIfUnexpected(s.grpc.Serve(loopback))
 	})
 
-	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
-	// uniquely in-process connection.
-	dialOpts, err := s.rpcContext.GRPCDialOptions()
-	if err != nil {
-		return err
-	}
 	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
 		dialOpts,
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -1278,6 +1279,15 @@ func (s *Server) Start(ctx context.Context) error {
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 	advTenantAddrU := util.NewUnresolvedAddr("tcp", s.cfg.TenantAdvertiseAddr)
+
+	// TODO(irfansharif): As of 21.1, we will no longer need gossip to start
+	// before the init server. We need it in 20.2 for backwards compatibility
+	// with 20.1 servers that use gossip connectivity to distribute the cluster
+	// ID. In 20.2 we introduced a dedicated Join RPC to do exactly this, and so
+	// we can defer gossip start to after bootstrap/initialization.
+	//
+	// TODO(irfansharif): Can this be gated behind a version flag? So we only
+	// actually start gossip pre-init server when we find out that we need to?
 
 	s.gossip.Start(advAddrU, filtered)
 	log.Event(ctx, "started gossip")
@@ -1361,7 +1371,7 @@ func (s *Server) Start(ctx context.Context) error {
 		// demonstrate that we're not doing anything functional here (and to
 		// prevent bugs during further refactors).
 		if s.rpcContext.ClusterID.Get() == uuid.Nil {
-			return errors.New("programming error: expected cluster id to be populated in rpc context")
+			return errors.AssertionFailedf("expected cluster ID to be populated in rpc context")
 		}
 		unregister := s.gossip.RegisterCallback(gossip.KeyClusterID, func(string, roachpb.Value) {
 			clusterID, err := s.gossip.GetClusterID()
@@ -1380,7 +1390,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// but this gossip only happens once the first range has a leaseholder, i.e.
 	// when a quorum of nodes has gone fully operational.
 	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
-		log.Infof(ctx, "connecting to gossip network to verify cluster id %q", state.clusterID)
+		log.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
 		select {
 		case <-s.gossip.Connected:
 			log.Infof(ctx, "node connected via gossip")

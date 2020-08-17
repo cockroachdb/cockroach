@@ -49,7 +49,7 @@ namespace protobuf_roachpb_2fapi_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[124];
+  static const ::google::protobuf::internal::ParseTable schema[126];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -270,6 +270,12 @@ extern InitPutRequestDefaultTypeInternal _InitPutRequest_default_instance_;
 class InitPutResponse;
 class InitPutResponseDefaultTypeInternal;
 extern InitPutResponseDefaultTypeInternal _InitPutResponse_default_instance_;
+class JoinNodeRequest;
+class JoinNodeRequestDefaultTypeInternal;
+extern JoinNodeRequestDefaultTypeInternal _JoinNodeRequest_default_instance_;
+class JoinNodeResponse;
+class JoinNodeResponseDefaultTypeInternal;
+extern JoinNodeResponseDefaultTypeInternal _JoinNodeResponse_default_instance_;
 class LeaseInfoRequest;
 class LeaseInfoRequestDefaultTypeInternal;
 extern LeaseInfoRequestDefaultTypeInternal _LeaseInfoRequest_default_instance_;
@@ -504,6 +510,8 @@ template<> ::cockroach::roachpb::IncrementRequest* Arena::CreateMaybeMessage<::c
 template<> ::cockroach::roachpb::IncrementResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::IncrementResponse>(Arena*);
 template<> ::cockroach::roachpb::InitPutRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::InitPutRequest>(Arena*);
 template<> ::cockroach::roachpb::InitPutResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::InitPutResponse>(Arena*);
+template<> ::cockroach::roachpb::JoinNodeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::JoinNodeRequest>(Arena*);
+template<> ::cockroach::roachpb::JoinNodeResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::JoinNodeResponse>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoRequest>(Arena*);
 template<> ::cockroach::roachpb::LeaseInfoResponse* Arena::CreateMaybeMessage<::cockroach::roachpb::LeaseInfoResponse>(Arena*);
 template<> ::cockroach::roachpb::MergeRequest* Arena::CreateMaybeMessage<::cockroach::roachpb::MergeRequest>(Arena*);
@@ -17574,6 +17582,227 @@ class GossipSubscriptionEvent : public ::google::protobuf::MessageLite /* @@prot
   ::google::protobuf::internal::ArenaStringPtr pattern_matched_;
   ::cockroach::roachpb::Value* content_;
   ::cockroach::roachpb::Error* error_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class JoinNodeRequest : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.JoinNodeRequest) */ {
+ public:
+  JoinNodeRequest();
+  virtual ~JoinNodeRequest();
+
+  JoinNodeRequest(const JoinNodeRequest& from);
+
+  inline JoinNodeRequest& operator=(const JoinNodeRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  JoinNodeRequest(JoinNodeRequest&& from) noexcept
+    : JoinNodeRequest() {
+    *this = ::std::move(from);
+  }
+
+  inline JoinNodeRequest& operator=(JoinNodeRequest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const JoinNodeRequest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const JoinNodeRequest* internal_default_instance() {
+    return reinterpret_cast<const JoinNodeRequest*>(
+               &_JoinNodeRequest_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    124;
+
+  void Swap(JoinNodeRequest* other);
+  friend void swap(JoinNodeRequest& a, JoinNodeRequest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline JoinNodeRequest* New() const final {
+    return CreateMaybeMessage<JoinNodeRequest>(NULL);
+  }
+
+  JoinNodeRequest* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<JoinNodeRequest>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const JoinNodeRequest& from);
+  void MergeFrom(const JoinNodeRequest& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(JoinNodeRequest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // .cockroach.roachpb.Version min_supported_version = 1;
+  bool has_min_supported_version() const;
+  void clear_min_supported_version();
+  static const int kMinSupportedVersionFieldNumber = 1;
+  private:
+  const ::cockroach::roachpb::Version& _internal_min_supported_version() const;
+  public:
+  const ::cockroach::roachpb::Version& min_supported_version() const;
+  ::cockroach::roachpb::Version* release_min_supported_version();
+  ::cockroach::roachpb::Version* mutable_min_supported_version();
+  void set_allocated_min_supported_version(::cockroach::roachpb::Version* min_supported_version);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.JoinNodeRequest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::cockroach::roachpb::Version* min_supported_version_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class JoinNodeResponse : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.JoinNodeResponse) */ {
+ public:
+  JoinNodeResponse();
+  virtual ~JoinNodeResponse();
+
+  JoinNodeResponse(const JoinNodeResponse& from);
+
+  inline JoinNodeResponse& operator=(const JoinNodeResponse& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  JoinNodeResponse(JoinNodeResponse&& from) noexcept
+    : JoinNodeResponse() {
+    *this = ::std::move(from);
+  }
+
+  inline JoinNodeResponse& operator=(JoinNodeResponse&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const JoinNodeResponse& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const JoinNodeResponse* internal_default_instance() {
+    return reinterpret_cast<const JoinNodeResponse*>(
+               &_JoinNodeResponse_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    125;
+
+  void Swap(JoinNodeResponse* other);
+  friend void swap(JoinNodeResponse& a, JoinNodeResponse& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline JoinNodeResponse* New() const final {
+    return CreateMaybeMessage<JoinNodeResponse>(NULL);
+  }
+
+  JoinNodeResponse* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<JoinNodeResponse>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const JoinNodeResponse& from);
+  void MergeFrom(const JoinNodeResponse& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(JoinNodeResponse* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_cluster_id();
+  static const int kClusterIdFieldNumber = 1;
+  const ::std::string& cluster_id() const;
+  void set_cluster_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_cluster_id(::std::string&& value);
+  #endif
+  void set_cluster_id(const char* value);
+  void set_cluster_id(const void* value, size_t size);
+  ::std::string* mutable_cluster_id();
+  ::std::string* release_cluster_id();
+  void set_allocated_cluster_id(::std::string* cluster_id);
+
+  void clear_node_id();
+  static const int kNodeIdFieldNumber = 2;
+  ::google::protobuf::int32 node_id() const;
+  void set_node_id(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.JoinNodeResponse)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr cluster_id_;
+  ::google::protobuf::int32 node_id_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -36113,9 +36342,134 @@ inline void GossipSubscriptionEvent::set_allocated_error(::cockroach::roachpb::E
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.GossipSubscriptionEvent.error)
 }
 
+// -------------------------------------------------------------------
+
+// JoinNodeRequest
+
+// .cockroach.roachpb.Version min_supported_version = 1;
+inline bool JoinNodeRequest::has_min_supported_version() const {
+  return this != internal_default_instance() && min_supported_version_ != NULL;
+}
+inline const ::cockroach::roachpb::Version& JoinNodeRequest::_internal_min_supported_version() const {
+  return *min_supported_version_;
+}
+inline const ::cockroach::roachpb::Version& JoinNodeRequest::min_supported_version() const {
+  const ::cockroach::roachpb::Version* p = min_supported_version_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.JoinNodeRequest.min_supported_version)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::Version*>(
+      &::cockroach::roachpb::_Version_default_instance_);
+}
+inline ::cockroach::roachpb::Version* JoinNodeRequest::release_min_supported_version() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.JoinNodeRequest.min_supported_version)
+  
+  ::cockroach::roachpb::Version* temp = min_supported_version_;
+  min_supported_version_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::Version* JoinNodeRequest::mutable_min_supported_version() {
+  
+  if (min_supported_version_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::Version>(GetArenaNoVirtual());
+    min_supported_version_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.JoinNodeRequest.min_supported_version)
+  return min_supported_version_;
+}
+inline void JoinNodeRequest::set_allocated_min_supported_version(::cockroach::roachpb::Version* min_supported_version) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete reinterpret_cast< ::google::protobuf::MessageLite*>(min_supported_version_);
+  }
+  if (min_supported_version) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      min_supported_version = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, min_supported_version, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  min_supported_version_ = min_supported_version;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.JoinNodeRequest.min_supported_version)
+}
+
+// -------------------------------------------------------------------
+
+// JoinNodeResponse
+
+inline void JoinNodeResponse::clear_cluster_id() {
+  cluster_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& JoinNodeResponse::cluster_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.JoinNodeResponse.cluster_id)
+  return cluster_id_.GetNoArena();
+}
+inline void JoinNodeResponse::set_cluster_id(const ::std::string& value) {
+  
+  cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.JoinNodeResponse.cluster_id)
+}
+#if LANG_CXX11
+inline void JoinNodeResponse::set_cluster_id(::std::string&& value) {
+  
+  cluster_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.JoinNodeResponse.cluster_id)
+}
+#endif
+inline void JoinNodeResponse::set_cluster_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.JoinNodeResponse.cluster_id)
+}
+inline void JoinNodeResponse::set_cluster_id(const void* value, size_t size) {
+  
+  cluster_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.JoinNodeResponse.cluster_id)
+}
+inline ::std::string* JoinNodeResponse::mutable_cluster_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.JoinNodeResponse.cluster_id)
+  return cluster_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* JoinNodeResponse::release_cluster_id() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.JoinNodeResponse.cluster_id)
+  
+  return cluster_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void JoinNodeResponse::set_allocated_cluster_id(::std::string* cluster_id) {
+  if (cluster_id != NULL) {
+    
+  } else {
+    
+  }
+  cluster_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), cluster_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.JoinNodeResponse.cluster_id)
+}
+
+inline void JoinNodeResponse::clear_node_id() {
+  node_id_ = 0;
+}
+inline ::google::protobuf::int32 JoinNodeResponse::node_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.JoinNodeResponse.node_id)
+  return node_id_;
+}
+inline void JoinNodeResponse::set_node_id(::google::protobuf::int32 value) {
+  
+  node_id_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.JoinNodeResponse.node_id)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
