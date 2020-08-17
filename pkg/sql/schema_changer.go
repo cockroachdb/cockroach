@@ -219,6 +219,12 @@ func (sc *SchemaChanger) refreshMaterializedView(
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context, table *descpb.TableDescriptor, query string, ts hlc.Timestamp, desc string,
 ) error {
+	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		txn.SetFixedTimestamp(ctx, ts)
 
@@ -411,17 +417,14 @@ func drainNamesForDescriptor(
 			mutDesc.SetDrainingNames(nil)
 
 			// Reclaim all old names.
-			b := txn.NewBatch()
 			for _, drain := range namesToReclaim {
+				// TODO (ajwerner): These should be batched.
 				err := catalogkv.RemoveObjectNamespaceEntry(
 					ctx, txn, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
 				)
 				if err != nil {
 					return err
 				}
-			}
-			if err := txn.Run(ctx, b); err != nil {
-				return err
 			}
 
 			// If the descriptor to drain is a schema, then we need to delete the
@@ -504,15 +507,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 	return nil
 }
 
-// Execute the entire schema change in steps.
-// inSession is set to false when this is called from the asynchronous
-// schema change execution path.
-//
-// If the txn that queued the schema changer did not commit, this will be a
-// no-op, as we'll fail to find the job for our mutation in the jobs registry.
-func (sc *SchemaChanger) exec(ctx context.Context) error {
-	ctx = logtags.AddTags(ctx, sc.execLogTags())
-
+func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descriptor, error) {
 	// Retrieve the descriptor that is being changed.
 	var desc catalog.Descriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -528,6 +523,23 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		)
 		return err
 	}); err != nil {
+		return nil, err
+	}
+	return desc, nil
+}
+
+// Execute the entire schema change in steps.
+// inSession is set to false when this is called from the asynchronous
+// schema change execution path.
+//
+// If the txn that queued the schema changer did not commit, this will be a
+// no-op, as we'll fail to find the job for our mutation in the jobs registry.
+func (sc *SchemaChanger) exec(ctx context.Context) error {
+	ctx = logtags.AddTags(ctx, sc.execLogTags())
+
+	// Pull out the requested descriptor.
+	desc, err := sc.getTargetDescriptor(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -630,8 +642,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// Run through mutation state machine and backfill.
-	err := sc.runStateMachineAndBackfill(ctx)
-	if err != nil {
+	if err := sc.runStateMachineAndBackfill(ctx); err != nil {
 		return err
 	}
 
@@ -764,7 +775,53 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	return sc.runStateMachineAndBackfill(ctx)
+	if err := sc.runStateMachineAndBackfill(ctx); err != nil {
+		return err
+	}
+
+	// Check if the target table needs to be cleaned up at all. If the target
+	// table was in the ADD state and the schema change failed, then we need to
+	// clean up the descriptor.
+	desc, err := sc.getTargetDescriptor(ctx)
+	if err != nil {
+		return err
+	}
+	if tblDesc, ok := desc.(sqlbase.TableDescriptor); ok && tblDesc.GetState() == descpb.TableDescriptor_ADD {
+		// Delete the names in use by this descriptor.
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return catalogkv.RemoveObjectNamespaceEntry(
+				ctx,
+				txn,
+				sc.execCfg.Codec,
+				tblDesc.GetParentID(),
+				tblDesc.GetParentSchemaID(),
+				tblDesc.GetName(),
+				false, /* kvTrace */
+			)
+		}); err != nil {
+			return err
+		}
+		// Now start a GC job for the table.
+		if err := startGCJob(
+			ctx,
+			sc.db,
+			sc.jobRegistry,
+			sc.job.Payload().Username,
+			"ROLLBACK OF"+sc.job.Payload().Description,
+			jobspb.SchemaChangeGCDetails{
+				Tables: []jobspb.SchemaChangeGCDetails_DroppedID{
+					{
+						ID:       tblDesc.GetID(),
+						DropTime: timeutil.Now().UnixNano(),
+					},
+				},
+			},
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -1697,6 +1754,9 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunAfterBackfill is called after completing a backfill.
 	RunAfterBackfill func(jobID int64) error
+
+	// RunBeforeQueryBackfill is called before a query based backfill.
+	RunBeforeQueryBackfill func() error
 
 	// RunBeforeIndexBackfill is called just before starting the index backfill, after
 	// fixing the index backfill scan timestamp.
