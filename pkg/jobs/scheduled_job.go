@@ -43,7 +43,7 @@ type scheduledJobRecord struct {
 	ScheduleDetails jobspb.ScheduleDetails    `col:"schedule_details"`
 	ExecutorType    string                    `col:"executor_type"`
 	ExecutionArgs   jobspb.ExecutionArguments `col:"execution_args"`
-	ScheduleChanges jobspb.ScheduleChangeInfo `col:"schedule_changes"`
+	ScheduleMeta    jobspb.ScheduleMetaInfo   `col:"schedule_changes"`
 }
 
 // ScheduledJob  is a representation of the scheduled job.
@@ -64,12 +64,49 @@ type ScheduledJob struct {
 	dirty map[string]struct{}
 }
 
+// ScheduleGroupAction is an opaque string describing an action
+// to perform on the schedule group.
+type ScheduleGroupAction string
+
+// NoScheduleGroupAction is a constant specify "no action"
+const NoScheduleGroupAction ScheduleGroupAction = ""
+
 // NewScheduledJob creates and initializes ScheduledJob.
 func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	return &ScheduledJob{
 		env:   env,
 		dirty: make(map[string]struct{}),
 	}
+}
+
+// LoadScheduledJob loads scheduled job record from the database.
+func LoadScheduledJob(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	id int64,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) (*ScheduledJob, error) {
+	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
+			env.ScheduledJobsTableName(), id))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(rows) != 1 {
+		return nil, errors.Newf(
+			"expected to find 1 schedule, found %d with schedule_id=%d",
+			len(rows), id)
+	}
+
+	j := NewScheduledJob(env)
+	if err := j.InitFromDatums(rows[0], cols); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // ScheduleID returns schedule ID.
@@ -190,17 +227,54 @@ func (j *ScheduledJob) SetScheduleDetails(details jobspb.ScheduleDetails) {
 // Arguments are interpreted same as printf.
 // If there are too many changes already recorded, trims older changes.
 func (j *ScheduledJob) AddScheduleChangeReason(reasonFmt string, args ...interface{}) {
-	if len(j.rec.ScheduleChanges.Changes) > 10 {
-		j.rec.ScheduleChanges.Changes = j.rec.ScheduleChanges.Changes[1:]
+	if len(j.rec.ScheduleMeta.Changes) > 10 {
+		j.rec.ScheduleMeta.Changes = j.rec.ScheduleMeta.Changes[1:]
 	}
 
-	j.rec.ScheduleChanges.Changes = append(
-		j.rec.ScheduleChanges.Changes,
-		jobspb.ScheduleChangeInfo_Change{
+	j.rec.ScheduleMeta.Changes = append(
+		j.rec.ScheduleMeta.Changes,
+		jobspb.ScheduleMetaInfo_Change{
 			Time:   j.env.Now().UnixNano(),
 			Reason: fmt.Sprintf(reasonFmt, args...),
 		})
 	j.markDirty("schedule_changes")
+}
+
+// LastChangeReason returns the last schedule change reason.
+func (j *ScheduledJob) LastChangeReason() string {
+	l := len(j.rec.ScheduleMeta.Changes)
+	if l > 0 {
+		return j.rec.ScheduleMeta.Changes[l-1].Reason
+	}
+	return ""
+}
+
+// AddScheduleToScheduleGroup adds specified schedule ID to the schedule
+// group record for this schedule.
+func (j *ScheduledJob) AddScheduleToScheduleGroup(id int64) {
+	j.rec.ScheduleMeta.ScheduleGroup = append(j.rec.ScheduleMeta.ScheduleGroup, id)
+	j.markDirty("schedule_changes")
+}
+
+// SetGroupAction sets schedule metadata group action to the specified value.
+func (j *ScheduledJob) SetGroupAction(action ScheduleGroupAction) {
+	j.rec.ScheduleMeta.GroupAction = string(action)
+	j.markDirty("schedule_changes")
+}
+
+// GroupAction returns group action information (if any).
+func (j *ScheduledJob) GroupAction() ScheduleGroupAction {
+	return ScheduleGroupAction(j.rec.ScheduleMeta.GroupAction)
+}
+
+// ScheduleExpr returns schedule expression for this schedule.
+func (j *ScheduledJob) ScheduleExpr() string {
+	return j.rec.ScheduleExpr
+}
+
+// ScheduleMetaInfo returns this schedule metadata information.
+func (j *ScheduledJob) ScheduleMetaInfo() *jobspb.ScheduleMetaInfo {
+	return &j.rec.ScheduleMeta
 }
 
 // Pause pauses this schedule.
@@ -393,7 +467,7 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 		case `execution_args`:
 			arg, err = marshalProto(&j.rec.ExecutionArgs)
 		case `schedule_changes`:
-			arg, err = marshalProto(&j.rec.ScheduleChanges)
+			arg, err = marshalProto(&j.rec.ScheduleMeta)
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)
 		}

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
@@ -152,19 +151,6 @@ func computeScheduleRecurrence(
 	return &scheduleRecurrence{cron, frequency}, nil
 }
 
-var humanDurations = map[time.Duration]string{
-	time.Hour:          "hour",
-	24 * time.Hour:     "day",
-	7 * 24 * time.Hour: "week",
-}
-
-func (r *scheduleRecurrence) Humanize() string {
-	if d, ok := humanDurations[r.frequency]; ok {
-		return "every " + d
-	}
-	return "every " + r.frequency.String()
-}
-
 var forceFullBackup *scheduleRecurrence
 
 func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurrence {
@@ -191,6 +177,7 @@ func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurre
 }
 
 const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
+const unpauseIncrementalAction jobs.ScheduleGroupAction = "unpauseInc"
 
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
@@ -320,54 +307,69 @@ func doCreateBackupSchedules(
 	ex := p.ExecCfg().InternalExecutor
 	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Create FULL backup schedule.
-		fullFirstRun := firstRun
-		if eval.isEnterpriseUser && fullFirstRun == nil && fullRecurrencePicked {
+		fullBackupStmt := tree.AsString(backupNode)
+		full, err := makeBackupSchedule(
+			env, p.User(), fullScheduleName, fullRecurrence, details, backupNode)
+		if err != nil {
+			return err
+		}
+
+		if firstRun != nil {
+			full.SetNextRun(*firstRun)
+		} else if eval.isEnterpriseUser && fullRecurrencePicked {
 			// The enterprise user did not indicate preference when to run full backups,
 			// and we picked the schedule ourselves.
 			// Run full backup immediately so that we do not wind up waiting for a long
 			// time before the first full backup runs.  Without full backup, we can't
-			// execute incrementals.
-			now := env.Now()
-			fullFirstRun = &now
+			// execute incremental.
+			full.SetNextRun(env.Now())
 		}
 
-		if err := createBackupSchedule(
-			ctx, env, p.User(), fullScheduleName, fullRecurrence,
-			fullFirstRun, details, backupNode, resultsCh, ex, txn,
-		); err != nil {
+		// Create the schedule (we need its ID to create incremental below).
+		if err := full.Create(ctx, ex, txn); err != nil {
 			return err
 		}
 
 		// If needed, create incremental.
 		if incRecurrence != nil {
 			backupNode.AppendToLatest = true
-
-			if err := createBackupSchedule(
-				ctx, env, p.User(), fullScheduleName+": INCREMENTAL", incRecurrence,
-				firstRun, details, backupNode, resultsCh, ex, txn,
-			); err != nil {
+			inc, err := makeBackupSchedule(
+				env, p.User(), fullScheduleName+": INCREMENTAL", incRecurrence, details, backupNode)
+			if err != nil {
 				return err
 			}
+			inc.Pause("Waiting for FULL")
+			inc.AddScheduleToScheduleGroup(full.ScheduleID())
+
+			if err := inc.Create(ctx, ex, txn); err != nil {
+				return err
+			}
+			if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
+				return err
+			}
+
+			// Add this incremental to the FULL group, and instruct full schedule
+			// to unpause incremental upon completion.
+			full.AddScheduleToScheduleGroup(inc.ScheduleID())
+			full.SetGroupAction(unpauseIncrementalAction)
 		}
 
-		return nil
+		if err := full.Update(ctx, ex, txn); err != nil {
+			return err
+		}
+		return emitSchedule(full, fullBackupStmt, resultsCh)
 	})
 
 }
 
-func createBackupSchedule(
-	ctx context.Context,
+func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	owner string,
 	name string,
 	recurrence *scheduleRecurrence,
-	firstRun *time.Time,
 	details jobspb.ScheduleDetails,
 	backupNode *tree.Backup,
-	resultsCh chan<- tree.Datums,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
-) error {
+) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleName(name)
 	sj.SetOwner(owner)
@@ -381,13 +383,10 @@ func createBackupSchedule(
 	}
 
 	if err := sj.SetSchedule(recurrence.cron); err != nil {
-		return err
+		return nil, err
 	}
 
 	sj.SetScheduleDetails(details)
-	if firstRun != nil {
-		sj.SetNextRun(*firstRun)
-	}
 
 	// TODO(yevgeniy): Validate backup schedule:
 	//  * Verify targets exist.  Provide a way for user to override this via option.
@@ -398,21 +397,25 @@ func createBackupSchedule(
 	args.BackupStatement = tree.AsString(backupNode)
 	any, err := pbtypes.MarshalAny(args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sj.SetExecutionDetails(
 		tree.ScheduledBackupExecutor.InternalName(),
 		jobspb.ExecutionArguments{Args: any},
 	)
 
-	// Create the schedule.
-	if err := sj.Create(ctx, ex, txn); err != nil {
-		return err
-	}
+	return sj, nil
+}
 
+func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tree.Datums) error {
 	var nextRun tree.Datum
+	status := "ACTIVE"
 	if sj.IsPaused() {
 		nextRun = tree.DNull
+		status = "PAUSED"
+		if reason := sj.LastChangeReason(); reason != "" {
+			status += ": " + reason
+		}
 	} else {
 		next, err := tree.MakeDTimestampTZ(sj.NextRun(), time.Microsecond)
 		if err != nil {
@@ -423,10 +426,11 @@ func createBackupSchedule(
 
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(sj.ScheduleID())),
-		tree.NewDString(name),
+		tree.NewDString(sj.ScheduleName()),
+		tree.NewDString(status),
 		nextRun,
-		tree.NewDString(recurrence.Humanize()),
-		tree.NewDString(tree.AsString(backupNode)),
+		tree.NewDString(sj.ScheduleExpr()),
+		tree.NewDString(backupStmt),
 	}
 	return nil
 }
@@ -507,8 +511,9 @@ func makeScheduledBackupEval(
 var scheduledBackupHeader = sqlbase.ResultColumns{
 	{Name: "schedule_id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
-	{Name: "next_run", Typ: types.TimestampTZ},
-	{Name: "frequency", Typ: types.String},
+	{Name: "status", Typ: types.String},
+	{Name: "first_run", Typ: types.TimestampTZ},
+	{Name: "schedule", Typ: types.String},
 	{Name: "backup_stmt", Typ: types.String},
 }
 

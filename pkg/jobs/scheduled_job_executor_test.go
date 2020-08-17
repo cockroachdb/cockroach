@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -39,7 +40,13 @@ func (s *statusTrackingExecutor) ExecuteJob(
 }
 
 func (s *statusTrackingExecutor) NotifyJobTermination(
-	ctx context.Context, jobID int64, jobStatus Status, schedule *ScheduledJob, txn *kv.Txn,
+	ctx context.Context,
+	jobID int64,
+	jobStatus Status,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) error {
 	s.counts[jobStatus]++
 	return nil

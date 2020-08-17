@@ -52,13 +52,21 @@ message ExecutionArguments {
   google.protobuf.Any args = 1;
 }
 
-// ScheduleChangeInfo describes the reasons for schedule changes.
-message ScheduleChangeInfo {
+// ScheduleMetaInfo describes schedule metadata.
+message ScheduleMetaInfo {
   message Change {
     int64 time = 1;
     string reason = 2;
   }
   repeated Change changes = 1  [(gogoproto.nullable) = false];
+
+  // IDs of the schedules that are members of a "group" of schedules.
+  // Excludes this schedule id.
+  repeated int64 schedule_group = 2;
+
+  // Group action is an opaque "command" asking this schedule to perform
+  // an action on the entire group of schedules, possibly including itself.
+  string group_action = 3;
 }
 
 // Message representing sql statement to execute.

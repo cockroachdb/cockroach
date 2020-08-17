@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -122,17 +123,51 @@ func (e *scheduledBackupExecutor) executeBackup(
 
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (e *scheduledBackupExecutor) NotifyJobTermination(
-	ctx context.Context, jobID int64, jobStatus jobs.Status, schedule *jobs.ScheduledJob, _ *kv.Txn,
+	ctx context.Context,
+	jobID int64,
+	jobStatus jobs.Status,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *jobs.ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) error {
 	if jobStatus == jobs.StatusSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
-	} else {
-		err := errors.Errorf(
-			"backup job %d scheduled by %d failed with status %s",
-			jobID, schedule.ScheduleID(), jobStatus)
-		log.Errorf(ctx, "backup error: %v	", err)
-		e.metrics.NumFailed.Inc(1)
-		jobs.DefaultHandleFailedRun(schedule, jobID, err)
+		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
+		return e.backupSucceeded(ctx, schedule, env, ex, txn)
+	}
+
+	e.metrics.NumFailed.Inc(1)
+	err := errors.Errorf(
+		"backup job %d scheduled by %d failed with status %s",
+		jobID, schedule.ScheduleID(), jobStatus)
+	log.Errorf(ctx, "backup error: %v	", err)
+	jobs.DefaultHandleFailedRun(schedule, jobID, err)
+
+	return nil
+}
+
+func (e *scheduledBackupExecutor) backupSucceeded(
+	ctx context.Context,
+	schedule *jobs.ScheduledJob,
+	env scheduledjobs.JobSchedulerEnv,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	if schedule.GroupAction() == unpauseIncrementalAction {
+		schedule.SetGroupAction(jobs.NoScheduleGroupAction)
+		for _, id := range schedule.ScheduleMetaInfo().ScheduleGroup {
+			s, err := jobs.LoadScheduledJob(ctx, env, id, ex, txn)
+			if err != nil {
+				return err
+			}
+			if err := s.Unpause("FULL backup completed"); err != nil {
+				return err
+			}
+			if err := s.Update(ctx, ex, txn); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
