@@ -69,23 +69,6 @@ type Column interface {
 	// DatumType returns the data type of the column.
 	DatumType() *types.T
 
-	// ColTypePrecision returns the precision of the column's SQL data type. This
-	// is only defined for the Decimal data type and represents the max number of
-	// decimal digits in the decimal (including fractional digits). If precision
-	// is 0, then the decimal has no max precision.
-	ColTypePrecision() int
-
-	// ColTypeWidth returns the width of the column's SQL data type. This has
-	// different meanings depending on the data type:
-	//
-	//   Decimal  : scale
-	//   Int      : # bits (16, 32, 64, etc)
-	//   Bit Array: # bits
-	//   String   : rune count
-	//
-	// TODO(andyk): Switch calling code to use DatumType.
-	ColTypeWidth() int
-
 	// IsNullable returns true if the column is nullable.
 	IsNullable() bool
 
