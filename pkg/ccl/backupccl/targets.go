@@ -751,7 +751,7 @@ func CheckObjectExists(
 }
 
 func fullClusterTargetsRestore(
-	allDescs []sqlbase.Descriptor,
+	allDescs []sqlbase.Descriptor, lastBackupManifest BackupManifest,
 ) ([]sqlbase.Descriptor, []sqlbase.DatabaseDescriptor, []jobspb.RestoreDetails_Tenant, error) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
@@ -770,7 +770,13 @@ func fullClusterTargetsRestore(
 		}
 	}
 
-	return filteredDescs, filteredDBs, nil, nil
+	// Restore all tenants during full-cluster restore.
+	var tenants []jobspb.RestoreDetails_Tenant
+	for _, tenant := range lastBackupManifest.Tenants {
+		tenants = append(tenants, jobspb.RestoreDetails_Tenant{ID: tenant.ID, Info: tenant.Info})
+	}
+
+	return filteredDescs, filteredDBs, tenants, nil
 }
 
 func selectTargets(
@@ -784,7 +790,7 @@ func selectTargets(
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
-		return fullClusterTargetsRestore(allDescs)
+		return fullClusterTargetsRestore(allDescs, lastBackupManifest)
 	}
 
 	if targets.Tenant != (roachpb.TenantID{}) {

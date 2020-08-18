@@ -344,6 +344,16 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(
 			clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
 	},
+	{
+		// Introduced in v20.2.
+		name:   "create new system.tenants table",
+		workFn: createTenantsTable,
+		// NB: no dedicated cluster version was introduced for this table at the
+		// time (4272248e573cbaa4fac436b0ea07195fcd648845). The below is the first
+		// cluster version that was added after the system.tenants table.
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
+		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
+	},
 }
 
 func staticIDs(
@@ -1923,4 +1933,8 @@ ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 		return err
 	}
 	return createSystemTable(ctx, r, sqlbase.SqllivenessTable)
+}
+
+func createTenantsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.TenantsTable)
 }
