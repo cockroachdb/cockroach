@@ -29,11 +29,6 @@ func (f FmtFlags) HasFlags(subset FmtFlags) bool {
 	return f&subset == subset
 }
 
-// SetFlags sets the given formatting flags.
-func (f *FmtFlags) SetFlags(subset FmtFlags) {
-	*f |= subset
-}
-
 // EncodeFlags returns the subset of the flags that are also lex encode flags.
 func (f FmtFlags) EncodeFlags() lex.EncodeFlags {
 	return lex.EncodeFlags(f) & (lex.EncFirstFreeFlagBit - 1)
@@ -299,21 +294,6 @@ func (ctx *FmtCtx) Printf(f string, args ...interface{}) {
 	fmt.Fprintf(&ctx.Buffer, f, args...)
 }
 
-// FmtExpr returns FmtFlags that indicate how the pretty-printer
-// should format expressions.
-func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases bool) FmtFlags {
-	if showTypes {
-		base |= FmtShowTypes
-	}
-	if symbolicVars {
-		base |= fmtSymbolicVars
-	}
-	if showTableAliases {
-		base |= FmtShowTableAliases
-	}
-	return base
-}
-
 // SetIndexedVarFormat modifies FmtCtx to customize the printing of
 // IndexedVars using the provided function.
 func (ctx *FmtCtx) SetIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) {
@@ -324,15 +304,6 @@ func (ctx *FmtCtx) SetIndexedVarFormat(fn func(ctx *FmtCtx, idx int)) {
 // StarDatums using the provided function.
 func (ctx *FmtCtx) SetPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder)) {
 	ctx.placeholderFormat = placeholderFn
-}
-
-// WithPlaceholderFormat changes the placeholder formatting function, calls the
-// given function, then restores the placeholder function.
-func (ctx *FmtCtx) WithPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeholder), fn func()) {
-	old := ctx.placeholderFormat
-	ctx.placeholderFormat = placeholderFn
-	defer func() { ctx.placeholderFormat = old }()
-	fn()
 }
 
 // SetIndexedTypeFormat modifies FmtCtx to customize the printing of

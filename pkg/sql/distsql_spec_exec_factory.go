@@ -756,14 +756,11 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
 	p := plan.(*planComponents)
-	explain, err := constructExplainPlanNode(options, stmtType, p, e.planner)
+	explain, err := constructExplainDistSQLOrVecNode(options, stmtType, p, e.planner)
 	if err != nil {
 		return nil, err
 	}
 	explainNode := explain.(planNode)
-	if _, isExplainPlan := explainNode.(*explainPlanNode); isExplainPlan {
-		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: explain (plan)")
-	}
 	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), explainNode)
 	if err != nil {
 		return nil, err
