@@ -79,15 +79,15 @@ func getFindSchedulesStatement(env scheduledjobs.JobSchedulerEnv, maxSchedules i
 	return fmt.Sprintf(
 		`
 SELECT
-  (SELECT count(*) 
+  (SELECT count(*)
    FROM %s J
-   WHERE 
-      J.created_by_type = '%s' AND J.created_by_id = S.schedule_id AND 
+   WHERE
+      J.created_by_type = '%s' AND J.created_by_id = S.schedule_id AND
       J.status NOT IN ('%s', '%s', '%s')
   ) AS num_running, S.*
 FROM %s S
 WHERE next_run < %s
-ORDER BY next_run
+ORDER BY random()
 %s`, env.SystemJobsTableName(), CreatedByScheduledJobs,
 		StatusSucceeded, StatusCanceled, StatusFailed,
 		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
