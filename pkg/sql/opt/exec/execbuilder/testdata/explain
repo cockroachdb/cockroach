@@ -1061,25 +1061,23 @@ sort
 query TTT colnames
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
-tree         field         description
-·            distribution  local
-·            vectorized    false
-group        ·             ·
- │           scalar        ·
- └── values  ·             ·
-·            size          2 columns, 2 rows
+tree            field         description
+·               distribution  local
+·               vectorized    false
+group (scalar)  ·             ·
+ └── values     ·             ·
+·               size          2 columns, 2 rows
 
 query TTT
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
-·          distribution   local
-·          vectorized     true
-group      ·              ·
- │         scalar         ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          tc@primary
-·          spans          FULL SCAN
+·               distribution   local
+·               vectorized     true
+group (scalar)  ·              ·
+ └── scan       ·              ·
+·               missing stats  ·
+·               table          tc@primary
+·               spans          FULL SCAN
 
 # Verify that subqueries are handled correctly, namely that we can have
 # subqueries outside of the EXPLAINed query.

@@ -860,8 +860,7 @@ EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
 ----
 ·                 distribution   full
 ·                 vectorized     true
-group             ·              ·
- │                scalar         ·
+group (scalar)    ·              ·
  └── lookup join  ·              ·
       │           table          a@primary
       │           equality       (a) = (a)

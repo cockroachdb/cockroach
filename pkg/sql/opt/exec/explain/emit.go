@@ -276,7 +276,7 @@ var nodeNames = [...]string{
 	recursiveCTEOp:         "recursive cte",
 	renderOp:               "render",
 	saveTableOp:            "save table",
-	scalarGroupByOp:        "group",
+	scalarGroupByOp:        "group (scalar)",
 	scanBufferOp:           "scan buffer",
 	scanOp:                 "", // This node does not have a fixed name.
 	sequenceSelectOp:       "sequence select",
@@ -785,9 +785,6 @@ func (e *emitter) emitGroupByAttributes(
 	}
 	if len(groupColOrdering) > 0 {
 		e.ob.Attr("ordered", groupColOrdering.String(inputCols))
-	}
-	if isScalar {
-		e.ob.Attr("scalar", "")
 	}
 }
 

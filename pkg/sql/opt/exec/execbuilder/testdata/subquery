@@ -74,10 +74,9 @@ root                              ·                    ·                      
       │                           id                   @S2                                                                          ·               ·
       │                           original sql         (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·               ·
       │                           exec mode            one row                                                                      ·               ·
-      └── group                   ·                    ·                                                                            (any_not_null)  ·
+      └── group (scalar)          ·                    ·                                                                            (any_not_null)  ·
            │                      estimated row count  1 (missing stats)                                                            ·               ·
            │                      aggregate 0          any_not_null(a)                                                              ·               ·
-           │                      scalar               ·                                                                            ·               ·
            └── limit              ·                    ·                                                                            (a)             ·
                 │                 estimated row count  1 (missing stats)                                                            ·               ·
                 │                 count                1                                                                            ·               ·
