@@ -470,7 +470,7 @@ func validateDualPurposeNodeCert(ci *CertInfo) error {
 	// The first certificate is used in client auth.
 	cert := ci.ParsedCertificates[0]
 	principals := getCertificatePrincipals(cert)
-	if !ContainsUser(NodeUser, principals) {
+	if !Contains(principals, NodeUser) {
 		return errors.Errorf("client/server node certificate has principals %q, expected %q",
 			principals, NodeUser)
 	}
@@ -489,7 +489,7 @@ func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
 	case ClientPem:
 		// Check that CommonName matches the username extracted from the filename.
 		principals := getCertificatePrincipals(cert)
-		if !ContainsUser(ci.Name, principals) {
+		if !Contains(principals, ci.Name) {
 			return errors.Errorf("client certificate has principals %q, expected %q",
 				principals, ci.Name)
 		}

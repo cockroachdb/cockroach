@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -476,10 +477,15 @@ func CreateTenantClientPair(
 		return nil, err
 	}
 
-	caCertPath := cm.TenantClientCACertPath()
+	// Load the tenant client CA cert info. Note that this falls back to the regular client CA which in turn falls
+	// back to the CA.
+	clientCA, err := cm.getTenantClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
 
 	// Load the CA pair.
-	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
+	caCert, caPrivateKey, err := loadCACertAndKey(filepath.Join(certsDir, clientCA.Filename), caKeyPath)
 	if err != nil {
 		return nil, err
 	}

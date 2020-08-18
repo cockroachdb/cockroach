@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"google.golang.org/grpc"
@@ -32,21 +33,12 @@ func authErrorf(format string, a ...interface{}) error {
 	return status.Errorf(codes.Unauthenticated, format, a...)
 }
 
-// auth is a policy that performs authentication and authorization for unary and
-// streaming RPC invocations. An auth enforces its policy through a pair of gRPC
-// interceptors that it exports.
-type auth interface {
-	// AuthUnary returns an interceptor to validate unary RPCs.
-	AuthUnary() grpc.UnaryServerInterceptor
-
-	// AuthUnary returns an interceptor to validate streaming RPCs.
-	AuthStream() grpc.StreamServerInterceptor
-}
-
 // kvAuth is the standard auth policy used for RPCs sent to an RPC server. It
 // validates that client TLS certificate provided by the incoming connection
 // contains a sufficiently privileged user.
-type kvAuth struct{}
+type kvAuth struct {
+	tenant tenantAuthorizer
+}
 
 // kvAuth implements the auth interface.
 func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor   { return a.unaryInterceptor }
@@ -55,8 +47,15 @@ func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInter
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	if err := a.requireSuperUser(ctx); err != nil {
+	tenID, err := a.authenticate(ctx)
+	if err != nil {
 		return nil, err
+	}
+	if tenID != (roachpb.TenantID{}) {
+		ctx = contextWithTenant(ctx, tenID)
+		if err := a.tenant.authorize(tenID, info.FullMethod, req); err != nil {
+			return nil, err
+		}
 	}
 	return handler(ctx, req)
 }
@@ -64,43 +63,68 @@ func (a kvAuth) unaryInterceptor(
 func (a kvAuth) streamInterceptor(
 	srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 ) error {
-	if err := a.requireSuperUser(ss.Context()); err != nil {
+	ctx := ss.Context()
+	tenID, err := a.authenticate(ctx)
+	if err != nil {
 		return err
+	}
+	if tenID != (roachpb.TenantID{}) {
+		ctx = contextWithTenant(ctx, tenID)
+		origSS := ss
+		ss = &wrappedServerStream{
+			ServerStream: origSS,
+			ctx:          ctx,
+			recv: func(m interface{}) error {
+				if err := origSS.RecvMsg(m); err != nil {
+					return err
+				}
+				// 'm' is now populated and contains the request from the client.
+				return a.tenant.authorize(tenID, info.FullMethod, m)
+			},
+		}
 	}
 	return handler(srv, ss)
 }
 
-func (a kvAuth) requireSuperUser(ctx context.Context) error {
-	// TODO(marc): grpc's authentication model (which gives credential access in
-	// the request handler) doesn't really fit with the current design of the
-	// security package (which assumes that TLS state is only given at connection
-	// time) - that should be fixed.
+func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	if grpcutil.IsLocalRequestContext(ctx) {
 		// This is an in-process request. Bypass authentication check.
-		return nil
+		//
+		// TODO(tbg): I don't understand when this is hit. Internal requests are routed
+		// directly to a `*Node` and should never pass through this code path.
+		return roachpb.TenantID{}, nil
 	}
 
-	peer, ok := peer.FromContext(ctx)
+	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return errTLSInfoMissing
+		return roachpb.TenantID{}, errTLSInfoMissing
 	}
 
-	tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return errTLSInfoMissing
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
+		return roachpb.TenantID{}, errTLSInfoMissing
 	}
 
 	certUsers, err := security.GetCertificateUsers(&tlsInfo.State)
 	if err != nil {
-		return err
+		return roachpb.TenantID{}, err
 	}
+
+	subj := tlsInfo.State.PeerCertificates[0].Subject
+	if security.Contains(subj.OrganizationalUnit, security.TenantsOU) {
+		// Tenant authentication.
+		return tenantFromCommonName(subj.CommonName)
+	}
+
+	// KV auth.
+
 	// TODO(benesch): the vast majority of RPCs should be limited to just
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
-	if !security.ContainsUser(security.NodeUser, certUsers) &&
-		!security.ContainsUser(security.RootUser, certUsers) {
-		return authErrorf("user %s is not allowed to perform this RPC", certUsers)
+	if !security.Contains(certUsers, security.NodeUser) &&
+		!security.Contains(certUsers, security.RootUser) {
+		return roachpb.TenantID{}, authErrorf("user %s is not allowed to perform this RPC", certUsers)
 	}
-	return nil
+	return roachpb.TenantID{}, nil
 }

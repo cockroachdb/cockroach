@@ -114,29 +114,26 @@ func spanInclusionFuncForClient(
 
 type serverOpts struct {
 	interceptor func(fullMethod string) error
-	tenant      bool
 }
 
 // ServerOption is a configuration option passed to NewServer.
 type ServerOption func(*serverOpts)
 
-// ForTenant is an option to NewServer that results in the server being set
-// up to validate incoming tenants. With this option the server still uses
-// KV-internal node certificates but listens on a dedicated port.
-func ForTenant(opts *serverOpts) {
-	opts.tenant = true
-}
-
 // WithInterceptor adds an additional interceptor. The interceptor is called before
 // streaming and unary RPCs and may inject an error.
-//
-// This option can only be used once (i.e. interceptors can not be chained).
 func WithInterceptor(f func(fullMethod string) error) ServerOption {
 	return func(opts *serverOpts) {
-		if opts.interceptor != nil {
-			panic("interceptor can only be set once")
+		if opts.interceptor == nil {
+			opts.interceptor = f
+		} else {
+			f := opts.interceptor
+			opts.interceptor = func(fullMethod string) error {
+				if err := f(fullMethod); err != nil {
+					return err
+				}
+				return f(fullMethod)
+			}
 		}
-		opts.interceptor = f
 	}
 }
 
@@ -172,13 +169,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.StatsHandler(&ctx.stats),
 	}
 	if !ctx.Config.Insecure {
-		var tlsConfig *tls.Config
-		var err error
-		if !o.tenant {
-			tlsConfig, err = ctx.GetServerTLSConfig()
-		} else {
-			tlsConfig, err = ctx.GetTenantServerTLSConfig()
-		}
+		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -191,12 +182,8 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 	var streamInterceptor []grpc.StreamServerInterceptor
 
 	if !ctx.Config.Insecure {
-		var a auth
-		if !o.tenant {
-			a = kvAuth{}
-		} else {
-			a = tenantAuth{}
-		}
+		a := kvAuth{}
+
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
 	}
