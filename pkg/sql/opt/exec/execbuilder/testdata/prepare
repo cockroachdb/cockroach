@@ -31,7 +31,7 @@ EXECUTE change_index
 scan  ·              ·
 ·     missing stats  ·
 ·     table          ab@bindex
-·     spans          /10-/11
+·     spans          [/10 - /10]
 
 statement ok
 DROP INDEX bindex

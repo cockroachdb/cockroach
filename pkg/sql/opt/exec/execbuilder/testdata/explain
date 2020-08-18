@@ -498,7 +498,7 @@ EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /1-/1/# /3-/3/#
+·     spans          [/1 - /1] [/3 - /3]
 ·     parallel       ·
 
 statement ok
@@ -1135,3 +1135,15 @@ EXPLAIN (VERBOSE) EXPLAIN ANALYZE SELECT 1
 project       ·                    ·                   (automatic, url)        ·
  └── explain  ·                    ·                   (automatic, url, json)  ·
 ·             estimated row count  10 (missing stats)  ·                       ·
+
+# Test a case with many spans.
+query TTT
+EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)
+----
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          t@primary
+·     spans          [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] … (4 more)
+·     parallel       ·

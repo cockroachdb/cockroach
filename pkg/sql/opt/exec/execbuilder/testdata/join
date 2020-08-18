@@ -1376,7 +1376,7 @@ merge join  ·                   ·
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               abcdef@primary
- │          spans               /1/2/6/9-
+ │          spans               [/1/2/6/9 - ]
  └── scan   ·                   ·
 ·           missing stats       ·
 ·           table               abg@primary
@@ -1626,7 +1626,7 @@ filter           ·              ·
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag@b_idx
-·                spans          /5-/6
+·                spans          [/5 - /5]
 
 # Enable zigzag joins.
 statement ok
@@ -1721,7 +1721,7 @@ filter           ·              ·
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag2@a_b_idx
-·                spans          /1/2-/1/3
+·                spans          [/1/2 - /1/2]
 
 # Test that we can force a merge join.
 query TTT

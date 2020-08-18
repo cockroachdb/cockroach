@@ -50,46 +50,33 @@ scan  ·              ·
 # constraining the value of k2 or k3. This is confusing on first glance because
 # the second interleave in the hierarchy doesn't contain any new primary key
 # columns on top of the first interleave.
-query TTT
-EXPLAIN SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
+query T
+SELECT description FROM [
+  EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
+] WHERE field = 'spans'
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          level4@primary
-·     spans          /2/#/54/1/#/55/1-/2/#/54/1/#/55/2
+/2/#/54/1/#/55/1-/2/#/54/1/#/55/2
 
-query TTT
-EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
+query T
+SELECT description FROM [
+  EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
+] WHERE field = 'spans'
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          level4@primary
-·     spans          /2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
+/2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
 
-query TTT
-EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
+query T
+SELECT description FROM [
+  EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
+] WHERE field = 'spans'
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          level4@primary
-·     spans          /2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
-·     parallel       ·
+/2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
 
-query TTT
-EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
+query T
+SELECT description FROM [
+  EXPLAIN (VERBOSE) SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
+] WHERE field = 'spans'
 ----
-·     distribution   local
-·     vectorized     true
-scan  ·              ·
-·     missing stats  ·
-·     table          level4@primary
-·     spans          /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
+/2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
 
 # ------------------------------------------------------------------------------
 # Trace of interleaved fetches from interesting interleaved hierarchy.
