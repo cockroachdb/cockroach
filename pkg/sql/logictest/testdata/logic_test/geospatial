@@ -4320,3 +4320,13 @@ POINT EMPTY                                            POINT EMPTY
 POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+
+subtest public_schema_resolution
+
+query T
+SELECT public.ST_AsText('POINT(10.5 20.25)'::geometry)
+----
+POINT (10.5 20.25)
+
+statement error unknown function: public.log\(\), but log\(\) exists
+SELECT public.log(10)
