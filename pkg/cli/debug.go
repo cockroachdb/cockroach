@@ -487,6 +487,27 @@ Decode and print a hexadecimal-encoded key-value pair.
 	},
 }
 
+var debugDecodeProtoName string
+var debugDecodeProtoCmd = &cobra.Command{
+	Use:   "decode-proto",
+	Short: "decode-proto <proto> --name=<fully qualified proto name>",
+	Long: `
+Read from stdin and attempt to decode any hex or base64 encoded proto fields and
+output them as JSON. All other fields will be outputted unchanged. Output fields
+will be separated by tabs.
+	
+The default value for --schema is 'cockroach.sql.sqlbase.Descriptor'.
+For example:
+
+$ decode-proto < cat debug/system.decsriptor.txt
+id	descriptor	hex_descriptor
+1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
+...	
+`,
+	Args: cobra.ArbitraryArgs,
+	RunE: runDebugDecodeProto,
+}
+
 var debugRaftLogCmd = &cobra.Command{
 	Use:   "raft-log <directory> <range id>",
 	Short: "print the raft log for a range",
@@ -1222,6 +1243,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
+	debugDecodeProtoCmd,
 	debugRocksDBCmd,
 	debugSSTDumpCmd,
 	debugGossipValuesCmd,
@@ -1316,4 +1338,8 @@ func init() {
 		"keep the output log file redactable")
 	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
 		"redact the input files to remove sensitive information")
+
+	f = debugDecodeProtoCmd.Flags()
+	f.StringVar(&debugDecodeProtoName, "schema", "cockroach.sql.sqlbase.Descriptor",
+		"fully qualified name of the proto to decode")
 }
