@@ -979,9 +979,10 @@ func backupPlanHook(
 
 		// TODO (lucy): For partitioned backups, also add verification for other
 		// stores we are writing to in addition to the default.
-		if err := VerifyUsableExportTarget(
-			ctx, p.ExecCfg().Settings, defaultStore, defaultURI, encryption,
-		); err != nil {
+		if err := checkForPreviousBackup(ctx, defaultStore, defaultURI); err != nil {
+			return err
+		}
+		if err := verifyWriteableDestination(ctx, defaultStore, defaultURI); err != nil {
 			return err
 		}
 
