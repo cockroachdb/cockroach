@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -190,34 +189,6 @@ func VerifySystemJob(
 	expected jobs.Record,
 ) error {
 	return verifySystemJob(t, db, offset, filterType, string(expectedStatus), "", expected)
-}
-
-// GetJobFormatVersion returns the format version of a schema change job.
-// Will fail the test if the jobID does not reference a schema change job.
-func GetJobFormatVersion(
-	t testing.TB, db *sqlutils.SQLRunner,
-) jobspb.SchemaChangeDetailsFormatVersion {
-	rows := db.QueryStr(t, "SELECT * FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND description <> 'updating privileges' ORDER BY created DESC LIMIT 1")
-	if len(rows) != 1 {
-		t.Fatal("expected exactly one row when checking the format version")
-	}
-	jobID, err := strconv.Atoi(rows[0][0])
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var payloadBytes []byte
-	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&payloadBytes)
-
-	payload := &jobspb.Payload{}
-	if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-		t.Fatal(err)
-	}
-	// Lease is always nil in 19.2.
-	payload.Lease = nil
-
-	details := payload.GetSchemaChange()
-	return details.FormatVersion
 }
 
 // GetJobID gets a particular job's ID.
