@@ -2030,6 +2030,10 @@ func (m *sessionDataMutator) SetTemporarySchemaName(scName string) {
 	m.data.SearchPath = m.data.SearchPath.WithTemporarySchemaName(scName)
 }
 
+func (m *sessionDataMutator) SetTemporarySchemaID(id uint32) {
+	m.data.TemporarySchemaID = id
+}
+
 func (m *sessionDataMutator) SetDefaultIntSize(size int) {
 	m.data.DefaultIntSize = size
 }

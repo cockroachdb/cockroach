@@ -1399,11 +1399,11 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 				if err != nil || desc == nil {
 					return false, err
 				}
-				schemaName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), desc.GetParentSchemaID())
+				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, desc.GetParentSchemaID())
 				if err != nil {
 					return false, err
 				}
-				return true, addTablesTableRow(addRow)(db, schemaName, desc)
+				return true, addTablesTableRow(addRow)(db, sc.Name, desc)
 			},
 		},
 	},
