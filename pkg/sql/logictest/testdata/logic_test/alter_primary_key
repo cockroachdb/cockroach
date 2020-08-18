@@ -388,7 +388,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i1
@@ -404,7 +403,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i2
@@ -420,7 +418,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i3
@@ -436,7 +433,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i4
@@ -452,7 +448,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i5
@@ -468,7 +463,6 @@ SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
 ----
 index join  ·              ·
  │          table          t@primary
- │          key columns    y
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          t@i7

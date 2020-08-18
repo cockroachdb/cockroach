@@ -40,7 +40,7 @@ project          ·                    ·                     (a, b)        ·
       │          estimated row count  100 (missing stats)   ·             ·
       │          type                 inner                 ·             ·
       │          equality             (a, b) = (a, b)       ·             ·
-      │          mergeJoinOrder       +"(a=a)",+"(b=b)"     ·             ·
+      │          merge ordering       +"(a=a)",+"(b=b)"     ·             ·
       ├── scan   ·                    ·                     (a, b)        +a,+b
       │          estimated row count  1000 (missing stats)  ·             ·
       │          table                data@primary          ·             ·

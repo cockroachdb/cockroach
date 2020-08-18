@@ -101,7 +101,7 @@ merge join      ·                    ·                     (a)     ·
  │              equality             (a) = (a)             ·       ·
  │              left cols are key    ·                     ·       ·
  │              right cols are key   ·                     ·       ·
- │              mergeJoinOrder       +"(a=a)"              ·       ·
+ │              merge ordering       +"(a=a)"              ·       ·
  ├── scan       ·                    ·                     (a)     +a
  │              estimated row count  1000 (missing stats)  ·       ·
  │              table                abc@primary           ·       ·
@@ -194,7 +194,7 @@ merge join  ·                    ·                     (x, y)  ·
  │          equality             (x) = (x)             ·       ·
  │          left cols are key    ·                     ·       ·
  │          right cols are key   ·                     ·       ·
- │          mergeJoinOrder       +"(x=x)"              ·       ·
+ │          merge ordering       +"(x=x)"              ·       ·
  ├── scan   ·                    ·                     (x, y)  +x
  │          estimated row count  1000 (missing stats)  ·       ·
  │          table                a@primary             ·       ·
@@ -237,7 +237,7 @@ merge join  ·                    ·                     (x, y)  ·
  │          equality             (x) = (x)             ·       ·
  │          left cols are key    ·                     ·       ·
  │          right cols are key   ·                     ·       ·
- │          mergeJoinOrder       +"(x=x)"              ·       ·
+ │          merge ordering       +"(x=x)"              ·       ·
  ├── scan   ·                    ·                     (x, y)  +x
  │          estimated row count  1000 (missing stats)  ·       ·
  │          table                a@primary             ·       ·

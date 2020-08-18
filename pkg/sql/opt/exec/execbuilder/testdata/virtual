@@ -70,7 +70,6 @@ virtual table lookup join  ·                      ·
  │                         type                   inner
  │                         equality               (conrelid) = (oid)
  │                         equality cols are key  ·
- │                         parallel               ·
  └── virtual table         ·                      ·
 ·                          table                  pg_constraint@primary
 
@@ -84,7 +83,6 @@ virtual table lookup join  ·                      ·
  │                         type                   left outer
  │                         equality               (conrelid) = (oid)
  │                         equality cols are key  ·
- │                         parallel               ·
  └── virtual table         ·                      ·
 ·                          table                  pg_constraint@primary
 
@@ -135,7 +133,6 @@ sort                                                               ·           
                 │                                                  type                   inner
                 │                                                  equality               (oid) = (attrelid)
                 │                                                  equality cols are key  ·
-                │                                                  parallel               ·
                 │                                                  pred                   column135 = attnum
                 └── render                                         ·                      ·
                      └── virtual table lookup join                 ·                      ·
@@ -143,7 +140,6 @@ sort                                                               ·           
                           │                                        type                   inner
                           │                                        equality               (oid) = (attrelid)
                           │                                        equality cols are key  ·
-                          │                                        parallel               ·
                           │                                        pred                   (column110 = attnum) AND (attrelid = 'b'::REGCLASS)
                           └── render                               ·                      ·
                                └── virtual table lookup join       ·                      ·
@@ -151,14 +147,12 @@ sort                                                               ·           
                                     │                              type                   inner
                                     │                              equality               (conrelid) = (oid)
                                     │                              equality cols are key  ·
-                                    │                              parallel               ·
                                     │                              pred                   oid = 'b'::REGCLASS
                                     └── virtual table lookup join  ·                      ·
                                          │                         table                  pg_class@pg_class_oid_idx
                                          │                         type                   inner
                                          │                         equality               (confrelid) = (oid)
                                          │                         equality cols are key  ·
-                                         │                         parallel               ·
                                          └── filter                ·                      ·
                                               │                    filter                 (conrelid = 'b'::REGCLASS) AND (contype = 'f')
                                               └── virtual table    ·                      ·

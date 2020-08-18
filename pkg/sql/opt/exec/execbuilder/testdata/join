@@ -389,28 +389,24 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 7   ·                          type                   inner
 7   ·                          equality               (oid) = (attrelid)
 7   ·                          equality cols are key  ·
-7   ·                          parallel               ·
 8   virtual table lookup join  ·                      ·
 8   ·                          estimated row count    10 (missing stats)
 8   ·                          table                  pg_class@pg_class_oid_idx
 8   ·                          type                   inner
 8   ·                          equality               (attrelid) = (oid)
 8   ·                          equality cols are key  ·
-8   ·                          parallel               ·
 9   virtual table lookup join  ·                      ·
 9   ·                          estimated row count    10 (missing stats)
 9   ·                          table                  pg_attribute@pg_attribute_attrelid_idx
 9   ·                          type                   inner
 9   ·                          equality               (confrelid) = (attrelid)
 9   ·                          equality cols are key  ·
-9   ·                          parallel               ·
 10  virtual table lookup join  ·                      ·
 10  ·                          estimated row count    10 (missing stats)
 10  ·                          table                  pg_constraint@pg_constraint_conrelid_idx
 10  ·                          type                   inner
 10  ·                          equality               (oid) = (conrelid)
 10  ·                          equality cols are key  ·
-10  ·                          parallel               ·
 10  ·                          pred                   contype = 'f'
 11  filter                     ·                      ·
 11  ·                          estimated row count    10 (missing stats)
@@ -452,7 +448,6 @@ merge join  ·                   ·
  │          type                inner
  │          equality            (cust) = (id)
  │          right cols are key  ·
- │          mergeJoinOrder      +"(cust=id)"
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               cards@cards_cust_idx
@@ -788,7 +783,7 @@ project          ·                    ·                           (a, b, c, d,
       │          equality             (b, a, c) = (b, a, c)       ·                         ·
       │          left cols are key    ·                           ·                         ·
       │          right cols are key   ·                           ·                         ·
-      │          mergeJoinOrder       +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
+      │          merge ordering       +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
       ├── scan   ·                    ·                           (a, b, c, d)              +b,+a,+c
       │          estimated row count  1000 (missing stats)        ·                         ·
       │          table                pkbac@primary               ·                         ·
@@ -809,7 +804,7 @@ merge join  ·                    ·                           (a, b, c, d, a, b
  │          equality             (b, a, c) = (b, a, d)       ·                         ·
  │          left cols are key    ·                           ·                         ·
  │          right cols are key   ·                           ·                         ·
- │          mergeJoinOrder       +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
+ │          merge ordering       +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
  ├── scan   ·                    ·                           (a, b, c, d)              +b,+a,+c
  │          estimated row count  1000 (missing stats)        ·                         ·
  │          table                pkbac@primary               ·                         ·
@@ -954,7 +949,7 @@ project          ·                    ·                    (x, y, u, v)       
       │          estimated row count  34 (missing stats)   ·                   ·
       │          type                 inner                ·                   ·
       │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
       ├── scan   ·                    ·                    (x, y, u)           +x,+y
       │          estimated row count  333 (missing stats)  ·                   ·
       │          table                xyu@primary          ·                   ·
@@ -975,7 +970,7 @@ project          ·                    ·                    (x, y, u, v)       
       │          estimated row count  333 (missing stats)  ·                   ·
       │          type                 left outer           ·                   ·
       │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
       ├── scan   ·                    ·                    (x, y, u)           +x,+y
       │          estimated row count  333 (missing stats)  ·                   ·
       │          table                xyu@primary          ·                   ·
@@ -996,7 +991,7 @@ project          ·                    ·                    (x, y, u, v)       
       │          estimated row count  333 (missing stats)  ·                   ·
       │          type                 left outer           ·                   ·
       │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
       ├── scan   ·                    ·                    (x, y, v)           +x,+y
       │          estimated row count  333 (missing stats)  ·                   ·
       │          table                xyv@primary          ·                   ·
@@ -1024,7 +1019,7 @@ filter                ·                    ·                     (x, y, u, v) 
            │          estimated row count  1900 (missing stats)  ·                   ·
            │          type                 full outer            ·                   ·
            │          equality             (x, y) = (x, y)       ·                   ·
-           │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+           │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
            ├── scan   ·                    ·                     (x, y, u)           +x,+y
            │          estimated row count  1000 (missing stats)  ·                   ·
            │          table                xyu@primary           ·                   ·
@@ -1044,7 +1039,7 @@ merge join  ·                    ·                  (x, y, u, x, y, v)  ·
  │          estimated row count  9 (missing stats)  ·                   ·
  │          type                 inner              ·                   ·
  │          equality             (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"  ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"  ·                   ·
  ├── scan   ·                    ·                  (x, y, u)           +y
  │          estimated row count  9 (missing stats)  ·                   ·
  │          table                xyu@primary        ·                   ·
@@ -1063,7 +1058,7 @@ merge join  ·                    ·                  (x, y, u, x, y, v)  ·
  │          estimated row count  9 (missing stats)  ·                   ·
  │          type                 inner              ·                   ·
  │          equality             (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"  ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"  ·                   ·
  ├── scan   ·                    ·                  (x, y, u)           +y
  │          estimated row count  9 (missing stats)  ·                   ·
  │          table                xyu@primary        ·                   ·
@@ -1082,7 +1077,7 @@ merge join  ·                    ·                     (x, y, u, x, y, v)  ·
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          type                 left outer            ·                   ·
  │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
  ├── scan   ·                    ·                     (x, y, u)           +x,+y
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          table                xyu@primary           ·                   ·
@@ -1101,7 +1096,7 @@ merge join  ·                    ·                     (x, y, u, x, y, v)  ·
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          type                 left outer            ·                   ·
  │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
  ├── scan   ·                    ·                     (x, y, v)           +x,+y
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          table                xyv@primary           ·                   ·
@@ -1125,7 +1120,7 @@ project          ·                    ·                    (x, y, u, v)       
       │          estimated row count  333 (missing stats)  ·                   ·
       │          type                 left outer           ·                   ·
       │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
       ├── scan   ·                    ·                    (x, y, u)           +x,+y
       │          estimated row count  333 (missing stats)  ·                   ·
       │          table                xyu@primary          ·                   ·
@@ -1146,7 +1141,7 @@ project          ·                    ·                    (x, y, u, v)       
       │          estimated row count  333 (missing stats)  ·                   ·
       │          type                 left outer           ·                   ·
       │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
       ├── scan   ·                    ·                    (x, y, v)           +x,+y
       │          estimated row count  333 (missing stats)  ·                   ·
       │          table                xyv@primary          ·                   ·
@@ -1174,7 +1169,7 @@ filter                ·                    ·                     (x, y, u, v) 
            │          estimated row count  1900 (missing stats)  ·                   ·
            │          type                 full outer            ·                   ·
            │          equality             (x, y) = (x, y)       ·                   ·
-           │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+           │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
            ├── scan   ·                    ·                     (x, y, u)           +x,+y
            │          estimated row count  1000 (missing stats)  ·                   ·
            │          table                xyu@primary           ·                   ·
@@ -1193,7 +1188,7 @@ merge join  ·                    ·                     (x, y, u, x, y, v)  ·
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          type                 left outer            ·                   ·
  │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
  ├── scan   ·                    ·                     (x, y, u)           +x,+y
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          table                xyu@primary           ·                   ·
@@ -1212,7 +1207,7 @@ merge join  ·                    ·                     (x, y, u, x, y, v)  ·
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          type                 left outer            ·                   ·
  │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+ │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
  ├── scan   ·                    ·                     (x, y, v)           +x,+y
  │          estimated row count  1000 (missing stats)  ·                   ·
  │          table                xyv@primary           ·                   ·
@@ -1234,7 +1229,7 @@ project          ·                    ·                     (x, y, u, v)      
       │          estimated row count  33 (missing stats)    ·                   ·
       │          type                 inner                 ·                   ·
       │          equality             (x, y) = (x, y)       ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
+      │          merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
       ├── scan   ·                    ·                     (x, y, u)           +x,+y
       │          estimated row count  333 (missing stats)   ·                   ·
       │          table                xyu@primary           ·                   ·
@@ -1268,7 +1263,7 @@ project          ·                    ·                  (a, b1, b2)     ·
       │          equality             (a) = (a)          ·               ·
       │          left cols are key    ·                  ·               ·
       │          right cols are key   ·                  ·               ·
-      │          mergeJoinOrder       +"(a=a)"           ·               ·
+      │          merge ordering       +"(a=a)"           ·               ·
       ├── scan   ·                    ·                  (a, b1)         ·
       │          estimated row count  1 (missing stats)  ·               ·
       │          table                l@primary          ·               ·
@@ -1289,7 +1284,7 @@ merge join  ·                    ·                  (a, b1, a, b2)  ·
  │          equality             (a) = (a)          ·               ·
  │          left cols are key    ·                  ·               ·
  │          right cols are key   ·                  ·               ·
- │          mergeJoinOrder       +"(a=a)"           ·               ·
+ │          merge ordering       +"(a=a)"           ·               ·
  ├── scan   ·                    ·                  (a, b1)         ·
  │          estimated row count  1 (missing stats)  ·               ·
  │          table                l@primary          ·               ·
@@ -1312,7 +1307,7 @@ project          ·                    ·                  (a, b1, b2)     ·
       │          equality             (a) = (a)          ·               ·
       │          left cols are key    ·                  ·               ·
       │          right cols are key   ·                  ·               ·
-      │          mergeJoinOrder       +"(a=a)"           ·               ·
+      │          merge ordering       +"(a=a)"           ·               ·
       ├── scan   ·                    ·                  (a, b2)         ·
       │          estimated row count  1 (missing stats)  ·               ·
       │          table                r@primary          ·               ·
@@ -1333,7 +1328,7 @@ merge join  ·                    ·                  (a, b1, a, b2)  ·
  │          equality             (a) = (a)          ·               ·
  │          left cols are key    ·                  ·               ·
  │          right cols are key   ·                  ·               ·
- │          mergeJoinOrder       +"(a=a)"           ·               ·
+ │          merge ordering       +"(a=a)"           ·               ·
  ├── scan   ·                    ·                  (a, b2)         ·
  │          estimated row count  1 (missing stats)  ·               ·
  │          table                r@primary          ·               ·
@@ -1372,7 +1367,6 @@ merge join  ·                   ·
  │          type                inner
  │          equality            (a, b) = (a, b)
  │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)",+"(b=b)"
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               abcdef@primary
@@ -1622,7 +1616,6 @@ filter           ·              ·
  │               filter         c = 6.0
  └── index join  ·              ·
       │          table          zigzag@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag@b_idx
@@ -1639,7 +1632,6 @@ EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ·            distribution        local
 ·            vectorized          true
 zigzag join  ·                   ·
-·            type                inner
 ·            pred                (b = 5) AND (c = 6.0)
 ·            left table          zigzag@b_idx
 ·            left columns        (a, b)
@@ -1660,9 +1652,7 @@ lookup join       ·                      ·
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
- │                parallel               ·
  └── zigzag join  ·                      ·
-·                 type                   inner
 ·                 pred                   (b = 5) AND (c = 6.0)
 ·                 left table             zigzag@b_idx
 ·                 left columns           (a, b)
@@ -1682,10 +1672,8 @@ lookup join       ·                      ·
  │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
- │                parallel               ·
  │                pred                   d > 4.0
  └── zigzag join  ·                      ·
-·                 type                   inner
 ·                 pred                   (b = 5) AND (c = 6.0)
 ·                 left table             zigzag@b_idx
 ·                 left columns           (a, b)
@@ -1717,7 +1705,6 @@ filter           ·              ·
  │               filter         c IS NULL
  └── index join  ·              ·
       │          table          zigzag2@primary
-      │          key columns    rowid
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag2@a_b_idx
@@ -1727,70 +1714,67 @@ filter           ·              ·
 query TTT
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              type           inner
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 # Test that we can force a merge join using the NATURAL syntax.
 query TTT
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              type           inner
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 # Test that we can force a merge join using the CROSS syntax.
 query TTT
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              type           inner
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 statement error LOOKUP can only be used with INNER or LEFT joins
 EXPLAIN SELECT * FROM onecolumn RIGHT LOOKUP JOIN twocolumn USING(x)

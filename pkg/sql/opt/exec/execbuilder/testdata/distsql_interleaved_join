@@ -198,7 +198,6 @@ merge join  ·                  ·
  │          type               inner
  │          equality           (pid1) = (pid1)
  │          left cols are key  ·
- │          mergeJoinOrder     +"(pid1=pid1)"
  ├── scan   ·                  ·
  │          missing stats      ·
  │          table              parent1@primary
@@ -900,7 +899,7 @@ merge join      ·                    ·                        (pid1, v, pid1, 
  │              type                 inner                    ·                               ·
  │              equality             (pid1, v) = (pid1, v)    ·                               ·
  │              left cols are key    ·                        ·                               ·
- │              mergeJoinOrder       +"(pid1=pid1)",+"(v=v)"  ·                               ·
+ │              merge ordering       +"(pid1=pid1)",+"(v=v)"  ·                               ·
  ├── filter     ·                    ·                        (pid1, v)                       +pid1
  │    │         estimated row count  10 (missing stats)       ·                               ·
  │    │         filter               v = 1                    ·                               ·

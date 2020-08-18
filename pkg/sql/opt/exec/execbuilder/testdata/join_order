@@ -47,14 +47,12 @@ lookup join       ·                      ·                  (a, b, c, d, b, x,
  │                type                   inner              ·                         ·
  │                equality               (c) = (c)          ·                         ·
  │                equality cols are key  ·                  ·                         ·
- │                parallel               ·                  ·                         ·
  └── lookup join  ·                      ·                  (a, b, c, d, b, x)        ·
       │           estimated row count    1 (missing stats)  ·                         ·
       │           table                  bx@primary         ·                         ·
       │           type                   inner              ·                         ·
       │           equality               (b) = (b)          ·                         ·
       │           equality cols are key  ·                  ·                         ·
-      │           parallel               ·                  ·                         ·
       └── scan    ·                      ·                  (a, b, c, d)              ·
 ·                 estimated row count    1 (missing stats)  ·                         ·
 ·                 table                  abc@primary        ·                         ·
@@ -74,14 +72,12 @@ lookup join       ·                      ·                  (a, b, c, d, b, x,
  │                type                   inner              ·                         ·
  │                equality               (c) = (c)          ·                         ·
  │                equality cols are key  ·                  ·                         ·
- │                parallel               ·                  ·                         ·
  └── lookup join  ·                      ·                  (a, b, c, d, b, x)        ·
       │           estimated row count    1 (missing stats)  ·                         ·
       │           table                  bx@primary         ·                         ·
       │           type                   inner              ·                         ·
       │           equality               (b) = (b)          ·                         ·
       │           equality cols are key  ·                  ·                         ·
-      │           parallel               ·                  ·                         ·
       └── scan    ·                      ·                  (a, b, c, d)              ·
 ·                 estimated row count    1 (missing stats)  ·                         ·
 ·                 table                  abc@primary        ·                         ·

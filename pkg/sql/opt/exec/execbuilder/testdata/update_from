@@ -19,7 +19,6 @@ update                ·                   ·
            │          equality            (a) = (a)
            │          left cols are key   ·
            │          right cols are key  ·
-           │          mergeJoinOrder      +"(a=a)"
            ├── scan   ·                   ·
            │          missing stats       ·
            │          table               abc@primary
@@ -81,7 +80,6 @@ update                ·                   ·
            │          equality            (a) = (a)
            │          left cols are key   ·
            │          right cols are key  ·
-           │          mergeJoinOrder      +"(a=a)"
            ├── scan   ·                   ·
            │          missing stats       ·
            │          table               abc@primary
@@ -118,7 +116,7 @@ update                ·                    ·                     (a, b, c, a, 
            │          equality             (a) = (a)             ·                                 ·
            │          left cols are key    ·                     ·                                 ·
            │          right cols are key   ·                     ·                                 ·
-           │          mergeJoinOrder       +"(a=a)"              ·                                 ·
+           │          merge ordering       +"(a=a)"              ·                                 ·
            ├── scan   ·                    ·                     (a, b, c)                         +a
            │          estimated row count  1000 (missing stats)  ·                                 ·
            │          table                abc@primary           ·                                 ·
@@ -145,7 +143,6 @@ update                 ·                      ·
            │           type                   inner
            │           equality               (column1) = (a)
            │           equality cols are key  ·
-           │           parallel               ·
            └── values  ·                      ·
 ·                      size                   3 columns, 2 rows
 

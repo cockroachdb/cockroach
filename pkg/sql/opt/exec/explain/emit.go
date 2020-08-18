@@ -322,8 +322,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 
 		if a.Params.Parallelize {
-			// TODO(radu): should be Vattr.
-			ob.Attr("parallel", "")
+			ob.VAttr("parallel", "")
 		}
 		e.emitLockingPolicy(a.Params.Locking)
 
@@ -369,8 +368,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		for i, c := range a.KeyCols {
 			cols[i] = inputCols[c].Name
 		}
-		// TODO(radu): should be verbose only.
-		ob.Attr("key columns", strings.Join(cols, ", "))
+		ob.VAttr("key columns", strings.Join(cols, ", "))
 
 	case groupByOp:
 		a := n.args.(*groupByArgs)
@@ -436,8 +434,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			mergeOrd[i].ColIdx = i
 			mergeOrd[i].Direction = a.LeftOrdering[i].Direction
 		}
-		// TODO(radu): fix this field name,
-		ob.Attr("mergeJoinOrder", mergeOrd.String(eqCols))
+		ob.VAttr("merge ordering", mergeOrd.String(eqCols))
 
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
@@ -462,8 +459,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		)
 		if a.EqColsAreKey {
 			ob.Attr("equality cols are key", "")
-			// TODO(radu): clean this up.
-			ob.Attr("parallel", "")
 		}
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 
@@ -490,8 +485,6 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 	case zigzagJoinOp:
 		a := n.args.(*zigzagJoinArgs)
-		// TODO(radu): remove this.
-		e.emitJoinType(descpb.InnerJoin, true /* hasEqCols */)
 		leftCols := tableColumns(a.LeftTable, a.LeftCols)
 		rightCols := tableColumns(a.RightTable, a.RightCols)
 		// TODO(radu): we should be passing nil instead of true.
@@ -519,13 +512,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		e.emitTableAndIndex("table", a.Table, a.Index)
 		e.emitJoinType(a.JoinType, true /* hasEqCols */)
 		cols := appendColumns(a.Input.Columns(), tableColumns(a.Table, a.LookupCols)...)
-		// TODO(radu): add field name.
-		ob.Expr("", a.InvertedExpr, cols)
+		ob.VExpr("inverted expr", a.InvertedExpr, cols)
 		// TODO(radu): we should be passing nil instead of true.
 		if a.OnCond != tree.DBoolTrue {
-			ob.Expr("onExpr", a.OnCond, cols)
+			ob.Expr("on", a.OnCond, cols)
 		}
-		ob.Attr("parallel", "")
 
 	case projectSetOp:
 		a := n.args.(*projectSetArgs)
@@ -711,12 +702,10 @@ func (e *emitter) emitLockingPolicy(locking *tree.LockingItem) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
-		// TODO(radu): should be Vattr.
-		e.ob.Attr("locking strength", strength.PrettyString())
+		e.ob.VAttr("locking strength", strength.PrettyString())
 	}
 	if waitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
-		// TODO(radu): should be Vattr.
-		e.ob.Attr("locking wait policy", waitPolicy.PrettyString())
+		e.ob.VAttr("locking wait policy", waitPolicy.PrettyString())
 	}
 }
 
@@ -742,19 +731,20 @@ func (e *emitter) emitGroupByAttributes(
 	groupColOrdering sqlbase.ColumnOrdering,
 	isScalar bool,
 ) {
-	// TODO(radu): make this loop verbose only.
-	for i, agg := range aggs {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "%s(", agg.FuncName)
-		if agg.Distinct {
-			buf.WriteString("DISTINCT ")
+	if e.ob.flags.Verbose {
+		for i, agg := range aggs {
+			var buf bytes.Buffer
+			fmt.Fprintf(&buf, "%s(", agg.FuncName)
+			if agg.Distinct {
+				buf.WriteString("DISTINCT ")
+			}
+			buf.WriteString(printColumnList(inputCols, agg.ArgCols))
+			buf.WriteByte(')')
+			if agg.Filter != -1 {
+				fmt.Fprintf(&buf, " FILTER (WHERE %s)", inputCols[agg.Filter].Name)
+			}
+			e.ob.Attr(fmt.Sprintf("aggregate %d", i), buf.String())
 		}
-		buf.WriteString(printColumnList(inputCols, agg.ArgCols))
-		buf.WriteByte(')')
-		if agg.Filter != -1 {
-			fmt.Fprintf(&buf, " FILTER (WHERE %s)", inputCols[agg.Filter].Name)
-		}
-		e.ob.Attr(fmt.Sprintf("aggregate %d", i), buf.String())
 	}
 	if len(groupCols) > 0 {
 		e.ob.Attr("group by", printColumnList(inputCols, groupCols))

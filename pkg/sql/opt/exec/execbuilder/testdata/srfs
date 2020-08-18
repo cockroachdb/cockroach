@@ -132,7 +132,7 @@ sort                       ·                    ·                             
                 │          left cols are key    ·                                                   ·                                                ·
                 │          right cols are key   ·                                                   ·                                                ·
                 │          pred                 y < z                                               ·                                                ·
-                │          mergeJoinOrder       +"(x=x)"                                            ·                                                ·
+                │          merge ordering       +"(x=x)"                                            ·                                                ·
                 ├── scan   ·                    ·                                                   (x, y)                                           +x
                 │          estimated row count  1000 (missing stats)                                ·                                                ·
                 │          table                xy@primary                                          ·                                                ·
@@ -187,7 +187,7 @@ project               ·                    ·                                  
            │          equality             (x) = (x)                               ·                                                           ·
            │          left cols are key    ·                                       ·                                                           ·
            │          right cols are key   ·                                       ·                                                           ·
-           │          mergeJoinOrder       +"(x=x)"                                ·                                                           ·
+           │          merge ordering       +"(x=x)"                                ·                                                           ·
            ├── scan   ·                    ·                                       (x, y)                                                      +x
            │          estimated row count  1000 (missing stats)                    ·                                                           ·
            │          table                xy@primary                              ·                                                           ·

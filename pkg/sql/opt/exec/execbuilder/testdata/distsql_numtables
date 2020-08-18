@@ -90,7 +90,7 @@ project              ·                    ·                     (x, str)     �
       │              equality             (x) = (y)             ·            ·
       │              left cols are key    ·                     ·            ·
       │              right cols are key   ·                     ·            ·
-      │              mergeJoinOrder       +"(x=y)"              ·            ·
+      │              merge ordering       +"(x=y)"              ·            ·
       ├── filter     ·                    ·                     (x)          +x
       │    │         estimated row count  333 (missing stats)   ·            ·
       │    │         filter               (x % 2) = 0           ·            ·
