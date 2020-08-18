@@ -20,7 +20,7 @@ EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@primary
-·     spans          /20-/30/#
+·     spans          [/20 - /30]
 ·     parallel       ·
 
 # No hint, reverse scan.
@@ -32,7 +32,7 @@ EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
-·        spans          /20-/30/#
+·        spans          [/20 - /30]
 ·        parallel       ·
 
 # Force primary
@@ -44,7 +44,7 @@ EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@primary
-·     spans          /20-/30/#
+·     spans          [/20 - /30]
 ·     parallel       ·
 
 # Force primary, reverse scan.
@@ -56,7 +56,7 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=primary,DESC} WHERE a >= 20 AND a <= 30
 revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
-·        spans          /20-/30/#
+·        spans          [/20 - /30]
 ·        parallel       ·
 
 # Force primary, allow reverse scan.
@@ -68,7 +68,7 @@ EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30 ORDER BY a DESC
 revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
-·        spans          /20-/30/#
+·        spans          [/20 - /30]
 ·        parallel       ·
 
 # Force primary, forward scan.
@@ -82,7 +82,7 @@ sort       ·              ·
  └── scan  ·              ·
 ·          missing stats  ·
 ·          table          abcd@primary
-·          spans          /20-/30/#
+·          spans          [/20 - /30]
 ·          parallel       ·
 
 # Force index b
@@ -199,32 +199,30 @@ filter     ·              ·
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE a >= 20 AND a <= 30
 ----
-·               distribution   local
-·               vectorized     true
-project         ·              ·
- └── filter     ·              ·
-      │         filter         (a >= 20) AND (a <= 30)
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          abcd@b
-·               spans          FULL SCAN
+·          distribution   local
+·          vectorized     true
+filter     ·              ·
+ │         filter         (a >= 20) AND (a <= 30)
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          abcd@b
+·          spans          FULL SCAN
 
 # Force index b (non-covering due to WHERE clause)
 query TTT
 EXPLAIN SELECT b FROM abcd@b WHERE c >= 20 AND c <= 30
 ----
-·                     distribution   local
-·                     vectorized     true
-project               ·              ·
- └── filter           ·              ·
-      │               filter         (c >= 20) AND (c <= 30)
-      └── index join  ·              ·
-           │          table          abcd@primary
-           │          key columns    a
-           └── scan   ·              ·
-·                     missing stats  ·
-·                     table          abcd@b
-·                     spans          FULL SCAN
+·                distribution   local
+·                vectorized     true
+filter           ·              ·
+ │               filter         (c >= 20) AND (c <= 30)
+ └── index join  ·              ·
+      │          table          abcd@primary
+      │          key columns    a
+      └── scan   ·              ·
+·                missing stats  ·
+·                table          abcd@b
+·                spans          FULL SCAN
 
 # No hint, should be using index cd
 query TTT
@@ -235,7 +233,7 @@ EXPLAIN SELECT c, d FROM abcd WHERE c >= 20 AND c < 40
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@cd
-·     spans          /20-/40
+·     spans          [/20 - /39]
 
 # Force primary index
 query TTT
@@ -292,7 +290,7 @@ index join  ·              ·
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          abcd@cd
-·           spans          /10-/11
+·           spans          [/10 - /10]
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10

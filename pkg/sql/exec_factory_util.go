@@ -106,7 +106,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	return colCfg
 }
 
-func constructExplainPlanNode(
+func constructExplainDistSQLOrVecNode(
 	options *tree.ExplainOptions, stmtType tree.StatementType, p *planComponents, planner *planner,
 ) (exec.Node, error) {
 	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
@@ -129,16 +129,6 @@ func constructExplainPlanNode(
 			options: options,
 			plan:    *p,
 		}, nil
-
-	case tree.ExplainPlan:
-		if analyzeSet {
-			return nil, errors.New("EXPLAIN ANALYZE only supported with (DISTSQL) option")
-		}
-		return planner.makeExplainPlanNodeWithPlan(
-			context.TODO(),
-			options,
-			*p,
-		)
 
 	default:
 		panic(errors.AssertionFailedf("unsupported explain mode %v", options.Mode))

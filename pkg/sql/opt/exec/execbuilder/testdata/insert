@@ -307,28 +307,27 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 10
 ]
 ----
-·                              distribution         local
-·                              vectorized           false
-insert                         ·                    ·
- │                             estimated row count  0 (missing stats)
- │                             into                 insert_t(x, v, rowid)
- │                             auto commit          ·
- └── project                   ·                    ·
-      └── render               ·                    ·
-           │                   estimated row count  10 (missing stats)
-           │                   render 0             unique_rowid()
-           │                   render 1             x
-           │                   render 2             v
-           └── limit           ·                    ·
-                │              estimated row count  10 (missing stats)
-                │              count                10
-                └── sort       ·                    ·
-                     │         estimated row count  1000 (missing stats)
-                     │         order                -v
-                     └── scan  ·                    ·
-·                              estimated row count  1000 (missing stats)
-·                              table                select_t@primary
-·                              spans                FULL SCAN
+·                         distribution         local
+·                         vectorized           false
+insert                    ·                    ·
+ │                        estimated row count  0 (missing stats)
+ │                        into                 insert_t(x, v, rowid)
+ │                        auto commit          ·
+ └── render               ·                    ·
+      │                   estimated row count  10 (missing stats)
+      │                   render 0             unique_rowid()
+      │                   render 1             x
+      │                   render 2             v
+      └── limit           ·                    ·
+           │              estimated row count  10 (missing stats)
+           │              count                10
+           └── sort       ·                    ·
+                │         estimated row count  1000 (missing stats)
+                │         order                -v
+                └── scan  ·                    ·
+·                         estimated row count  1000 (missing stats)
+·                         table                select_t@primary
+·                         spans                FULL SCAN
 
 # Check that INSERT supports LIMIT (MySQL extension)
 query TTT
@@ -336,125 +335,119 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ]
 ----
-·                    distribution         local
-·                    vectorized           false
-insert               ·                    ·
- │                   estimated row count  0 (missing stats)
- │                   into                 insert_t(x, v, rowid)
- │                   auto commit          ·
- └── project         ·                    ·
-      └── render     ·                    ·
-           │         estimated row count  1 (missing stats)
-           │         render 0             unique_rowid()
-           │         render 1             x
-           │         render 2             v
-           └── scan  ·                    ·
-·                    estimated row count  1 (missing stats)
-·                    table                select_t@primary
-·                    spans                LIMITED SCAN
-·                    limit                1
+·               distribution         local
+·               vectorized           false
+insert          ·                    ·
+ │              estimated row count  0 (missing stats)
+ │              into                 insert_t(x, v, rowid)
+ │              auto commit          ·
+ └── render     ·                    ·
+      │         estimated row count  1 (missing stats)
+      │         render 0             unique_rowid()
+      │         render 1             x
+      │         render 2             v
+      └── scan  ·                    ·
+·               estimated row count  1 (missing stats)
+·               table                select_t@primary
+·               spans                LIMITED SCAN
+·               limit                1
 
 # Check the grouping of LIMIT and ORDER BY
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
+----
+·                      distribution  local
+·                      vectorized    false
+insert                 ·             ·
+ │                     into          insert_t(x, v, rowid)
+ │                     auto commit   ·
+ └── render            ·             ·
+      └── limit        ·             ·
+           │           count         1
+           └── values  ·             ·
+·                      size          2 columns, 2 rows
+
+query TTT
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
 ·                           distribution  local
 ·                           vectorized    false
 insert                      ·             ·
  │                          into          insert_t(x, v, rowid)
  │                          auto commit   ·
- └── project                ·             ·
-      └── render            ·             ·
-           └── limit        ·             ·
-                │           count         1
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
                 └── values  ·             ·
 ·                           size          2 columns, 2 rows
 
 query TTT
-EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
-----
-·                                distribution  local
-·                                vectorized    false
-insert                           ·             ·
- │                               into          insert_t(x, v, rowid)
- │                               auto commit   ·
- └── project                     ·             ·
-      └── render                 ·             ·
-           └── limit             ·             ·
-                │                count         1
-                └── sort         ·             ·
-                     │           order         +column2
-                     └── values  ·             ·
-·                                size          2 columns, 2 rows
-
-query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-·                                distribution  local
-·                                vectorized    false
-insert                           ·             ·
- │                               into          insert_t(x, v, rowid)
- │                               auto commit   ·
- └── project                     ·             ·
-      └── render                 ·             ·
-           └── limit             ·             ·
-                │                count         1
-                └── sort         ·             ·
-                     │           order         +column2
-                     └── values  ·             ·
-·                                size          2 columns, 2 rows
+·                           distribution  local
+·                           vectorized    false
+insert                      ·             ·
+ │                          into          insert_t(x, v, rowid)
+ │                          auto commit   ·
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
+                └── values  ·             ·
+·                           size          2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-·                                distribution  local
-·                                vectorized    false
-insert                           ·             ·
- │                               into          insert_t(x, v, rowid)
- │                               auto commit   ·
- └── project                     ·             ·
-      └── render                 ·             ·
-           └── limit             ·             ·
-                │                count         1
-                └── sort         ·             ·
-                     │           order         +column2
-                     └── values  ·             ·
-·                                size          2 columns, 2 rows
+·                           distribution  local
+·                           vectorized    false
+insert                      ·             ·
+ │                          into          insert_t(x, v, rowid)
+ │                          auto commit   ·
+ └── render                 ·             ·
+      └── limit             ·             ·
+           │                count         1
+           └── sort         ·             ·
+                │           order         +column2
+                └── values  ·             ·
+·                           size          2 columns, 2 rows
 
 # ORDER BY expression that's not inserted into table.
 query TTTTT
 EXPLAIN (VERBOSE)
 INSERT INTO insert_t (SELECT length(k), 2 FROM kv ORDER BY k || v LIMIT 10) RETURNING x+v
 ----
-·                                        distribution         local                   ·                               ·
-·                                        vectorized           false                   ·                               ·
-render                                   ·                    ·                       ("?column?")                    ·
- │                                       estimated row count  10 (missing stats)      ·                               ·
- │                                       render 0             x + v                   ·                               ·
- └── insert                              ·                    ·                       (x, v, rowid)                   ·
-      │                                  estimated row count  10 (missing stats)      ·                               ·
-      │                                  into                 insert_t(x, v, rowid)   ·                               ·
-      └── project                        ·                    ·                       (length, "?column?", column11)  ·
-           └── render                    ·                    ·                       (column11, length, "?column?")  ·
-                │                        estimated row count  10 (missing stats)      ·                               ·
-                │                        render 0             unique_rowid()          ·                               ·
-                │                        render 1             length                  ·                               ·
-                │                        render 2             "?column?"              ·                               ·
-                └── limit                ·                    ·                       (length, "?column?", column10)  ·
-                     │                   estimated row count  10 (missing stats)      ·                               ·
-                     │                   count                10                      ·                               ·
-                     └── sort            ·                    ·                       (length, "?column?", column10)  +column10
-                          │              estimated row count  1000 (missing stats)    ·                               ·
-                          │              order                +column10               ·                               ·
-                          └── render     ·                    ·                       (length, "?column?", column10)  ·
-                               │         estimated row count  1000 (missing stats)    ·                               ·
-                               │         render 0             length(k)               ·                               ·
-                               │         render 1             2                       ·                               ·
-                               │         render 2             k::STRING || v::STRING  ·                               ·
-                               └── scan  ·                    ·                       (k, v)                          ·
-·                                        estimated row count  1000 (missing stats)    ·                               ·
-·                                        table                kv@primary              ·                               ·
-·                                        spans                FULL SCAN               ·                               ·
+·                                   distribution         local                   ·                               ·
+·                                   vectorized           false                   ·                               ·
+render                              ·                    ·                       ("?column?")                    ·
+ │                                  estimated row count  10 (missing stats)      ·                               ·
+ │                                  render 0             x + v                   ·                               ·
+ └── insert                         ·                    ·                       (x, v, rowid)                   ·
+      │                             estimated row count  10 (missing stats)      ·                               ·
+      │                             into                 insert_t(x, v, rowid)   ·                               ·
+      └── render                    ·                    ·                       (length, "?column?", column11)  ·
+           │                        estimated row count  10 (missing stats)      ·                               ·
+           │                        render 0             unique_rowid()          ·                               ·
+           │                        render 1             length                  ·                               ·
+           │                        render 2             "?column?"              ·                               ·
+           └── limit                ·                    ·                       (length, "?column?", column10)  ·
+                │                   estimated row count  10 (missing stats)      ·                               ·
+                │                   count                10                      ·                               ·
+                └── sort            ·                    ·                       (length, "?column?", column10)  +column10
+                     │              estimated row count  1000 (missing stats)    ·                               ·
+                     │              order                +column10               ·                               ·
+                     └── render     ·                    ·                       (length, "?column?", column10)  ·
+                          │         estimated row count  1000 (missing stats)    ·                               ·
+                          │         render 0             length(k)               ·                               ·
+                          │         render 1             2                       ·                               ·
+                          │         render 2             k::STRING || v::STRING  ·                               ·
+                          └── scan  ·                    ·                       (k, v)                          ·
+·                                   estimated row count  1000 (missing stats)    ·                               ·
+·                                   table                kv@primary              ·                               ·
+·                                   spans                FULL SCAN               ·                               ·
 
 # ------------------------------------------------------------------------------
 # Insert rows into table during schema changes.
@@ -517,37 +510,36 @@ CREATE TABLE xyz (x INT, y INT, z INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
 ----
-·                                        distribution         local                                                ·                    ·
-·                                        vectorized           false                                                ·                    ·
-root                                     ·                    ·                                                    (z)                  ·
- ├── sort                                ·                    ·                                                    (z)                  +z
- │    │                                  estimated row count  1000 (missing stats)                                 ·                    ·
- │    │                                  order                +z                                                   ·                    ·
- │    └── scan buffer                    ·                    ·                                                    (z)                  ·
- │                                       estimated row count  1000 (missing stats)                                 ·                    ·
- │                                       label                buffer 1                                             ·                    ·
- └── subquery                            ·                    ·                                                    ·                    ·
-      │                                  id                   @S1                                                  ·                    ·
-      │                                  original sql         INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
-      │                                  exec mode            all rows                                             ·                    ·
-      └── buffer                         ·                    ·                                                    (z)                  ·
-           │                             label                buffer 1                                             ·                    ·
-           └── project                   ·                    ·                                                    (z)                  ·
-                │                        estimated row count  1000 (missing stats)                                 ·                    ·
-                └── insert               ·                    ·                                                    (z, rowid)           ·
-                     │                   estimated row count  1000 (missing stats)                                 ·                    ·
-                     │                   into                 xyz(x, y, z, rowid)                                  ·                    ·
-                     └── project         ·                    ·                                                    (a, b, c, column11)  ·
-                          └── render     ·                    ·                                                    (column11, a, b, c)  ·
-                               │         estimated row count  1000 (missing stats)                                 ·                    ·
-                               │         render 0             unique_rowid()                                       ·                    ·
-                               │         render 1             a                                                    ·                    ·
-                               │         render 2             b                                                    ·                    ·
-                               │         render 3             c                                                    ·                    ·
-                               └── scan  ·                    ·                                                    (a, b, c)            ·
-·                                        estimated row count  1000 (missing stats)                                 ·                    ·
-·                                        table                abc@primary                                          ·                    ·
-·                                        spans                FULL SCAN                                            ·                    ·
+·                                   distribution         local                                                ·                    ·
+·                                   vectorized           false                                                ·                    ·
+root                                ·                    ·                                                    (z)                  ·
+ ├── sort                           ·                    ·                                                    (z)                  +z
+ │    │                             estimated row count  1000 (missing stats)                                 ·                    ·
+ │    │                             order                +z                                                   ·                    ·
+ │    └── scan buffer               ·                    ·                                                    (z)                  ·
+ │                                  estimated row count  1000 (missing stats)                                 ·                    ·
+ │                                  label                buffer 1                                             ·                    ·
+ └── subquery                       ·                    ·                                                    ·                    ·
+      │                             id                   @S1                                                  ·                    ·
+      │                             original sql         INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z  ·                    ·
+      │                             exec mode            all rows                                             ·                    ·
+      └── buffer                    ·                    ·                                                    (z)                  ·
+           │                        label                buffer 1                                             ·                    ·
+           └── project              ·                    ·                                                    (z)                  ·
+                │                   estimated row count  1000 (missing stats)                                 ·                    ·
+                └── insert          ·                    ·                                                    (z, rowid)           ·
+                     │              estimated row count  1000 (missing stats)                                 ·                    ·
+                     │              into                 xyz(x, y, z, rowid)                                  ·                    ·
+                     └── render     ·                    ·                                                    (a, b, c, column11)  ·
+                          │         estimated row count  1000 (missing stats)                                 ·                    ·
+                          │         render 0             unique_rowid()                                       ·                    ·
+                          │         render 1             a                                                    ·                    ·
+                          │         render 2             b                                                    ·                    ·
+                          │         render 3             c                                                    ·                    ·
+                          └── scan  ·                    ·                                                    (a, b, c)            ·
+·                                   estimated row count  1000 (missing stats)                                 ·                    ·
+·                                   table                abc@primary                                          ·                    ·
+·                                   spans                FULL SCAN                                            ·                    ·
 
 # ------------------------------------------------------------------------------
 # Regression for #35364. This tests behavior that is different between the CBO
