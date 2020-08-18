@@ -160,6 +160,11 @@ func (r schemaChangeGCResumer) Resume(
 				return nil
 			}
 			expired, earliestDeadline = refreshTables(ctx, execCfg, remainingTables, tableDropTimes, indexDropTimes, r.jobID, progress)
+
+			if isDoneGC(progress) {
+				return nil
+			}
+
 			timerDuration := time.Until(earliestDeadline)
 			if expired {
 				timerDuration = 0
