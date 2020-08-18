@@ -23,7 +23,15 @@ TABLE kv
       └── k int not null
 
 exec-ddl
+CREATE INDEX idx2 ON kv (v)
+----
+
+exec-ddl
 DROP INDEX idx
+----
+
+exec-ddl
+DROP INDEX idx2
 ----
 
 exec-ddl
