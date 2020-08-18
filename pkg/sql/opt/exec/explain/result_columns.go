@@ -196,7 +196,7 @@ func getResultColumns(
 		}
 		return sqlbase.ShowTraceColumns, nil
 
-	case createTableOp, createTableAsOp, createViewOp, controlJobsOp,
+	case createTableOp, createTableAsOp, createViewOp, controlJobsOp, controlSchedulesOp,
 		cancelQueriesOp, cancelSessionsOp, errorIfRowsOp, deleteRangeOp:
 		// These operations produce no columns.
 		return nil, nil

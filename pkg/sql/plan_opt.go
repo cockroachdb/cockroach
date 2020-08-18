@@ -552,7 +552,16 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var result *planComponents
 	var explainPlan *explain.Plan
 	var isDDL bool
-	if !planTop.savePlanString {
+	if planTop.appStats != nil {
+		// We do not set this flag upfront when initializing planTop because the
+		// planning process could in principle modify the AST, resulting in a
+		// different statement signature.
+		planTop.savePlanForStats = planTop.appStats.shouldSaveLogicalPlanDescription(
+			planTop.stmt,
+			allowAutoCommit,
+		)
+	}
+	if !planTop.savePlanString && !planTop.savePlanForStats {
 		// No instrumentation.
 		bld := execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()

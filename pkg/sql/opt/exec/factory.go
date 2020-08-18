@@ -196,12 +196,12 @@ type KVOption struct {
 // RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
 // given the result of the last iteration (as a node created by
 // ConstructBuffer).
-type RecursiveCTEIterationFn func(bufferRef Node) (Plan, error)
+type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 
 // ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
 // a row produced from the left side. The plan is guaranteed to produce the
 // rightColumns passed to ConstructApplyJoin (in order).
-type ApplyJoinPlanRightSideFn func(leftRow tree.Datums) (Plan, error)
+type ApplyJoinPlanRightSideFn func(ef Factory, leftRow tree.Datums) (Plan, error)
 
 // Cascade describes a cascading query. The query uses a node created by
 // ConstructBuffer as an input; it should only be triggered if this buffer is

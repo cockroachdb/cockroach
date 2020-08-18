@@ -20,6 +20,10 @@ type Flags struct {
 	// ShowTypes indicates that the types of columns are shown.
 	// If ShowTypes is true, then Verbose is also true.
 	ShowTypes bool
+	// If HideValues is true, we hide fields that may contain values from the
+	// query (e.g. spans). Used internally for the plan visible in the UI.
+	// If HideValues is true, then Verbose must be false.
+	HideValues bool
 }
 
 // MakeFlags crates Flags from ExplainOptions.

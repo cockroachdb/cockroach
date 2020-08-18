@@ -18,6 +18,8 @@ SELECT oid FROM t.orders WHERE oid = 123
 ----
 name: scan
 attrs:
+- key: missing stats
+  value: ""
 - key: table
   value: orders@primary
 - key: spans
@@ -38,17 +40,13 @@ project                                               (cid int, date date, value
 plan-tree
 SELECT cid, date, value FROM t.orders
 ----
-name: render
-attrs:
-- key: render
-  value: cid
-- key: render
-  value: date
-- key: render
-  value: value
+name: project
+attrs: []
 children:
 - name: scan
   attrs:
+  - key: missing stats
+    value: ""
   - key: table
     value: orders@primary
   - key: spans
@@ -85,12 +83,8 @@ project                                                                         
 plan-tree
 SELECT cid, sum(value) FROM t.orders WHERE date > '2015-01-01' GROUP BY cid ORDER BY 1 - sum(value)
 ----
-name: render
-attrs:
-- key: render
-  value: cid
-- key: render
-  value: sum
+name: project
+attrs: []
 children:
 - name: sort
   attrs:
@@ -98,13 +92,7 @@ children:
     value: +column7
   children:
   - name: render
-    attrs:
-    - key: render
-      value: _ - sum
-    - key: render
-      value: cid
-    - key: render
-      value: sum
+    attrs: []
     children:
     - name: group
       attrs:
@@ -113,12 +101,8 @@ children:
       - key: group by
         value: cid
       children:
-      - name: render
-        attrs:
-        - key: render
-          value: cid
-        - key: render
-          value: value
+      - name: project
+        attrs: []
         children:
         - name: filter
           attrs:
@@ -127,6 +111,8 @@ children:
           children:
           - name: scan
             attrs:
+            - key: missing stats
+              value: ""
             - key: table
               value: orders@primary
             - key: spans
@@ -148,6 +134,8 @@ SELECT value FROM (SELECT cid, date, value FROM t.orders)
 ----
 name: scan
 attrs:
+- key: missing stats
+  value: ""
 - key: table
   value: orders@primary
 - key: spans
@@ -182,43 +170,44 @@ project                                                              (cid int, d
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
-name: render
-attrs:
-- key: render
-  value: cid
-- key: render
-  value: date
-- key: render
-  value: value
+name: project
+attrs: []
 children:
-- name: hash join
-  attrs:
-  - key: type
-    value: inner
-  - key: equality
-    value: (date) = (date)
-  - key: right cols are key
-    value: ""
+- name: project
+  attrs: []
   children:
-  - name: scan
+  - name: hash join
     attrs:
-    - key: table
-      value: orders@primary
-    - key: spans
-      value: FULL SCAN
-    children: []
-  - name: distinct
-    attrs:
-    - key: distinct on
-      value: date
+    - key: type
+      value: inner
+    - key: equality
+      value: (date) = (date)
+    - key: right cols are key
+      value: ""
     children:
     - name: scan
       attrs:
+      - key: missing stats
+        value: ""
       - key: table
         value: orders@primary
       - key: spans
         value: FULL SCAN
       children: []
+    - name: distinct
+      attrs:
+      - key: distinct on
+        value: date
+      children:
+      - name: scan
+        attrs:
+        - key: missing stats
+          value: ""
+        - key: table
+          value: orders@primary
+        - key: spans
+          value: FULL SCAN
+        children: []
 
 exec
 CREATE TABLE t.movies (
@@ -272,28 +261,27 @@ SELECT id AS movie_id, title, (SELECT name FROM t.actors WHERE name = 'Foo') FRO
 name: root
 attrs: []
 children:
-- name: render
-  attrs:
-  - key: render
-    value: id
-  - key: render
-    value: title
-  - key: render
-    value: (SELECT name FROM t.actors WHERE name = _)
+- name: project
+  attrs: []
   children:
-  - name: scan
-    attrs:
-    - key: table
-      value: movies@primary
-    - key: spans
-      value: FULL SCAN
-    children: []
+  - name: render
+    attrs: []
+    children:
+    - name: scan
+      attrs:
+      - key: missing stats
+        value: ""
+      - key: table
+        value: movies@primary
+      - key: spans
+        value: FULL SCAN
+      children: []
 - name: subquery
   attrs:
   - key: id
     value: '@S1'
   - key: original sql
-    value: (SELECT name FROM t.actors WHERE name = _)
+    value: (SELECT name FROM t.actors WHERE name = 'Foo')
   - key: exec mode
     value: one row
   children:
@@ -307,6 +295,8 @@ children:
       children:
       - name: scan
         attrs:
+        - key: missing stats
+          value: ""
         - key: table
           value: actors@primary
         - key: spans
