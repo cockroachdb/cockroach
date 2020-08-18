@@ -87,8 +87,10 @@ func (p *planner) writeSchemaDescChange(
 			Username:      p.User(),
 			DescriptorIDs: descpb.IDs{desc.ID},
 			Details: jobspb.SchemaChangeDetails{
-				DescID:        desc.ID,
-				FormatVersion: jobspb.JobResumerFormatVersion,
+				DescID: desc.ID,
+				// The version distinction for database jobs doesn't matter for schema
+				// jobs.
+				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}

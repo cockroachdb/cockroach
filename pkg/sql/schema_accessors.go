@@ -39,9 +39,12 @@ type (
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	DatabaseDescriptor = descpb.DatabaseDescriptor
-	// UncachedDatabaseDescriptor is provided for convenience and to make the
+	// MutableDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	UncachedDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
+	MutableDatabaseDescriptor = sqlbase.MutableDatabaseDescriptor
+	// ImmutableDatabaseDescriptor is provided for convenience and to make the
+	// interface definitions below more intuitive.
+	ImmutableDatabaseDescriptor = sqlbase.ImmutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor

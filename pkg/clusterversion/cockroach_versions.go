@@ -77,6 +77,7 @@ const (
 	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	VersionMaterializedViews
 	VersionBox2DType
+	VersionLeasedDatabaseDescriptors
 
 	// Add new versions here (step one of two).
 )
@@ -576,6 +577,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionBox2DType enables the use of the box2d type.
 		Key:     VersionBox2DType,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 17},
+	},
+	{
+		// VersionLeasedDatabasedDescriptors enables leased database descriptors.
+		Key:     VersionLeasedDatabaseDescriptors,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 18},
 	},
 
 	// Add new versions here (step two of two).

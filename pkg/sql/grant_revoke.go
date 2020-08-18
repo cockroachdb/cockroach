@@ -168,20 +168,31 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.ImmutableDatabaseDescriptor:
-			if err := d.Validate(); err != nil {
-				return err
-			}
-			if err := catalogkv.WriteDescToBatch(
-				ctx,
-				p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-				p.ExecCfg().Settings,
-				b,
-				p.ExecCfg().Codec,
-				descriptor.GetID(),
-				descriptor,
-			); err != nil {
-				return err
+		case *sqlbase.MutableDatabaseDescriptor:
+			if p.Descriptors().DatabaseLeasingUnsupported() {
+				if err := d.Validate(); err != nil {
+					return err
+				}
+				if err := catalogkv.WriteDescToBatch(
+					ctx,
+					p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+					p.ExecCfg().Settings,
+					b,
+					p.ExecCfg().Codec,
+					descriptor.GetID(),
+					descriptor,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := p.writeDatabaseChangeToBatch(ctx, d, b); err != nil {
+					return err
+				}
+				if err := p.createNonDropDatabaseChangeJob(ctx, d.ID,
+					fmt.Sprintf("updating privileges for database %d", d.ID),
+				); err != nil {
+					return err
+				}
 			}
 
 		case *sqlbase.MutableTableDescriptor:

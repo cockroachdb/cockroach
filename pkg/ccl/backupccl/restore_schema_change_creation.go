@@ -183,7 +183,9 @@ func createSchemaChangeJobsFromMutations(
 				DescID:          tableDesc.ID,
 				TableMutationID: mutationID,
 				ResumeSpanList:  spanList,
-				FormatVersion:   jobspb.JobResumerFormatVersion,
+				// The version distinction for database jobs doesn't matter for a schema
+				// change on a single table.
+				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
