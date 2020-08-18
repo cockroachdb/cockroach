@@ -17,6 +17,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -179,6 +180,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		backupStmt string
 		period     time.Duration
 		runsNow    bool
+		shownStmt  string
 	}
 
 	testCases := []struct {
@@ -191,12 +193,13 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	}{
 		{
 			name:  "full-cluster",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=neverappars' RECURRING '@hourly'",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=neverappars' WITH detached",
+					shownStmt:  "BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=redacted' WITH detached",
 					period:     time.Hour,
 				},
 			},
@@ -320,6 +323,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				{
 					nameRe:     "BACKUP .*",
 					backupStmt: "BACKUP TABLE db.*, other_db.foo INTO 'somewhere' WITH encryption_passphrase='secret', detached",
+					shownStmt:  "BACKUP TABLE db.*, other_db.foo INTO 'somewhere' WITH encryption_passphrase='redacted', detached",
 					period:     7 * 24 * time.Hour,
 				},
 			},
@@ -329,7 +333,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			user: enterpriseUser,
 			query: `
 		CREATE SCHEDULE FOR BACKUP DATABASE db1, db2 INTO ('somewhere', 'anywhere')
-		WITH revision_history 
+		WITH revision_history
     RECURRING '1 2 * * *'
     FULL BACKUP ALWAYS
 		WITH EXPERIMENTAL SCHEDULE OPTIONS first_run=$1
@@ -376,6 +380,15 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, len(tc.expectedSchedules), len(schedules))
 
+			shown := th.sqlDB.QueryStr(t, `SELECT id, command->'backup_statement' FROM [SHOW SCHEDULES]`)
+			require.Equal(t, len(tc.expectedSchedules), len(shown))
+			shownByID := map[int64]string{}
+			for _, i := range shown {
+				id, err := strconv.ParseInt(i[0], 10, 64)
+				require.NoError(t, err)
+				shownByID[id] = i[1]
+			}
+
 			// Build a map of expected backup statement to expected schedule.
 			expectedByName := make(map[string]expectedSchedule)
 			for _, s := range tc.expectedSchedules {
@@ -387,6 +400,12 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				expectedSchedule, ok := expectedByName[stmt]
 				require.True(t, ok, "could not find matching name for %q", stmt)
 				require.Regexp(t, regexp.MustCompile(expectedSchedule.nameRe), s.ScheduleName())
+
+				expectedShown := fmt.Sprintf("%q", expectedSchedule.backupStmt)
+				if expectedSchedule.shownStmt != "" {
+					expectedShown = fmt.Sprintf("%q", expectedSchedule.shownStmt)
+				}
+				require.Equal(t, expectedShown, shownByID[s.ScheduleID()])
 
 				frequency, err := s.Frequency()
 				require.NoError(t, err)
