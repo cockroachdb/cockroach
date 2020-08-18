@@ -88,7 +88,7 @@ FROM system.jobs
 	sqlDB.Exec(t, `GRANT CREATE, SELECT ON DATABASE data TO system_ops;`)
 	sqlDB.Exec(t, `GRANT system_ops TO maxroach1;`)
 
-	sqlDB.Exec(t, `CREATE STATISTICS my_stats FROM data.bank`)
+	injectStats(t, sqlDB, "data.bank", "id")
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
 
 	// Create a bunch of user tables on the restoring cluster that we're going
