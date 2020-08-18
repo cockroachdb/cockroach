@@ -303,6 +303,9 @@ message SchemaChangeDetails {
   // statement. We collect the types here rather than creating individual DROP
   // TYPE jobs for each dropped type.
   repeated uint32 dropped_types = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  // dropped_schemas holds the set of schemas to drop as part of a DROP SCHEMA
+  // or DROP DATABASE cascade statement.
+  repeated uint32 dropped_schemas = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   // The descriptor ID of the dropped database which created this job.
   uint32 dropped_database_id = 4 [
     (gogoproto.customname) = "DroppedDatabaseID",

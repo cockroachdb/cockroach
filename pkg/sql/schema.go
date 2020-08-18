@@ -43,11 +43,32 @@ func (p *planner) schemaExists(
 	return exists, nil
 }
 
+func (p *planner) writeSchemaDesc(
+	ctx context.Context, desc *sqlbase.MutableSchemaDescriptor,
+) error {
+	desc.MaybeIncrementVersion()
+	p.Descriptors().ResetSchemaCache()
+	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
+		return err
+	}
+	b := p.txn.NewBatch()
+	if err := catalogkv.WriteDescToBatch(
+		ctx,
+		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		p.ExecCfg().Settings,
+		b,
+		p.ExecCfg().Codec,
+		desc.ID,
+		desc,
+	); err != nil {
+		return err
+	}
+	return p.txn.Run(ctx, b)
+}
+
 func (p *planner) writeSchemaDescChange(
 	ctx context.Context, desc *sqlbase.MutableSchemaDescriptor, jobDesc string,
 ) error {
-	desc.MaybeIncrementVersion()
-
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
 	if jobExists {
 		// Update it.
@@ -78,21 +99,5 @@ func (p *planner) writeSchemaDescChange(
 		log.Infof(ctx, "queued new schema change job %d for schema %d", *newJob.ID(), desc.ID)
 	}
 
-	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
-		return err
-	}
-
-	b := p.txn.NewBatch()
-	if err := catalogkv.WriteDescToBatch(
-		ctx,
-		p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-		p.ExecCfg().Settings,
-		b,
-		p.ExecCfg().Codec,
-		desc.ID,
-		desc,
-	); err != nil {
-		return err
-	}
-	return p.txn.Run(ctx, b)
+	return p.writeSchemaDesc(ctx, desc)
 }

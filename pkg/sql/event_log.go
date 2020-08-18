@@ -30,6 +30,9 @@ const (
 	// EventLogDropDatabase is recorded when a database is dropped.
 	EventLogDropDatabase EventLogType = "drop_database"
 
+	// EventLogDropSchema is recorded when a schema is dropped.
+	EventLogDropSchema EventLogType = "drop_schema"
+
 	// EventLogCreateTable is recorded when a table is created.
 	EventLogCreateTable EventLogType = "create_table"
 	// EventLogDropTable is recorded when a table is dropped.

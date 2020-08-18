@@ -589,8 +589,20 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 
 	tableDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor)
 	if !ok {
-		// If our descriptor is not a table, then just drain leases and return.
-		return waitToUpdateLeases(false /* refreshStats */)
+		// If our descriptor is not a table, then just drain leases.
+		if err := waitToUpdateLeases(false /* refreshStats */); err != nil {
+			return err
+		}
+		// Some descriptors should be deleted if they are in the DROP state.
+		switch desc.(type) {
+		case sqlbase.SchemaDescriptor:
+			if desc.Dropped() {
+				if err := sc.execCfg.DB.Del(ctx, sqlbase.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 
 	// Otherwise, continue with the rest of the schema change state machine.
@@ -1915,9 +1927,9 @@ func (r schemaChangeResumer) Resume(
 		}
 	}
 
-	execSchemaChange := func(tableID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID) error {
+	execSchemaChange := func(descID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID) error {
 		sc := SchemaChanger{
-			descID:               tableID,
+			descID:               descID,
 			mutationID:           mutationID,
 			droppedDatabaseID:    droppedDatabaseID,
 			sqlInstanceID:        p.ExecCfg().NodeID.SQLInstanceID(),
@@ -1960,7 +1972,7 @@ func (r schemaChangeResumer) Resume(
 					ctx,
 					"descriptor %d not found for schema change processing mutation %d;"+
 						"assuming it was dropped, and exiting",
-					tableID, mutationID,
+					descID, mutationID,
 				)
 				return nil
 			case !isPermanentSchemaChangeError(scErr):
@@ -1980,17 +1992,26 @@ func (r schemaChangeResumer) Resume(
 	// nothing left to do.
 	if details.DroppedDatabaseID != descpb.InvalidID &&
 		len(details.DroppedTables) == 0 &&
-		len(details.DroppedTypes) == 0 {
+		len(details.DroppedTypes) == 0 &&
+		len(details.DroppedSchemas) == 0 {
 		return nil
 	}
 
-	// If a database is being dropped, handle this separately by draining names
-	// for all the tables and types.
+	// If a database or a set of schemas is being dropped, drop all objects as
+	// part of this schema change job.
 	//
 	// This also covers other cases where we have a leftover 19.2 job that drops
 	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
-	// it's possible for DroppedDatabaseID to be unset.
-	if details.DroppedDatabaseID != descpb.InvalidID || len(details.DroppedTables) > 1 {
+	if details.DroppedDatabaseID != descpb.InvalidID ||
+		len(details.DroppedTables) > 1 ||
+		len(details.DroppedSchemas) > 0 {
+		// Drop all schemas.
+		for _, id := range details.DroppedSchemas {
+			if err := execSchemaChange(id, descpb.InvalidMutationID, descpb.InvalidID); err != nil {
+				return err
+			}
+		}
+
 		// Drop all of the types in the database.
 		for i := range details.DroppedTypes {
 			ts := &typeSchemaChanger{
