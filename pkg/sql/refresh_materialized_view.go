@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -57,6 +58,14 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// will return consistent data. The schema change process will backfill the
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
+
+	// Inform the user that CONCURRENTLY is not needed.
+	if n.n.Concurrently {
+		params.p.SendClientNotice(
+			params.ctx,
+			pgnotice.Newf("CONCURRENTLY is not required as views are refreshed concurrently"),
+		)
+	}
 
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
 	newPrimaryIndex := protoutil.Clone(&n.desc.PrimaryIndex).(*descpb.IndexDescriptor)
