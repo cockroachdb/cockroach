@@ -1068,6 +1068,8 @@ from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_combinebbox"></a><code>st_combinebbox(box2d: box2d, geometry: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Combines the current bounding box with the bounding box of the Geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>

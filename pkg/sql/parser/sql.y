@@ -5679,39 +5679,42 @@ generated_as:
 
 
 index_def:
-  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+  INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
-      Name:    tree.Name($2),
-      Columns: $4.idxElems(),
-      Sharded: $6.shardedIndexDef(),
-      Storing: $7.nameList(),
-      Interleave: $8.interleave(),
-      PartitionBy: $9.partitionBy(),
-      Predicate: $10.expr(),
+      Name:          tree.Name($2),
+      Columns:       $4.idxElems(),
+      Sharded:       $6.shardedIndexDef(),
+      Storing:       $7.nameList(),
+      Interleave:    $8.interleave(),
+      PartitionBy:   $9.partitionBy(),
+      StorageParams: $10.storageParams(),
+      Predicate:     $11.expr(),
     }
   }
-| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_where_clause
+| UNIQUE INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
-        Name:    tree.Name($3),
-        Columns: $5.idxElems(),
-        Sharded: $7.shardedIndexDef(),
-        Storing: $8.nameList(),
-        Interleave: $9.interleave(),
-        PartitionBy: $10.partitionBy(),
-        Predicate: $11.expr(),
+        Name:          tree.Name($3),
+        Columns:       $5.idxElems(),
+        Sharded:       $7.shardedIndexDef(),
+        Storing:       $8.nameList(),
+        Interleave:    $9.interleave(),
+        PartitionBy:   $10.partitionBy(),
+        StorageParams: $11.storageParams(),
+        Predicate:     $12.expr(),
       },
     }
   }
-| INVERTED INDEX opt_name '(' index_params ')' opt_where_clause
+| INVERTED INDEX opt_name '(' index_params ')' opt_with_storage_parameter_list opt_where_clause
   {
     $$.val = &tree.IndexTableDef{
-      Name:    tree.Name($3),
-      Columns: $5.idxElems(),
-      Inverted: true,
-      Predicate: $7.expr(),
+      Name:          tree.Name($3),
+      Columns:       $5.idxElems(),
+      Inverted:      true,
+      StorageParams: $7.storageParams(),
+      Predicate:     $8.expr(),
     }
   }
 

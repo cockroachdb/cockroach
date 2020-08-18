@@ -14,10 +14,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -39,13 +41,33 @@ type explainNewPlanNodeRun struct {
 }
 
 func (e *explainNewPlanNode) startExec(params runParams) error {
+	realPlan := e.plan.WrappedPlan.(*planComponents)
+	distribution, willVectorize := explainGetDistributedAndVectorized(params, realPlan)
+
 	ob := explain.NewOutputBuilder(e.flags)
+	if err := emitExplain(ob, params.p.ExecCfg().Codec, e.plan, distribution, willVectorize); err != nil {
+		return err
+	}
+	v := params.p.newContainerValuesNode(e.columns, 0)
+	for _, row := range ob.BuildExplainRows() {
+		if _, err := v.rows.AddRow(params.ctx, row); err != nil {
+			return err
+		}
+	}
+	e.run.results = v
 
-	realPlan := e.plan.WrappedPlan.(*planTop)
-	distribution, willVectorize := explainGetDistributedAndVectorized(params, &realPlan.planComponents)
+	return nil
+}
+
+func emitExplain(
+	ob *explain.OutputBuilder,
+	codec keys.SQLCodec,
+	explainPlan *explain.Plan,
+	distribution physicalplan.PlanDistribution,
+	vectorized bool,
+) error {
 	ob.AddField("distribution", distribution.String())
-	ob.AddField("vectorized", fmt.Sprintf("%t", willVectorize))
-
+	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 		var tabDesc *sqlbase.ImmutableTableDescriptor
 		var idxDesc *descpb.IndexDescriptor
@@ -56,7 +78,7 @@ func (e *explainNewPlanNode) startExec(params runParams) error {
 			tabDesc = table.(*optTable).desc
 			idxDesc = index.(*optIndex).desc
 		}
-		spans, err := generateScanSpans(params.p, tabDesc, idxDesc, scanParams)
+		spans, err := generateScanSpans(codec, tabDesc, idxDesc, scanParams)
 		if err != nil {
 			return err.Error()
 		}
@@ -69,25 +91,13 @@ func (e *explainNewPlanNode) startExec(params runParams) error {
 		//    four values are the special tenant prefix byte and tenant ID, followed
 		//    by the table ID and the index ID.
 		skip := 2
-		if !params.p.ExecCfg().Codec.ForSystemTenant() {
+		if !codec.ForSystemTenant() {
 			skip = 4
 		}
 		return sqlbase.PrettySpans(idxDesc, spans, skip)
 	}
 
-	if err := explain.Emit(e.plan, ob, spanFormatFn); err != nil {
-		return err
-	}
-
-	v := params.p.newContainerValuesNode(e.columns, 0)
-	for _, row := range ob.BuildExplainRows() {
-		if _, err := v.rows.AddRow(params.ctx, row); err != nil {
-			return err
-		}
-	}
-	e.run.results = v
-
-	return nil
+	return explain.Emit(explainPlan, ob, spanFormatFn)
 }
 
 func (e *explainNewPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }

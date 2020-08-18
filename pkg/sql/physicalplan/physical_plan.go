@@ -1335,7 +1335,7 @@ const (
 	// locally.
 	PartiallyDistributedPlan
 
-	// FullyDistributedPlan indicates the the whole plan is distributed.
+	// FullyDistributedPlan indicates that the whole plan is distributed.
 	FullyDistributedPlan
 )
 

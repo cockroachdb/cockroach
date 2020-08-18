@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -841,8 +842,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
 		ctx, planner, planner.execCfg.NodeID, ex.sessionData.DistSQLMode, planner.curPlan.main,
-	).WillDistribute()
-	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
+	)
+	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
@@ -858,7 +859,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	queryMeta.phase = executing
 	// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
-	queryMeta.isDistributed = distributePlan
+	queryMeta.isDistributed = distributePlan.WillDistribute()
 	progAtomic := &queryMeta.progressAtomic
 	ex.mu.Unlock()
 
@@ -877,13 +878,18 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagTenant)
 	}
 
-	if distributePlan {
-		planner.curPlan.flags.Set(planFlagDistributed)
-	} else {
-		planner.curPlan.flags.Set(planFlagDistSQLLocal)
+	switch distributePlan {
+	case physicalplan.FullyDistributedPlan:
+		planner.curPlan.flags.Set(planFlagFullyDistributed)
+	case physicalplan.PartiallyDistributedPlan:
+		planner.curPlan.flags.Set(planFlagPartiallyDistributed)
+	default:
+		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
-	stats, err := ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan, progAtomic)
+	stats, err := ex.execWithDistSQLEngine(
+		ctx, planner, stmt.AST.StatementType(), res, distributePlan.WillDistribute(), progAtomic,
+	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
 
@@ -905,7 +911,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
 	planner.curPlan.init(planner.stmt, ex.appStats)
 	if planner.collectBundle {
-		planner.curPlan.instrumentation.savePlanString = true
+		planner.curPlan.savePlanString = true
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {

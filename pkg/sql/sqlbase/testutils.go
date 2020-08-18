@@ -107,9 +107,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			panic(errors.AssertionFailedf("float with an unexpected width %d", typ.Width()))
 		}
 	case types.Box2DFamily:
-		b := geo.NewCartesianBoundingBox()
-		b.AddPoint(rng.NormFloat64(), rng.NormFloat64())
-		b.AddPoint(rng.NormFloat64(), rng.NormFloat64())
+		b := geo.NewCartesianBoundingBox().AddPoint(rng.NormFloat64(), rng.NormFloat64()).AddPoint(rng.NormFloat64(), rng.NormFloat64())
 		return tree.NewDBox2D(b)
 	case types.GeographyFamily:
 		gm, err := typ.GeoMetadata()

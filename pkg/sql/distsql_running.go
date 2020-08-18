@@ -1056,7 +1056,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			recv.SetError(err)
 			return false
 		}
-		cp := cascadePlan.(*planTop)
+		cp := cascadePlan.(*planComponents)
 		plan.cascades[i].plan = cp.main
 		if len(cp.subqueryPlans) > 0 {
 			recv.SetError(errors.AssertionFailedf("cascades should not have subqueries"))

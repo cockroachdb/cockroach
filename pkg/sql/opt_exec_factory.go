@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -104,7 +105,7 @@ func (ef *execFactory) ConstructScan(
 	scan.reverse = params.Reverse
 	scan.parallelize = params.Parallelize
 	var err error
-	scan.spans, err = generateScanSpans(ef.planner, tabDesc, indexDesc, params)
+	scan.spans, err = generateScanSpans(ef.planner.ExecCfg().Codec, tabDesc, indexDesc, params)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +126,12 @@ func (ef *execFactory) ConstructScan(
 }
 
 func generateScanSpans(
-	planner *planner,
+	codec keys.SQLCodec,
 	tabDesc *sqlbase.ImmutableTableDescriptor,
 	indexDesc *descpb.IndexDescriptor,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
-	sb := span.MakeBuilder(planner.ExecCfg().Codec, tabDesc, indexDesc)
+	sb := span.MakeBuilder(codec, tabDesc, indexDesc)
 	if params.InvertedConstraint != nil {
 		return GenerateInvertedSpans(params.InvertedConstraint, sb)
 	}
@@ -1157,7 +1158,7 @@ func (ef *execFactory) ConstructExplainOpt(
 func (ef *execFactory) ConstructExplain(
 	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
-	return constructExplainPlanNode(options, stmtType, plan.(*planTop), ef.planner)
+	return constructExplainPlanNode(options, stmtType, plan.(*planComponents), ef.planner)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.

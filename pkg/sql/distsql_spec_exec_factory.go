@@ -755,7 +755,7 @@ func (e *distSQLSpecExecFactory) ConstructExplain(
 	// variants of EXPLAIN when subqueries are present as we do in the old path.
 	// TODO(yuzefovich): make sure that local plan nodes that create
 	// distributed jobs are shown as "distributed". See distSQLExplainable.
-	p := plan.(*planTop)
+	p := plan.(*planComponents)
 	explain, err := constructExplainPlanNode(options, stmtType, p, e.planner)
 	if err != nil {
 		return nil, err

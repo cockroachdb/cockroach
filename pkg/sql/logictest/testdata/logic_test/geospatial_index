@@ -1,0 +1,89 @@
+statement ok
+CREATE TABLE geo_table(
+  id int primary key,
+  geog geography(geometry, 4326),
+  geom geometry(geometry, 3857),
+  FAMILY fam_0_geog (geog),
+  FAMILY fam_1_geom (geom),
+  FAMILY fam_2_id (id)
+)
+
+statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX bad_idx ON geo_table(id) WITH (s2_max_cells=15)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (s2_max_cells=42)
+
+statement error s2_max_level \(29\) must be divisible by s2_level_mod \(2\)
+CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (s2_max_level=29, s2_level_mod=2)
+
+statement error "geometry_min_x" can only be applied to GEOMETRY spatial indexes
+CREATE INDEX bad_idx ON geo_table USING GIST(geog) WITH (geometry_min_x=0)
+
+statement error geometry_max_x \(0\.000000\) must be greater than geometry_min_x \(10\.000000\)
+CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_x=10, geometry_max_x=0)
+
+statement error geometry_max_y \(0\.000000\) must be greater than geometry_min_y \(10\.000000\)
+CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_y=10, geometry_max_y=0)
+
+statement ok
+CREATE INDEX geom_idx_1 ON geo_table USING GIST(geom) WITH (geometry_min_x=0, s2_max_level=15)
+
+statement ok
+CREATE INDEX geom_idx_2 ON geo_table USING GIST(geom) WITH (geometry_min_x=0)
+
+statement ok
+CREATE INDEX geom_idx_3 ON geo_table USING GIST(geom) WITH (s2_max_level=10)
+
+statement ok
+CREATE INDEX geom_idx_4 ON geo_table USING GIST(geom)
+
+statement ok
+CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=2)
+
+statement ok
+CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
+----
+CREATE TABLE public.geo_table (
+   id INT8 NOT NULL,
+   geog GEOGRAPHY(GEOMETRY,4326) NULL,
+   geom GEOMETRY(GEOMETRY,3857) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX geom_idx_1 (geom) WITH (s2_max_level=15, geometry_min_x=0),
+   INVERTED INDEX geom_idx_2 (geom) WITH (geometry_min_x=0),
+   INVERTED INDEX geom_idx_3 (geom) WITH (s2_max_level=10),
+   INVERTED INDEX geom_idx_4 (geom),
+   INVERTED INDEX geog_idx_1 (geog) WITH (s2_level_mod=2),
+   INVERTED INDEX geog_idx_2 (geog),
+   FAMILY fam_0_geog (geog),
+   FAMILY fam_1_geom (geom),
+   FAMILY fam_2_id (id)
+)
+
+let $create_table
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
+
+statement ok
+DROP TABLE geo_table; $create_table
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE geo_table]
+----
+CREATE TABLE public.geo_table (
+   id INT8 NOT NULL,
+   geog GEOGRAPHY(GEOMETRY,4326) NULL,
+   geom GEOMETRY(GEOMETRY,3857) NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX geom_idx_1 (geom) WITH (s2_max_level=15, geometry_min_x=0),
+   INVERTED INDEX geom_idx_2 (geom) WITH (geometry_min_x=0),
+   INVERTED INDEX geom_idx_3 (geom) WITH (s2_max_level=10),
+   INVERTED INDEX geom_idx_4 (geom),
+   INVERTED INDEX geog_idx_1 (geog) WITH (s2_level_mod=2),
+   INVERTED INDEX geog_idx_2 (geog),
+   FAMILY fam_0_geog (geog),
+   FAMILY fam_1_geom (geom),
+   FAMILY fam_2_id (id)
+)
