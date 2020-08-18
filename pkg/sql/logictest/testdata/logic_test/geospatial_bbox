@@ -162,6 +162,22 @@ BOX(-1 -1,1 1)
 BOX(4 -5,4 -5)
 BOX(-1 -5,4 1)
 
+subtest st_expand
+
+query TT
+SELECT
+  st_expand(b::box2d, 10),
+  st_expand(b::box2d, 10, 20)
+FROM ( VALUES
+  ('box(-1 -1, 1 1)'),
+  ('box(-10 -20, 15 30)'),
+  (NULL)
+) tbl(b)
+----
+BOX(-11 -11,11 11)  BOX(-11 -21,11 21)
+BOX(-20 -30,25 40)  BOX(-20 -40,25 50)
+NULL                NULL
+
 subtest cast_test
 
 query T

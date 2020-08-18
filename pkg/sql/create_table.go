@@ -169,6 +169,7 @@ var minimumTypeUsageVersions = map[types.Family]clusterversion.VersionKey{
 	types.TimeTZFamily:    clusterversion.VersionTimeTZType,
 	types.GeographyFamily: clusterversion.VersionGeospatialType,
 	types.GeometryFamily:  clusterversion.VersionGeospatialType,
+	types.Box2DFamily:     clusterversion.VersionBox2DType,
 }
 
 // isTypeSupportedInVersion returns whether a given type is supported in the given version.

@@ -145,17 +145,17 @@ func (b *CartesianBoundingBox) Combine(o *CartesianBoundingBox) *CartesianBoundi
 	return b.AddPoint(o.LoX, o.LoY).AddPoint(o.HiX, o.HiY)
 }
 
-// Buffer adds n units to each side of the bounding box.
-func (b *CartesianBoundingBox) Buffer(n float64) *CartesianBoundingBox {
+// Buffer adds deltaX and deltaY to the bounding box on both the Lo and Hi side.
+func (b *CartesianBoundingBox) Buffer(deltaX, deltaY float64) *CartesianBoundingBox {
 	if b == nil {
 		return nil
 	}
 	return &CartesianBoundingBox{
 		BoundingBox: geopb.BoundingBox{
-			LoX: b.LoX - n,
-			HiX: b.HiX + n,
-			LoY: b.LoY - n,
-			HiY: b.HiY + n,
+			LoX: b.LoX - deltaX,
+			HiX: b.HiX + deltaX,
+			LoY: b.LoY - deltaY,
+			HiY: b.HiY + deltaY,
 		},
 	}
 }

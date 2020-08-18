@@ -3665,6 +3665,40 @@ Bottom Left.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_expand": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"delta", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				delta := float64(tree.MustBeDFloat(args[1]))
+				return tree.NewDBox2D(bbox.Buffer(delta, delta)), nil
+			},
+			Info: infoBuilder{
+				info: "Extends the box2d by delta units across all dimensions.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"box2d", types.Box2D},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bbox := tree.MustBeDBox2D(args[0])
+				deltaX := float64(tree.MustBeDFloat(args[1]))
+				deltaY := float64(tree.MustBeDFloat(args[2]))
+				return tree.NewDBox2D(bbox.Buffer(deltaX, deltaY)), nil
+			},
+			Info: infoBuilder{
+				info: "Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Schema changes
