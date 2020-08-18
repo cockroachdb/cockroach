@@ -204,7 +204,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		plan := p.(*planTop)
+		plan := p.(*planComponents)
 
 		if err := a.runRightSidePlan(params, plan); err != nil {
 			return false, err
@@ -220,7 +220,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 // a.run.rightRows, ready for retrieval. An error indicates that something went
 // wrong during execution of the right hand side of the join, and that we should
 // completely give up on the outer join.
-func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error {
+func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planComponents) error {
 	a.run.curRightRow = 0
 	a.run.rightRows.Clear(params.ctx)
 	return runPlanInsidePlan(params, plan, a.run.rightRows)
@@ -229,7 +229,7 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 // runPlanInsidePlan is used to run a plan and gather the results in a row
 // container, as part of the execution of an "outer" plan.
 func runPlanInsidePlan(
-	params runParams, plan *planTop, rowContainer *rowcontainer.RowContainer,
+	params runParams, plan *planComponents, rowContainer *rowcontainer.RowContainer,
 ) error {
 	rowResultWriter := NewRowResultWriter(rowContainer)
 	recv := MakeDistSQLReceiver(
@@ -263,7 +263,7 @@ func runPlanInsidePlan(
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
 		params.ctx, evalCtx, &plannerCopy, params.p.txn, false, /* distribute */
 	)
-	planCtx.planner.curPlan = *plan
+	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.stmtType = recv.stmtType
 

@@ -147,7 +147,7 @@ func (ex *connExecutor) recordStatementSummary(
 	if automaticRetryCount == 0 {
 		ex.updateOptCounters(flags)
 		m := &ex.metrics.EngineMetrics
-		if flags.IsSet(planFlagDistributed) {
+		if flags.IsDistributed() {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
 			}
@@ -159,8 +159,8 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	ex.statsCollector.recordStatement(
-		stmt, planner.curPlan.instrumentation.savedPlanForStats,
-		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagVectorized),
+		stmt, planner.curPlan.savedPlanForStats,
+		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)

@@ -33,13 +33,7 @@ func constructPlan(
 	cascades []exec.Cascade,
 	checks []exec.Node,
 ) (exec.Plan, error) {
-	res := &planTop{
-		// TODO(radu): these fields can be modified by planning various opaque
-		// statements. We should have a cleaner way of plumbing these.
-		avoidBuffering:  planner.curPlan.avoidBuffering,
-		auditEvents:     planner.curPlan.auditEvents,
-		instrumentation: planner.curPlan.instrumentation,
-	}
+	res := &planComponents{}
 	assignPlan := func(plan *planMaybePhysical, node exec.Node) {
 		switch n := node.(type) {
 		case planNode:
@@ -113,7 +107,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 }
 
 func constructExplainPlanNode(
-	options *tree.ExplainOptions, stmtType tree.StatementType, p *planTop, planner *planner,
+	options *tree.ExplainOptions, stmtType tree.StatementType, p *planComponents, planner *planner,
 ) (exec.Node, error) {
 	analyzeSet := options.Flags[tree.ExplainFlagAnalyze]
 
@@ -125,7 +119,7 @@ func constructExplainPlanNode(
 	case tree.ExplainDistSQL:
 		return &explainDistSQLNode{
 			options:  options,
-			plan:     p.planComponents,
+			plan:     *p,
 			analyze:  analyzeSet,
 			stmtType: stmtType,
 		}, nil
@@ -133,7 +127,7 @@ func constructExplainPlanNode(
 	case tree.ExplainVec:
 		return &explainVecNode{
 			options: options,
-			plan:    p.planComponents,
+			plan:    *p,
 		}, nil
 
 	case tree.ExplainPlan:
@@ -143,7 +137,7 @@ func constructExplainPlanNode(
 		return planner.makeExplainPlanNodeWithPlan(
 			context.TODO(),
 			options,
-			p.planComponents,
+			*p,
 		)
 
 	default:

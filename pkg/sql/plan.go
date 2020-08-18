@@ -13,15 +13,19 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/errors"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -277,6 +281,9 @@ type planTop struct {
 	mem     *memo.Memo
 	catalog *optCatalog
 
+	// codec is populated during planning.
+	codec keys.SQLCodec
+
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -291,10 +298,17 @@ type planTop struct {
 	// results.
 	avoidBuffering bool
 
-	instrumentation planInstrumentation
-
 	// If we are collecting query diagnostics, flow diagrams are saved here.
 	distSQLDiagrams []execinfrapb.FlowDiagram
+
+	appStats          *appStats
+	savedPlanForStats *roachpb.ExplainTreePlanNode
+
+	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
+	// will be saved in planString.
+	savePlanString bool
+	explainPlan    *explain.Plan
+	planString     string
 }
 
 // physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
@@ -406,18 +420,55 @@ func (p *planComponents) close(ctx context.Context) {
 // init resets planTop to point to a given statement; used at the start of the
 // planning process.
 func (p *planTop) init(stmt *Statement, appStats *appStats) {
-	*p = planTop{stmt: stmt}
-	p.instrumentation.init(appStats)
+	*p = planTop{stmt: stmt, appStats: appStats}
 }
 
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
-	if p.main.planNode != nil {
+	if p.main.planNode != nil && p.flags.IsSet(planFlagExecDone) {
 		// TODO(yuzefovich): update this once we support creating table reader
 		// specs directly in the optimizer (see #47474).
-		p.instrumentation.savePlanInfo(ctx, p)
+		if p.appStats != nil && p.appStats.shouldSaveLogicalPlanDescription(
+			p.stmt,
+			p.flags.IsDistributed(),
+			p.flags.IsSet(planFlagVectorized),
+			p.flags.IsSet(planFlagImplicitTxn),
+			p.execErr,
+		) {
+			p.savedPlanForStats = planToTree(ctx, p)
+		}
+
+		if p.savePlanString && p.explainPlan != nil {
+			var err error
+			p.planString, err = p.formatExplain()
+			if err != nil {
+				p.planString = err.Error()
+			}
+		}
 	}
 	p.planComponents.close(ctx)
+}
+
+func (p *planTop) formatExplain() (string, error) {
+	if p.explainPlan == nil {
+		return "", errors.AssertionFailedf("no plan")
+	}
+	vectorized := p.flags.IsSet(planFlagVectorized)
+	distribution := physicalplan.LocalPlan
+	if p.flags.IsSet(planFlagFullyDistributed) {
+		distribution = physicalplan.FullyDistributedPlan
+	} else if p.flags.IsSet(planFlagPartiallyDistributed) {
+		distribution = physicalplan.PartiallyDistributedPlan
+	}
+
+	ob := explain.NewOutputBuilder(explain.Flags{
+		Verbose:   true,
+		ShowTypes: true,
+	})
+	if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+		return "", err
+	}
+	return ob.BuildString(), nil
 }
 
 // formatOptPlan returns a visual representation of the optimizer plan that was
@@ -513,13 +564,16 @@ const (
 	// did not find one.
 	planFlagOptCacheMiss
 
-	// planFlagDistributed is set if the plan is for the DistSQL engine, in
-	// distributed mode.
-	planFlagDistributed
+	// planFlagFullyDistributed is set if the query execution is is fully
+	// distributed.
+	planFlagFullyDistributed
 
-	// planFlagDistSQLLocal is set if the plan is for the DistSQL engine,
-	// but in local mode.
-	planFlagDistSQLLocal
+	// planFlagPartiallyDistributed is set if the query execution is is partially
+	// distributed (see physicalplan.PartiallyDistributedPlan).
+	planFlagPartiallyDistributed
+
+	// planFlagNotDistributed is set if the query execution is not distributed.
+	planFlagNotDistributed
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
@@ -547,38 +601,8 @@ func (pf *planFlags) Set(flag planFlags) {
 	*pf |= flag
 }
 
-// planInstrumentation handles collection of plan information before the plan is
-// closed.
-type planInstrumentation struct {
-	appStats          *appStats
-	savedPlanForStats *roachpb.ExplainTreePlanNode
-
-	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
-	// will be saved in planString.
-	savePlanString bool
-	planString     string
-}
-
-func (pi *planInstrumentation) init(appStats *appStats) {
-	pi.appStats = appStats
-}
-
-// savePlanInfo is called before the plan is closed.
-func (pi *planInstrumentation) savePlanInfo(ctx context.Context, curPlan *planTop) {
-	if !curPlan.flags.IsSet(planFlagExecDone) {
-		return
-	}
-	if pi.appStats != nil && pi.appStats.shouldSaveLogicalPlanDescription(
-		curPlan.stmt,
-		curPlan.flags.IsSet(planFlagDistributed),
-		curPlan.flags.IsSet(planFlagVectorized),
-		curPlan.flags.IsSet(planFlagImplicitTxn),
-		curPlan.execErr,
-	) {
-		pi.savedPlanForStats = planToTree(ctx, curPlan)
-	}
-
-	if pi.savePlanString {
-		pi.planString = planToString(ctx, curPlan)
-	}
+// IsDistributed returns true if either the fully or the partially distributed
+// flags is set.
+func (pf planFlags) IsDistributed() bool {
+	return pf.IsSet(planFlagFullyDistributed) || pf.IsSet(planFlagPartiallyDistributed)
 }

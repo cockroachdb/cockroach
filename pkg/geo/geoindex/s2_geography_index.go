@@ -50,7 +50,7 @@ func NewS2GeographyIndex(cfg S2GeographyConfig) GeographyIndex {
 // DefaultGeographyIndexConfig returns a default config for a geography index.
 func DefaultGeographyIndexConfig() *Config {
 	return &Config{
-		S2Geography: &S2GeographyConfig{S2Config: defaultS2Config()},
+		S2Geography: &S2GeographyConfig{S2Config: DefaultS2Config()},
 	}
 }
 
