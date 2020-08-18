@@ -154,5 +154,90 @@ ALTER SCHEMA another_one RENAME TO myschema
 statement ok
 ROLLBACK
 
-statement error pq: unimplemented: DROP SCHEMA
+# We should be able to drop an empty schema without CASCADE.
+statement ok
+CREATE SCHEMA empty;
+DROP SCHEMA empty
+
+let $schema_id
+SELECT id FROM system.namespace WHERE name = 'myschema'
+
+# Create some objects under myschema, and have them reference some objects
+# in other schemas.
+statement ok
+CREATE TABLE myschema.myschema_t1 (x INT);
+CREATE TABLE myschema.myschema_t2 (x INT);
+CREATE SEQUENCE myschema.myschema_seq1;
+CREATE TABLE myschema.myschema_t3 (x INT DEFAULT nextval('myschema.myschema_seq1'));
+CREATE TYPE myschema.myschema_ty1 AS ENUM ('schema');
+CREATE SCHEMA otherschema;
+CREATE VIEW otherschema.otherschema_v1 AS SELECT x FROM myschema.myschema_t1;
+CREATE TABLE otherschema.otherschema_t1 (x INT);
+CREATE SEQUENCE otherschema.otherschema_seq1 OWNED BY myschema.myschema_t1.x;
+
+statement error pq: schema "myschema" is not empty and CASCADE was not specified
 DROP SCHEMA myschema
+
+# Now drop with cascade.
+statement ok
+DROP SCHEMA myschema CASCADE
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'myschema%' OR table_name LIKE 'otherschema%'
+----
+otherschema_t1
+
+query T
+SELECT name FROM [SHOW ENUMS] WHERE name LIKE 'myschema%'
+
+# The schema should be gone.
+query I
+SELECT id FROM system.namespace WHERE name = 'myschema'
+
+query IT
+SELECT * FROM system.descriptor WHERE id = $schema_id
+
+# We can't resolve a schema dropped in the same transaction.
+statement ok
+CREATE SCHEMA dropped;
+BEGIN
+
+statement ok
+DROP SCHEMA dropped
+
+statement error pq: cannot create "dropped.t" because the target database or schema does not exist
+CREATE TABLE dropped.t (x INT)
+
+statement ok
+ROLLBACK
+
+# We shouldn't be able to create a conflicting schema name in the same transaction
+# that it is dropped in.
+statement ok
+BEGIN
+
+statement ok
+DROP SCHEMA dropped
+
+statement error pq: schema "dropped" already exists
+CREATE SCHEMA dropped
+
+statement ok
+ROLLBACK
+
+# Test that we can drop multiple schemas as part of a single DROP statement.
+statement ok
+CREATE SCHEMA scdrop1;
+CREATE SCHEMA scdrop2;
+CREATE SCHEMA scdrop3;
+CREATE TABLE scdrop1.scdrop1_t1 (x INT);
+CREATE TABLE scdrop1.scdrop1_t2 (x INT);
+CREATE TABLE scdrop2.scdrop2_t1 (x INT);
+CREATE VIEW scdrop2.scdrop2_v1 AS SELECT x FROM scdrop1.scdrop1_t1;
+CREATE VIEW scdrop3.scdrop3_v1 AS SELECT x FROM scdrop2.scdrop2_v1;
+
+statement ok
+DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
+
+query T
+SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'

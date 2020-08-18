@@ -259,6 +259,11 @@ func (desc *TypeDescriptor) Dropped() bool {
 	return desc.State == TypeDescriptor_DROP
 }
 
+// Dropped implements the Descriptor interface.
+func (desc *SchemaDescriptor) Dropped() bool {
+	return desc.State == SchemaDescriptor_DROP
+}
+
 // IsVirtualTable returns true if the TableDescriptor describes a
 // virtual Table (like the information_schema tables) and thus doesn't
 // need to be physically stored.
