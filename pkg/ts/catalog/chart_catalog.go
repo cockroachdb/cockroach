@@ -2120,4 +2120,44 @@ var charts = []sectionDescription{
 			},
 		},
 	},
+	{
+		Organization: [][]string{{Jobs, "Schedules", "Daemon"}},
+		Charts: []chartDescription{
+			{
+				Title: "Round",
+				Metrics: []string{
+
+					"schedules.round.schedules-ready-to-run",
+					"schedules.round.reschedule-skip",
+					"schedules.round.reschedule-wait",
+					"schedules.round.jobs-started",
+					"schedules.round.num-jobs-running",
+				},
+				AxisLabel: "Count",
+			},
+			{
+				Title: "Total",
+				Metrics: []string{
+					"schedules.corrupt",
+					"schedules.total.started",
+					"schedules.total.succeeded",
+					"schedules.total.failed",
+				},
+				AxisLabel: "Count",
+			},
+		},
+	},
+	{
+		Organization: [][]string{{Jobs, "Schedules", "Backup"}},
+		Charts: []chartDescription{
+			{
+				Title: "Counts",
+				Metrics: []string{
+					"schedules.BACKUP.started",
+					"schedules.BACKUP.succeeded",
+					"schedules.BACKUP.failed",
+				},
+			},
+		},
+	},
 }
