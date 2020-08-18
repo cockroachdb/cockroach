@@ -512,6 +512,14 @@ func (n *UnresolvedName) ResolveFunction(
 		// it in the global namespace.
 		prefix = ""
 	}
+	if prefix == sessiondata.PublicSchemaName {
+		// If the user specified public, it may be from a PostgreSQL extension.
+		// Double check the function definition allows resolution on the public
+		// schema, and resolve as such if appropriate.
+		if d, ok := FunDefs[function]; ok && d.AvailableOnPublicSchema {
+			return d, nil
+		}
+	}
 
 	if prefix != "" {
 		fullName = prefix + "." + function
