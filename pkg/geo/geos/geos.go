@@ -438,8 +438,8 @@ func MinDistance(a geopb.EWKB, b geopb.EWKB) (float64, error) {
 	return float64(distance), nil
 }
 
-// ClipEWKBByRect clips a EWKB to the specified rectangle.
-func ClipEWKBByRect(
+// ClipByRect clips a EWKB to the specified rectangle.
+func ClipByRect(
 	ewkb geopb.EWKB, xMin float64, yMin float64, xMax float64, yMax float64,
 ) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()
@@ -447,7 +447,7 @@ func ClipEWKBByRect(
 		return nil, err
 	}
 	var cEWKB C.CR_GEOS_String
-	if err := statusToError(C.CR_GEOS_ClipEWKBByRect(g, goToCSlice(ewkb), C.double(xMin),
+	if err := statusToError(C.CR_GEOS_ClipByRect(g, goToCSlice(ewkb), C.double(xMin),
 		C.double(yMin), C.double(xMax), C.double(yMax), &cEWKB)); err != nil {
 		return nil, err
 	}

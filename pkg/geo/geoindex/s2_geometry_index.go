@@ -276,7 +276,7 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g *geo.Geometry) (geom.T, boo
 	if s.geomExceedsBounds(gt) {
 		clipped = true
 		clippedEWKB, err :=
-			geos.ClipEWKBByRect(g.EWKB(), s.minX+s.deltaX, s.minY+s.deltaY, s.maxX-s.deltaX, s.maxY-s.deltaY)
+			geos.ClipByRect(g.EWKB(), s.minX+s.deltaX, s.minY+s.deltaY, s.maxX-s.deltaX, s.maxY-s.deltaY)
 		if err != nil {
 			return nil, false, err
 		}
