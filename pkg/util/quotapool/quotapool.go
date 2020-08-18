@@ -265,7 +265,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		tryAgainTimerC = tryAgainTimer.Ch()
 	}
 	tryAcquire := func() (fulfilled bool) {
-		stopTryAgainTimer()
+		tryAgainTimerC = nil
 		fulfilled, tryAgainAfter = qp.tryAcquireOnNotify(ctx, r, n)
 		if fulfilled {
 			return true
@@ -293,6 +293,8 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 			if fulfilled := tryAcquire(); fulfilled {
 				return nil
 			}
+		case <-qp.closer:
+			qp.Close("closer")
 		case <-ctx.Done():
 			qp.cleanupOnCancel(n)
 			return ctx.Err()

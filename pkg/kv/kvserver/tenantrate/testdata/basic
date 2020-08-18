@@ -8,24 +8,25 @@ writebytes: { rate: 1024, burst: 2048 }
 # Set up three tenants with refcounts 2, 1, and 3 respectively.
 
 get_tenants
-[2, 2, 3, 5, 5, 5]
+[1, 2, 2, 3, 5, 5, 5]
 ----
-[2#2, 3#1, 5#3]
+[2#2, 3#1, 5#3, system#1]
 
 # Launch two requests on behalf of tenant 2 and one on behalf of 3.
 
 launch
+- { id: g0, tenant: 1 }
 - { id: g1, tenant: 2 }
 - { id: g2, tenant: 2 }
 - { id: g3, tenant: 3 }
 ----
-[g1@2, g2@2, g3@3]
+[g0@system, g1@2, g2@2, g3@3]
 
 # Ensure that none of the above requests get blocked because they use less
 # than the configured burst for their respective limiters.
 
 await
-[g1, g2, g3]
+[g0, g1, g2, g3]
 ----
 []
 
@@ -56,12 +57,25 @@ kv_tenant_rate_limit_current_blocked{tenant_id="3"} 0
 kv_tenant_rate_limit_current_blocked{tenant_id="5"} 0
 kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
 
+
+# Observe that the "requests_admitted" counter has appropriate values to
+# indicate that requests have been admitted.
+
+metrics
+kv_tenant_rate_limit_requests_admitted
+----
+kv_tenant_rate_limit_requests_admitted 4
+kv_tenant_rate_limit_requests_admitted{tenant_id="2"} 2
+kv_tenant_rate_limit_requests_admitted{tenant_id="3"} 1
+kv_tenant_rate_limit_requests_admitted{tenant_id="5"} 0
+kv_tenant_rate_limit_requests_admitted{tenant_id="system"} 1
+
 # Release the tenant 3 rate limiter.
 
 release_tenants
 [3]
 ----
-[2#2, 5#3]
+[2#2, 5#3, system#1]
 
 # Observe that tenant 3 no longer appears in the metrics.
 

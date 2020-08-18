@@ -25,6 +25,7 @@ func (s systemLimiter) Wait(ctx context.Context, writeBytes int64) error {
 }
 
 func (s systemLimiter) RecordRead(ctx context.Context, readBytes int64) {
+	s.readBytesAdmitted.Inc(readBytes)
 }
 
 var _ Limiter = (*systemLimiter)(nil)

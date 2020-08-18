@@ -74,6 +74,9 @@ func (r *Replica) sendWithRangeID(
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 
 	// NB: must be performed before collecting request spans.
 	ba, err := maybeStripInFlightWrites(ba)
@@ -124,6 +127,7 @@ func (r *Replica) sendWithRangeID(
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 	}
 
+	r.recordImpactOnRateLimiter(ctx, br)
 	return br, pErr
 }
 
