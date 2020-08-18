@@ -1243,6 +1243,8 @@ drop_table_stmt ::=
 drop_view_stmt ::=
 	'DROP' 'VIEW' table_name_list opt_drop_behavior
 	| 'DROP' 'VIEW' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+	| 'DROP' 'MATERIALIZED' 'VIEW' table_name_list opt_drop_behavior
+	| 'DROP' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' table_name_list opt_drop_behavior
 
 drop_sequence_stmt ::=
 	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
@@ -1476,11 +1478,15 @@ alter_zone_index_stmt ::=
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' relation_expr 'RENAME' 'TO' view_name
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' view_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' relation_expr 'RENAME' 'TO' view_name
 
 alter_view_set_schema_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' relation_expr 'SET' 'SCHEMA' schema_name
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
+	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' 'SCHEMA' schema_name
 
 alter_rename_sequence_stmt ::=
 	'ALTER' 'SEQUENCE' relation_expr 'RENAME' 'TO' sequence_name
