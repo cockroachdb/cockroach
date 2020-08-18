@@ -1188,9 +1188,7 @@ func (p *planner) alterTableOwner(
 	}
 
 	// Ensure the new owner has CREATE privilege on the table's schema.
-	if err := p.canCreateOnSchema(
-		ctx, desc.GetParentSchemaID(), newOwner,
-	); err != nil {
+	if err := p.canCreateOnSchema(ctx, desc.GetParentSchemaID(), newOwner); err != nil {
 		return false, err
 	}
 

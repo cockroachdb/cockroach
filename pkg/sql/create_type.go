@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -271,15 +270,12 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	// However having USAGE on a parent schema of the type
 	// gives USAGE privilege to the type.
 	privs := descpb.NewDefaultPrivilegeDescriptor(params.p.User())
-	resolvedSchema, err := resolver.ResolveSchemaByID(
-		p.EvalContext().Context, p.Txn(), p.ExecCfg().Codec, schemaID,
-	)
+	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(params.ctx, p.Txn(), schemaID)
 	if err != nil {
 		return err
 	}
 
 	inheritUsagePrivilegeFromSchema(resolvedSchema, privs)
-
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	// TODO (rohany): OID's are computed using an offset of

@@ -103,6 +103,7 @@ func (p *planner) getOrCreateTemporarySchema(
 			return descpb.InvalidID, err
 		}
 		p.sessionDataMutator.SetTemporarySchemaName(sKey.Name())
+		p.sessionDataMutator.SetTemporarySchemaID(uint32(id))
 		return id, nil
 	}
 	return schemaID, nil
