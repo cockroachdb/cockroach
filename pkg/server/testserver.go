@@ -1199,6 +1199,20 @@ func (ts *TestServer) ForceTableGC(
 	return pErr.GoError()
 }
 
+// ScratchRange splits off a range suitable to be used as KV scratch space. (it
+// doesn't overlap system spans or SQL tables).
+//
+// Calling this multiple times is undefined (but see TestCluster.ScratchRange()
+// which is idempotent).
+func (ts *TestServer) ScratchRange() (roachpb.Key, error) {
+	scratchKey := keys.TableDataMax
+	_, _, err := ts.SplitRange(scratchKey)
+	if err != nil {
+		return nil, err
+	}
+	return scratchKey, nil
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

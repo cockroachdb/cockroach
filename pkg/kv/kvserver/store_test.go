@@ -848,37 +848,60 @@ func TestStoreVisitReplicasByKey(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Query for all ranges.
-	visited := make([]roachpb.RSpan, 0)
-	s.VisitReplicasByKey(ctx, roachpb.RKeyMin, roachpb.RKeyMax, func(_ context.Context, r KeyRange) bool {
-		visited = append(visited, r.Desc().RSpan())
-		return true
-	})
-	require.Equal(t, ranges, visited)
+	tests := []struct {
+		name       string
+		start, end roachpb.RKey
+		exp        []roachpb.RSpan
+	}{
+		{
+			name:  "all ranges",
+			start: roachpb.RKeyMin,
+			end:   roachpb.RKeyMax,
+			exp:   ranges,
+		},
+		{
+			name:  "some ranges",
+			start: ranges[3].Key,
+			end:   ranges[6].EndKey,
+			exp:   ranges[3:7],
+		},
+		{
+			name:  "some ranges, inexact boundaries",
+			start: ranges[3].Key.Next(),
+			end:   ranges[6].Key.Next(),
+			exp:   ranges[3:7],
+		},
+		{
+			name:  "within range",
+			start: ranges[6].Key.Next(),
+			end:   ranges[6].Key.Next().Next(),
+			exp:   ranges[6:7],
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Iterate ascendingly.
+			var visited []roachpb.RSpan
+			s.VisitReplicasByKey(ctx, tc.start, tc.end, AscendingKeyOrder, func(_ context.Context, r KeyRange) bool {
+				visited = append(visited, r.Desc().RSpan())
+				return true
+			})
+			require.Equal(t, tc.exp, visited, tc.exp)
 
-	// Query for some of the ranges.
-	visited = visited[:0]
-	s.VisitReplicasByKey(ctx, ranges[3].Key, ranges[6].EndKey, func(_ context.Context, r KeyRange) bool {
-		visited = append(visited, r.Desc().RSpan())
-		return true
-	})
-	require.Equal(t, ranges[3:7], visited)
-
-	// Like above, but don't use exact boundaries.
-	visited = visited[:0]
-	s.VisitReplicasByKey(ctx, ranges[3].Key.Next(), ranges[6].Key.Next(), func(_ context.Context, r KeyRange) bool {
-		visited = append(visited, r.Desc().RSpan())
-		return true
-	})
-	require.Equal(t, ranges[3:7], visited)
-
-	// Query within a single range.
-	visited = visited[:0]
-	s.VisitReplicasByKey(ctx, ranges[6].Key.Next(), ranges[6].Key.Next(), func(_ context.Context, r KeyRange) bool {
-		visited = append(visited, r.Desc().RSpan())
-		return true
-	})
-	require.Equal(t, ranges[6:7], visited)
+			// Iterate descendingly.
+			visited = visited[:0]
+			s.VisitReplicasByKey(ctx, tc.start, tc.end, DescendingKeyOrder, func(_ context.Context, r KeyRange) bool {
+				visited = append(visited, r.Desc().RSpan())
+				return true
+			})
+			// Reverse the expected values.
+			exp := make([]roachpb.RSpan, len(tc.exp))
+			for i, sp := range tc.exp {
+				exp[len(exp)-i-1] = sp
+			}
+			require.Equal(t, exp, visited)
+		})
+	}
 }
 
 func TestHasOverlappingReplica(t *testing.T) {
