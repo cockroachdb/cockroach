@@ -89,7 +89,7 @@
         $item:* & (ColsIntersect (OuterCols $item) $constCols)
         ...
     ]
-    $private:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 ((OpName)
@@ -116,7 +116,7 @@
         $item:* & (ColsIntersect (OuterCols $item) $constCols)
         ...
     ]
-    $private:*
+    $private:* & (NoJoinHints $private)
 )
 =>
 ((OpName)
