@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2526,12 +2527,37 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	),
 })
 
+const experimentalBox2DClusterSettingName = "sql.spatial.experimental_box2d_comparison_operators.enabled"
+
+var experimentalBox2DClusterSetting = settings.RegisterPublicBoolSetting(
+	experimentalBox2DClusterSettingName,
+	"enables the use of certain experimental box2d comparison operators",
+	false,
+)
+
+func checkExperimentalBox2DComparisonOperatorEnabled(ctx *EvalContext) error {
+	if !experimentalBox2DClusterSetting.Get(&ctx.Settings.SV) {
+		return errors.WithHintf(
+			pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"this box2d comparison operator is experimental",
+			),
+			"To enable box2d comparators, use `SET CLUSTER SETTING %s = on`.",
+			experimentalBox2DClusterSettingName,
+		)
+	}
+	return nil
+}
+
 func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) cmpOpOverload {
 	return cmpOpOverload{
 		&CmpOp{
 			LeftType:  types.Box2D,
 			RightType: types.Box2D,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
 				ret := op(
 					MustBeDBox2D(left).CartesianBoundingBox,
 					MustBeDBox2D(right).CartesianBoundingBox,
@@ -2543,7 +2569,10 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 		&CmpOp{
 			LeftType:  types.Box2D,
 			RightType: types.Geometry,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
 				ret := op(
 					MustBeDBox2D(left).CartesianBoundingBox,
 					MustBeDGeometry(right).CartesianBoundingBox(),
@@ -2555,7 +2584,10 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 		&CmpOp{
 			LeftType:  types.Geometry,
 			RightType: types.Box2D,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
 				ret := op(
 					MustBeDGeometry(left).CartesianBoundingBox(),
 					MustBeDBox2D(right).CartesianBoundingBox,
@@ -2567,7 +2599,10 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 		&CmpOp{
 			LeftType:  types.Geometry,
 			RightType: types.Geometry,
-			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if err := checkExperimentalBox2DComparisonOperatorEnabled(ctx); err != nil {
+					return nil, err
+				}
 				ret := op(
 					MustBeDGeometry(left).CartesianBoundingBox(),
 					MustBeDGeometry(right).CartesianBoundingBox(),
