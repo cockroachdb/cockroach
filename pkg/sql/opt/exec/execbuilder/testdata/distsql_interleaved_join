@@ -192,22 +192,21 @@ SET enable_interleaved_joins = false
 query TTT
 EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
-·                distribution       full
-·                vectorized         true
-project          ·                  ·
- └── merge join  ·                  ·
-      │          type               inner
-      │          equality           (pid1) = (pid1)
-      │          left cols are key  ·
-      │          mergeJoinOrder     +"(pid1=pid1)"
-      ├── scan   ·                  ·
-      │          missing stats      ·
-      │          table              parent1@primary
-      │          spans              FULL SCAN
-      └── scan   ·                  ·
-·                missing stats      ·
-·                table              child1@primary
-·                spans              FULL SCAN
+·           distribution       full
+·           vectorized         true
+merge join  ·                  ·
+ │          type               inner
+ │          equality           (pid1) = (pid1)
+ │          left cols are key  ·
+ │          mergeJoinOrder     +"(pid1=pid1)"
+ ├── scan   ·                  ·
+ │          missing stats      ·
+ │          table              parent1@primary
+ │          spans              FULL SCAN
+ └── scan   ·                  ·
+·           missing stats      ·
+·           table              child1@primary
+·           spans              FULL SCAN
 
 statement ok
 SET enable_interleaved_joins = true
@@ -215,16 +214,15 @@ SET enable_interleaved_joins = true
 query TTT
 EXPLAIN SELECT * FROM parent1 JOIN child1 USING(pid1)
 ----
-·                      distribution  full
-·                      vectorized    true
-project                ·             ·
- └── interleaved join  ·             ·
-·                      type          inner
-·                      left table    parent1@primary
-·                      left spans    FULL SCAN
-·                      right table   child1@primary
-·                      right spans   FULL SCAN
-·                      ancestor      left
+·                 distribution  full
+·                 vectorized    true
+interleaved join  ·             ·
+·                 type          inner
+·                 left table    parent1@primary
+·                 left spans    FULL SCAN
+·                 right table   child1@primary
+·                 right spans   FULL SCAN
+·                 ancestor      left
 
 #####################
 # Interleaved joins #
@@ -421,17 +419,16 @@ EXPLAIN SELECT * FROM grandchild2 JOIN parent1 USING(pid1) WHERE
   OR pid1 >= 31 AND pid1 <= 33
   OR pa1 > 0
 ----
-·                      distribution  full
-·                      vectorized    true
-project                ·             ·
- └── interleaved join  ·             ·
-·                      type          inner
-·                      left table    grandchild2@primary
-·                      left spans    FULL SCAN
-·                      right table   parent1@primary
-·                      right spans   FULL SCAN
-·                      right filter  ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
-·                      ancestor      right
+·                 distribution  full
+·                 vectorized    true
+interleaved join  ·             ·
+·                 type          inner
+·                 left table    grandchild2@primary
+·                 left spans    FULL SCAN
+·                 right table   parent1@primary
+·                 right spans   FULL SCAN
+·                 right filter  ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
+·                 ancestor      right
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).
 # Note there are 5 nodes because the filter cid2 >= 12 AND cid2 <= 14
@@ -627,19 +624,18 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzUVF1rnEAUfe-vGM7T2k6Jo7
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
 ----
-·                           distribution         full                  ·                                           ·
-·                           vectorized           true                  ·                                           ·
-project                     ·                    ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
- └── project                ·                    ·                     (pa1, pid1, cid1, cid2, gcid1, gca1)        ·
-      │                     estimated row count  200 (missing stats)   ·                                           ·
-      └── interleaved join  ·                    ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
-·                           estimated row count  200 (missing stats)   ·                                           ·
-·                           type                 left outer            ·                                           ·
-·                           left table           outer_gc1@primary     ·                                           ·
-·                           left spans           /1/#/60/1-/20/#/60/2  ·                                           ·
-·                           right table          outer_p1@primary      ·                                           ·
-·                           right spans          /1-/20/#              ·                                           ·
-·                           ancestor             right                 ·                                           ·
+·                      distribution         full                  ·                                           ·
+·                      vectorized           true                  ·                                           ·
+project                ·                    ·                     (pid1, pa1, cid1, cid2, gcid1, gca1)        ·
+ │                     estimated row count  200 (missing stats)   ·                                           ·
+ └── interleaved join  ·                    ·                     (pid1, cid1, cid2, gcid1, gca1, pid1, pa1)  ·
+·                      estimated row count  200 (missing stats)   ·                                           ·
+·                      type                 left outer            ·                                           ·
+·                      left table           outer_gc1@primary     ·                                           ·
+·                      left spans           /1/#/60/1-/20/#/60/2  ·                                           ·
+·                      right table          outer_p1@primary      ·                                           ·
+·                      right spans          /1-/20/#              ·                                           ·
+·                      ancestor             right                 ·                                           ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]

@@ -84,39 +84,38 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) UPSERT INTO kv (k) SELECT k FROM kv ORDER BY v DESC LIMIT 2
 ]
 ----
-·                                        distribution           local
-·                                        vectorized             false
-upsert                                   ·                      ·
- │                                       estimated row count    0 (missing stats)
- │                                       into                   kv(k, v)
- │                                       auto commit            ·
- └── project                             ·                      ·
-      └── lookup join                    ·                      ·
-           │                             estimated row count    2 (missing stats)
-           │                             table                  kv@primary
-           │                             type                   inner
-           │                             equality               (k) = (k)
-           │                             equality cols are key  ·
-           │                             parallel               ·
-           └── distinct                  ·                      ·
-                │                        estimated row count    2 (missing stats)
-                │                        distinct on            k
-                │                        nulls are distinct     ·
-                │                        error on duplicate     ·
-                └── render               ·                      ·
-                     │                   estimated row count    2 (missing stats)
-                     │                   render 0               CAST(NULL AS INT8)
-                     │                   render 1               k
-                     └── limit           ·                      ·
-                          │              estimated row count    2 (missing stats)
-                          │              count                  2
-                          └── sort       ·                      ·
-                               │         estimated row count    1000 (missing stats)
-                               │         order                  -v
-                               └── scan  ·                      ·
-·                                        estimated row count    1000 (missing stats)
-·                                        table                  kv@primary
-·                                        spans                  FULL SCAN
+·                                   distribution           local
+·                                   vectorized             false
+upsert                              ·                      ·
+ │                                  estimated row count    0 (missing stats)
+ │                                  into                   kv(k, v)
+ │                                  auto commit            ·
+ └── lookup join                    ·                      ·
+      │                             estimated row count    2 (missing stats)
+      │                             table                  kv@primary
+      │                             type                   inner
+      │                             equality               (k) = (k)
+      │                             equality cols are key  ·
+      │                             parallel               ·
+      └── distinct                  ·                      ·
+           │                        estimated row count    2 (missing stats)
+           │                        distinct on            k
+           │                        nulls are distinct     ·
+           │                        error on duplicate     ·
+           └── render               ·                      ·
+                │                   estimated row count    2 (missing stats)
+                │                   render 0               CAST(NULL AS INT8)
+                │                   render 1               k
+                └── limit           ·                      ·
+                     │              estimated row count    2 (missing stats)
+                     │              count                  2
+                     └── sort       ·                      ·
+                          │         estimated row count    1000 (missing stats)
+                          │         order                  -v
+                          └── scan  ·                      ·
+·                                   estimated row count    1000 (missing stats)
+·                                   table                  kv@primary
+·                                   spans                  FULL SCAN
 
 # Use Upsert with indexed table, default columns, computed columns, and check
 # columns.

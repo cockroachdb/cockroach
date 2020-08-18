@@ -60,29 +60,28 @@ query TTT
 EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-·                                   distribution      local
-·                                   vectorized        false
-root                                ·                 ·
- ├── limit                          ·                 ·
- │    │                             count             1
- │    └── scan buffer               ·                 ·
- │                                  label             buffer 1 (a)
- └── subquery                       ·                 ·
-      │                             id                @S1
-      │                             original sql      UPDATE t SET x = x + 1 RETURNING x
-      │                             exec mode         all rows
-      └── buffer                    ·                 ·
-           │                        label             buffer 1 (a)
-           └── update               ·                 ·
-                │                   table             t
-                │                   set               x
-                └── project         ·                 ·
-                     └── render     ·                 ·
-                          └── scan  ·                 ·
-·                                   missing stats     ·
-·                                   table             t@primary
-·                                   spans             FULL SCAN
-·                                   locking strength  for update
+·                              distribution      local
+·                              vectorized        false
+root                           ·                 ·
+ ├── limit                     ·                 ·
+ │    │                        count             1
+ │    └── scan buffer          ·                 ·
+ │                             label             buffer 1 (a)
+ └── subquery                  ·                 ·
+      │                        id                @S1
+      │                        original sql      UPDATE t SET x = x + 1 RETURNING x
+      │                        exec mode         all rows
+      └── buffer               ·                 ·
+           │                   label             buffer 1 (a)
+           └── update          ·                 ·
+                │              table             t
+                │              set               x
+                └── render     ·                 ·
+                     └── scan  ·                 ·
+·                              missing stats     ·
+·                              table             t@primary
+·                              spans             FULL SCAN
+·                              locking strength  for update
 
 query TTT
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2), (3) RETURNING x)
@@ -156,29 +155,28 @@ root                      ·              ·
 query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
-·                                   distribution      local
-·                                   vectorized        false
-root                                ·                 ·
- ├── limit                          ·                 ·
- │    │                             count             1
- │    └── scan buffer               ·                 ·
- │                                  label             buffer 1
- └── subquery                       ·                 ·
-      │                             id                @S1
-      │                             original sql      UPDATE t SET x = x + 1 RETURNING x
-      │                             exec mode         all rows
-      └── buffer                    ·                 ·
-           │                        label             buffer 1
-           └── update               ·                 ·
-                │                   table             t
-                │                   set               x
-                └── project         ·                 ·
-                     └── render     ·                 ·
-                          └── scan  ·                 ·
-·                                   missing stats     ·
-·                                   table             t@primary
-·                                   spans             FULL SCAN
-·                                   locking strength  for update
+·                              distribution      local
+·                              vectorized        false
+root                           ·                 ·
+ ├── limit                     ·                 ·
+ │    │                        count             1
+ │    └── scan buffer          ·                 ·
+ │                             label             buffer 1
+ └── subquery                  ·                 ·
+      │                        id                @S1
+      │                        original sql      UPDATE t SET x = x + 1 RETURNING x
+      │                        exec mode         all rows
+      └── buffer               ·                 ·
+           │                   label             buffer 1
+           └── update          ·                 ·
+                │              table             t
+                │              set               x
+                └── render     ·                 ·
+                     └── scan  ·                 ·
+·                              missing stats     ·
+·                              table             t@primary
+·                              spans             FULL SCAN
+·                              locking strength  for update
 
 query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2), (3) RETURNING x] LIMIT 1
@@ -205,27 +203,26 @@ root                        ·             ·
 query TTT
 EXPLAIN SELECT count(*) FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ----
-·                           distribution   local
-·                           vectorized     false
-root                        ·              ·
- ├── group                  ·              ·
- │    │                     aggregate 0    count_rows()
- │    │                     scalar         ·
- │    └── project           ·              ·
- │         └── scan buffer  ·              ·
- │                          label          buffer 1
- └── subquery               ·              ·
-      │                     id             @S1
-      │                     original sql   INSERT INTO t SELECT * FROM t2 RETURNING x
-      │                     exec mode      all rows
-      └── buffer            ·              ·
-           │                label          buffer 1
-           └── insert       ·              ·
-                │           into           t(x)
-                └── scan    ·              ·
-·                           missing stats  ·
-·                           table          t2@primary
-·                           spans          FULL SCAN
+·                         distribution   local
+·                         vectorized     false
+root                      ·              ·
+ ├── group                ·              ·
+ │    │                   aggregate 0    count_rows()
+ │    │                   scalar         ·
+ │    └── scan buffer     ·              ·
+ │                        label          buffer 1
+ └── subquery             ·              ·
+      │                   id             @S1
+      │                   original sql   INSERT INTO t SELECT * FROM t2 RETURNING x
+      │                   exec mode      all rows
+      └── buffer          ·              ·
+           │              label          buffer 1
+           └── insert     ·              ·
+                │         into           t(x)
+                └── scan  ·              ·
+·                         missing stats  ·
+·                         table          t2@primary
+·                         spans          FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t

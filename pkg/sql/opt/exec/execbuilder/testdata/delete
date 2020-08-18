@@ -70,39 +70,37 @@ delete range  ·             ·
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v LIMIT 10
 ----
-·                         distribution   local
-·                         vectorized     false
-delete                    ·              ·
- │                        from           unindexed
- │                        auto commit    ·
- └── project              ·              ·
-      └── limit           ·              ·
-           │              count          10
-           └── filter     ·              ·
-                │         filter         v = 7
-                └── scan  ·              ·
-·                         missing stats  ·
-·                         table          unindexed@primary
-·                         spans          FULL SCAN
+·                    distribution   local
+·                    vectorized     false
+delete               ·              ·
+ │                   from           unindexed
+ │                   auto commit    ·
+ └── limit           ·              ·
+      │              count          10
+      └── filter     ·              ·
+           │         filter         v = 7
+           └── scan  ·              ·
+·                    missing stats  ·
+·                    table          unindexed@primary
+·                    spans          FULL SCAN
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-·                         distribution   local
-·                         vectorized     false
-delete                    ·              ·
- │                        from           unindexed
- │                        auto commit    ·
- └── project              ·              ·
-      └── limit           ·              ·
-           │              count          10
-           └── filter     ·              ·
-                │         filter         v = 5
-                └── scan  ·              ·
-·                         missing stats  ·
-·                         table          unindexed@primary
-·                         spans          FULL SCAN
+·                    distribution   local
+·                    vectorized     false
+delete               ·              ·
+ │                   from           unindexed
+ │                   auto commit    ·
+ └── limit           ·              ·
+      │              count          10
+      └── filter     ·              ·
+           │         filter         v = 5
+           └── scan  ·              ·
+·                    missing stats  ·
+·                    table          unindexed@primary
+·                    spans          FULL SCAN
 
 # Check fast DELETE.
 query TTT
@@ -365,40 +363,39 @@ CREATE TABLE child_with_index (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                     distribution        local
-·                                     vectorized          false
-root                                  ·                   ·
- ├── delete                           ·                   ·
- │    │                               from                parent
- │    └── buffer                      ·                   ·
- │         │                          label               buffer 1
- │         └── scan                   ·                   ·
- │                                    missing stats       ·
- │                                    table               parent@primary
- │                                    spans               /11-
- ├── fk-cascade                       ·                   ·
- │                                    fk                  fk_pid_ref_parent
- │                                    input               buffer 1
- ├── fk-cascade                       ·                   ·
- │                                    fk                  fk_pid_ref_parent
- │                                    input               buffer 1
- └── fk-check                         ·                   ·
-      └── error if rows               ·                   ·
-           └── project                ·                   ·
-                └── hash join         ·                   ·
-                     │                type                inner
-                     │                equality            (id) = (pid)
-                     │                left cols are key   ·
-                     │                right cols are key  ·
-                     ├── scan buffer  ·                   ·
-                     │                label               buffer 1
-                     └── distinct     ·                   ·
-                          │           distinct on         pid
-                          │           order key           pid
-                          └── scan    ·                   ·
-·                                     missing stats       ·
-·                                     table               child_with_index@primary
-·                                     spans               FULL SCAN
+·                                distribution        local
+·                                vectorized          false
+root                             ·                   ·
+ ├── delete                      ·                   ·
+ │    │                          from                parent
+ │    └── buffer                 ·                   ·
+ │         │                     label               buffer 1
+ │         └── scan              ·                   ·
+ │                               missing stats       ·
+ │                               table               parent@primary
+ │                               spans               /11-
+ ├── fk-cascade                  ·                   ·
+ │                               fk                  fk_pid_ref_parent
+ │                               input               buffer 1
+ ├── fk-cascade                  ·                   ·
+ │                               fk                  fk_pid_ref_parent
+ │                               input               buffer 1
+ └── fk-check                    ·                   ·
+      └── error if rows          ·                   ·
+           └── hash join         ·                   ·
+                │                type                inner
+                │                equality            (id) = (pid)
+                │                left cols are key   ·
+                │                right cols are key  ·
+                ├── scan buffer  ·                   ·
+                │                label               buffer 1
+                └── distinct     ·                   ·
+                     │           distinct on         pid
+                     │           order key           pid
+                     └── scan    ·                   ·
+·                                missing stats       ·
+·                                table               child_with_index@primary
+·                                spans               FULL SCAN
 
 statement ok
 DROP TABLE child_with_index
@@ -415,40 +412,39 @@ CREATE TABLE child_without_cascade (
 query TTT
 EXPLAIN DELETE FROM parent WHERE id > 10
 ----
-·                                     distribution        local
-·                                     vectorized          false
-root                                  ·                   ·
- ├── delete                           ·                   ·
- │    │                               from                parent
- │    └── buffer                      ·                   ·
- │         │                          label               buffer 1
- │         └── scan                   ·                   ·
- │                                    missing stats       ·
- │                                    table               parent@primary
- │                                    spans               /11-
- ├── fk-cascade                       ·                   ·
- │                                    fk                  fk_pid_ref_parent
- │                                    input               buffer 1
- ├── fk-cascade                       ·                   ·
- │                                    fk                  fk_pid_ref_parent
- │                                    input               buffer 1
- └── fk-check                         ·                   ·
-      └── error if rows               ·                   ·
-           └── project                ·                   ·
-                └── hash join         ·                   ·
-                     │                type                inner
-                     │                equality            (id) = (pid)
-                     │                left cols are key   ·
-                     │                right cols are key  ·
-                     ├── scan buffer  ·                   ·
-                     │                label               buffer 1
-                     └── distinct     ·                   ·
-                          │           distinct on         pid
-                          │           order key           pid
-                          └── scan    ·                   ·
-·                                     missing stats       ·
-·                                     table               child_without_cascade@primary
-·                                     spans               FULL SCAN
+·                                distribution        local
+·                                vectorized          false
+root                             ·                   ·
+ ├── delete                      ·                   ·
+ │    │                          from                parent
+ │    └── buffer                 ·                   ·
+ │         │                     label               buffer 1
+ │         └── scan              ·                   ·
+ │                               missing stats       ·
+ │                               table               parent@primary
+ │                               spans               /11-
+ ├── fk-cascade                  ·                   ·
+ │                               fk                  fk_pid_ref_parent
+ │                               input               buffer 1
+ ├── fk-cascade                  ·                   ·
+ │                               fk                  fk_pid_ref_parent
+ │                               input               buffer 1
+ └── fk-check                    ·                   ·
+      └── error if rows          ·                   ·
+           └── hash join         ·                   ·
+                │                type                inner
+                │                equality            (id) = (pid)
+                │                left cols are key   ·
+                │                right cols are key  ·
+                ├── scan buffer  ·                   ·
+                │                label               buffer 1
+                └── distinct     ·                   ·
+                     │           distinct on         pid
+                     │           order key           pid
+                     └── scan    ·                   ·
+·                                missing stats       ·
+·                                table               child_without_cascade@primary
+·                                spans               FULL SCAN
 
 statement ok
 DROP TABLE child_without_cascade
