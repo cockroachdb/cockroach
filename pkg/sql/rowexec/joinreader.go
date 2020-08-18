@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -71,9 +72,10 @@ type joinReader struct {
 
 	diskMonitor *mon.BytesMonitor
 
-	desc      tabledesc.Immutable
-	index     *descpb.IndexDescriptor
-	colIdxMap map[descpb.ColumnID]int
+	desc             tabledesc.Immutable
+	index            *descpb.IndexDescriptor
+	colIdxMap        map[descpb.ColumnID]int
+	maintainOrdering bool
 
 	// fetcher wraps the row.Fetcher used to perform lookups. This enables the
 	// joinReader to wrap the fetcher with a stat collector when necessary.
@@ -136,10 +138,11 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:       tabledesc.MakeImmutable(spec.Table),
-		input:      input,
-		inputTypes: input.OutputTypes(),
-		lookupCols: lookupCols,
+		desc:             tabledesc.MakeImmutable(spec.Table),
+		maintainOrdering: spec.MaintainOrdering,
+		input:            input,
+		inputTypes:       input.OutputTypes(),
+		lookupCols:       lookupCols,
 	}
 
 	var err error
@@ -248,7 +251,7 @@ func newJoinReader(
 		jr.fetcher = &fetcher
 	}
 
-	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), spec.MaintainOrdering, rightCols, readerType)
+	jr.initJoinReaderStrategy(flowCtx, columnTypes, len(columnIDs), rightCols, readerType)
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint()
 
 	// TODO(radu): verify the input types match the index key types
@@ -259,16 +262,21 @@ func (jr *joinReader) initJoinReaderStrategy(
 	flowCtx *execinfra.FlowCtx,
 	typs []*types.T,
 	numKeyCols int,
-	maintainOrdering bool,
 	neededRightCols util.FastIntSet,
 	readerType joinReaderType,
 ) {
 	spanBuilder := span.MakeBuilder(flowCtx.Codec(), &jr.desc, jr.index)
 	spanBuilder.SetNeededColumns(neededRightCols)
 
+	var keyToInputRowIndices map[string][]int
+	if readerType != indexJoinReaderType {
+		keyToInputRowIndices = make(map[string][]int)
+	}
+	// Else: see the comment in defaultSpanGenerator on why we don't need
+	// this map for index joins.
 	spanGenerator := defaultSpanGenerator{
 		spanBuilder:          spanBuilder,
-		keyToInputRowIndices: make(map[string][]int),
+		keyToInputRowIndices: keyToInputRowIndices,
 		numKeyCols:           numKeyCols,
 		lookupCols:           jr.lookupCols,
 	}
@@ -280,7 +288,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		return
 	}
 
-	if !maintainOrdering {
+	if !jr.maintainOrdering {
 		jr.strategy = &joinReaderNoOrderingStrategy{
 			joinerBase:           &jr.joinerBase,
 			defaultSpanGenerator: spanGenerator,
@@ -445,13 +453,21 @@ func (jr *joinReader) readInput() (joinReaderState, *execinfrapb.ProducerMetadat
 		return jrEmittingRows, nil
 	}
 
-	if jr.readerType == lookupJoinReaderType {
-		// Sort the spans so that we can rely upon the fetcher to limit the number of
-		// results per batch. It's safe to reorder the spans here because we already
-		// restore the original order of the output during the output collection
-		// phase.
+	// Sort the spans for the following cases:
+	// - For lookupJoinReaderType: this is so that we can rely upon the fetcher
+	//   to limit the number of results per batch. It's safe to reorder the
+	//   spans here because we already restore the original order of the output
+	//   during the output collection phase.
+	// - For indexJoinReaderType when !maintainOrdering: this allows lower
+	//   layers to optimize iteration over the data. Note that the looked up
+	//   rows are output unchanged, in the retrieval order, so it is not safe to
+	//   do this when maintainOrdering is true (the ordering to be maintained
+	//   may be different than the ordering in the index).
+	if jr.readerType == lookupJoinReaderType ||
+		(jr.readerType == indexJoinReaderType && !jr.maintainOrdering) {
 		sort.Sort(spans)
 	}
+
 	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
 	if err := jr.fetcher.StartScan(
 		jr.Ctx, jr.FlowCtx.Txn, spans, jr.shouldLimitBatches, 0, /* limitHint */
@@ -471,10 +487,16 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		// Construct a "partial key" of nCols, so we can match the key format that
 		// was stored in our keyToInputRowIndices map. This matches the format that
 		// is output in jr.generateSpan.
-		key, err := jr.fetcher.PartialKey(nCols)
-		if err != nil {
-			jr.MoveToDraining(err)
-			return jrStateUnknown, jr.DrainHelper()
+		var key roachpb.Key
+		// Index joins do not look at this key parameter so don't bother populating
+		// it, since it is not cheap for long keys.
+		if jr.readerType != indexJoinReaderType {
+			var err error
+			key, err = jr.fetcher.PartialKey(nCols)
+			if err != nil {
+				jr.MoveToDraining(err)
+				return jrStateUnknown, jr.DrainHelper()
+			}
 		}
 
 		// Fetch the next row and copy it into the row container.

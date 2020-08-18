@@ -1945,6 +1945,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		MaintainOrdering:  len(n.reqOrdering) > 0,
 		SystemColumns:     n.table.systemColumns,
 	}
 
