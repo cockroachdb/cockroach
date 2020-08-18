@@ -51,10 +51,6 @@ import (
 )
 
 const (
-	// RunningStatusDrainingNames used to indicate that the job was draining names
-	// for dropped descriptors. This constant is now deprecated and only exists
-	// to be used for migrating old jobs.
-	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
 	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
