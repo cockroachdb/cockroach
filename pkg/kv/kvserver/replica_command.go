@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -576,6 +577,8 @@ func (r *Replica) AdminMerge(
 	var reply roachpb.AdminMergeResponse
 
 	runMergeTxn := func(txn *kv.Txn) error {
+		ctx, recording, cancel := tracing.ContextWithRecordingSpan(ctx, "DEBUG!! merge txn")
+		defer cancel()
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
@@ -760,7 +763,9 @@ func (r *Replica) AdminMerge(
 			},
 		})
 		log.Event(ctx, "attempting commit")
-		return txn.Run(ctx, b)
+		res := txn.Run(ctx, b)
+		log.Infof(ctx, "DEBUG!! merge trace: %v", recording().String())
+		return res
 	}
 
 	// If the merge transaction encounters an error, we need to trigger a full
