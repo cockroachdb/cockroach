@@ -172,7 +172,6 @@ var _ planNode = &DropRoleNode{}
 var _ planNode = &dropViewNode{}
 var _ planNode = &errorIfRowsNode{}
 var _ planNode = &explainDistSQLNode{}
-var _ planNode = &explainPlanNode{}
 var _ planNode = &explainVecNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &GrantRoleNode{}
@@ -496,7 +495,7 @@ func startExec(params runParams, plan planNode) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
 			switch p.(type) {
-			case *explainPlanNode, *explainDistSQLNode, *explainVecNode:
+			case *explainDistSQLNode, *explainVecNode:
 				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
 				return false, nil
 			case *showTraceNode:

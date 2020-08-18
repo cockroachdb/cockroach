@@ -28,53 +28,47 @@ query TTT
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
-·                                  distribution           local
-·                                  vectorized             true
-project                            ·                      ·
- └── project                       ·                      ·
-      └── lookup join              ·                      ·
-           │                       table                  rtable@primary
-           │                       type                   inner
-           │                       equality               (rk1, rk2) = (rk1,rk2)
-           │                       equality cols are key  ·
-           │                       parallel               ·
-           │                       pred                   st_intersects(geom1, geom)
-           └── project             ·                      ·
-                └── inverted join  ·                      ·
-                     │             table                  rtable@geom_index
-                     │             type                   inner
-                     │             ·                      st_intersects(geom1, geom_inverted_key)
-                     │             parallel               ·
-                     └── scan      ·                      ·
-·                                  missing stats          ·
-·                                  table                  ltable@primary
-·                                  spans                  FULL SCAN
+·                   distribution           local
+·                   vectorized             true
+lookup join         ·                      ·
+ │                  table                  rtable@primary
+ │                  type                   inner
+ │                  equality               (rk1, rk2) = (rk1,rk2)
+ │                  equality cols are key  ·
+ │                  parallel               ·
+ │                  pred                   st_intersects(geom1, geom)
+ └── inverted join  ·                      ·
+      │             table                  rtable@geom_index
+      │             type                   inner
+      │             ·                      st_intersects(geom1, geom_inverted_key)
+      │             parallel               ·
+      └── scan      ·                      ·
+·                   missing stats          ·
+·                   table                  ltable@primary
+·                   spans                  FULL SCAN
 
 query TTT
 EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 5)
 ----
-·                                  distribution           local
-·                                  vectorized             true
-project                            ·                      ·
- └── project                       ·                      ·
-      └── lookup join              ·                      ·
-           │                       table                  rtable@primary
-           │                       type                   inner
-           │                       equality               (rk1, rk2) = (rk1,rk2)
-           │                       equality cols are key  ·
-           │                       parallel               ·
-           │                       pred                   st_dwithin(geom1, geom, 5.0)
-           └── project             ·                      ·
-                └── inverted join  ·                      ·
-                     │             table                  rtable@geom_index
-                     │             type                   inner
-                     │             ·                      st_dwithin(geom1, geom_inverted_key, 5.0)
-                     │             parallel               ·
-                     └── scan      ·                      ·
-·                                  missing stats          ·
-·                                  table                  ltable@primary
-·                                  spans                  FULL SCAN
+·                   distribution           local
+·                   vectorized             true
+lookup join         ·                      ·
+ │                  table                  rtable@primary
+ │                  type                   inner
+ │                  equality               (rk1, rk2) = (rk1,rk2)
+ │                  equality cols are key  ·
+ │                  parallel               ·
+ │                  pred                   st_dwithin(geom1, geom, 5.0)
+ └── inverted join  ·                      ·
+      │             table                  rtable@geom_index
+      │             type                   inner
+      │             ·                      st_dwithin(geom1, geom_inverted_key, 5.0)
+      │             parallel               ·
+      └── scan      ·                      ·
+·                   missing stats          ·
+·                   table                  ltable@primary
+·                   spans                  FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE)

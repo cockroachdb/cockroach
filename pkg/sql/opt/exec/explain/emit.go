@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,6 +32,14 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
+		// In non-verbose mode, we skip all projections.
+		// In verbose mode, we only skip trivial projections (which just rearrange
+		// or rename the columns).
+		if !ob.flags.Verbose {
+			if n.op == serializingProjectOp || n.op == simpleProjectOp {
+				return walk(n.children[0])
+			}
+		}
 		n, columns, ordering := omitTrivialProjections(n)
 		name, err := e.nodeName(n)
 		if err != nil {
@@ -109,24 +118,43 @@ type SpanFormatFn func(table cat.Table, index cat.Index, scanParams exec.ScanPar
 // ordering, unless the node is an identity projection (which just renames
 // columns) - in which case we return the child node and the renamed columns.
 func omitTrivialProjections(n *Node) (*Node, sqlbase.ResultColumns, sqlbase.ColumnOrdering) {
-	if n.op != serializingProjectOp {
+	var projection []exec.NodeColumnOrdinal
+	switch n.op {
+	case serializingProjectOp:
+		projection = n.args.(*serializingProjectArgs).Cols
+	case simpleProjectOp:
+		projection = n.args.(*simpleProjectArgs).Cols
+	default:
 		return n, n.Columns(), n.Ordering()
 	}
 
-	projection := n.args.(*serializingProjectArgs).Cols
+	input, inputColumns, inputOrdering := omitTrivialProjections(n.children[0])
 
-	input := n.children[0]
-	// Check if the projection is the identity.
-	// TODO(radu): extend this to omit projections that only reorder or rename columns.
-	if len(projection) != len(input.Columns()) {
+	// Check if the projection is a bijection (i.e. permutation of all input
+	// columnns), and construct the inverse projection.
+	if len(projection) != len(inputColumns) {
 		return n, n.Columns(), n.Ordering()
 	}
-	for i := range projection {
-		if int(projection[i]) != i {
+	inverse := make([]int, len(inputColumns))
+	for i := range inverse {
+		inverse[i] = -1
+	}
+	for i, col := range projection {
+		inverse[int(col)] = i
+	}
+	for i := range inverse {
+		if inverse[i] == -1 {
 			return n, n.Columns(), n.Ordering()
 		}
 	}
-	return input, n.Columns(), input.Ordering()
+	// We will show the child node and its ordering, but with the columns
+	// reordered and renamed according to the parent.
+	ordering := make(sqlbase.ColumnOrdering, len(inputOrdering))
+	for i, o := range inputOrdering {
+		ordering[i].ColIdx = inverse[o.ColIdx]
+		ordering[i].Direction = o.Direction
+	}
+	return input, n.Columns(), ordering
 }
 
 // emitter is a helper for emitting explain information for all the operators.
@@ -634,23 +662,46 @@ func (e *emitter) emitTableAndIndex(field string, table cat.Table, index cat.Ind
 func (e *emitter) emitSpans(
 	field string, table cat.Table, index cat.Index, scanParams exec.ScanParams,
 ) {
+	e.ob.Attr(field, e.spansStr(table, index, scanParams))
+}
+
+func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
 	if scanParams.InvertedConstraint == nil && scanParams.IndexConstraint == nil {
 		if scanParams.HardLimit > 0 {
-			e.ob.Attr(field, "LIMITED SCAN")
-		} else {
-			e.ob.Attr(field, "FULL SCAN")
+			return "LIMITED SCAN"
 		}
-	} else {
-		if e.ob.flags.HideValues {
-			n := len(scanParams.InvertedConstraint)
-			if scanParams.IndexConstraint != nil {
-				n = scanParams.IndexConstraint.Spans.Count()
-			}
-			e.ob.Attrf(field, "%d span%s", n, util.Pluralize(int64(n)))
-		} else {
-			e.ob.Attr(field, e.spanFormatFn(table, index, scanParams))
-		}
+		return "FULL SCAN"
 	}
+
+	// In verbose mode show the physical spans.
+	if e.ob.flags.Verbose {
+		return e.spanFormatFn(table, index, scanParams)
+	}
+
+	// For inverted constraints, just print the number of spans. Inverted key
+	// values are generally not user-readable.
+	if scanParams.InvertedConstraint != nil {
+		n := len(scanParams.InvertedConstraint)
+		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
+	}
+
+	// If we must hide values, only show the count.
+	if e.ob.flags.HideValues {
+		n := scanParams.IndexConstraint.Spans.Count()
+		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
+	}
+
+	sp := &scanParams.IndexConstraint.Spans
+	// Show up to 4 logical spans.
+	if maxSpans := 4; sp.Count() > maxSpans {
+		trunc := &constraint.Spans{}
+		trunc.Alloc(maxSpans)
+		for i := 0; i < maxSpans; i++ {
+			trunc.Append(sp.Get(i))
+		}
+		return fmt.Sprintf("%s … (%d more)", trunc.String(), sp.Count()-maxSpans)
+	}
+	return sp.String()
 }
 
 func (e *emitter) emitLockingPolicy(locking *tree.LockingItem) {

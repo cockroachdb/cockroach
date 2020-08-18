@@ -22,8 +22,6 @@ type ReqOrdering = sqlbase.ColumnOrdering
 // by and columns for which we know all rows have the same value.
 func planReqOrdering(plan planNode) ReqOrdering {
 	switch n := plan.(type) {
-	case *explainPlanNode:
-		return planReqOrdering(n.run.results)
 	case *limitNode:
 		return planReqOrdering(n.plan)
 	case *max1RowNode:

@@ -173,9 +173,29 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMT01L80AYvL-_YplT-7pi43
 query TTTTT
 EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res
 ----
+·               distribution         full                  ·              ·
+·               vectorized           true                  ·              ·
+sort            ·                    ·                     (y, str, res)  +res
+ │              estimated row count  1000 (missing stats)  ·              ·
+ │              order                +res                  ·              ·
+ └── render     ·                    ·                     (res, y, str)  ·
+      │         estimated row count  1000 (missing stats)  ·              ·
+      │         render 0             repeat('test', y)     ·              ·
+      │         render 1             y                     ·              ·
+      │         render 2             str                   ·              ·
+      └── scan  ·                    ·                     (y, str)       ·
+·               estimated row count  1000 (missing stats)  ·              ·
+·               table                numtostr@primary      ·              ·
+·               spans                FULL SCAN             ·              ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
+----
 ·                    distribution         full                  ·              ·
 ·                    vectorized           true                  ·              ·
-project              ·                    ·                     (y, str, res)  ·
+limit                ·                    ·                     (y, str, res)  ·
+ │                   estimated row count  10 (missing stats)    ·              ·
+ │                   count                10                    ·              ·
  └── sort            ·                    ·                     (res, y, str)  +res
       │              estimated row count  1000 (missing stats)  ·              ·
       │              order                +res                  ·              ·
@@ -188,28 +208,6 @@ project              ·                    ·                     (y, str, res) 
 ·                    estimated row count  1000 (missing stats)  ·              ·
 ·                    table                numtostr@primary      ·              ·
 ·                    spans                FULL SCAN             ·              ·
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT y, str, repeat('test', y) AS res FROM NumToStr ORDER BY res LIMIT 10
-----
-·                         distribution         full                  ·              ·
-·                         vectorized           true                  ·              ·
-project                   ·                    ·                     (y, str, res)  ·
- └── limit                ·                    ·                     (res, y, str)  ·
-      │                   estimated row count  10 (missing stats)    ·              ·
-      │                   count                10                    ·              ·
-      └── sort            ·                    ·                     (res, y, str)  +res
-           │              estimated row count  1000 (missing stats)  ·              ·
-           │              order                +res                  ·              ·
-           └── render     ·                    ·                     (res, y, str)  ·
-                │         estimated row count  1000 (missing stats)  ·              ·
-                │         render 0             repeat('test', y)     ·              ·
-                │         render 1             y                     ·              ·
-                │         render 2             str                   ·              ·
-                └── scan  ·                    ·                     (y, str)       ·
-·                         estimated row count  1000 (missing stats)  ·              ·
-·                         table                numtostr@primary      ·              ·
-·                         spans                FULL SCAN             ·              ·
 
 # Regression test for #20481.
 query T

@@ -124,7 +124,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query TTT
@@ -135,7 +135,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for no key update
 
 query TTT
@@ -146,7 +146,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for share
 
 query TTT
@@ -157,7 +157,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for key share
 
 query TTT
@@ -168,7 +168,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for share
 
 query TTT
@@ -179,7 +179,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for no key update
 
 query TTT
@@ -190,7 +190,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FO
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query TTT
@@ -201,7 +201,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -216,7 +216,7 @@ render     ·                 ·
  └── scan  ·                 ·
 ·          missing stats     ·
 ·          table             t@primary
-·          spans             /1-/1/#
+·          spans             [/1 - /1]
 ·          locking strength  for update
 
 # ------------------------------------------------------------------------------
@@ -565,80 +565,76 @@ root                 ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
-·                    distribution           local
-·                    vectorized             true
-project              ·                      ·
- └── lookup join     ·                      ·
-      │              table                  t@primary
-      │              type                   inner
-      │              equality               (b) = (a)
-      │              equality cols are key  ·
-      │              parallel               ·
-      └── distinct   ·                      ·
-           │         distinct on            b
-           └── scan  ·                      ·
-·                    missing stats          ·
-·                    table                  t@primary
-·                    spans                  FULL SCAN
+·               distribution           local
+·               vectorized             true
+lookup join     ·                      ·
+ │              table                  t@primary
+ │              type                   inner
+ │              equality               (b) = (a)
+ │              equality cols are key  ·
+ │              parallel               ·
+ └── distinct   ·                      ·
+      │         distinct on            b
+      └── scan  ·                      ·
+·               missing stats          ·
+·               table                  t@primary
+·               spans                  FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE)
 ----
-·                    distribution           local
-·                    vectorized             true
-project              ·                      ·
- └── lookup join     ·                      ·
-      │              table                  t@primary
-      │              type                   inner
-      │              equality               (b) = (a)
-      │              equality cols are key  ·
-      │              parallel               ·
-      └── distinct   ·                      ·
-           │         distinct on            b
-           └── scan  ·                      ·
-·                    missing stats          ·
-·                    table                  t@primary
-·                    spans                  FULL SCAN
-·                    locking strength       for update
+·               distribution           local
+·               vectorized             true
+lookup join     ·                      ·
+ │              table                  t@primary
+ │              type                   inner
+ │              equality               (b) = (a)
+ │              equality cols are key  ·
+ │              parallel               ·
+ └── distinct   ·                      ·
+      │         distinct on            b
+      └── scan  ·                      ·
+·               missing stats          ·
+·               table                  t@primary
+·               spans                  FULL SCAN
+·               locking strength       for update
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
-·                    distribution           local
-·                    vectorized             true
-project              ·                      ·
- └── lookup join     ·                      ·
-      │              table                  t@primary
-      │              type                   inner
-      │              equality               (b) = (a)
-      │              equality cols are key  ·
-      │              parallel               ·
-      └── distinct   ·                      ·
-           │         distinct on            b
-           └── scan  ·                      ·
-·                    missing stats          ·
-·                    table                  t@primary
-·                    spans                  FULL SCAN
+·               distribution           local
+·               vectorized             true
+lookup join     ·                      ·
+ │              table                  t@primary
+ │              type                   inner
+ │              equality               (b) = (a)
+ │              equality cols are key  ·
+ │              parallel               ·
+ └── distinct   ·                      ·
+      │         distinct on            b
+      └── scan  ·                      ·
+·               missing stats          ·
+·               table                  t@primary
+·               spans                  FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a IN (SELECT b FROM t FOR UPDATE OF t)
 ----
-·                    distribution           local
-·                    vectorized             true
-project              ·                      ·
- └── lookup join     ·                      ·
-      │              table                  t@primary
-      │              type                   inner
-      │              equality               (b) = (a)
-      │              equality cols are key  ·
-      │              parallel               ·
-      └── distinct   ·                      ·
-           │         distinct on            b
-           └── scan  ·                      ·
-·                    missing stats          ·
-·                    table                  t@primary
-·                    spans                  FULL SCAN
-·                    locking strength       for update
+·               distribution           local
+·               vectorized             true
+lookup join     ·                      ·
+ │              table                  t@primary
+ │              type                   inner
+ │              equality               (b) = (a)
+ │              equality cols are key  ·
+ │              parallel               ·
+ └── distinct   ·                      ·
+      │         distinct on            b
+      └── scan  ·                      ·
+·               missing stats          ·
+·               table                  t@primary
+·               spans                  FULL SCAN
+·               locking strength       for update
 
 # ------------------------------------------------------------------------------
 # Tests with common-table expressions.
@@ -745,115 +741,110 @@ root                 ·                 ·
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for share
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for share
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
@@ -861,94 +852,90 @@ EXPLAIN SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for share
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for share
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for no key update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for key share
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for no key update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for key share
 
 query TTT
 EXPLAIN SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF u
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for no key update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for no key update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 # ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
@@ -957,25 +944,24 @@ project          ·                   ·
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t
@@ -989,69 +975,66 @@ EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t, u
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
 
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query TTT
 EXPLAIN SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 # Postgres doesn't support applying locking clauses to joins. The following
 # queries all return the error: "FOR UPDATE cannot be applied to a join".
@@ -1060,25 +1043,24 @@ project          ·                   ·
 query TTT
 EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 query error pgcode 42P01 relation "t" in FOR UPDATE clause not found in FROM clause
 EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF t
@@ -1092,25 +1074,24 @@ EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF u2
 query TTT
 EXPLAIN SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
-·                distribution        local
-·                vectorized          true
-project          ·                   ·
- └── merge join  ·                   ·
-      │          type                inner
-      │          equality            (a) = (a)
-      │          left cols are key   ·
-      │          right cols are key  ·
-      │          mergeJoinOrder      +"(a=a)"
-      ├── scan   ·                   ·
-      │          missing stats       ·
-      │          table               t@primary
-      │          spans               FULL SCAN
-      │          locking strength    for update
-      └── scan   ·                   ·
-·                missing stats       ·
-·                table               u@primary
-·                spans               FULL SCAN
-·                locking strength    for update
+·           distribution        local
+·           vectorized          true
+merge join  ·                   ·
+ │          type                inner
+ │          equality            (a) = (a)
+ │          left cols are key   ·
+ │          right cols are key  ·
+ │          mergeJoinOrder      +"(a=a)"
+ ├── scan   ·                   ·
+ │          missing stats       ·
+ │          table               t@primary
+ │          spans               FULL SCAN
+ │          locking strength    for update
+ └── scan   ·                   ·
+·           missing stats       ·
+·           table               u@primary
+·           spans               FULL SCAN
+·           locking strength    for update
 
 # ------------------------------------------------------------------------------
 # Tests with lateral joins.
@@ -1331,7 +1312,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1343,7 +1324,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for no key update
 ·     locking wait policy  nowait
 
@@ -1355,7 +1336,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for share
 ·     locking wait policy  nowait
 
@@ -1367,7 +1348,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for key share
 ·     locking wait policy  nowait
 
@@ -1379,7 +1360,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for share
 ·     locking wait policy  nowait
 
@@ -1391,7 +1372,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NO
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for no key update
 ·     locking wait policy  nowait
 
@@ -1403,7 +1384,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FO
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1415,7 +1396,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1431,6 +1412,6 @@ render     ·                    ·
  └── scan  ·                    ·
 ·          missing stats        ·
 ·          table                t@primary
-·          spans                /1-/1/#
+·          spans                [/1 - /1]
 ·          locking strength     for update
 ·          locking wait policy  nowait

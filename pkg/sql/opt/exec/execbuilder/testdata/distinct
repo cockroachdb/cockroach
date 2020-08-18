@@ -159,18 +159,17 @@ CREATE TABLE abcd (
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT 1 AS z, d, b FROM abcd ORDER BY d, b
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (z, d, b)  ·
- └── render     ·                    ·                     (z, b, d)  +d,+b
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         render 0             1                     ·          ·
-      │         render 1             b                     ·          ·
-      │         render 2             d                     ·          ·
-      └── scan  ·                    ·                     (b, d)     +d,+b
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                abcd@abcd_d_b_key     ·          ·
-·               spans                FULL SCAN             ·          ·
+·          distribution         local                 ·          ·
+·          vectorized           true                  ·          ·
+render     ·                    ·                     (z, d, b)  +d,+b
+ │         estimated row count  1000 (missing stats)  ·          ·
+ │         render 0             1                     ·          ·
+ │         render 1             b                     ·          ·
+ │         render 2             d                     ·          ·
+ └── scan  ·                    ·                     (b, d)     +d,+b
+·          estimated row count  1000 (missing stats)  ·          ·
+·          table                abcd@abcd_d_b_key     ·          ·
+·          spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd

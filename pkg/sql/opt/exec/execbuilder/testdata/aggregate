@@ -73,99 +73,95 @@ project              ·                    ·                            (min in
 query TTTTT
 EXPLAIN (TYPES) SELECT min(1), count(NULL), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
-·                      distribution         local                               ·                                                                                                                                                   ·
-·                      vectorized           false                               ·                                                                                                                                                   ·
-project                ·                    ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
- └── render            ·                    ·                                   (avg float, to_hex string, min int, count int, max int, sum_int int, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool)    ·
-      │                estimated row count  1                                   ·                                                                                                                                                   ·
-      │                render 0             ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
-      │                render 1             (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
-      │                render 2             (min)[int]                          ·                                                                                                                                                   ·
-      │                render 3             (count)[int]                        ·                                                                                                                                                   ·
-      │                render 4             (max)[int]                          ·                                                                                                                                                   ·
-      │                render 5             (sum_int)[int]                      ·                                                                                                                                                   ·
-      │                render 6             (sum)[decimal]                      ·                                                                                                                                                   ·
-      │                render 7             (stddev)[decimal]                   ·                                                                                                                                                   ·
-      │                render 8             (variance)[decimal]                 ·                                                                                                                                                   ·
-      │                render 9             (bool_and)[bool]                    ·                                                                                                                                                   ·
-      │                render 10            (bool_or)[bool]                     ·                                                                                                                                                   ·
-      └── group        ·                    ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
-           │           estimated row count  1                                   ·                                                                                                                                                   ·
-           │           aggregate 0          min(column1)                        ·                                                                                                                                                   ·
-           │           aggregate 1          count(column3)                      ·                                                                                                                                                   ·
-           │           aggregate 2          max(column1)                        ·                                                                                                                                                   ·
-           │           aggregate 3          sum_int(column1)                    ·                                                                                                                                                   ·
-           │           aggregate 4          avg(column1)                        ·                                                                                                                                                   ·
-           │           aggregate 5          sum(column1)                        ·                                                                                                                                                   ·
-           │           aggregate 6          stddev(column1)                     ·                                                                                                                                                   ·
-           │           aggregate 7          variance(column1)                   ·                                                                                                                                                   ·
-           │           aggregate 8          bool_and(column11)                  ·                                                                                                                                                   ·
-           │           aggregate 9          bool_or(column11)                   ·                                                                                                                                                   ·
-           │           aggregate 10         xor_agg(column14)                   ·                                                                                                                                                   ·
-           │           scalar               ·                                   ·                                                                                                                                                   ·
-           └── values  ·                    ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
-·                      size                 4 columns, 1 row                    ·                                                                                                                                                   ·
-·                      row 0, expr 0        (1)[int]                            ·                                                                                                                                                   ·
-·                      row 0, expr 1        (NULL)[unknown]                     ·                                                                                                                                                   ·
-·                      row 0, expr 2        (true)[bool]                        ·                                                                                                                                                   ·
-·                      row 0, expr 3        ('\x01')[bytes]                     ·                                                                                                                                                   ·
+·                 distribution         local                               ·                                                                                                                                                   ·
+·                 vectorized           false                               ·                                                                                                                                                   ·
+render            ·                    ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
+ │                estimated row count  1                                   ·                                                                                                                                                   ·
+ │                render 0             ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
+ │                render 1             (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
+ │                render 2             (min)[int]                          ·                                                                                                                                                   ·
+ │                render 3             (count)[int]                        ·                                                                                                                                                   ·
+ │                render 4             (max)[int]                          ·                                                                                                                                                   ·
+ │                render 5             (sum_int)[int]                      ·                                                                                                                                                   ·
+ │                render 6             (sum)[decimal]                      ·                                                                                                                                                   ·
+ │                render 7             (stddev)[decimal]                   ·                                                                                                                                                   ·
+ │                render 8             (variance)[decimal]                 ·                                                                                                                                                   ·
+ │                render 9             (bool_and)[bool]                    ·                                                                                                                                                   ·
+ │                render 10            (bool_or)[bool]                     ·                                                                                                                                                   ·
+ └── group        ·                    ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
+      │           estimated row count  1                                   ·                                                                                                                                                   ·
+      │           aggregate 0          min(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 1          count(column3)                      ·                                                                                                                                                   ·
+      │           aggregate 2          max(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 3          sum_int(column1)                    ·                                                                                                                                                   ·
+      │           aggregate 4          avg(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 5          sum(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 6          stddev(column1)                     ·                                                                                                                                                   ·
+      │           aggregate 7          variance(column1)                   ·                                                                                                                                                   ·
+      │           aggregate 8          bool_and(column11)                  ·                                                                                                                                                   ·
+      │           aggregate 9          bool_or(column11)                   ·                                                                                                                                                   ·
+      │           aggregate 10         xor_agg(column14)                   ·                                                                                                                                                   ·
+      │           scalar               ·                                   ·                                                                                                                                                   ·
+      └── values  ·                    ·                                   (column1 int, column3 unknown, column11 bool, column14 bytes)                                                                                       ·
+·                 size                 4 columns, 1 row                    ·                                                                                                                                                   ·
+·                 row 0, expr 0        (1)[int]                            ·                                                                                                                                                   ·
+·                 row 0, expr 1        (NULL)[unknown]                     ·                                                                                                                                                   ·
+·                 row 0, expr 2        (true)[bool]                        ·                                                                                                                                                   ·
+·                 row 0, expr 3        ('\x01')[bytes]                     ·                                                                                                                                                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
-·               distribution         local                 ·                        ·
-·               vectorized           true                  ·                        ·
-project         ·                    ·                     (count int, k int)       ·
- └── group      ·                    ·                     (k int, count_rows int)  ·
-      │         estimated row count  1000 (missing stats)  ·                        ·
-      │         aggregate 0          count_rows()          ·                        ·
-      │         group by             k                     ·                        ·
-      │         ordered              +k                    ·                        ·
-      └── scan  ·                    ·                     (k int)                  +k
-·               estimated row count  1000 (missing stats)  ·                        ·
-·               table                kv@primary            ·                        ·
-·               spans                FULL SCAN             ·                        ·
+·          distribution         local                 ·                   ·
+·          vectorized           true                  ·                   ·
+group      ·                    ·                     (count int, k int)  ·
+ │         estimated row count  1000 (missing stats)  ·                   ·
+ │         aggregate 0          count_rows()          ·                   ·
+ │         group by             k                     ·                   ·
+ │         ordered              +k                    ·                   ·
+ └── scan  ·                    ·                     (k int)             +k
+·          estimated row count  1000 (missing stats)  ·                   ·
+·          table                kv@primary            ·                   ·
+·          spans                FULL SCAN             ·                   ·
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-·                    distribution         local                       ·                              ·
-·                    vectorized           true                        ·                              ·
-project              ·                    ·                           (count int, r int)             ·
- └── group           ·                    ·                           (column7 int, count_rows int)  ·
-      │              estimated row count  1000 (missing stats)        ·                              ·
-      │              aggregate 0          count_rows()                ·                              ·
-      │              group by             column7                     ·                              ·
-      └── render     ·                    ·                           (column7 int)                  ·
-           │         estimated row count  1000 (missing stats)        ·                              ·
-           │         render 0             ((k)[int] + (v)[int])[int]  ·                              ·
-           └── scan  ·                    ·                           (k int, v int)                 ·
-·                    estimated row count  1000 (missing stats)        ·                              ·
-·                    table                kv@primary                  ·                              ·
-·                    spans                FULL SCAN                   ·                              ·
+·               distribution         local                       ·                   ·
+·               vectorized           true                        ·                   ·
+group           ·                    ·                           (count int, r int)  ·
+ │              estimated row count  1000 (missing stats)        ·                   ·
+ │              aggregate 0          count_rows()                ·                   ·
+ │              group by             column7                     ·                   ·
+ └── render     ·                    ·                           (column7 int)       ·
+      │         estimated row count  1000 (missing stats)        ·                   ·
+      │         render 0             ((k)[int] + (v)[int])[int]  ·                   ·
+      └── scan  ·                    ·                           (k int, v int)      ·
+·               estimated row count  1000 (missing stats)        ·                   ·
+·               table                kv@primary                  ·                   ·
+·               spans                FULL SCAN                   ·                   ·
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
-·                    distribution         local                                  ·                                          ·
-·                    vectorized           true                                   ·                                          ·
-project              ·                    ·                                      (count int, r int)                         ·
- └── render          ·                    ·                                      (r int, count_rows int)                    ·
-      │              estimated row count  1000 (missing stats)                   ·                                          ·
-      │              render 0             ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
-      │              render 1             (count_rows)[int]                      ·                                          ·
-      └── group      ·                    ·                                      (k int, count_rows int, any_not_null int)  ·
-           │         estimated row count  1000 (missing stats)                   ·                                          ·
-           │         aggregate 0          count_rows()                           ·                                          ·
-           │         aggregate 1          any_not_null(v)                        ·                                          ·
-           │         group by             k                                      ·                                          ·
-           │         ordered              +k                                     ·                                          ·
-           └── scan  ·                    ·                                      (k int, v int)                             +k
-·                    estimated row count  1000 (missing stats)                   ·                                          ·
-·                    table                kv@primary                             ·                                          ·
-·                    spans                FULL SCAN                              ·                                          ·
+·               distribution         local                                  ·                                          ·
+·               vectorized           true                                   ·                                          ·
+render          ·                    ·                                      (count int, r int)                         ·
+ │              estimated row count  1000 (missing stats)                   ·                                          ·
+ │              render 0             ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
+ │              render 1             (count_rows)[int]                      ·                                          ·
+ └── group      ·                    ·                                      (k int, count_rows int, any_not_null int)  ·
+      │         estimated row count  1000 (missing stats)                   ·                                          ·
+      │         aggregate 0          count_rows()                           ·                                          ·
+      │         aggregate 1          any_not_null(v)                        ·                                          ·
+      │         group by             k                                      ·                                          ·
+      │         ordered              +k                                     ·                                          ·
+      └── scan  ·                    ·                                      (k int, v int)                             +k
+·               estimated row count  1000 (missing stats)                   ·                                          ·
+·               table                kv@primary                             ·                                          ·
+·               spans                FULL SCAN                              ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k) FROM kv
@@ -893,29 +889,28 @@ render     ·                    ·                                        (r tu
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-·                          distribution         local                                               ·                                                ·
-·                          vectorized           true                                                ·                                                ·
-project                    ·                    ·                                                   (min string, r tuple{int, int})                  ·
- └── render                ·                    ·                                                   (r tuple{int, int}, min string)                  ·
-      │                    estimated row count  100000 (missing stats)                              ·                                                ·
-      │                    render 0             (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
-      │                    render 1             (min)[string]                                       ·                                                ·
-      └── group            ·                    ·                                                   (a int, x string, min string, any_not_null int)  ·
-           │               estimated row count  100000 (missing stats)                              ·                                                ·
-           │               aggregate 0          min(y)                                              ·                                                ·
-           │               aggregate 1          any_not_null(b)                                     ·                                                ·
-           │               group by             a, x                                                ·                                                ·
-           └── cross join  ·                    ·                                                   (a int, b int, x string, y string)               ·
-                │          estimated row count  1000000 (missing stats)                             ·                                                ·
-                │          type                 cross                                               ·                                                ·
-                ├── scan   ·                    ·                                                   (a int, b int)                                   ·
-                │          estimated row count  1000 (missing stats)                                ·                                                ·
-                │          table                ab@primary                                          ·                                                ·
-                │          spans                FULL SCAN                                           ·                                                ·
-                └── scan   ·                    ·                                                   (x string, y string)                             ·
-·                          estimated row count  1000 (missing stats)                                ·                                                ·
-·                          table                xy@primary                                          ·                                                ·
-·                          spans                FULL SCAN                                           ·                                                ·
+·                     distribution         local                                               ·                                                ·
+·                     vectorized           true                                                ·                                                ·
+render                ·                    ·                                                   (min string, r tuple{int, int})                  ·
+ │                    estimated row count  100000 (missing stats)                              ·                                                ·
+ │                    render 0             (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
+ │                    render 1             (min)[string]                                       ·                                                ·
+ └── group            ·                    ·                                                   (a int, x string, min string, any_not_null int)  ·
+      │               estimated row count  100000 (missing stats)                              ·                                                ·
+      │               aggregate 0          min(y)                                              ·                                                ·
+      │               aggregate 1          any_not_null(b)                                     ·                                                ·
+      │               group by             a, x                                                ·                                                ·
+      └── cross join  ·                    ·                                                   (a int, b int, x string, y string)               ·
+           │          estimated row count  1000000 (missing stats)                             ·                                                ·
+           │          type                 cross                                               ·                                                ·
+           ├── scan   ·                    ·                                                   (a int, b int)                                   ·
+           │          estimated row count  1000 (missing stats)                                ·                                                ·
+           │          table                ab@primary                                          ·                                                ·
+           │          spans                FULL SCAN                                           ·                                                ·
+           └── scan   ·                    ·                                                   (x string, y string)                             ·
+·                     estimated row count  1000 (missing stats)                                ·                                                ·
+·                     table                xy@primary                                          ·                                                ·
+·                     spans                FULL SCAN                                           ·                                                ·
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.

@@ -37,13 +37,6 @@ type invertedJoinNode struct {
 	onExpr tree.TypedExpr
 }
 
-// CanParallelize indicates whether the fetchers can parallelize the
-// batches of lookups that can be performed. This should be kept in
-// sync with the behavior of invertedJoiner scan behavior.
-func (ij *invertedJoinNode) CanParallelize() bool {
-	return true
-}
-
 func (ij *invertedJoinNode) startExec(params runParams) error {
 	panic("invertedJoinNode cannot be run in local mode")
 }

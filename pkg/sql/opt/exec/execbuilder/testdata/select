@@ -104,35 +104,32 @@ scan  ·                    ·                     (p, d, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]
 ----
-·          distribution         local                 ·          ·
-·          vectorized           true                  ·          ·
-project    ·                    ·                     (c, d, p)  ·
- └── scan  ·                    ·                     (p, d, c)  ·
-·          estimated row count  1000 (missing stats)  ·          ·
-·          table                num_ref@primary       ·          ·
-·          spans                FULL SCAN             ·          ·
+·     distribution         local                 ·          ·
+·     vectorized           true                  ·          ·
+scan  ·                    ·                     (c, d, p)  ·
+·     estimated row count  1000 (missing stats)  ·          ·
+·     table                num_ref@primary       ·          ·
+·     spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias(col1,col2,col3)]
 ----
-·          distribution         local                 ·                   ·
-·          vectorized           true                  ·                   ·
-project    ·                    ·                     (col1, col2, col3)  ·
- └── scan  ·                    ·                     (p, d, c)           ·
-·          estimated row count  1000 (missing stats)  ·                   ·
-·          table                num_ref@primary       ·                   ·
-·          spans                FULL SCAN             ·                   ·
+·     distribution         local                 ·                   ·
+·     vectorized           true                  ·                   ·
+scan  ·                    ·                     (col1, col2, col3)  ·
+·     estimated row count  1000 (missing stats)  ·                   ·
+·     table                num_ref@primary       ·                   ·
+·     spans                FULL SCAN             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]@bc
 ----
-·          distribution         local                 ·          ·
-·          vectorized           true                  ·          ·
-project    ·                    ·                     (c, d, p)  ·
- └── scan  ·                    ·                     (p, d, c)  ·
-·          estimated row count  1000 (missing stats)  ·          ·
-·          table                num_ref@bc            ·          ·
-·          spans                FULL SCAN             ·          ·
+·     distribution         local                 ·          ·
+·     vectorized           true                  ·          ·
+scan  ·                    ·                     (c, d, p)  ·
+·     estimated row count  1000 (missing stats)  ·          ·
+·     table                num_ref@bc            ·          ·
+·     spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@bc
@@ -343,20 +340,19 @@ render     ·                    ·                     (r)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x AS a, x + 1 AS b, y, y + 1 AS c, x + y AS d FROM a
 ----
-·               distribution         local                 ·                ·
-·               vectorized           true                  ·                ·
-project         ·                    ·                     (a, b, y, c, d)  ·
- └── render     ·                    ·                     (b, c, d, x, y)  ·
-      │         estimated row count  1000 (missing stats)  ·                ·
-      │         render 0             x + 1                 ·                ·
-      │         render 1             y + 1                 ·                ·
-      │         render 2             x + y                 ·                ·
-      │         render 3             x                     ·                ·
-      │         render 4             y                     ·                ·
-      └── scan  ·                    ·                     (x, y)           ·
-·               estimated row count  1000 (missing stats)  ·                ·
-·               table                a@primary             ·                ·
-·               spans                FULL SCAN             ·                ·
+·          distribution         local                 ·                ·
+·          vectorized           true                  ·                ·
+render     ·                    ·                     (a, b, y, c, d)  ·
+ │         estimated row count  1000 (missing stats)  ·                ·
+ │         render 0             x + 1                 ·                ·
+ │         render 1             y + 1                 ·                ·
+ │         render 2             x + y                 ·                ·
+ │         render 3             x                     ·                ·
+ │         render 4             y                     ·                ·
+ └── scan  ·                    ·                     (x, y)           ·
+·          estimated row count  1000 (missing stats)  ·                ·
+·          table                a@primary             ·                ·
+·          spans                FULL SCAN             ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT u * v + v AS r FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
@@ -668,13 +664,12 @@ scan  ·                    ·                     (a collatedstring{da}, b int)
 query TTTTT
 EXPLAIN (TYPES) SELECT b, a FROM coll ORDER BY b, a
 ----
-·          distribution         local                 ·                              ·
-·          vectorized           true                  ·                              ·
-project    ·                    ·                     (b int, a collatedstring{da})  ·
- └── scan  ·                    ·                     (a collatedstring{da}, b int)  +b,+a
-·          estimated row count  1000 (missing stats)  ·                              ·
-·          table                coll@coll_b_a_idx     ·                              ·
-·          spans                FULL SCAN             ·                              ·
+·     distribution         local                 ·                              ·
+·     vectorized           true                  ·                              ·
+scan  ·                    ·                     (b int, a collatedstring{da})  +b,+a
+·     estimated row count  1000 (missing stats)  ·                              ·
+·     table                coll@coll_b_a_idx     ·                              ·
+·     spans                FULL SCAN             ·                              ·
 
 statement ok
 DROP TABLE coll
@@ -1278,21 +1273,20 @@ filter     ·                    ·                   (a, b)  +a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, a+b+c AS x FROM (SELECT * FROM abcd LIMIT 10)) WHERE x > 100 ORDER BY a
 ----
-·                    distribution         local                ·          ·
-·                    vectorized           true                 ·          ·
-project              ·                    ·                    (a, x)     ·
- └── render          ·                    ·                    (x, a)     +a
-      │              estimated row count  3 (missing stats)    ·          ·
-      │              render 0             c + (a + b)          ·          ·
-      │              render 1             a                    ·          ·
-      └── filter     ·                    ·                    (a, b, c)  +a
-           │         estimated row count  3 (missing stats)    ·          ·
-           │         filter               (c + (a + b)) > 100  ·          ·
-           └── scan  ·                    ·                    (a, b, c)  +a
-·                    estimated row count  10 (missing stats)   ·          ·
-·                    table                abcd@primary         ·          ·
-·                    spans                LIMITED SCAN         ·          ·
-·                    limit                10                   ·          ·
+·               distribution         local                ·          ·
+·               vectorized           true                 ·          ·
+render          ·                    ·                    (a, x)     +a
+ │              estimated row count  3 (missing stats)    ·          ·
+ │              render 0             c + (a + b)          ·          ·
+ │              render 1             a                    ·          ·
+ └── filter     ·                    ·                    (a, b, c)  +a
+      │         estimated row count  3 (missing stats)    ·          ·
+      │         filter               (c + (a + b)) > 100  ·          ·
+      └── scan  ·                    ·                    (a, b, c)  +a
+·               estimated row count  10 (missing stats)   ·          ·
+·               table                abcd@primary         ·          ·
+·               spans                LIMITED SCAN         ·          ·
+·               limit                10                   ·          ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(x,y,z))
@@ -1330,7 +1324,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/#
+·     spans          [/10 - /10]
 
 query TTT
 EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
@@ -1340,7 +1334,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 query TTT
@@ -1351,7 +1345,7 @@ EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 # Verify that consolidated point spans are still parallelized.
@@ -1363,7 +1357,7 @@ EXPLAIN SELECT * FROM a WHERE a in (10, 11)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/11/#
+·     spans          [/10 - /11]
 ·     parallel       ·
 
 query TTT
@@ -1374,7 +1368,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /11-/19/#
+·     spans          [/11 - /19]
 ·     parallel       ·
 
 # This ticks all the boxes for parallelization apart from the fact that there
@@ -1387,7 +1381,7 @@ EXPLAIN SELECT * FROM a WHERE a > 10
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /11-
+·     spans          [/11 - ]
 
 # Test non-int types.
 
@@ -1395,33 +1389,31 @@ scan  ·              ·
 query TTT
 EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
 ----
-·                distribution   local
-·                vectorized     true
-project          ·              ·
- └── index join  ·              ·
-      │          table          a@primary
-      │          key columns    a
-      └── scan   ·              ·
-·                missing stats  ·
-·                table          a@item
-·                spans          /"ball"-/"ball"/PrefixEnd /"sock"-/"sock"/PrefixEnd
-·                parallel       ·
+·           distribution   local
+·           vectorized     true
+index join  ·              ·
+ │          table          a@primary
+ │          key columns    a
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          a@item
+·           spans          [/'ball' - /'ball'] [/'sock' - /'sock']
+·           parallel       ·
 
 # Range queries on non-int types are not parallel due to unbounded number of
 # results.
 query TTT
 EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND price < 40
 ----
-·                distribution   local
-·                vectorized     true
-project          ·              ·
- └── index join  ·              ·
-      │          table          a@primary
-      │          key columns    a
-      └── scan   ·              ·
-·                missing stats  ·
-·                table          a@p
-·                spans          /5.000000000000001-/9.999999999999998/PrefixEnd /20.000000000000004-/39.99999999999999/PrefixEnd
+·           distribution   local
+·           vectorized     true
+index join  ·              ·
+ │          table          a@primary
+ │          key columns    a
+ └── scan   ·              ·
+·           missing stats  ·
+·           table          a@p
+·           spans          [/5.000000000000001 - /9.999999999999998] [/20.000000000000004 - /39.99999999999999]
 
 query TTT
 EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
@@ -1431,7 +1423,7 @@ EXPLAIN SELECT * FROM b WHERE (a = 10 AND b = 10) OR (a = 20 AND b = 20)
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@primary
-·     spans          /10/10-/10/10/# /20/20-/20/20/#
+·     spans          [/10/10 - /10/10] [/20/20 - /20/20]
 ·     parallel       ·
 
 # This one isn't parallelizable because it's not a point lookup - only part of
@@ -1444,7 +1436,7 @@ EXPLAIN SELECT * FROM b WHERE a = 10 OR a = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@primary
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 
 # This one isn't parallelizable because it has a LIMIT clause.
 query TTT
@@ -1455,7 +1447,7 @@ EXPLAIN SELECT * FROM a WHERE a = 10 OR a = 20 LIMIT 1
 scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
-·     spans          /10-/10/# /20-/20/#
+·     spans          [/10 - /10] [/20 - /20]
 ·     limit          1
 
 statement ok
@@ -1470,7 +1462,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_b_idx
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 
 statement ok
 CREATE UNIQUE INDEX on b(c)
@@ -1485,7 +1477,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_key
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 query TTT
@@ -1496,7 +1488,7 @@ EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_key
-·     spans          /!NULL-/2 /10-/11
+·     spans          (/NULL - /1] [/10 - /10]
 
 statement ok
 CREATE UNIQUE INDEX on b(d DESC)
@@ -1511,7 +1503,7 @@ EXPLAIN SELECT d FROM b WHERE d = 10 OR d < 2
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_d_key
-·     spans          /10-/9 /1-/NULL
+·     spans          [/10 - /10] [/1 - /NULL)
 
 statement ok
 CREATE UNIQUE INDEX ON b(c, d)
@@ -1521,13 +1513,12 @@ CREATE UNIQUE INDEX ON b(c, d)
 query TTT
 EXPLAIN SELECT d FROM b WHERE c = 10 AND d = 10 OR c IS NULL AND d > 0 AND d < 2
 ----
-·          distribution   local
-·          vectorized     true
-project    ·              ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          b@b_c_d_key
-·          spans          /NULL/1-/NULL/2 /10/10-/10/11
+·     distribution   local
+·     vectorized     true
+scan  ·              ·
+·     missing stats  ·
+·     table          b@b_c_d_key
+·     spans          [/NULL/1 - /NULL/1] [/10/10 - /10/10]
 
 statement ok
 DROP INDEX b_b_idx
@@ -1544,7 +1535,7 @@ EXPLAIN SELECT b FROM b WHERE b = 10 OR b = 20
 scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_b_key
-·     spans          /10-/11 /20-/21
+·     spans          [/10 - /10] [/20 - /20]
 ·     parallel       ·
 
 statement ok
@@ -1582,22 +1573,21 @@ CREATE TABLE s (x INT PRIMARY KEY, y INT, z INT)
 query TTT
 EXPLAIN SELECT e.z, s.z, n FROM e, s, generate_series(0, s.z, 1000) as n WHERE e.y = s.y ORDER BY s.z LIMIT 10
 ----
-·                              distribution   local
-·                              vectorized     true
-project                        ·              ·
- └── limit                     ·              ·
-      │                        count          10
-      └── sort                 ·              ·
-           │                   order          +z
-           └── project set     ·              ·
-                └── hash join  ·              ·
-                     │         type           inner
-                     │         equality       (y) = (y)
-                     ├── scan  ·              ·
-                     │         missing stats  ·
-                     │         table          e@primary
-                     │         spans          FULL SCAN
-                     └── scan  ·              ·
-·                              missing stats  ·
-·                              table          s@primary
-·                              spans          FULL SCAN
+·                         distribution   local
+·                         vectorized     true
+limit                     ·              ·
+ │                        count          10
+ └── sort                 ·              ·
+      │                   order          +z
+      └── project set     ·              ·
+           └── hash join  ·              ·
+                │         type           inner
+                │         equality       (y) = (y)
+                ├── scan  ·              ·
+                │         missing stats  ·
+                │         table          e@primary
+                │         spans          FULL SCAN
+                └── scan  ·              ·
+·                         missing stats  ·
+·                         table          s@primary
+·                         spans          FULL SCAN

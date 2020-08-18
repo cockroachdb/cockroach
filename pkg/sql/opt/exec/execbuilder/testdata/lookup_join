@@ -330,21 +330,20 @@ project              ·                    ·                 (name)            
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM books CROSS JOIN books2
 ----
-tree             field                description     columns                                         ordering
-·                distribution         full            ·                                               ·
-·                vectorized           true            ·                                               ·
-project          ·                    ·               (title, edition, shelf, title, edition, shelf)  ·
- └── cross join  ·                    ·               (title, edition, shelf, title, edition, shelf)  ·
-      │          estimated row count  1000000         ·                                               ·
-      │          type                 cross           ·                                               ·
-      ├── scan   ·                    ·               (title, edition, shelf)                         ·
-      │          estimated row count  10000           ·                                               ·
-      │          table                books2@primary  ·                                               ·
-      │          spans                FULL SCAN       ·                                               ·
-      └── scan   ·                    ·               (title, edition, shelf)                         ·
-·                estimated row count  100             ·                                               ·
-·                table                books@primary   ·                                               ·
-·                spans                FULL SCAN       ·                                               ·
+tree        field                description     columns                                         ordering
+·           distribution         full            ·                                               ·
+·           vectorized           true            ·                                               ·
+cross join  ·                    ·               (title, edition, shelf, title, edition, shelf)  ·
+ │          estimated row count  1000000         ·                                               ·
+ │          type                 cross           ·                                               ·
+ ├── scan   ·                    ·               (title, edition, shelf)                         ·
+ │          estimated row count  10000           ·                                               ·
+ │          table                books2@primary  ·                                               ·
+ │          spans                FULL SCAN       ·                                               ·
+ └── scan   ·                    ·               (title, edition, shelf)                         ·
+·           estimated row count  100             ·                                               ·
+·           table                books@primary   ·                                               ·
+·           spans                FULL SCAN       ·                                               ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
@@ -718,18 +717,17 @@ project              ·                    ·                     (a)           
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def JOIN abc ON a=f ORDER BY a
 ----
-·                 distribution         full         ·                   ·
-·                 vectorized           true         ·                   ·
-project           ·                    ·            (d, e, f, a, b, c)  ·
- └── lookup join  ·                    ·            (a, b, c, d, e, f)  +a
-      │           estimated row count  100          ·                   ·
-      │           table                def@primary  ·                   ·
-      │           type                 inner        ·                   ·
-      │           equality             (a) = (f)    ·                   ·
-      └── scan    ·                    ·            (a, b, c)           +a
-·                 estimated row count  100          ·                   ·
-·                 table                abc@primary  ·                   ·
-·                 spans                FULL SCAN    ·                   ·
+·            distribution         full         ·                   ·
+·            vectorized           true         ·                   ·
+lookup join  ·                    ·            (d, e, f, a, b, c)  +a
+ │           estimated row count  100          ·                   ·
+ │           table                def@primary  ·                   ·
+ │           type                 inner        ·                   ·
+ │           equality             (a) = (f)    ·                   ·
+ └── scan    ·                    ·            (a, b, c)           +a
+·            estimated row count  100          ·                   ·
+·            table                abc@primary  ·                   ·
+·            spans                FULL SCAN    ·                   ·
 
 # Test that we don't get a lookup join if we force a merge join.
 query TTTTT
@@ -903,20 +901,19 @@ INSERT INTO b VALUES(1)
 query TTT
 EXPLAIN SELECT count(*) FROM (SELECT * FROM b NATURAL INNER LOOKUP JOIN a)
 ----
-·                      distribution   full
-·                      vectorized     true
-group                  ·              ·
- │                     aggregate 0    count_rows()
- │                     scalar         ·
- └── project           ·              ·
-      └── lookup join  ·              ·
-           │           table          a@primary
-           │           type           inner
-           │           equality       (a) = (a)
-           └── scan    ·              ·
-·                      missing stats  ·
-·                      table          b@primary
-·                      spans          FULL SCAN
+·                 distribution   full
+·                 vectorized     true
+group             ·              ·
+ │                aggregate 0    count_rows()
+ │                scalar         ·
+ └── lookup join  ·              ·
+      │           table          a@primary
+      │           type           inner
+      │           equality       (a) = (a)
+      └── scan    ·              ·
+·                 missing stats  ·
+·                 table          b@primary
+·                 spans          FULL SCAN
 
 statement ok
 SET tracing = on
@@ -1493,61 +1490,59 @@ GROUP BY s_name
 ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
-·                                                                      distribution           full
-·                                                                      vectorized             true
-limit                                                                  ·                      ·
- │                                                                     count                  100
- └── sort                                                              ·                      ·
-      │                                                                order                  -count_rows,+s_name
-      └── group                                                        ·                      ·
-           │                                                           aggregate 0            count_rows()
-           │                                                           group by               s_name
-           └── project                                                 ·                      ·
-                └── lookup join                                        ·                      ·
-                     │                                                 table                  lineitem@primary
-                     │                                                 type                   semi
-                     │                                                 equality               (l_orderkey) = (l_orderkey)
-                     │                                                 pred                   l_suppkey != l_suppkey
-                     └── lookup join                                   ·                      ·
-                          │                                            table                  orders@primary
-                          │                                            type                   inner
-                          │                                            equality               (l_orderkey) = (o_orderkey)
-                          │                                            equality cols are key  ·
-                          │                                            parallel               ·
-                          │                                            pred                   o_orderstatus = 'F'
-                          └── lookup join                              ·                      ·
-                               │                                       table                  lineitem@primary
-                               │                                       type                   anti
-                               │                                       equality               (l_orderkey) = (l_orderkey)
-                               │                                       pred                   l_receiptdate > l_commitdate
-                               └── project                             ·                      ·
-                                    └── lookup join                    ·                      ·
-                                         │                             table                  lineitem@primary
-                                         │                             type                   inner
-                                         │                             equality               (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
-                                         │                             equality cols are key  ·
-                                         │                             parallel               ·
-                                         │                             pred                   l_receiptdate > l_commitdate
-                                         └── lookup join               ·                      ·
-                                              │                        table                  lineitem@l_sk
-                                              │                        type                   inner
-                                              │                        equality               (s_suppkey) = (l_suppkey)
-                                              └── lookup join          ·                      ·
-                                                   │                   table                  supplier@primary
-                                                   │                   type                   inner
-                                                   │                   equality               (s_suppkey) = (s_suppkey)
-                                                   │                   equality cols are key  ·
-                                                   │                   parallel               ·
-                                                   └── lookup join     ·                      ·
-                                                        │              table                  supplier@s_nk
-                                                        │              type                   inner
-                                                        │              equality               (n_nationkey) = (s_nationkey)
-                                                        └── filter     ·                      ·
-                                                             │         filter                 n_name = 'SAUDI ARABIA'
-                                                             └── scan  ·                      ·
-·                                                                      estimated row count    25
-·                                                                      table                  nation@primary
-·                                                                      spans                  FULL SCAN
+·                                                            distribution           full
+·                                                            vectorized             true
+limit                                                        ·                      ·
+ │                                                           count                  100
+ └── sort                                                    ·                      ·
+      │                                                      order                  -count_rows,+s_name
+      └── group                                              ·                      ·
+           │                                                 aggregate 0            count_rows()
+           │                                                 group by               s_name
+           └── lookup join                                   ·                      ·
+                │                                            table                  lineitem@primary
+                │                                            type                   semi
+                │                                            equality               (l_orderkey) = (l_orderkey)
+                │                                            pred                   l_suppkey != l_suppkey
+                └── lookup join                              ·                      ·
+                     │                                       table                  orders@primary
+                     │                                       type                   inner
+                     │                                       equality               (l_orderkey) = (o_orderkey)
+                     │                                       equality cols are key  ·
+                     │                                       parallel               ·
+                     │                                       pred                   o_orderstatus = 'F'
+                     └── lookup join                         ·                      ·
+                          │                                  table                  lineitem@primary
+                          │                                  type                   anti
+                          │                                  equality               (l_orderkey) = (l_orderkey)
+                          │                                  pred                   l_receiptdate > l_commitdate
+                          └── lookup join                    ·                      ·
+                               │                             table                  lineitem@primary
+                               │                             type                   inner
+                               │                             equality               (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
+                               │                             equality cols are key  ·
+                               │                             parallel               ·
+                               │                             pred                   l_receiptdate > l_commitdate
+                               └── lookup join               ·                      ·
+                                    │                        table                  lineitem@l_sk
+                                    │                        type                   inner
+                                    │                        equality               (s_suppkey) = (l_suppkey)
+                                    └── lookup join          ·                      ·
+                                         │                   table                  supplier@primary
+                                         │                   type                   inner
+                                         │                   equality               (s_suppkey) = (s_suppkey)
+                                         │                   equality cols are key  ·
+                                         │                   parallel               ·
+                                         └── lookup join     ·                      ·
+                                              │              table                  supplier@s_nk
+                                              │              type                   inner
+                                              │              equality               (n_nationkey) = (s_nationkey)
+                                              └── filter     ·                      ·
+                                                   │         filter                 n_name = 'SAUDI ARABIA'
+                                                   └── scan  ·                      ·
+·                                                            estimated row count    25
+·                                                            table                  nation@primary
+·                                                            spans                  FULL SCAN
 
 # Regression test for #50964.
 statement ok

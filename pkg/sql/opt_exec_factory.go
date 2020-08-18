@@ -1158,7 +1158,7 @@ func (ef *execFactory) ConstructExplainOpt(
 func (ef *execFactory) ConstructExplain(
 	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
-	return constructExplainPlanNode(options, stmtType, plan.(*planComponents), ef.planner)
+	return constructExplainDistSQLOrVecNode(options, stmtType, plan.(*planComponents), ef.planner)
 }
 
 // ConstructShowTrace is part of the exec.Factory interface.
@@ -1858,7 +1858,7 @@ func (ef *execFactory) ConstructExplainPlan(
 	if err != nil {
 		return nil, err
 	}
-	n := &explainNewPlanNode{
+	n := &explainPlanNode{
 		flags: flags,
 		plan:  plan.(*explain.Plan),
 	}

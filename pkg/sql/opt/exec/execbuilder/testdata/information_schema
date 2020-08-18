@@ -16,7 +16,7 @@ EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ·              vectorized    false
 virtual table  ·             ·
 ·              table         tables@tables_table_name_idx
-·              spans         /"foo"-/"foo"/PrefixEnd
+·              spans         [/'foo' - /'foo']
 
 statement error use of crdb_internal_vtable_pk column not allowed
 SELECT crdb_internal_vtable_pk FROM system.information_schema.schemata
