@@ -116,7 +116,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 		return func() error {
 			nodeDB := conns[node-1]
 			r := nodeDB.QueryRowContext(ctx, "SELECT v FROM test.test AS OF SYSTEM "+
-				"TIME follower_read_timestamp() WHERE k = $1", k)
+				"TIME experimental_follower_read_timestamp() WHERE k = $1", k)
 			var got int64
 			if err := r.Scan(&got); err != nil {
 				// Ignore errors due to cancellation.
