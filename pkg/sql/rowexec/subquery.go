@@ -14,12 +14,9 @@ package rowexec
 type SubqueryExecMode int
 
 const (
-	// SubqueryExecModeUnknown is the default value, and is only used to indicate
-	// a subquery that was improperly initialized.
-	SubqueryExecModeUnknown SubqueryExecMode = iota
 	// SubqueryExecModeExists indicates that the subquery is an argument to
 	// EXISTS. Result type is Bool.
-	SubqueryExecModeExists
+	SubqueryExecModeExists SubqueryExecMode = 1 + iota
 	// SubqueryExecModeAllRowsNormalized indicates that the subquery is an
 	// argument to IN, ANY, SOME, or ALL. Any number of rows are
 	// expected. The result type is tuple of rows. As a special case, if
@@ -37,13 +34,3 @@ const (
 	// that column's type. If there are no rows, the result is NULL.
 	SubqueryExecModeOneRow
 )
-
-// SubqueryExecModeNames maps SubqueryExecMode values to human readable
-// strings for EXPLAIN queries.
-var SubqueryExecModeNames = map[SubqueryExecMode]string{
-	SubqueryExecModeUnknown:           "<unknown>",
-	SubqueryExecModeExists:            "exists",
-	SubqueryExecModeAllRowsNormalized: "all rows normalized",
-	SubqueryExecModeAllRows:           "all rows",
-	SubqueryExecModeOneRow:            "one row",
-}

@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -62,22 +61,6 @@ func (n *groupNode) Close(ctx context.Context) {
 	for _, f := range n.funcs {
 		f.close(ctx)
 	}
-}
-
-// aggIsGroupingColumn returns true if the given output aggregation is an
-// any_not_null aggregation for a grouping column. The grouping column
-// index is also returned.
-func (n *groupNode) aggIsGroupingColumn(aggIdx int) (colIdx int, ok bool) {
-	if holder := n.funcs[aggIdx]; holder.funcName == builtins.AnyNotNull {
-		for _, c := range n.groupCols {
-			for _, renderIdx := range holder.argRenderIdxs {
-				if c == renderIdx {
-					return c, true
-				}
-			}
-		}
-	}
-	return -1, false
 }
 
 type aggregateFuncHolder struct {
