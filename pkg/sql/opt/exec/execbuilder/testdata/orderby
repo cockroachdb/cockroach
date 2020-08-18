@@ -297,7 +297,7 @@ sort             ·                ·
       └── scan   ·                ·
 ·                missing stats    ·
 ·                table            abc@ba
-·                spans            /11-/30
+·                spans            [/11 - /29]
 
 # An inequality should not be enough to force the use of the index.
 query TTT
@@ -442,7 +442,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abc@bc
-·     spans          /2-/3
+·     spans          [/2 - /2]
 
 query TTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
@@ -452,7 +452,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 revscan  ·              ·
 ·        missing stats  ·
 ·        table          abc@bc
-·        spans          /2-/3
+·        spans          [/2 - /2]
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query TTTTT
@@ -503,7 +503,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@abc
-·     spans          /1/4-/1/5
+·     spans          [/1/4 - /1/4]
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
@@ -513,7 +513,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@abc
-·     spans          /1/4-/1/5
+·     spans          [/1/4 - /1/4]
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
@@ -523,7 +523,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@abc
-·     spans          /1/4-/1/5
+·     spans          [/1/4 - /1/4]
 
 query TTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
@@ -533,7 +533,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@abc
-·     spans          /1/4-/1/5
+·     spans          [/1/4 - /1/4]
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)

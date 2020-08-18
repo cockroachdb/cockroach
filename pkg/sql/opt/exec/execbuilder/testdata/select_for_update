@@ -124,7 +124,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query TTT
@@ -135,7 +135,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for no key update
 
 query TTT
@@ -146,7 +146,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for share
 
 query TTT
@@ -157,7 +157,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for key share
 
 query TTT
@@ -168,7 +168,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for share
 
 query TTT
@@ -179,7 +179,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for no key update
 
 query TTT
@@ -190,7 +190,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FO
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query TTT
@@ -201,7 +201,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t
 scan  ·                 ·
 ·     missing stats     ·
 ·     table             t@primary
-·     spans             /1-/1/#
+·     spans             [/1 - /1]
 ·     locking strength  for update
 
 query error pgcode 42P01 relation "t2" in FOR UPDATE clause not found in FROM clause
@@ -216,7 +216,7 @@ render     ·                 ·
  └── scan  ·                 ·
 ·          missing stats     ·
 ·          table             t@primary
-·          spans             /1-/1/#
+·          spans             [/1 - /1]
 ·          locking strength  for update
 
 # ------------------------------------------------------------------------------
@@ -1312,7 +1312,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1324,7 +1324,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR NO KEY UPDATE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for no key update
 ·     locking wait policy  nowait
 
@@ -1336,7 +1336,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for share
 ·     locking wait policy  nowait
 
@@ -1348,7 +1348,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for key share
 ·     locking wait policy  nowait
 
@@ -1360,7 +1360,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for share
 ·     locking wait policy  nowait
 
@@ -1372,7 +1372,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE NO
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for no key update
 ·     locking wait policy  nowait
 
@@ -1384,7 +1384,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FO
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1396,7 +1396,7 @@ EXPLAIN SELECT * FROM t WHERE a = 1 FOR UPDATE OF t NOWAIT
 scan  ·                    ·
 ·     missing stats        ·
 ·     table                t@primary
-·     spans                /1-/1/#
+·     spans                [/1 - /1]
 ·     locking strength     for update
 ·     locking wait policy  nowait
 
@@ -1412,6 +1412,6 @@ render     ·                    ·
  └── scan  ·                    ·
 ·          missing stats        ·
 ·          table                t@primary
-·          spans                /1-/1/#
+·          spans                [/1 - /1]
 ·          locking strength     for update
 ·          locking wait policy  nowait

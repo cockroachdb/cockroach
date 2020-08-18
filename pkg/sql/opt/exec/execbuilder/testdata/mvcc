@@ -14,7 +14,7 @@ EXPLAIN SELECT z FROM t WHERE x = 1
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /1/0-/1/1 /1/2/1-/1/2/2
+·     spans          [/1 - /1]
 
 query TTT
 EXPLAIN SELECT crdb_internal_mvcc_timestamp, z FROM t WHERE x = 1
@@ -24,7 +24,7 @@ EXPLAIN SELECT crdb_internal_mvcc_timestamp, z FROM t WHERE x = 1
 scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
-·     spans          /1-/1/#
+·     spans          [/1 - /1]
 
 # Ensure that the presence of mutation columns doesn't affect accessing system
 # columns.
