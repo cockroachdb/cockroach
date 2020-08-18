@@ -233,3 +233,9 @@ func (desc *MutableDatabaseDescriptor) Immutable() Descriptor {
 func (desc *MutableDatabaseDescriptor) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
+
+// AddDrainingName adds a draining name to the DatabaseDescriptor's slice of
+// draining names.
+func (desc *MutableDatabaseDescriptor) AddDrainingName(name descpb.NameInfo) {
+	desc.DrainingNames = append(desc.DrainingNames, name)
+}

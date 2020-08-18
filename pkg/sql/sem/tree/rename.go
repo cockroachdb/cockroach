@@ -33,6 +33,20 @@ func (node *RenameDatabase) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.NewName)
 }
 
+// ReparentDatabase represents a database reparenting as a schema operation.
+type ReparentDatabase struct {
+	Name   Name
+	Parent Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ReparentDatabase) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	node.Name.Format(ctx)
+	ctx.WriteString(" CONVERT TO SCHEMA WITH PARENT ")
+	node.Parent.Format(ctx)
+}
+
 // RenameTable represents a RENAME TABLE or RENAME VIEW or RENAME SEQUENCE
 // statement. Whether the user has asked to rename a view or a sequence
 // is indicated by the IsView and IsSequence fields.

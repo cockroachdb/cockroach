@@ -576,7 +576,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLJOB CONVERSION COPY COVERING CREATE CREATEROLE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLJOB CONVERSION CONVERT COPY COVERING CREATE CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -714,6 +714,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 
 // ALTER DATABASE
 %type <tree.Statement> alter_rename_database_stmt
+%type <tree.Statement> alter_database_to_schema_stmt
 %type <tree.Statement> alter_zone_database_stmt
 %type <tree.Statement> alter_database_owner
 
@@ -1387,6 +1388,7 @@ alter_database_stmt:
   alter_rename_database_stmt
 |  alter_zone_database_stmt
 |  alter_database_owner
+| alter_database_to_schema_stmt
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -6597,6 +6599,12 @@ opt_asc_desc:
     $$.val = tree.DefaultDirection
   }
 
+alter_database_to_schema_stmt:
+  ALTER DATABASE database_name CONVERT TO SCHEMA WITH PARENT database_name
+  {
+    $$.val = &tree.ReparentDatabase{Name: tree.Name($3), Parent: tree.Name($9)}
+  }
+
 alter_rename_database_stmt:
   ALTER DATABASE database_name RENAME TO database_name
   {
@@ -11173,6 +11181,7 @@ unreserved_keyword:
 | CONSTRAINTS
 | CONTROLJOB
 | CONVERSION
+| CONVERT
 | COPY
 | COVERING
 | CREATEROLE
