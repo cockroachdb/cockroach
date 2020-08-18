@@ -4188,6 +4188,7 @@ func initGeoBuiltins() {
 			panic("duplicate builtin: " + k)
 		}
 		v.props.Category = categoryGeospatial
+		v.props.AvailableOnPublicSchema = true
 		builtins[k] = v
 	}
 }

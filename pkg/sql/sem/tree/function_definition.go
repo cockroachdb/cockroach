@@ -73,6 +73,10 @@ type FunctionProperties struct {
 	// Category is used to generate documentation strings.
 	Category string
 
+	// AvailableOnPublicSchema indicates whether the function can be resolved
+	// if it is found on the public schema.
+	AvailableOnPublicSchema bool
+
 	// ReturnLabels can be used to override the return column name of a
 	// function in a FROM clause.
 	// This satisfies a Postgres quirk where some json functions have
