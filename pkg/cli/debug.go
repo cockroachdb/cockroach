@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
 	"math"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -452,6 +454,55 @@ Decode and print a hexadecimal-encoded key-value pair.
 			Key:   k,
 			Value: bs[1],
 		})
+		return nil
+	},
+}
+
+var debugDecodeProtoName string
+var debugDecodeProtoCmd = &cobra.Command{
+	Use:   "decode-proto",
+	Short: "decode-proto <proto> --name=<fully qualified proto name>",
+	Long: `
+Read from stdin and attempt to decode any hex or base64 encoded proto fields and
+output them as JSON. All other fields will be outputted unchanged. Output fields
+will be separated by tabs.
+	
+The default value for --name is 'cockroach.sql.sqlbase.Descriptor'.	For example:
+
+$ decode-proto < cat debug/system.decsriptor.txt
+id	descriptor	hex_descriptor
+1	\022!\012\006system\020\001\032\025\012\011\012\005admin\0200\012\010\012\004root\0200	{"database": {"id": 1, "modificationTime": {}, "name": "system", "privileges": {"users": [{"privileges": 48, "user": "admin"}, {"privileges": 48, "user": "root"}]}}}
+...	
+`,
+	Args: cobra.ArbitraryArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sc := bufio.NewScanner(os.Stdin)
+		for sc.Scan() {
+			for _, field := range strings.Fields(sc.Text()) {
+				bytes, err := gohex.DecodeString(field)
+				if err != nil {
+					b, err2 := base64.StdEncoding.DecodeString(field)
+					if err2 != nil {
+						fmt.Printf("%s\t", field)
+						// Skip since it doesn't appear that this field is an encoded proto.
+						continue
+					}
+					bytes = b
+				}
+				msg, err := protoreflect.DecodeMessage(debugDecodeProtoName, bytes)
+				if err != nil {
+					fmt.Printf("%s\t", field)
+					// Skip since it doesn't appear that this field is an encoded proto.
+					continue
+				}
+				j, err := protoreflect.MessageToJSON(msg)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("%s\t", j.String())
+			}
+			fmt.Println("")
+		}
 		return nil
 	},
 }
@@ -1191,6 +1242,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugBallastCmd,
 	debugDecodeKeyCmd,
 	debugDecodeValueCmd,
+	debugDecodeProtoCmd,
 	debugRocksDBCmd,
 	debugSSTDumpCmd,
 	debugGossipValuesCmd,
@@ -1282,4 +1334,8 @@ func init() {
 		"keep the output log file redactable")
 	f.BoolVar(&debugMergeLogsOpts.redactInput, "redact", debugMergeLogsOpts.redactInput,
 		"redact the input files to remove sensitive information")
+
+	f = debugDecodeProtoCmd.Flags()
+	f.StringVar(&debugDecodeProtoName, "name", "cockroach.sql.sqlbase.Descriptor",
+		"fully qualified name of the proto to decode")
 }
