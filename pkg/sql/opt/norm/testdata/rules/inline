@@ -430,6 +430,72 @@ inner-join (hash)
  └── filters
       └── k:1 = y:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
+# Regression test for #50841
+exec-ddl
+CREATE TABLE kv  (k  INT8 PRIMARY KEY, v  INT8);
+----
+
+exec-ddl
+CREATE TABLE kv2 (k2 INT8 PRIMARY KEY, v2 INT8);
+----
+
+# Ensure that lookup joins are used.
+opt expect-not=InlineJoinConstantsLeft format=hide-all
+SELECT v, v2
+FROM (SELECT unnest('{1}'::INT8[]) AS lookup_k)
+INNER LOOKUP JOIN (SELECT k, v FROM kv) ON k = lookup_k
+INNER LOOKUP JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (lookup kv2)
+      ├── flags: force lookup join (into right side)
+      ├── lookup columns are key
+      ├── inner-join (lookup kv)
+      │    ├── flags: force lookup join (into right side)
+      │    ├── lookup columns are key
+      │    ├── values
+      │    │    └── (1,)
+      │    └── filters (true)
+      └── filters (true)
+
+# Ensure that merge joins are used.
+opt expect-not=InlineJoinConstantsLeft format=hide-all
+SELECT v, v2
+FROM (SELECT unnest('{1}'::INT8[]) AS lookup_k)
+INNER MERGE JOIN (SELECT k, v FROM kv) ON k = lookup_k
+INNER MERGE JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (merge)
+      ├── flags: force merge join
+      ├── inner-join (merge)
+      │    ├── flags: force merge join
+      │    ├── values
+      │    │    └── (1,)
+      │    ├── scan kv
+      │    └── filters (true)
+      ├── scan kv2
+      └── filters (true)
+
+# Ensure that merge joins are used.
+opt expect-not=InlineJoinConstantsRight format=hide-all
+SELECT v, v2
+FROM (SELECT k, v FROM kv)
+INNER MERGE JOIN (SELECT unnest('{1}'::INT8[]) AS lookup_k) ON k = lookup_k
+INNER MERGE JOIN (SELECT k2, v2 FROM kv2) ON k2 = lookup_k;
+----
+project
+ └── inner-join (merge)
+      ├── flags: force merge join
+      ├── inner-join (merge)
+      │    ├── flags: force merge join
+      │    ├── scan kv
+      │    ├── values
+      │    │    └── (1,)
+      │    └── filters (true)
+      ├── scan kv2
+      └── filters (true)
+
 # --------------------------------------------------
 # PushSelectIntoInlinableProject
 # --------------------------------------------------
