@@ -266,24 +266,21 @@ If we decide to support user-adjustable S2 parameters, we could
 support a syntax like the following:
 
 ```
-CREATE INVERTED INDEX [indexname] ON [tablename] ( [geospatial_column] ) WITH COVERING (min_level = 0, max_level = 30, ….)
+CREATE INVERTED INDEX [indexname] ON [tablename] ( [geospatial_column] ) WITH (s2_max_level = 30, ….)
+-- or
+CREATE INDEX [indexname] ON [tablename] USING GIST ( [geospatial_column] ) WITH (s2_max_level = 30, ….)
 ```
 
 For 2D planar geometry there will be an axis-aligned rectangular bound
 that all shapes that want index acceleration should fit in. The bound
-will be specified at index creation time. We could adopt a syntax
-similar to SQL Server, which also requires a rectangular [bounding
-box](https://docs.microsoft.com/en-us/sql/relational-databases/spatial/spatial-indexes-overview?view=sql-server-ver15#the-bounding-box).
-Shapes can exceed this bounding box, but those shapes will not benefit
-from index acceleration. To support this syntax, we will introduce a
-WITH:
+will be specified at index creation time. By default this will use
+the bounds defined by the SRID.
+
+Bounds can be overwritten using WITH:
 
 ``` 
-CREATE INVERTED INDEX [indexname] ON [tablename] ( [geospatial_column] ) WITH BOUNDING BOX (x_min, y_min, x_max, y_max)
+CREATE INVERTED INDEX [indexname] ON [tablename] ( [geospatial_column] ) WITH (geometry_min_x = X, ...)
 ```
-
-The default bounding box for 2D geometry will be decided after
-consultation with users.
 
 #### Disk Serialization
 
@@ -403,7 +400,21 @@ Example changed installation instructions:
 $ wget -qO- https://binaries.cockroachdb.com/cockroach-v20.2.0.linux-amd64.tgz | tar  xvz
 $ cp -i cockroach-v20.2.0.linux-amd64/cockroach /usr/local/bin/
 # Optional step.
-$ cp -i cockroach-v20.2.0.linux-amd64/libgeos_c.so /usr/local/lib/
+$ cp -i cockroach-v20.2.0.linux-amd64/lib/*.so /usr/local/lib/cockroach/
+```
+
+However, GEOS will still be loaded provided it is in the same directory under `lib`
+in which CockroachDB was executed from, e.g.:
+```
+$ wget -qO- https://binaries.cockroachdb.com/cockroach-v20.2.0.linux-amd64.tgz | tar  xvz
+$ cd cockroach-v20.2.0.linux-amd64
+$ ls
+lib
+cockroach
+$ ls lib
+libgeos.so
+libgeos_c.so
+$ ./cockroach # this should have GEOS loaded.
 ```
 
 If a user attempts to use a geospatial function without having the library installed,
@@ -488,8 +499,7 @@ PostGIS has a set of [bounding box
 operators](https://postgis.net/docs/reference.html#idm9874) that are
 not part of the OGC or SQL/MM specs. As mentioned above, our different
 indexing approach prevents these from being index
-accelerated. Therefore we have no plans to support these in the
-initial implementation.
+accelerated. We may decide to support these at a later date.
 
 
 #### Distance Operators
@@ -524,7 +534,7 @@ For 2D geometry and geography, these are:
 * ST_Within (geometry only)
 
 These functions have an equivalent with an `_` prefix
-(e.g.. _ST_Within) that avoids using the indexes. We will similarly
+(e.g. `_ST_Within`) that avoids using the indexes. We will similarly
 have such functions, in which the optimizer will know not to use the
 indexes when doing these operations.
 
@@ -584,6 +594,38 @@ builtins for parsing and encoding them):
   [RFC7946](https://tools.ietf.org/html/rfc7946). These are all
   supported by twpayne/go-geom libraries.
 
+Furthermore, we will aim to be compatible with importing and exporting
+other data external file types using the [`ogr2ogr`](https://gdal.org/programs/ogr2ogr.html)
+tool.
+
+Initially, these imports can be directly ingested as PGDUMPs using the
+`IMPORT PGDUMP` syntax. An example workflow:
+
+```
+$ ogr2ogr -f PGDUMP cockroach-data/import.sql import.gpkg -skipfailures
+$ echo "IMPORT PGDUMP 'nodelocal://0/import.sql" | cockroach sql 
+```
+
+For exports, a user can transform the dataset
+into GeoJSON before using `ogr2ogr` to massage them into a different format.
+An example workflow:
+
+```
+$ echo "SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'name', 'nyc_subway_stations',
+        'features', json_agg(st_asgeojson(nyc_subway_stations.*)::jsonb)
+) FROM nyc_subway_stations;" | cockroach sql --format=raw | head -n 4 | tail -n 1 > ~/subway.json
+$ ogr2ogr -f GPKG ~/subway.gpkg ~/subway.json 
+```
+
+Re-using `ogr2ogr` allows us to support file types such as:
+
+* ESRI Shapefiles
+* PGDUMPs
+* Geodatabase
+* Geopackage
+* [and vector drivers mentioned here](https://gdal.org/drivers/vector/index.html)
 
 ### Spatial Reference Identifiers (SRIDs) and Projections
 
@@ -1674,3 +1716,8 @@ None beyond what is already mentioned in earlier text.
 # Updates
 * 2020-05-07:
   * added ST_ContainsProperly as an indexable function.
+* 2020-08-17:
+  * update install instructions
+  * update bbox notes
+  * update index specification
+  * added notes on ogr2ogr
