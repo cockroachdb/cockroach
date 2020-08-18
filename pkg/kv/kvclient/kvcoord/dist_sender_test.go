@@ -1709,8 +1709,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 			// Check that the cache has the updated descriptor returned by the RPC.
 			for _, ri := range tc {
 				rk := ri.Desc.StartKey
-				entry, err := ds.rangeCache.Lookup(ctx, rk)
-				require.NoError(t, err)
+				entry := ds.rangeCache.GetCached(ctx, rk, false /* inverted */)
 				require.NotNil(t, entry)
 				require.Equal(t, &ri.Desc, entry.Desc())
 				if ri.Lease.Empty() {
