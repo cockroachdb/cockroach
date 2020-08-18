@@ -75,14 +75,9 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	}
 
 	// Reset and allocate new IDs for the new indexes.
-	getID := func() descpb.IndexID {
-		res := n.desc.NextIndexID
-		n.desc.NextIndexID++
-		return res
-	}
-	newPrimaryIndex.ID = getID()
+	newPrimaryIndex.ID = n.desc.GetNextIndexID()
 	for i := range newIndexes {
-		newIndexes[i].ID = getID()
+		newIndexes[i].ID = n.desc.GetNextIndexID()
 	}
 
 	// Queue the refresh mutation.
