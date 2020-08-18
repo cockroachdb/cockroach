@@ -62,9 +62,9 @@ CR_GEOS_Slice CR_GEOS_Init(CR_GEOS_Slice geoscLoc, CR_GEOS_Slice geosLoc, CR_GEO
 // convertible to a NUL character terminated C string.
 CR_GEOS_Status CR_GEOS_WKTToEWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, int srid, CR_GEOS_String* ewkb);
 
-// CR_GEOS_ClipEWKBByRect clips a given EWKB by the given rectangle.
-CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin, double ymin,
-                                      double xmax, double ymax, CR_GEOS_String* clippedEWKB);
+// CR_GEOS_ClipByRect clips a given EWKB by the given rectangle.
+CR_GEOS_Status CR_GEOS_ClipByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin, double ymin,
+                                  double xmax, double ymax, CR_GEOS_String* clippedEWKB);
 // CR_GEOS_Buffer buffers a given EWKB by the given distance and params.
 CR_GEOS_Status CR_GEOS_Buffer(CR_GEOS* lib, CR_GEOS_Slice ewkb, CR_GEOS_BufferParamsInput params,
                               double distance, CR_GEOS_String* ret);
