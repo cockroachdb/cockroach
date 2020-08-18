@@ -368,7 +368,7 @@ root                                  ·                   ·
  │              │                     equality            (p) = (p)
  │              │                     left cols are key   ·
  │              │                     right cols are key  ·
- │              ├── union             ·                   ·
+ │              ├── except            ·                   ·
  │              │    ├── scan buffer  ·                   ·
  │              │    │                label               buffer 1
  │              │    └── scan buffer  ·                   ·
@@ -386,7 +386,7 @@ root                                  ·                   ·
                 │                     equality            (p) = (p)
                 │                     left cols are key   ·
                 │                     right cols are key  ·
-                ├── union             ·                   ·
+                ├── except            ·                   ·
                 │    ├── scan buffer  ·                   ·
                 │    │                label               buffer 1
                 │    └── scan buffer  ·                   ·
@@ -420,7 +420,7 @@ root                                  ·              ·
  │         └── lookup join (semi)     ·              ·
  │              │                     table          child@child_p_idx
  │              │                     equality       (p) = (p)
- │              └── union             ·              ·
+ │              └── except            ·              ·
  │                   ├── scan buffer  ·              ·
  │                   │                label          buffer 1
  │                   └── scan buffer  ·              ·
@@ -430,7 +430,7 @@ root                                  ·              ·
            └── lookup join (semi)     ·              ·
                 │                     table          child_nullable@child_nullable_p_idx
                 │                     equality       (p) = (p)
-                └── union             ·              ·
+                └── except            ·              ·
                      ├── scan buffer  ·              ·
                      │                label          buffer 1
                      └── scan buffer  ·              ·
@@ -461,7 +461,7 @@ root                                  ·                   ·
                 │                     equality            (c) = (c)
                 │                     left cols are key   ·
                 │                     right cols are key  ·
-                ├── union             ·                   ·
+                ├── except            ·                   ·
                 │    ├── scan buffer  ·                   ·
                 │    │                label               buffer 1
                 │    └── scan buffer  ·                   ·
@@ -562,7 +562,7 @@ root                                  ·                   ·
                 │                     equality            (c) = (c)
                 │                     left cols are key   ·
                 │                     right cols are key  ·
-                ├── union             ·                   ·
+                ├── except            ·                   ·
                 │    ├── scan buffer  ·                   ·
                 │    │                label               buffer 1
                 │    └── scan buffer  ·                   ·
@@ -659,7 +659,7 @@ root                                  ·                   ·
                 │                     equality            (x) = (y)
                 │                     left cols are key   ·
                 │                     right cols are key  ·
-                ├── union             ·                   ·
+                ├── except            ·                   ·
                 │    ├── scan buffer  ·                   ·
                 │    │                label               buffer 1
                 │    └── scan buffer  ·                   ·
