@@ -1156,6 +1156,24 @@ CREATE TYPE greeting AS ENUM ('hello', 'hi');
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test DELIMITED imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "DELIMITED",
+			contents:    "hello\thello\nhi\thi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
+		// Test PGCOPY imports.
+		{
+			create:      "a greeting, b greeting",
+			intoCols:    "a, b",
+			typ:         "PGCOPY",
+			contents:    "hello\thello\nhi\thi\n",
+			verifyQuery: "SELECT * FROM t ORDER BY a",
+			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
+		},
 	}
 
 	// Set up a directory for the data files.
