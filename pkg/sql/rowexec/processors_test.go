@@ -852,6 +852,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
 		vectorizeOpt := "off"
 		if vectorize {
+			skip.WithIssue(t, 52948)
 			vectorizeOpt = "on"
 		}
 		for _, testCase := range testCases {
