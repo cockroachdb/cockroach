@@ -375,9 +375,6 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 		expectedRun{scheduleIDs[4], nil},
 	)
 	stopper.Stop(ctx)
-
-	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
-	require.EqualValues(t, numJobs, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
@@ -422,9 +419,6 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 		return nil
 	})
 	stopper.Stop(ctx)
-
-	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
-	require.EqualValues(t, jobsPerIteration, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
