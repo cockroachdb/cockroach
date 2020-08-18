@@ -90,17 +90,6 @@ CREATE TABLE public.geog_table_negative_values (
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
 SELECT 'SRID=3857;POINT(1.0 2.0)'::geography
 
-query BTT
-SELECT
-  PostGIS_HasBBox(geom),
-  PostGIS_AddBBox(geom),
-  PostGIS_DropBBox(geom)
-FROM geo_table
-ORDER BY id ASC
-----
-false  010100000000000000000000400000000000000040  010100000000000000000000400000000000000040
-false  0101000000000000000000F03F000000000000F03F  0101000000000000000000F03F000000000000F03F
-
 query ITTT rowsort
 SELECT * FROM geo_table
 ----
@@ -880,6 +869,30 @@ Point middle of Right Square              0
 Square (left)                             1
 Square (right)                            1
 Square overlapping left and right square  1.1
+
+# *BBox operators
+query TBTTT
+SELECT
+  dsc,
+  PostGIS_HasBBox(geom),
+  ST_AsEWKT(PostGIS_AddBBox(geom)),
+  PostGIS_GetBBox(geom),
+  ST_AsEWKT(PostGIS_DropBBox(geom))
+FROM geom_operators_test
+ORDER BY dsc ASC
+----
+Empty GeometryCollection                  false  GEOMETRYCOLLECTION EMPTY                               NULL                    GEOMETRYCOLLECTION EMPTY
+Empty LineString                          false  LINESTRING EMPTY                                       NULL                    LINESTRING EMPTY
+Empty Point                               false  POINT EMPTY                                            NULL                    POINT EMPTY
+Faraway point                             false  POINT (5 5)                                            BOX(5 5,5 5)            POINT (5 5)
+Line going through left and right square  true   LINESTRING (-0.5 0.5, 0.5 0.5)                         BOX(-0.5 0.5,0.5 0.5)   LINESTRING (-0.5 0.5, 0.5 0.5)
+NULL                                      NULL   NULL                                                   NULL                    NULL
+Nested Geometry Collection                true   GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  BOX(0 0,0 0)            GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+Point middle of Left Square               false  POINT (-0.5 0.5)                                       BOX(-0.5 0.5,-0.5 0.5)  POINT (-0.5 0.5)
+Point middle of Right Square              false  POINT (0.5 0.5)                                        BOX(0.5 0.5,0.5 0.5)    POINT (0.5 0.5)
+Square (left)                             true   POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 BOX(-1 0,0 1)           POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))
+Square (right)                            true   POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    BOX(0 0,1 1)            POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
+Square overlapping left and right square  true   POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           BOX(-0.1 0,1 1)         POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
 # Validity checking.
 query TBBBTTTT

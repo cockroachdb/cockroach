@@ -113,6 +113,8 @@ var validCasts = []castInfo{
 	{from: types.UnknownFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
 	{from: types.CollatedStringFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
+	{from: types.GeometryFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
+	{from: types.Box2DFamily, to: types.Box2DFamily, volatility: VolatilityImmutable},
 
 	// Casts to GeographyFamily.
 	{from: types.UnknownFamily, to: types.GeographyFamily, volatility: VolatilityImmutable},
@@ -125,6 +127,7 @@ var validCasts = []castInfo{
 
 	// Casts to GeometryFamily.
 	{from: types.UnknownFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
+	{from: types.Box2DFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.BytesFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.JsonFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
 	{from: types.StringFamily, to: types.GeometryFamily, volatility: VolatilityImmutable},
@@ -709,6 +712,13 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDBox2D(string(*d))
 		case *DCollatedString:
 			return ParseDBox2D(d.Contents)
+		case *DBox2D:
+			return d, nil
+		case *DGeometry:
+			if d.Geometry.Empty() {
+				return DNull, nil
+			}
+			return NewDBox2D(d.CartesianBoundingBox()), nil
 		}
 
 	case types.GeographyFamily:
@@ -790,6 +800,12 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return nil, err
 			}
 			g, err := geo.ParseGeometryFromGeoJSON([]byte(*t))
+			if err != nil {
+				return nil, err
+			}
+			return &DGeometry{g}, nil
+		case *DBox2D:
+			g, err := geo.NewGeometryFromGeomT(d.ToGeomT())
 			if err != nil {
 				return nil, err
 			}

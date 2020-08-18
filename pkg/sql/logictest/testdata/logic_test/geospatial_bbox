@@ -18,6 +18,32 @@ SELECT * FROM box2d_encoding_test ORDER BY id ASC
 1  BOX(1 2,3 4)              BOX(3 4,5 6)      {"BOX(-1 -2,-3 -4)"}
 2  BOX(10.1 20.1,30.5 40.6)  BOX(30 40,50 60)  {"BOX(-1 -2,-3 -4)","BOX(3 -4,5 -6)"}
 
+subtest st_makebox2d
+
+statement error first argument is not a POINT
+SELECT ST_MakeBox2D('LINESTRING(0 0, 1 1)', 'POINT(1 0)')
+
+statement error second argument is not a POINT
+SELECT ST_MakeBox2D('POINT(1 0)', 'LINESTRING(0 0, 1 1)')
+
+statement error cannot use POINT EMPTY
+SELECT ST_MakeBox2D('POINT(1 0)', 'POINT EMPTY')
+
+statement error cannot use POINT EMPTY
+SELECT ST_MakeBox2D('POINT EMPTY', 'POINT (1 0)')
+
+statement error operation on mixed SRIDs forbidden
+SELECT ST_MakeBox2D('SRID=4326;POINT(1 0)', 'SRID=3857;POINT(1 0)')
+
+query T
+SELECT ST_MakeBox2D(a::geometry, b::geometry) FROM ( VALUES
+  ('POINT (1 0)', 'POINT(5 6)'),
+  ('POINT (1 0)', 'POINT(1 0)')
+) tbl(a, b)
+----
+BOX(1 0,5 6)
+BOX(1 0,1 0)
+
 subtest comparison_ops
 
 statement ok
@@ -135,3 +161,37 @@ NULL
 BOX(-1 -1,1 1)
 BOX(4 -5,4 -5)
 BOX(-1 -5,4 1)
+
+subtest cast_test
+
+query T
+SELECT
+  ST_AsEWKT(b::box2d::geometry)
+FROM ( VALUES
+  (NULL),
+  ('box(-1 -1,-1 -1)'),
+  ('box(1 3,20 3)'),
+  ('box(5.5 -10, 5.5 60)'),
+  ('box(-1 -2, 4 6)')
+) tbl(b)
+----
+NULL
+POINT (-1 -1)
+LINESTRING (1 3, 20 3)
+LINESTRING (5.5 -10, 5.5 60)
+POLYGON ((-1 -2, -1 6, 4 6, 4 -2, -1 -2))
+
+query T
+SELECT
+  g::geometry::box2d
+FROM ( VALUES
+  ('point empty'),
+  (null),
+  ('point(5 5)'),
+  ('linestring(4 5, 9 10)')
+) tbl(g)
+----
+NULL
+NULL
+BOX(5 5,5 5)
+BOX(4 5,9 10)
