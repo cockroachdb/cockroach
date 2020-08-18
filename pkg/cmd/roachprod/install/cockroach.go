@@ -31,6 +31,7 @@ import (
 var StartOpts struct {
 	Encrypt    bool
 	Sequential bool
+	SkipInit   bool
 }
 
 // Cockroach TODO(peter): document
@@ -119,7 +120,7 @@ func argExists(args []string, target string) int {
 // `start-single-node` (this was written to provide a short hand to start a
 // single node cluster with a replication factor of one).
 func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
-	h := &crdbStartHelper{c: c, r: r}
+	h := &crdbInstallHelper{c: c, r: r}
 	h.distributeCerts()
 
 	nodes := c.ServerNodes()
@@ -150,11 +151,17 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		// NB: The code blocks below are not parallelized, so it's safe for us
 		// to use fmt.Printf style logging.
 
-		// 1. We don't init when invoking with `start-single-node`.
-		// 2. For nodes running <20.1, the --join flags are constructed in a manner
-		//    such that the first node doesn't have any (see `generateStartArgs`),
-		//    which prompts CRDB to auto-initialize. For nodes running >=20.1, we
-		//    need to explicitly initialize.
+		// 1. We don't init invoked using `--skip-init`.
+		// 2. We don't init when invoking with `start-single-node`.
+		// 3. For nodes running <20.1, the --join flags are constructed in a
+		//    manner such that the first node doesn't have any (see
+		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
+		//    nodes running >=20.1, we need to explicitly initialize.
+
+		if StartOpts.SkipInit {
+			return nil, nil
+		}
+
 		shouldInit := !h.useStartSingleNode(vers) && vers.AtLeast(version.MustParse("v20.1.0"))
 		if shouldInit {
 			fmt.Printf("%s: initializing cluster\n", h.c.Name)
@@ -187,6 +194,9 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 				fmt.Println(cmdOut)
 			}
 		}
+
+		// We're sure to set cluster settings after having initialized the
+		// cluster.
 
 		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
 		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
@@ -316,12 +326,12 @@ func (r Cockroach) SQL(c *SyncedCluster, args []string) error {
 	return nil
 }
 
-type crdbStartHelper struct {
+type crdbInstallHelper struct {
 	c *SyncedCluster
 	r Cockroach
 }
 
-func (h *crdbStartHelper) startNode(
+func (h *crdbInstallHelper) startNode(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
 	startCmd, err := h.generateStartCmd(nodeIdx, extraArgs, vers)
@@ -343,7 +353,7 @@ func (h *crdbStartHelper) startNode(
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (h *crdbStartHelper) generateStartCmd(
+func (h *crdbInstallHelper) generateStartCmd(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) (string, error) {
 	args, err := h.generateStartArgs(nodeIdx, extraArgs, vers)
@@ -390,7 +400,7 @@ func (h *crdbStartHelper) generateStartCmd(
 	return cmd, nil
 }
 
-func (h *crdbStartHelper) generateStartArgs(
+func (h *crdbInstallHelper) generateStartArgs(
 	nodeIdx int, extraArgs []string, vers *version.Version,
 ) ([]string, error) {
 	var args []string
@@ -491,7 +501,7 @@ func (h *crdbStartHelper) generateStartArgs(
 	return args, nil
 }
 
-func (h *crdbStartHelper) initializeCluster(nodeIdx int) (string, error) {
+func (h *crdbInstallHelper) initializeCluster(nodeIdx int) (string, error) {
 	nodes := h.c.ServerNodes()
 	initCmd := h.generateInitCmd(nodeIdx)
 
@@ -508,7 +518,7 @@ func (h *crdbStartHelper) initializeCluster(nodeIdx int) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (h *crdbStartHelper) setClusterSettings(nodeIdx int) (string, error) {
+func (h *crdbInstallHelper) setClusterSettings(nodeIdx int) (string, error) {
 	nodes := h.c.ServerNodes()
 	clusterSettingCmd := h.generateClusterSettingCmd(nodeIdx)
 
@@ -525,7 +535,7 @@ func (h *crdbStartHelper) setClusterSettings(nodeIdx int) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (h *crdbStartHelper) generateClusterSettingCmd(nodeIdx int) string {
+func (h *crdbInstallHelper) generateClusterSettingCmd(nodeIdx int) string {
 	nodes := h.c.ServerNodes()
 	license := envutil.EnvOrDefaultString("COCKROACH_DEV_LICENSE", "")
 	if license == "" {
@@ -553,7 +563,7 @@ func (h *crdbStartHelper) generateClusterSettingCmd(nodeIdx int) string {
 	return clusterSettingCmd
 }
 
-func (h *crdbStartHelper) generateInitCmd(nodeIdx int) string {
+func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 	nodes := h.c.ServerNodes()
 
 	var initCmd string
@@ -572,7 +582,7 @@ func (h *crdbStartHelper) generateInitCmd(nodeIdx int) string {
 	return initCmd
 }
 
-func (h *crdbStartHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
+func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string {
 	if !StartOpts.Encrypt {
 		return ""
 	}
@@ -594,13 +604,13 @@ func (h *crdbStartHelper) generateKeyCmd(nodeIdx int, extraArgs []string) string
 	return keyCmd
 }
 
-func (h *crdbStartHelper) useStartSingleNode(vers *version.Version) bool {
+func (h *crdbInstallHelper) useStartSingleNode(vers *version.Version) bool {
 	return len(h.c.VMs) == 1 && vers.AtLeast(version.MustParse("v19.2.0"))
 }
 
 // distributeCerts, like the name suggests, distributes certs if it's a secure
 // cluster and we're starting n1.
-func (h *crdbStartHelper) distributeCerts() {
+func (h *crdbInstallHelper) distributeCerts() {
 	for _, node := range h.c.ServerNodes() {
 		if node == 1 && h.c.Secure {
 			h.c.DistributeCerts()
@@ -609,7 +619,7 @@ func (h *crdbStartHelper) distributeCerts() {
 	}
 }
 
-func (h *crdbStartHelper) shouldAdvertisePublicIP() bool {
+func (h *crdbInstallHelper) shouldAdvertisePublicIP() bool {
 	// If we're creating nodes that span VPC (e.g. AWS multi-region or
 	// multi-cloud), we'll tell the nodes to advertise their public IPs
 	// so that attaching nodes to the cluster Just Works.
@@ -621,7 +631,7 @@ func (h *crdbStartHelper) shouldAdvertisePublicIP() bool {
 	return false
 }
 
-func (h *crdbStartHelper) getEnvVars() string {
+func (h *crdbInstallHelper) getEnvVars() string {
 	var buf strings.Builder
 	for _, v := range os.Environ() {
 		if strings.HasPrefix(v, "COCKROACH_") {
@@ -640,7 +650,7 @@ func (h *crdbStartHelper) getEnvVars() string {
 	return buf.String()
 }
 
-func (h *crdbStartHelper) run(nodeIdx int, cmd string) (string, error) {
+func (h *crdbInstallHelper) run(nodeIdx int, cmd string) (string, error) {
 	nodes := h.c.ServerNodes()
 
 	sess, err := h.c.newSession(nodes[nodeIdx])
