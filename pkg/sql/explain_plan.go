@@ -30,10 +30,6 @@ const (
 	// explainSubqueryFmtFlags is the format for subqueries within `EXPLAIN SQL` statements.
 	// Since these are individually run, we don't need to scrub any data from subqueries.
 	explainSubqueryFmtFlags = tree.FmtSimple
-
-	// sampledLogicalPlanFmtFlags is the format for sampled logical plans. Because these exposed
-	// in the Admin UI, sampled plans should be scrubbed of sensitive information.
-	sampledLogicalPlanFmtFlags = tree.FmtHideConstants
 )
 
 // explainPlanNode wraps the logic for EXPLAIN as a planNode.
