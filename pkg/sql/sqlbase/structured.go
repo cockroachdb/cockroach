@@ -3069,21 +3069,20 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m descpb.DescriptorMuta
 					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case descpb.ConstraintToUpdate_FOREIGN_KEY:
-				switch t.Constraint.ForeignKey.Validity {
-				case descpb.ConstraintValidity_Validating:
-					// Constraint already added, just mark it as Validated
-					for i := range desc.OutboundFKs {
-						fk := &desc.OutboundFKs[i]
-						if fk.Name == t.Constraint.Name {
-							fk.Validity = descpb.ConstraintValidity_Validated
-							break
-						}
+				var found bool
+				for i := range desc.OutboundFKs {
+					fk := &desc.OutboundFKs[i]
+					if fk.Name == t.Constraint.Name {
+						found = true
+						fk.Validity = descpb.ConstraintValidity_Validated
+						break
 					}
-				case descpb.ConstraintValidity_Unvalidated:
+				}
+				if !found {
+					t.Constraint.ForeignKey.Validity = descpb.ConstraintValidity_Validated
 					// Takes care of adding the Foreign Key to the table index. Adding the
 					// backreference to the referenced table index must be taken care of
 					// in another call.
-					// TODO (tyler): Combine both of these tasks in the same place.
 					desc.OutboundFKs = append(desc.OutboundFKs, t.Constraint.ForeignKey)
 				}
 			case descpb.ConstraintToUpdate_NOT_NULL:
