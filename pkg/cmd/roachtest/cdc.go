@@ -65,9 +65,6 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING changefeed.push.enabled = true`); err != nil {
-		t.Fatal(err)
-	}
 	kafka := kafkaManager{
 		c:     c,
 		nodes: kafkaNode,
@@ -486,12 +483,9 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *testRegistry) {
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("cdc/tpcc-1000"),
-		Owner: OwnerCDC,
-		// RangeFeed is not production ready in 2.1; we could run the tests with the
-		// old poller, but it's not worth it.
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    fmt.Sprintf("cdc/tpcc-1000"),
+		Owner:   OwnerCDC,
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -503,10 +497,9 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("cdc/initial-scan"),
-		Owner:      OwnerCDC,
-		MinVersion: "v2.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    fmt.Sprintf("cdc/initial-scan"),
+		Owner:   OwnerCDC,
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -519,13 +512,9 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:  "cdc/poller/rangefeed=false",
-		Owner: OwnerCDC,
-		// When testing a 2.1 binary, we use the poller for all the other tests
-		// and this is close enough to cdc/tpcc-1000 test to be redundant, so
-		// skip it.
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    "cdc/poller/rangefeed=false",
+		Owner:   OwnerCDC,
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -537,11 +526,9 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("cdc/sink-chaos"),
-		Owner: `cdc`,
-		// TODO(dan): Re-enable this test on 2.1 if we decide to backport #36852.
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    fmt.Sprintf("cdc/sink-chaos"),
+		Owner:   `cdc`,
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -554,12 +541,10 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("cdc/crdb-chaos"),
-		Owner: `cdc`,
-		Skip:  "#37716",
-		// TODO(dan): Re-enable this test on 2.1 if we decide to backport #36852.
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    fmt.Sprintf("cdc/crdb-chaos"),
+		Owner:   `cdc`,
+		Skip:    "#37716",
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -576,9 +561,8 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("cdc/ledger"),
-		Owner:      `cdc`,
-		MinVersion: "v2.1.0",
+		Name:  fmt.Sprintf("cdc/ledger"),
+		Owner: `cdc`,
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
@@ -595,10 +579,9 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:      `cdc`,
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Name:    "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:   `cdc`,
+		Cluster: makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType: tpccWorkloadType,
@@ -617,19 +600,17 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/bank",
-		Owner:      `cdc`,
-		MinVersion: "v2.1.0",
-		Cluster:    makeClusterSpec(4),
+		Name:    "cdc/bank",
+		Owner:   `cdc`,
+		Cluster: makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/schemareg",
-		Owner:      `cdc`,
-		MinVersion: "v19.1.0",
-		Cluster:    makeClusterSpec(1),
+		Name:    "cdc/schemareg",
+		Owner:   `cdc`,
+		Cluster: makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
