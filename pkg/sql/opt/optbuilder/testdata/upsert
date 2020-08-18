@@ -2089,3 +2089,91 @@ build
 INSERT INTO partial_indexes (a, b, c) VALUES (1, 1, 'foo') ON CONFLICT (a) DO UPDATE SET b = b + 1
 ----
 error (42702): column reference "b" is ambiguous (candidates: excluded.b, partial_indexes.b)
+
+# ------------------------------------------------------------------------------
+# Test unique partial indexes.
+# ------------------------------------------------------------------------------
+
+exec-ddl
+CREATE TABLE unique_partial_indexes (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    UNIQUE INDEX (b) WHERE c = 'foo'
+)
+----
+
+build
+INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT DO NOTHING
+----
+insert unique_partial_indexes
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column3:7 => c:3
+ ├── partial index put columns: column17:17
+ └── project
+      ├── columns: column17:17!null column1:5!null column2:6!null column3:7!null
+      ├── project
+      │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    └── upsert-distinct-on
+      │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:16
+      │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:16
+      │         ├── project
+      │         │    ├── columns: upsert_partial_index_distinct1:16 column1:5!null column2:6!null column3:7!null
+      │         │    ├── project
+      │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │    └── select
+      │         │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14
+      │         │    │         ├── left-join (hash)
+      │         │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:12 b:13 c:14
+      │         │    │         │    ├── upsert-distinct-on
+      │         │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    ├── grouping columns: column1:5!null
+      │         │    │         │    │    ├── project
+      │         │    │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    │    └── select
+      │         │    │         │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10
+      │         │    │         │    │    │         ├── left-join (hash)
+      │         │    │         │    │    │         │    ├── columns: column1:5!null column2:6!null column3:7!null a:8 b:9 c:10
+      │         │    │         │    │    │         │    ├── values
+      │         │    │         │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │         │    │         │    │    │         │    │    └── (1, 1, 'bar')
+      │         │    │         │    │    │         │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │         │    │    ├── columns: a:8!null b:9 c:10
+      │         │    │         │    │    │         │    │    └── partial index predicates
+      │         │    │         │    │    │         │    │         └── secondary: filters
+      │         │    │         │    │    │         │    │              └── c:10 = 'foo'
+      │         │    │         │    │    │         │    └── filters
+      │         │    │         │    │    │         │         └── column1:5 = a:8
+      │         │    │         │    │    │         └── filters
+      │         │    │         │    │    │              └── a:8 IS NULL
+      │         │    │         │    │    └── aggregations
+      │         │    │         │    │         ├── first-agg [as=column2:6]
+      │         │    │         │    │         │    └── column2:6
+      │         │    │         │    │         └── first-agg [as=column3:7]
+      │         │    │         │    │              └── column3:7
+      │         │    │         │    ├── select
+      │         │    │         │    │    ├── columns: a:12!null b:13 c:14!null
+      │         │    │         │    │    ├── scan unique_partial_indexes
+      │         │    │         │    │    │    ├── columns: a:12!null b:13 c:14
+      │         │    │         │    │    │    └── partial index predicates
+      │         │    │         │    │    │         └── secondary: filters
+      │         │    │         │    │    │              └── c:14 = 'foo'
+      │         │    │         │    │    └── filters
+      │         │    │         │    │         └── c:14 = 'foo'
+      │         │    │         │    └── filters
+      │         │    │         │         ├── column2:6 = b:13
+      │         │    │         │         └── column3:7 = 'foo'
+      │         │    │         └── filters
+      │         │    │              └── a:12 IS NULL
+      │         │    └── projections
+      │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:16]
+      │         └── aggregations
+      │              ├── first-agg [as=column1:5]
+      │              │    └── column1:5
+      │              └── first-agg [as=column3:7]
+      │                   └── column3:7
+      └── projections
+           └── column3:7 = 'foo' [as=column17:17]

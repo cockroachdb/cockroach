@@ -639,6 +639,198 @@ SELECT * FROM l@a_b_gt_5 WHERE b > 5
 ----
 7  7
 
+# Test unique partial indexes.
+subtest unique
+
+statement ok
+CREATE TABLE u (
+    a INT,
+    b INT,
+    UNIQUE INDEX i (a) WHERE b > 0
+)
+
+# Inserting multiple rows that conflicts fails.
+statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i\"
+INSERT INTO u VALUES (1, 1), (1, 2)
+
+# Inserting multiple rows that don't conflict succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1), (2, 2), (1, -1)
+
+# Inserting a row that conflicts with an existing row fails.
+statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i\"
+INSERT INTO u VALUES (1, 3)
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+
+# Deleting and re-inserting a conflicting row is successful.
+statement ok
+DELETE FROM u WHERE a = 2;
+INSERT INTO u VALUES (2, 2);
+
+# Updating a row in the unique partial index to conflict with another row fails.
+statement error pgcode 23505 duplicate key value \(a\)=\(2\) violates unique constraint \"i\"
+UPDATE u SET a = 2 WHERE b = 1
+
+# Updating a row not in the unique partial index to conflict with a row in the
+# index fails.
+statement error pgcode 23505 duplicate key value \(a\)=\(2\) violates unique constraint \"i\"
+UPDATE u SET a = 2, b = 1 WHERE b = -1
+
+# Updating a row not in the unique index to remain out of the unique index
+# succeeds.
+statement ok
+UPDATE u SET a = 2, b = -2 WHERE b = -1
+
+# Updating a row in the unique index to a non-conflicting value in the unqiue
+# index succeeds.
+statement ok
+UPDATE u SET a = 3, b = 3  WHERE b = 2
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+3  3
+2  -2
+
+statement ok
+DELETE FROM u
+
+# Tests for ON CONFLICT DO NOTHING.
+
+# Inserting a row not contained in the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -1) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  -1
+
+# Inserting a non-conflicting row succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+
+# Inserting rows that aren't contained by the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -10), (1, -100) ON CONFLICT DO NOTHING;
+INSERT INTO u VALUES (1, -1000) ON CONFLICT DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+1  -10
+1  -100
+1  -1000
+
+statement ok
+DELETE FROM u WHERE b IN (-10, -100, -1000)
+
+# Inserting multiple rows that conflict with each other inserts some of the
+# rows.
+statement ok
+INSERT INTO u VALUES (2, 2), (2, 20), (2, -2) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+2  -2
+
+# Inserting a row that conflicts with an existing row is a no-op.
+statement ok
+INSERT INTO u VALUES (1, 10) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+1  -1
+2  -2
+
+# Inserting one conflicting and one non-conflicting row inserts the
+# non-conflicting row.
+statement ok
+INSERT INTO u VALUES (2, 20), (3, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b) WHERE a > 0
+
+# Inserting a row that conflicts with a row via a second unique index is a
+# no-op.
+statement ok
+INSERT INTO u VALUES (4, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+# Inserting a row that conflicts with rows via two unique indexes is a no-op.
+statement ok
+INSERT INTO u VALUES (1, 3) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+2  2
+3  3
+1  -1
+2  -2
+
+# Inserting rows that conflict with neither unique index succeeds.
+statement ok
+INSERT INTO u VALUES (4, 4), (1, -10), (-10, 2) ON CONFLICT DO NOTHING
+
+query II rowsort
+SELECT * FROM u
+----
+1    1
+2    2
+3    3
+4    4
+1    -1
+1    -10
+2    -2
+-10  2
+
+statement ok
+DROP INDEX i2
+
+statement ok
+DELETE from u
+
 # Test partial indexes with an ENUM in the predicate.
 subtest enum
 
