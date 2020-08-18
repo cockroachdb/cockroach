@@ -184,21 +184,18 @@ SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 sort                                              ·                  ·
  │                                                order              +nspname,+relname
  └── render                                       ·                  ·
-      └── hash join                               ·                  ·
-           │                                      type               right outer
+      └── hash join (right outer)                 ·                  ·
            │                                      equality           (table_id) = (column44)
            ├── virtual table                      ·                  ·
            │                                      table              table_row_statistics@primary
            └── render                             ·                  ·
                 └── hash join                     ·                  ·
-                     │                            type               inner
                      │                            equality           (oid) = (relnamespace)
                      ├── filter                   ·                  ·
                      │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                      │    └── virtual table       ·                  ·
                      │                            table              pg_namespace@primary
-                     └── hash join                ·                  ·
-                          │                       type               left outer
+                     └── hash join (left outer)   ·                  ·
                           │                       equality           (oid) = (objoid)
                           │                       left cols are key  ·
                           ├── filter              ·                  ·
@@ -219,21 +216,18 @@ SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 sort                                              ·                  ·
  │                                                order              +nspname,+relname
  └── render                                       ·                  ·
-      └── hash join                               ·                  ·
-           │                                      type               right outer
+      └── hash join (right outer)                 ·                  ·
            │                                      equality           (table_id) = (column44)
            ├── virtual table                      ·                  ·
            │                                      table              table_row_statistics@primary
            └── render                             ·                  ·
                 └── hash join                     ·                  ·
-                     │                            type               inner
                      │                            equality           (oid) = (relnamespace)
                      ├── filter                   ·                  ·
                      │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                      │    └── virtual table       ·                  ·
                      │                            table              pg_namespace@primary
-                     └── hash join                ·                  ·
-                          │                       type               left outer
+                     └── hash join (left outer)   ·                  ·
                           │                       equality           (oid) = (objoid)
                           │                       left cols are key  ·
                           ├── filter              ·                  ·
@@ -316,8 +310,7 @@ render                                  ·             ·
       │                                 ordered       +ordinal_position
       └── sort                          ·             ·
            │                            order         +ordinal_position
-           └── hash join                ·             ·
-                │                       type          left outer
+           └── hash join (left outer)   ·             ·
                 │                       equality      (column_name) = (column_name)
                 ├── filter              ·             ·
                 │    │                  filter        ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
@@ -360,7 +353,6 @@ sort                                      ·                      ·
  │                                        order                  +conname
  └── render                               ·                      ·
       └── hash join                       ·                      ·
-           │                              type                   inner
            │                              equality               (oid) = (relnamespace)
            ├── filter                     ·                      ·
            │    │                         filter                 nspname = 'public'
@@ -368,7 +360,6 @@ sort                                      ·                      ·
            │                              table                  pg_namespace@primary
            └── virtual table lookup join  ·                      ·
                 │                         table                  pg_constraint@pg_constraint_conrelid_idx
-                │                         type                   inner
                 │                         equality               (oid) = (conrelid)
                 │                         equality cols are key  ·
                 └── filter                ·                      ·
@@ -379,39 +370,37 @@ sort                                      ·                      ·
 query TTT
 EXPLAIN SHOW USERS
 ----
-·                                                   distribution       local
-·                                                   vectorized         true
-sort                                                ·                  ·
- │                                                  order              +username
- └── render                                         ·                  ·
-      └── group                                     ·                  ·
-           │                                        group by           username
-           └── sort                                 ·                  ·
-                │                                   order              +role
-                └── hash join                       ·                  ·
-                     │                              type               left outer
-                     │                              equality           (username) = (member)
-                     │                              left cols are key  ·
-                     ├── group                      ·                  ·
-                     │    │                         group by           username
-                     │    └── window                ·                  ·
-                     │         └── render           ·                  ·
-                     │              └── merge join  ·                  ·
-                     │                   │          type               left outer
-                     │                   │          equality           (username) = (username)
-                     │                   │          left cols are key  ·
-                     │                   ├── scan   ·                  ·
-                     │                   │          missing stats      ·
-                     │                   │          table              users@primary
-                     │                   │          spans              FULL SCAN
-                     │                   └── scan   ·                  ·
-                     │                              missing stats      ·
-                     │                              table              role_options@primary
-                     │                              spans              FULL SCAN
-                     └── scan                       ·                  ·
-·                                                   missing stats      ·
-·                                                   table              role_members@role_members_role_idx
-·                                                   spans              FULL SCAN
+·                                                                distribution       local
+·                                                                vectorized         true
+sort                                                             ·                  ·
+ │                                                               order              +username
+ └── render                                                      ·                  ·
+      └── group                                                  ·                  ·
+           │                                                     group by           username
+           └── sort                                              ·                  ·
+                │                                                order              +role
+                └── hash join (left outer)                       ·                  ·
+                     │                                           equality           (username) = (member)
+                     │                                           left cols are key  ·
+                     ├── group                                   ·                  ·
+                     │    │                                      group by           username
+                     │    └── window                             ·                  ·
+                     │         └── render                        ·                  ·
+                     │              └── merge join (left outer)  ·                  ·
+                     │                   │                       equality           (username) = (username)
+                     │                   │                       left cols are key  ·
+                     │                   ├── scan                ·                  ·
+                     │                   │                       missing stats      ·
+                     │                   │                       table              users@primary
+                     │                   │                       spans              FULL SCAN
+                     │                   └── scan                ·                  ·
+                     │                                           missing stats      ·
+                     │                                           table              role_options@primary
+                     │                                           spans              FULL SCAN
+                     └── scan                                    ·                  ·
+·                                                                missing stats      ·
+·                                                                table              role_members@role_members_role_idx
+·                                                                spans              FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
@@ -503,7 +492,6 @@ EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ·            vectorized             true
 lookup join  ·                      ·
  │           table                  t2@primary
- │           type                   inner
  │           equality               (k) = (x)
  │           equality cols are key  ·
  └── scan    ·                      ·

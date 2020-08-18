@@ -215,79 +215,76 @@ group      ·                    ·                     (count, count, sum, sum,
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-·                          distribution         local                         ·             ·
-·                          vectorized           true                          ·             ·
-group                      ·                    ·                             (count)       ·
- │                         estimated row count  1 (missing stats)             ·             ·
- │                         aggregate 0          count(column11)               ·             ·
- │                         scalar               ·                             ·             ·
- └── distinct              ·                    ·                             (column11)    ·
-      │                    estimated row count  1000 (missing stats)          ·             ·
-      │                    distinct on          column11                      ·             ·
-      └── render           ·                    ·                             (column11)    ·
-           │               estimated row count  1000000 (missing stats)       ·             ·
-           │               render 0             ((k, v, w, s) AS k, v, w, s)  ·             ·
-           └── cross join  ·                    ·                             (k, v, w, s)  ·
-                │          estimated row count  1000000 (missing stats)       ·             ·
-                │          type                 cross                         ·             ·
-                ├── scan   ·                    ·                             (k, v, w, s)  ·
-                │          estimated row count  1000 (missing stats)          ·             ·
-                │          table                kv@primary                    ·             ·
-                │          spans                FULL SCAN                     ·             ·
-                └── scan   ·                    ·                             ()            ·
-·                          estimated row count  1000 (missing stats)          ·             ·
-·                          table                kv@primary                    ·             ·
-·                          spans                FULL SCAN                     ·             ·
+·                                  distribution         local                         ·             ·
+·                                  vectorized           true                          ·             ·
+group                              ·                    ·                             (count)       ·
+ │                                 estimated row count  1 (missing stats)             ·             ·
+ │                                 aggregate 0          count(column11)               ·             ·
+ │                                 scalar               ·                             ·             ·
+ └── distinct                      ·                    ·                             (column11)    ·
+      │                            estimated row count  1000 (missing stats)          ·             ·
+      │                            distinct on          column11                      ·             ·
+      └── render                   ·                    ·                             (column11)    ·
+           │                       estimated row count  1000000 (missing stats)       ·             ·
+           │                       render 0             ((k, v, w, s) AS k, v, w, s)  ·             ·
+           └── cross join (inner)  ·                    ·                             (k, v, w, s)  ·
+                │                  estimated row count  1000000 (missing stats)       ·             ·
+                ├── scan           ·                    ·                             (k, v, w, s)  ·
+                │                  estimated row count  1000 (missing stats)          ·             ·
+                │                  table                kv@primary                    ·             ·
+                │                  spans                FULL SCAN                     ·             ·
+                └── scan           ·                    ·                             ()            ·
+·                                  estimated row count  1000 (missing stats)          ·             ·
+·                                  table                kv@primary                    ·             ·
+·                                  spans                FULL SCAN                     ·             ·
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
-·                     distribution         local
-·                     vectorized           true
-project               ·                    ·
- │                    estimated row count  1000 (missing stats)
- └── group            ·                    ·
-      │               estimated row count  1000 (missing stats)
-      │               aggregate 0          min(k)
-      │               group by             k
-      └── cross join  ·                    ·
-           │          estimated row count  1000000 (missing stats)
-           │          type                 cross
-           ├── scan   ·                    ·
-           │          estimated row count  1000 (missing stats)
-           │          table                kv@primary
-           │          spans                FULL SCAN
-           └── scan   ·                    ·
-·                     estimated row count  1000 (missing stats)
-·                     table                kv@primary
-·                     spans                FULL SCAN
+·                             distribution         local
+·                             vectorized           true
+project                       ·                    ·
+ │                            estimated row count  1000 (missing stats)
+ └── group                    ·                    ·
+      │                       estimated row count  1000 (missing stats)
+      │                       aggregate 0          min(k)
+      │                       group by             k
+      └── cross join (inner)  ·                    ·
+           │                  estimated row count  1000000 (missing stats)
+           ├── scan           ·                    ·
+           │                  estimated row count  1000 (missing stats)
+           │                  table                kv@primary
+           │                  spans                FULL SCAN
+           └── scan           ·                    ·
+·                             estimated row count  1000 (missing stats)
+·                             table                kv@primary
+·                             spans                FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
-·                     distribution         local
-·                     vectorized           true
-project               ·                    ·
- │                    estimated row count  1000 (missing stats)
- └── group            ·                    ·
-      │               estimated row count  1000 (missing stats)
-      │               aggregate 0          min(k)
-      │               group by             k
-      └── cross join  ·                    ·
-           │          estimated row count  1000000 (missing stats)
-           │          type                 cross
-           ├── scan   ·                    ·
-           │          estimated row count  1000 (missing stats)
-           │          table                kv@primary
-           │          spans                FULL SCAN
-           └── scan   ·                    ·
-·                     estimated row count  1000 (missing stats)
-·                     table                kv@primary
-·                     spans                FULL SCAN
+·                             distribution         local
+·                             vectorized           true
+project                       ·                    ·
+ │                            estimated row count  1000 (missing stats)
+ └── group                    ·                    ·
+      │                       estimated row count  1000 (missing stats)
+      │                       aggregate 0          min(k)
+      │                       group by             k
+      └── cross join (inner)  ·                    ·
+           │                  estimated row count  1000000 (missing stats)
+           ├── scan           ·                    ·
+           │                  estimated row count  1000 (missing stats)
+           │                  table                kv@primary
+           │                  spans                FULL SCAN
+           └── scan           ·                    ·
+·                             estimated row count  1000 (missing stats)
+·                             table                kv@primary
+·                             spans                FULL SCAN
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
@@ -295,25 +292,24 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
-·                     distribution         local
-·                     vectorized           true
-project               ·                    ·
- │                    estimated row count  1000 (missing stats)
- └── group            ·                    ·
-      │               estimated row count  1000 (missing stats)
-      │               aggregate 0          min(k)
-      │               group by             k
-      └── cross join  ·                    ·
-           │          estimated row count  1000000 (missing stats)
-           │          type                 cross
-           ├── scan   ·                    ·
-           │          estimated row count  1000 (missing stats)
-           │          table                kv@primary
-           │          spans                FULL SCAN
-           └── scan   ·                    ·
-·                     estimated row count  1000 (missing stats)
-·                     table                kv@primary
-·                     spans                FULL SCAN
+·                             distribution         local
+·                             vectorized           true
+project                       ·                    ·
+ │                            estimated row count  1000 (missing stats)
+ └── group                    ·                    ·
+      │                       estimated row count  1000 (missing stats)
+      │                       aggregate 0          min(k)
+      │                       group by             k
+      └── cross join (inner)  ·                    ·
+           │                  estimated row count  1000000 (missing stats)
+           ├── scan           ·                    ·
+           │                  estimated row count  1000 (missing stats)
+           │                  table                kv@primary
+           │                  spans                FULL SCAN
+           └── scan           ·                    ·
+·                             estimated row count  1000 (missing stats)
+·                             table                kv@primary
+·                             spans                FULL SCAN
 
 # Show reuse of renders expression inside an expansion.
 query TTT
@@ -321,24 +317,23 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT a.v FROM kv a, kv b GROUP BY a.v, a.w, a.s
 ]
 ----
-·                     distribution         local
-·                     vectorized           true
-project               ·                    ·
- │                    estimated row count  1000 (missing stats)
- └── distinct         ·                    ·
-      │               estimated row count  1000 (missing stats)
-      │               distinct on          v, w, s
-      └── cross join  ·                    ·
-           │          estimated row count  1000000 (missing stats)
-           │          type                 cross
-           ├── scan   ·                    ·
-           │          estimated row count  1000 (missing stats)
-           │          table                kv@primary
-           │          spans                FULL SCAN
-           └── scan   ·                    ·
-·                     estimated row count  1000 (missing stats)
-·                     table                kv@primary
-·                     spans                FULL SCAN
+·                             distribution         local
+·                             vectorized           true
+project                       ·                    ·
+ │                            estimated row count  1000 (missing stats)
+ └── distinct                 ·                    ·
+      │                       estimated row count  1000 (missing stats)
+      │                       distinct on          v, w, s
+      └── cross join (inner)  ·                    ·
+           │                  estimated row count  1000000 (missing stats)
+           ├── scan           ·                    ·
+           │                  estimated row count  1000 (missing stats)
+           │                  table                kv@primary
+           │                  spans                FULL SCAN
+           └── scan           ·                    ·
+·                             estimated row count  1000 (missing stats)
+·                             table                kv@primary
+·                             spans                FULL SCAN
 
 statement ok
 CREATE TABLE abc (
@@ -768,26 +763,25 @@ render     ·                    ·                     (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-·                     distribution         local                             ·                     ·
-·                     vectorized           true                              ·                     ·
-project               ·                    ·                                 (sum decimal)         ·
- │                    estimated row count  1000 (missing stats)              ·                     ·
- └── group            ·                    ·                                 (k int, sum decimal)  ·
-      │               estimated row count  1000 (missing stats)              ·                     ·
-      │               aggregate 0          sum(d)                            ·                     ·
-      │               group by             k                                 ·                     ·
-      └── cross join  ·                    ·                                 (k int, d decimal)    ·
-           │          estimated row count  330000 (missing stats)            ·                     ·
-           │          type                 cross                             ·                     ·
-           │          pred                 ((k)[int] >= (d)[decimal])[bool]  ·                     ·
-           ├── scan   ·                    ·                                 (k int)               ·
-           │          estimated row count  1000 (missing stats)              ·                     ·
-           │          table                kv@primary                        ·                     ·
-           │          spans                FULL SCAN                         ·                     ·
-           └── scan   ·                    ·                                 (d decimal)           ·
-·                     estimated row count  1000 (missing stats)              ·                     ·
-·                     table                abc@primary                       ·                     ·
-·                     spans                FULL SCAN                         ·                     ·
+·                             distribution         local                             ·                     ·
+·                             vectorized           true                              ·                     ·
+project                       ·                    ·                                 (sum decimal)         ·
+ │                            estimated row count  1000 (missing stats)              ·                     ·
+ └── group                    ·                    ·                                 (k int, sum decimal)  ·
+      │                       estimated row count  1000 (missing stats)              ·                     ·
+      │                       aggregate 0          sum(d)                            ·                     ·
+      │                       group by             k                                 ·                     ·
+      └── cross join (inner)  ·                    ·                                 (k int, d decimal)    ·
+           │                  estimated row count  330000 (missing stats)            ·                     ·
+           │                  pred                 ((k)[int] >= (d)[decimal])[bool]  ·                     ·
+           ├── scan           ·                    ·                                 (k int)               ·
+           │                  estimated row count  1000 (missing stats)              ·                     ·
+           │                  table                kv@primary                        ·                     ·
+           │                  spans                FULL SCAN                         ·                     ·
+           └── scan           ·                    ·                                 (d decimal)           ·
+·                             estimated row count  1000 (missing stats)              ·                     ·
+·                             table                abc@primary                       ·                     ·
+·                             spans                FULL SCAN                         ·                     ·
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
 statement ok
@@ -889,28 +883,27 @@ render     ·                    ·                                        (r tu
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-·                     distribution         local                                               ·                                                ·
-·                     vectorized           true                                                ·                                                ·
-render                ·                    ·                                                   (min string, r tuple{int, int})                  ·
- │                    estimated row count  100000 (missing stats)                              ·                                                ·
- │                    render 0             (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
- │                    render 1             (min)[string]                                       ·                                                ·
- └── group            ·                    ·                                                   (a int, x string, min string, any_not_null int)  ·
-      │               estimated row count  100000 (missing stats)                              ·                                                ·
-      │               aggregate 0          min(y)                                              ·                                                ·
-      │               aggregate 1          any_not_null(b)                                     ·                                                ·
-      │               group by             a, x                                                ·                                                ·
-      └── cross join  ·                    ·                                                   (a int, b int, x string, y string)               ·
-           │          estimated row count  1000000 (missing stats)                             ·                                                ·
-           │          type                 cross                                               ·                                                ·
-           ├── scan   ·                    ·                                                   (a int, b int)                                   ·
-           │          estimated row count  1000 (missing stats)                                ·                                                ·
-           │          table                ab@primary                                          ·                                                ·
-           │          spans                FULL SCAN                                           ·                                                ·
-           └── scan   ·                    ·                                                   (x string, y string)                             ·
-·                     estimated row count  1000 (missing stats)                                ·                                                ·
-·                     table                xy@primary                                          ·                                                ·
-·                     spans                FULL SCAN                                           ·                                                ·
+·                             distribution         local                                               ·                                                ·
+·                             vectorized           true                                                ·                                                ·
+render                        ·                    ·                                                   (min string, r tuple{int, int})                  ·
+ │                            estimated row count  100000 (missing stats)                              ·                                                ·
+ │                            render 0             (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
+ │                            render 1             (min)[string]                                       ·                                                ·
+ └── group                    ·                    ·                                                   (a int, x string, min string, any_not_null int)  ·
+      │                       estimated row count  100000 (missing stats)                              ·                                                ·
+      │                       aggregate 0          min(y)                                              ·                                                ·
+      │                       aggregate 1          any_not_null(b)                                     ·                                                ·
+      │                       group by             a, x                                                ·                                                ·
+      └── cross join (inner)  ·                    ·                                                   (a int, b int, x string, y string)               ·
+           │                  estimated row count  1000000 (missing stats)                             ·                                                ·
+           ├── scan           ·                    ·                                                   (a int, b int)                                   ·
+           │                  estimated row count  1000 (missing stats)                                ·                                                ·
+           │                  table                ab@primary                                          ·                                                ·
+           │                  spans                FULL SCAN                                           ·                                                ·
+           └── scan           ·                    ·                                                   (x string, y string)                             ·
+·                             estimated row count  1000 (missing stats)                                ·                                                ·
+·                             table                xy@primary                                          ·                                                ·
+·                             spans                FULL SCAN                                           ·                                                ·
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
@@ -1179,25 +1172,24 @@ group           ·                    ·                       (string_agg)     
 query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM xyz JOIN kv ON y=v
 ----
-·                    distribution         local                 ·        ·
-·                    vectorized           true                  ·        ·
-group                ·                    ·                     (count)  ·
- │                   estimated row count  1 (missing stats)     ·        ·
- │                   aggregate 0          count_rows()          ·        ·
- │                   scalar               ·                     ·        ·
- └── project         ·                    ·                     ()       ·
-      └── hash join  ·                    ·                     (y, v)   ·
-           │         estimated row count  9801 (missing stats)  ·        ·
-           │         type                 inner                 ·        ·
-           │         equality             (y) = (v)             ·        ·
-           ├── scan  ·                    ·                     (y)      ·
-           │         estimated row count  1000 (missing stats)  ·        ·
-           │         table                xyz@xy                ·        ·
-           │         spans                FULL SCAN             ·        ·
-           └── scan  ·                    ·                     (v)      ·
-·                    estimated row count  1000 (missing stats)  ·        ·
-·                    table                kv@primary            ·        ·
-·                    spans                FULL SCAN             ·        ·
+·                            distribution         local                 ·        ·
+·                            vectorized           true                  ·        ·
+group                        ·                    ·                     (count)  ·
+ │                           estimated row count  1 (missing stats)     ·        ·
+ │                           aggregate 0          count_rows()          ·        ·
+ │                           scalar               ·                     ·        ·
+ └── project                 ·                    ·                     ()       ·
+      └── hash join (inner)  ·                    ·                     (y, v)   ·
+           │                 estimated row count  9801 (missing stats)  ·        ·
+           │                 equality             (y) = (v)             ·        ·
+           ├── scan          ·                    ·                     (y)      ·
+           │                 estimated row count  1000 (missing stats)  ·        ·
+           │                 table                xyz@xy                ·        ·
+           │                 spans                FULL SCAN             ·        ·
+           └── scan          ·                    ·                     (v)      ·
+·                            estimated row count  1000 (missing stats)  ·        ·
+·                            table                kv@primary            ·        ·
+·                            spans                FULL SCAN             ·        ·
 
 
 # Regression test for #31882: make sure we don't incorrectly advertise an

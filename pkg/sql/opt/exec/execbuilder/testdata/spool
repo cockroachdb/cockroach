@@ -228,7 +228,6 @@ EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ·                         vectorized     false
 root                      ·              ·
  ├── cross join           ·              ·
- │    │                   type           cross
  │    ├── scan buffer     ·              ·
  │    │                   label          buffer 1
  │    └── scan            ·              ·
