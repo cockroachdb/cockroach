@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,11 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/gorhill/cronexpr"
 )
@@ -328,7 +332,7 @@ func doCreateBackupSchedules(
 		}
 
 		if err := createBackupSchedule(
-			ctx, env, fullScheduleName, fullRecurrence,
+			ctx, env, p.User(), fullScheduleName, fullRecurrence,
 			fullFirstRun, details, backupNode, resultsCh, ex, txn,
 		); err != nil {
 			return err
@@ -339,7 +343,7 @@ func doCreateBackupSchedules(
 			backupNode.AppendToLatest = true
 
 			if err := createBackupSchedule(
-				ctx, env, fullScheduleName+": INCREMENTAL", incRecurrence,
+				ctx, env, p.User(), fullScheduleName+": INCREMENTAL", incRecurrence,
 				firstRun, details, backupNode, resultsCh, ex, txn,
 			); err != nil {
 				return err
@@ -354,6 +358,7 @@ func doCreateBackupSchedules(
 func createBackupSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
+	owner string,
 	name string,
 	recurrence *scheduleRecurrence,
 	firstRun *time.Time,
@@ -365,6 +370,7 @@ func createBackupSchedule(
 ) error {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleName(name)
+	sj.SetOwner(owner)
 
 	// Prepare arguments for scheduled backup execution.
 	args := &ScheduledBackupExecutionArgs{}
@@ -526,4 +532,62 @@ func createBackupScheduleHook(
 
 func init() {
 	sql.AddPlanHook(createBackupScheduleHook)
+}
+
+// MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets in
+// URI fields.
+func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
+	stmt, err := parser.ParseOne(m.BackupStatement)
+	if err != nil {
+		return nil, err
+	}
+	backup, ok := stmt.AST.(*tree.Backup)
+	if !ok {
+		return nil, errors.Errorf("unexpected %T statement in backup schedule: %v", backup, backup)
+	}
+
+	for i := range backup.To {
+		raw, ok := backup.To[i].(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
+		}
+		clean, err := cloudimpl.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+		backup.To[i] = tree.NewDString(clean)
+	}
+
+	// NB: this will never be non-nil with current schedule syntax but is here for
+	// completeness.
+	for i := range backup.IncrementalFrom {
+		raw, ok := backup.IncrementalFrom[i].(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
+		}
+		clean, err := cloudimpl.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+		backup.IncrementalFrom[i] = tree.NewDString(clean)
+	}
+
+	for i := range backup.Options.EncryptionKMSURI {
+		raw, ok := backup.Options.EncryptionKMSURI[i].(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
+		}
+		clean, err := cloudimpl.RedactKMSURI(raw.RawString())
+		if err != nil {
+			return nil, err
+		}
+		backup.Options.EncryptionKMSURI[i] = tree.NewDString(clean)
+	}
+
+	if backup.Options.EncryptionPassphrase != nil {
+		backup.Options.EncryptionPassphrase = tree.NewDString("redacted")
+	}
+
+	m.BackupStatement = backup.String()
+	return json.Marshal(m)
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -85,8 +84,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 
 	// Invoke backup plan hook.
-	// TODO(yevgeniy): Invoke backup as the owner of the schedule.
-	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, security.RootUser)
+	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
 	defer cleanup()
 	planBackup, cols, _, _, err := backupPlanHook(ctx, backupStmt, hook.(sql.PlanHookState))
 
