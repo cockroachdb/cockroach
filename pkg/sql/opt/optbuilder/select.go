@@ -1357,13 +1357,12 @@ func (b *Builder) validateLockingInFrom(
 		// Validating locking wait policy.
 		switch li.WaitPolicy {
 		case tree.LockWaitBlock:
-			// Default.
+			// Default. Block on conflicting locks.
 		case tree.LockWaitSkip:
 			panic(unimplementedWithIssueDetailf(40476, "",
 				"SKIP LOCKED lock wait policy is not supported"))
 		case tree.LockWaitError:
-			panic(unimplementedWithIssueDetailf(40476, "",
-				"NOWAIT lock wait policy is not supported"))
+			// Raise an error on conflicting locks.
 		default:
 			panic(errors.AssertionFailedf("unknown locking wait policy: %s", li.WaitPolicy))
 		}

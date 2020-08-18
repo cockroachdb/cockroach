@@ -64,7 +64,8 @@ func initRowFetcher(
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	scanVisibility execinfrapb.ScanVisibility,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumns []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
@@ -90,7 +91,8 @@ func initRowFetcher(
 	if err := fetcher.Init(
 		flowCtx.Codec(),
 		reverseScan,
-		lockStr,
+		lockStrength,
+		lockWaitPolicy,
 		isCheck,
 		alloc,
 		tableArgs,

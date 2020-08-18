@@ -376,7 +376,13 @@ func newInterleavedReaderJoiner(
 	}
 
 	if err := irj.initRowFetcher(
-		flowCtx, spec.Tables, tables, spec.Reverse, spec.LockingStrength, &irj.alloc,
+		flowCtx,
+		spec.Tables,
+		tables,
+		spec.Reverse,
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		&irj.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -413,7 +419,8 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	tables []execinfrapb.InterleavedReaderJoinerSpec_Table,
 	tableInfos []tableInfo,
 	reverseScan bool,
-	lockStr descpb.ScanLockingStrength,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))
@@ -439,7 +446,8 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	return irj.fetcher.Init(
 		flowCtx.Codec(),
 		reverseScan,
-		lockStr,
+		lockStrength,
+		lockWaitPolicy,
 		true, /* isCheck */
 		alloc,
 		args...,
