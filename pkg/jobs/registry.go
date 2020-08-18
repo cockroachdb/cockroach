@@ -331,7 +331,7 @@ func (r *Registry) Run(ctx context.Context, ex sqlutil.InternalExecutor, jobs []
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 			query,
 		)
 		if err != nil {
@@ -611,7 +611,7 @@ func (r *Registry) Start(
 
 		if _, err := r.ex.QueryRowEx(
 			ctx, "expire-sessions", nil,
-			sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser}, `
+			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser}, `
 UPDATE system.jobs SET claim_session_id = NULL
 WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 		); err != nil {

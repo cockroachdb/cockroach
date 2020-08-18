@@ -208,7 +208,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				context.Background(),
 				"test-num-effected",
 				nil,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 				jobControl,
 			)
 			require.NoError(t, err)

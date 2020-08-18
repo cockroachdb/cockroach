@@ -133,7 +133,7 @@ func lookupScheduleAndExecutor(
 	txn *kv.Txn,
 ) (*ScheduledJob, ScheduledJobExecutor, error) {
 	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		fmt.Sprintf(
 			"SELECT schedule_id, schedule_details, executor_type FROM %s WHERE schedule_id = %d",
 			env.ScheduledJobsTableName(), scheduleID))

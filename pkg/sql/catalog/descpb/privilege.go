@@ -387,7 +387,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:                          privilege.ReadWriteData,
+	keys.JobsTableID:                          privilege.ReadData,
 	keys.WebSessionsTableID:                   privilege.ReadWriteData,
 	keys.TableStatisticsTableID:               privilege.ReadWriteData,
 	keys.LocationsTableID:                     privilege.ReadWriteData,
@@ -402,8 +402,8 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.StatementBundleChunksTableID:         privilege.ReadWriteData,
 	keys.StatementDiagnosticsRequestsTableID:  privilege.ReadWriteData,
 	keys.StatementDiagnosticsTableID:          privilege.ReadWriteData,
-	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
-	keys.SqllivenessID:                        privilege.ReadWriteData,
+	keys.ScheduledJobsTableID:                 privilege.ReadData,
+	keys.SqllivenessID:                        privilege.ReadData,
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.

@@ -713,7 +713,7 @@ func (j *Job) load(ctx context.Context) error {
 			stmt = newStmt
 		}
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "load-job-query", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 			stmt, *j.ID())
 		if err != nil {
 			return err

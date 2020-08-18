@@ -107,7 +107,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
 		row, err := j.registry.ex.QueryRowEx(
-			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+			ctx, "log-job", txn, sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 			selectStmt, *j.id)
 		if err != nil {
 			return err
