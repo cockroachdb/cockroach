@@ -2057,11 +2057,11 @@ alter_attribute_action:
 // %Help: REFRESH - recalculate a materialized view
 // %Category: Misc
 // %Text:
-// REFRESH MATERIALIZED VIEW view_name
+// REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name
 refresh_stmt:
-  REFRESH MATERIALIZED VIEW view_name
+  REFRESH MATERIALIZED VIEW opt_concurrently view_name
   {
-    $$.val = &tree.RefreshMaterializedView{Name: $4.unresolvedObjectName()}
+    $$.val = &tree.RefreshMaterializedView{Name: $5.unresolvedObjectName(), Concurrently: $4.bool()}
   }
 | REFRESH error // SHOW HELP: REFRESH
 
