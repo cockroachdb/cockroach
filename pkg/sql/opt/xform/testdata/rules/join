@@ -4040,13 +4040,13 @@ memo (optimized, ~14KB, required=[presentation: a:1])
  ├── G7: (index-join G10 t5,cols=(1,2))
  │    └── []
  │         ├── best: (index-join G10 t5,cols=(1,2))
- │         └── cost: 565.58
+ │         └── cost: 559.92
  ├── G8: (contains G11 G12)
  ├── G9: (filters)
  ├── G10: (scan t5@b_idx,cols=(1),constrained)
  │    └── []
  │         ├── best: (scan t5@b_idx,cols=(1),constrained)
- │         └── cost: 114.45
+ │         └── cost: 113.31
  ├── G11: (variable b)
  └── G12: (const '{"a": 1, "c": 2}')
 

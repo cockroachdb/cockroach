@@ -63,6 +63,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	md := scan.Memo().Metadata()
 	hardLimit := scan.HardLimit.RowCount()
 
+	isPartialIndexScan := scan.UsesPartialIndex(md)
+	var pred FiltersExpr
+	if isPartialIndexScan {
+		pred = scan.PartialIndexPredicate(md)
+	}
+
 	// Side Effects
 	// ------------
 	// A Locking option is a side-effect (we don't want to elide this scan).
@@ -79,8 +85,14 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// ----------------
 	// Initialize not-NULL columns from the table schema.
 	rel.NotNullCols = tableNotNullCols(md, scan.Table)
+	// Union not-NULL columns with not-NULL columns in the constraint.
 	if scan.Constraint != nil {
 		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.evalCtx))
+	}
+	// Union not-NULL columns with not-NULL columns in the partial index
+	// predicate.
+	if isPartialIndexScan {
+		rel.NotNullCols.UnionWith(b.rejectNullCols(pred))
 	}
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
@@ -105,13 +117,17 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
 			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
 		}
+		if isPartialIndexScan {
+			b.addFiltersToFuncDep(pred, &rel.FuncDeps)
+		}
 		rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 		rel.FuncDeps.ProjectCols(rel.OutputCols)
 	}
 
 	// Cardinality
 	// -----------
-	// Restrict cardinality based on constraint, FDs, and hard limit.
+	// Restrict cardinality based on constraint, partial index predicate, FDs,
+	// and hard limit.
 	rel.Cardinality = props.AnyCardinality
 	if scan.Constraint != nil && scan.Constraint.IsContradiction() {
 		rel.Cardinality = props.ZeroCardinality
@@ -123,6 +139,9 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		}
 		if scan.Constraint != nil {
 			b.updateCardinalityFromConstraint(scan.Constraint, rel)
+		}
+		if isPartialIndexScan {
+			b.updateCardinalityFromFilters(pred, rel)
 		}
 	}
 
