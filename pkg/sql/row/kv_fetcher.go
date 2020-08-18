@@ -16,14 +16,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
+// KVFetcher wraps KVBatchFetcher, providing a NextKV interface that returns the
 // next kv from its input.
 type KVFetcher struct {
-	kvBatchFetcher
+	KVBatchFetcher
 
 	kvs []roachpb.KeyValue
 
@@ -42,15 +43,18 @@ func NewKVFetcher(
 	firstBatchLimit int64,
 	lockStr descpb.ScanLockingStrength,
 ) (*KVFetcher, error) {
-	kvBatchFetcher, err := makeKVBatchFetcher(
-		txn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
+	kvBatchFetcher, err := MakeKVBatchFetcher(
+		txn, spans, reverse, useBatchLimit, firstBatchLimit, roachpb.BATCH_RESPONSE,
+		ColFormatArgs{
+			TenantID: roachpb.SystemTenantID,
+		}, lockStr,
 	)
-	return newKVFetcher(&kvBatchFetcher), err
+	return newKVFetcher(kvBatchFetcher), err
 }
 
-func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
+func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
 	return &KVFetcher{
-		kvBatchFetcher: batchFetcher,
+		KVBatchFetcher: batchFetcher,
 	}
 }
 
@@ -59,22 +63,16 @@ func (f *KVFetcher) GetBytesRead() int64 {
 	return f.bytesRead
 }
 
-// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
-// timestamps from returned KV's.
-type MVCCDecodingStrategy int
-
-const (
-	// MVCCDecodingNotRequired is used when timestamps aren't needed.
-	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
-	// MVCCDecodingRequired is used when timestamps are needed.
-	MVCCDecodingRequired
-)
+// GetCurSpan returns the most recent Span that was processed by this fetcher.
+func (f *KVFetcher) GetCurSpan() roachpb.Span {
+	return f.Span
+}
 
 // NextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, and any errors that may have
 // occurred.
 func (f *KVFetcher) NextKV(
-	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
+	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
 ) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
 	for {
 		newSpan = f.newSpan
@@ -90,9 +88,9 @@ func (f *KVFetcher) NextKV(
 			var err error
 			var ts hlc.Timestamp
 			switch mvccDecodeStrategy {
-			case MVCCDecodingRequired:
+			case storage.MVCCDecodingRequired:
 				key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
-			case MVCCDecodingNotRequired:
+			case storage.MVCCDecodingNotRequired:
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
@@ -107,7 +105,7 @@ func (f *KVFetcher) NextKV(
 			}, newSpan, nil
 		}
 
-		ok, f.kvs, f.batchResponse, f.Span, err = f.nextBatch(ctx)
+		ok, f.kvs, f.batchResponse, f.Span, err = f.NextBatch(ctx)
 		if err != nil {
 			return ok, kv, false, err
 		}
@@ -119,13 +117,13 @@ func (f *KVFetcher) NextKV(
 	}
 }
 
-// SpanKVFetcher is a kvBatchFetcher that returns a set slice of kvs.
+// SpanKVFetcher is a KVBatchFetcher that returns a set slice of kvs.
 type SpanKVFetcher struct {
 	KVs []roachpb.KeyValue
 }
 
-// nextBatch implements the kvBatchFetcher interface.
-func (f *SpanKVFetcher) nextBatch(
+// nextBatch implements the KVBatchFetcher interface.
+func (f *SpanKVFetcher) NextBatch(
 	_ context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
 	if len(f.KVs) == 0 {

@@ -834,11 +834,11 @@ func mvccGet(
 		intent = &intents[0]
 	}
 
-	if len(mvccScanner.results.repr) == 0 {
+	if mvccScanner.results.getCount() == 0 {
 		return nil, intent, nil
 	}
 
-	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.(*pebbleResults).repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2408,8 +2408,8 @@ func mvccScanToBytes(
 	}
 
 	res.KVData = mvccScanner.results.finish()
-	res.NumKeys = mvccScanner.results.count
-	res.NumBytes = mvccScanner.results.bytes
+	res.NumKeys = mvccScanner.results.getCount()
+	res.NumBytes = mvccScanner.results.getBytes()
 
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {

@@ -21,6 +21,7 @@ import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed
 // during read operations.
@@ -372,6 +373,9 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
+  // The columnar batch_response format
+  // TODO(jordan): fill me in
+  COL_BATCH_RESPONSE = 2;
 }
 
 
@@ -401,6 +405,22 @@ message ScanRequest {
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
+
+  // This "any type" field is a serialized TableReaderSpec that can be used
+  // to initialize a columnar scan for MVCC. We use this generic type to resolve
+  // some painful circular dependency issues.
+  google.protobuf.Any scan_spec = 6;
+
+  bool projection = 7;
+
+  // The output columns describe a projection on the internal set of columns;
+  // only the columns in this list will be emitted.
+  //
+  // Can only be set if projection is true. Cannot be set at the same time with
+  // render expressions.
+  repeated uint32 needed_columns = 8 [packed = true];
+
+  uint64 tenant_id = 9;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -453,6 +473,22 @@ message ReverseScanRequest {
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
   kv.kvserver.concurrency.lock.Strength key_locking = 5;
+
+  // This "any type" field is a serialized TableReaderSpec that can be used
+  // to initialize a columnar scan for MVCC. We use this generic type to resolve
+  // some painful circular dependency issues.
+  google.protobuf.Any scan_spec = 6;
+
+  bool projection = 7;
+
+  // The output columns describe a projection on the internal set of columns;
+  // only the columns in this list will be emitted.
+  //
+  // Can only be set if projection is true. Cannot be set at the same time with
+  // render expressions.
+  repeated uint32 needed_columns = 8 [packed = true];
+
+  uint64 tenant_id = 9;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.

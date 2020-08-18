@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 // kvBatchSize is the number of keys we request at a time.
@@ -30,7 +31,7 @@ import (
 // TODO(radu): parameters like this should be configurable
 var kvBatchSize int64 = 10000
 
-// TestingSetKVBatchSize changes the kvBatchFetcher batch size, and returns a function that restores it.
+// TestingSetKVBatchSize changes the KVBatchFetcher batch size, and returns a function that restores it.
 // This is to be used only in tests - we have no test coverage for arbitrary kv batch sizes at this time.
 func TestingSetKVBatchSize(val int64) func() {
 	oldVal := kvBatchSize
@@ -55,6 +56,7 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
+	format          roachpb.ScanFormat
 	// lockStr represents the locking mode to use when fetching KVs.
 	lockStr descpb.ScanLockingStrength
 
@@ -70,9 +72,10 @@ type txnKVFetcher struct {
 
 	origSpan         roachpb.Span
 	remainingBatches [][]byte
+	args             ColFormatArgs
 }
 
-var _ kvBatchFetcher = &txnKVFetcher{}
+var _ KVBatchFetcher = &txnKVFetcher{}
 
 // getBatchSize returns the max size of the next batch.
 func (f *txnKVFetcher) getBatchSize() int64 {
@@ -148,21 +151,30 @@ func (f *txnKVFetcher) getKeyLockingStrength() lock.Strength {
 	}
 }
 
-// makeKVBatchFetcher initializes a kvBatchFetcher for the given spans.
+type ColFormatArgs struct {
+	Spec          *types.Any
+	TenantID      roachpb.TenantID
+	IsProjection  bool
+	OutputColumns []uint32
+}
+
+// MakeKVBatchFetcher initializes a KVBatchFetcher for the given spans.
 //
 // If useBatchLimit is true, batches are limited to kvBatchSize. If
 // firstBatchLimit is also set, the first batch is limited to that value.
 // Subsequent batches are larger, up to kvBatchSize.
 //
 // Batch limits can only be used if the spans are ordered.
-func makeKVBatchFetcher(
+func MakeKVBatchFetcher(
 	txn *kv.Txn,
 	spans roachpb.Spans,
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
+	format roachpb.ScanFormat,
+	args ColFormatArgs,
 	lockStr descpb.ScanLockingStrength,
-) (txnKVFetcher, error) {
+) (KVBatchFetcher, error) {
 	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
@@ -171,11 +183,11 @@ func makeKVBatchFetcher(
 		return res, nil
 	}
 	return makeKVBatchFetcherWithSendFunc(
-		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStr,
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, format, args, lockStr,
 	)
 }
 
-// makeKVBatchFetcherWithSendFunc is like makeKVBatchFetcher but uses a custom
+// makeKVBatchFetcherWithSendFunc is like MakeKVBatchFetcher but uses a custom
 // send function.
 func makeKVBatchFetcherWithSendFunc(
 	sendFn sendFunc,
@@ -183,10 +195,12 @@ func makeKVBatchFetcherWithSendFunc(
 	reverse bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
+	format roachpb.ScanFormat,
+	args ColFormatArgs,
 	lockStr descpb.ScanLockingStrength,
-) (txnKVFetcher, error) {
+) (KVBatchFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
-		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
+		return nil, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
 			firstBatchLimit, useBatchLimit)
 	}
 
@@ -194,7 +208,7 @@ func makeKVBatchFetcherWithSendFunc(
 		// Verify the spans are ordered if a batch limit is used.
 		for i := 1; i < len(spans); i++ {
 			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
-				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
+				return nil, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
 		}
 	} else if util.RaceEnabled {
@@ -213,7 +227,7 @@ func makeKVBatchFetcherWithSendFunc(
 			// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
 			// risk of incorrect results, since the row fetcher can't distinguish
 			// between identical rows in two different batches.
-			return txnKVFetcher{}, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
+			return nil, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
 		}
 	}
 
@@ -228,12 +242,14 @@ func makeKVBatchFetcherWithSendFunc(
 		}
 	}
 
-	return txnKVFetcher{
+	return &txnKVFetcher{
 		sendFn:          sendFn,
 		spans:           copySpans,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
+		format:          format,
+		args:            args,
 		lockStr:         lockStr,
 	}, nil
 }
@@ -258,16 +274,28 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
 			scans[i].SetSpan(f.spans[i])
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].ScanFormat = f.format
 			scans[i].KeyLocking = keyLocking
+			if f.format == roachpb.COL_BATCH_RESPONSE {
+				scans[i].TenantId = f.args.TenantID.ToUint64()
+				scans[i].ScanSpec = f.args.Spec
+				scans[i].Projection = f.args.IsProjection
+				scans[i].NeededColumns = f.args.OutputColumns
+			}
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
 			scans[i].SetSpan(f.spans[i])
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].ScanFormat = f.format
 			scans[i].KeyLocking = keyLocking
+			if f.format == roachpb.COL_BATCH_RESPONSE {
+				scans[i].TenantId = f.args.TenantID.ToUint64()
+				scans[i].ScanSpec = f.args.Spec
+				scans[i].Projection = f.args.IsProjection
+				scans[i].NeededColumns = f.args.OutputColumns
+			}
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	}
@@ -333,11 +361,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-// nextBatch returns the next batch of key/value pairs. If there are none
+// NextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, ok is false.
 // origSpan returns the span that batch was fetched from, and bounds all of the
 // keys returned.
-func (f *txnKVFetcher) nextBatch(
+func (f *txnKVFetcher) NextBatch(
 	ctx context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, origSpan roachpb.Span, err error) {
 	if len(f.remainingBatches) > 0 {
@@ -372,5 +400,5 @@ func (f *txnKVFetcher) nextBatch(
 	if err := f.fetch(ctx); err != nil {
 		return false, nil, nil, roachpb.Span{}, err
 	}
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }

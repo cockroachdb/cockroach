@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/gogo/protobuf/types"
 )
 
 func init() {
@@ -63,6 +64,20 @@ func Scan(
 			return result.Result{}, err
 		}
 		reply.Rows = scanRes.KVs
+	case roachpb.COL_BATCH_RESPONSE:
+		var da types.DynamicAny
+		if err := types.UnmarshalAny(args.ScanSpec, &da); err != nil {
+			return result.Result{}, err
+		}
+		scanRes, err = storage.MVCCScanToCols(
+			ctx, args.TenantId, reader, da.Message,
+			args.Projection,
+			args.NeededColumns,
+			args.Key, args.EndKey, h.Timestamp, opts)
+		if err != nil {
+			return result.Result{}, err
+		}
+		reply.BatchResponses = scanRes.KVData
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}

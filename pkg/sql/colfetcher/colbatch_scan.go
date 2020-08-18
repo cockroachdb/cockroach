@@ -11,9 +11,11 @@
 package colfetcher
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -26,8 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(yuzefovich): reading the data through a pair of ColBatchScan and
@@ -115,6 +120,95 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta.Metrics.RowsRead = int64(s.rowsRead)
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
+}
+
+func newCFetchWrapper(
+	ctx context.Context,
+	acc *mon.BoundAccount,
+	codec keys.SQLCodec,
+	specMessage proto.Message,
+	isProjection bool,
+	neededCols util.FastIntSet,
+	nexter storage.NextKVer,
+) (storage.CFetcherWrapper, error) {
+	spec, ok := specMessage.(*execinfrapb.TableReaderSpec)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected a TableReaderSpec, but found a %T", specMessage)
+	}
+	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
+	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
+	// indicates that we're probably doing this wrong. Instead we should be
+	// just seting the ID and Version in the spec or something like that and
+	// retrieving the hydrated ImmutableTableDescriptor from cache.
+	table := sqlbase.NewImmutableTableDescriptor(spec.Table)
+	typs := table.ColumnTypesWithMutations(returnMutations)
+	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
+	// Add all requested system columns to the output.
+	sysColTypes, sysColDescs, err := sqlbase.GetSystemColumnTypesAndDescriptors(&spec.Table, spec.SystemColumns)
+	if err != nil {
+		return nil, err
+	}
+	typs = append(typs, sysColTypes...)
+	for i := range sysColDescs {
+		columnIdxMap[sysColDescs[i].ID] = len(columnIdxMap)
+	}
+	wrapper := cfetcherWrapper{}
+	if spec.IsCheck {
+		// cFetchers don't support these checks.
+		return nil, errors.AssertionFailedf("attempting to create a cFetcher with the IsCheck flag set")
+	}
+	if !isProjection {
+		neededCols.AddRange(0, len(typs)-1)
+	}
+	allocator := colmem.NewAllocator(ctx, acc, coldata.StandardColumnFactory)
+	if _, _, err := initCRowFetcher(
+		codec, allocator, &wrapper.fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
+		spec.Reverse, neededCols, spec.Visibility, spec.LockingStrength, sysColDescs,
+	); err != nil {
+		return nil, err
+	}
+	wrapper.fetcher.fetcher = nexter
+	wrapper.converter, err = colserde.NewArrowBatchConverter(typs)
+	if err != nil {
+		return nil, err
+	}
+	wrapper.serializer, err = colserde.NewRecordBatchSerializer(typs)
+	if err != nil {
+		return nil, err
+	}
+	return &wrapper, nil
+}
+
+type cfetcherWrapper struct {
+	fetcher    cFetcher
+	converter  *colserde.ArrowBatchConverter
+	serializer *colserde.RecordBatchSerializer
+}
+
+func (c *cfetcherWrapper) NextBatch(ctx context.Context) ([]byte, error) {
+	batch, err := c.fetcher.nextBatch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if batch.Length() == 0 {
+		return nil, nil
+	}
+	data, err := c.converter.BatchToArrow(batch)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	_, _, err = c.serializer.Serialize(&buf, data)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+var _ storage.CFetcherWrapper = &cfetcherWrapper{}
+
+func init() {
+	storage.GetMeACFetcher = newCFetchWrapper
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.
