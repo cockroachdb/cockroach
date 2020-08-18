@@ -132,6 +132,9 @@ func TestScanBatches(t *testing.T) {
 	s, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
+	if _, err := db.Exec("SET CLUSTER SETTING server.sqlliveness.heartbeat='1000s'"); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS test`); err != nil {
 		t.Fatal(err)

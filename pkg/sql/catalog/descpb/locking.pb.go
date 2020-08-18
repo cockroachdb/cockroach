@@ -152,11 +152,12 @@ func (x *ScanLockingStrength) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ScanLockingStrength) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_ed2d621531b2095f, []int{0}
+	return fileDescriptor_locking_2399db643a0152e9, []int{0}
 }
 
-// ScanLockingWaitPolicy controls the policy used by scans for dealing with rows
-// being locked by FOR UPDATE/SHARE clauses.
+// LockingWaitPolicy controls the policy used for handling conflicting locks
+// held by other active transactions when attempting to lock rows due to FOR
+// UPDATE/SHARE clauses (i.e. it represents the NOWAIT and SKIP LOCKED options).
 type ScanLockingWaitPolicy int32
 
 const (
@@ -168,9 +169,6 @@ const (
 	// optimizer without throwing an error.
 	ScanLockingWaitPolicy_SKIP ScanLockingWaitPolicy = 1
 	// ERROR represents NOWAIT - raise an error if a row cannot be locked.
-	//
-	// NOTE: ERROR is not currently implemented and does not make it out of the
-	// SQL optimizer without throwing an error.
 	ScanLockingWaitPolicy_ERROR ScanLockingWaitPolicy = 2
 )
 
@@ -202,7 +200,7 @@ func (x *ScanLockingWaitPolicy) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ScanLockingWaitPolicy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_locking_ed2d621531b2095f, []int{1}
+	return fileDescriptor_locking_2399db643a0152e9, []int{1}
 }
 
 func init() {
@@ -211,10 +209,10 @@ func init() {
 }
 
 func init() {
-	proto.RegisterFile("sql/catalog/descpb/locking.proto", fileDescriptor_locking_ed2d621531b2095f)
+	proto.RegisterFile("sql/catalog/descpb/locking.proto", fileDescriptor_locking_2399db643a0152e9)
 }
 
-var fileDescriptor_locking_ed2d621531b2095f = []byte{
+var fileDescriptor_locking_2399db643a0152e9 = []byte{
 	// 248 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x28, 0x2e, 0xcc, 0xd1,
 	0x4f, 0x4e, 0x2c, 0x49, 0xcc, 0xc9, 0x4f, 0xd7, 0x4f, 0x49, 0x2d, 0x4e, 0x2e, 0x48, 0xd2, 0xcf,

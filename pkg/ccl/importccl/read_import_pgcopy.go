@@ -43,6 +43,7 @@ func newPgCopyReader(
 	walltime int64,
 	parallelism int,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
+	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{
@@ -51,6 +52,7 @@ func newPgCopyReader(
 			numWorkers: parallelism,
 			evalCtx:    evalCtx,
 			tableDesc:  tableDesc,
+			targetCols: targetCols,
 			kvCh:       kvCh,
 		},
 		opts: opts,

@@ -937,3 +937,95 @@ build
 SELECT * FROM information_schema.columns FOR UPDATE
 ----
 error (42601): FOR UPDATE not allowed with virtual tables
+
+# ------------------------------------------------------------------------------
+# Tests with the NOWAIT lock wait policy.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t FOR UPDATE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-update,nowait
+
+build
+SELECT * FROM t FOR NO KEY UPDATE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-no-key-update,nowait
+
+build
+SELECT * FROM t FOR SHARE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-share,nowait
+
+build
+SELECT * FROM t FOR KEY SHARE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-key-share,nowait
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-share,nowait
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-no-key-update,nowait
+
+build
+SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-update,nowait
+
+build
+SELECT * FROM t FOR UPDATE OF t NOWAIT
+----
+project
+ ├── columns: a:1!null b:2
+ └── scan t
+      ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+      └── locking: for-update,nowait
+
+build
+SELECT * FROM t FOR UPDATE OF t2 NOWAIT
+----
+error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
+
+build
+SELECT 1 FROM t FOR UPDATE OF t NOWAIT
+----
+project
+ ├── columns: "?column?":4!null
+ ├── scan t
+ │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3
+ │    └── locking: for-update,nowait
+ └── projections
+      └── 1 [as="?column?":4]
