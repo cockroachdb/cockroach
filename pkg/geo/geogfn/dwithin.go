@@ -17,7 +17,7 @@ import (
 )
 
 // DWithin returns whether a is within distance d of b. If A or B contains empty
-// Geography objects, this will return false. If exclusive is false, DWithin is
+// Geography objects, this will return false. If inclusive, DWithin is
 // equivalent to Distance(a, b) <= d. Otherwise, DWithin is instead equivalent
 // to Distance(a, b) < d.
 func DWithin(
@@ -25,7 +25,7 @@ func DWithin(
 	b *geo.Geography,
 	distance float64,
 	useSphereOrSpheroid UseSphereOrSpheroid,
-	exclusive bool,
+	exclusive geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)

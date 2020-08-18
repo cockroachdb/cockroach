@@ -247,3 +247,32 @@
 )
 =>
 (MakeIntersectionFunction $args)
+
+# FoldCmpSTDistanceLeft replaces an expression of the form:
+# 'ST_Distance(...) <= x' with a call to ST_DWithin or ST_DWithinExclusive. This
+# replacement allows early-exit behavior, and may enable use of an inverted
+# index scan. See the MakeSTDWithin method for the specific variation on
+# ST_DWithin that is used to replace expressions with different comparison
+# operators (e.g. '<' vs '<=').
+[FoldCmpSTDistanceLeft, Normalize]
+(Ge | Gt | Le | Lt
+    $left:(Function
+        $args:*
+        $private:(FunctionPrivate "st_distance")
+    )
+    $right:*
+)
+=>
+(MakeSTDWithinLeft (OpName) $args $right)
+
+# FoldCmpSTDistanceRight mirrors FoldCmpSTDistanceLeft.
+[FoldCmpSTDistanceRight, Normalize]
+(Ge | Gt | Le | Lt
+    $left:*
+    $right:(Function
+        $args:*
+        $private:(FunctionPrivate "st_distance")
+    )
+)
+=>
+(MakeSTDWithinRight (OpName) $args $left)

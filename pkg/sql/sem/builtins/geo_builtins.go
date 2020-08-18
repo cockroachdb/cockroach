@@ -2530,7 +2530,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
-	"st_dwithin": makeSTDWithinBuiltin(false /* exclusive */),
+	"st_dwithin": makeSTDWithinBuiltin(geo.FnInclusive),
 	"st_equals": makeBuiltin(
 		defProps(),
 		geometryOverload2BinaryPredicate(
@@ -3941,7 +3941,7 @@ Bottom Left.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
-	"_st_dwithinexclusive": makeSTDWithinBuiltin(true /* exclusive */),
+	"st_dwithinexclusive": makeSTDWithinBuiltin(geo.FnExclusive),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -4213,7 +4213,7 @@ func initGeoBuiltins() {
 		"st_intersects",
 		"st_intersection",
 		"st_length",
-		"_st_dwithinexclusive",
+		"st_dwithinexclusive",
 	} {
 		builtin, exists := geoBuiltins[builtinName]
 		if !exists {
@@ -4492,7 +4492,11 @@ func stAsGeoJSONFromTuple(
 	return tree.NewDString(string(marshalledIndent)), nil
 }
 
-func makeSTDWithinBuiltin(exclusive bool) builtinDefinition {
+func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
+	exclusivityStr := ", inclusive."
+	if exclusive {
+		exclusivityStr = ", exclusive."
+	}
 	return makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -4513,7 +4517,8 @@ func makeSTDWithinBuiltin(exclusive bool) builtinDefinition {
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if any of geometry_a is within distance units of geometry_b.",
+				info: "Returns true if any of geometry_a is within distance units of geometry_b" +
+					exclusivityStr,
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -4535,7 +4540,8 @@ func makeSTDWithinBuiltin(exclusive bool) builtinDefinition {
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info:         "Returns true if any of geography_a is within distance meters of geography_b." + usesSpheroidMessage + spheroidDistanceMessage,
+				info: "Returns true if any of geography_a is within distance meters of geography_b" +
+					exclusivityStr + usesSpheroidMessage + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib,
 				precision:    "1cm",
 			}.String(),
@@ -4562,7 +4568,8 @@ func makeSTDWithinBuiltin(exclusive bool) builtinDefinition {
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info:         "Returns true if any of geography_a is within distance meters of geography_b." + spheroidDistanceMessage,
+				info: "Returns true if any of geography_a is within distance meters of geography_b" +
+					exclusivityStr + spheroidDistanceMessage,
 				libraryUsage: usesGeographicLib | usesS2,
 				precision:    "1cm",
 			}.String(),
