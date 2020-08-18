@@ -1858,7 +1858,7 @@ func (ef *execFactory) ConstructExplainPlan(
 	if err != nil {
 		return nil, err
 	}
-	n := &explainNewPlanNode{
+	n := &explainPlanNode{
 		flags: flags,
 		plan:  plan.(*explain.Plan),
 	}

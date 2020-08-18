@@ -376,7 +376,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropViewNode{}):                "drop view",
 	reflect.TypeOf(&errorIfRowsNode{}):             "error if rows",
 	reflect.TypeOf(&explainDistSQLNode{}):          "explain distsql",
-	reflect.TypeOf(&explainNewPlanNode{}):          "explain plan",
+	reflect.TypeOf(&explainPlanNode{}):             "explain plan",
 	reflect.TypeOf(&explainVecNode{}):              "explain vectorized",
 	reflect.TypeOf(&exportNode{}):                  "export",
 	reflect.TypeOf(&filterNode{}):                  "filter",
