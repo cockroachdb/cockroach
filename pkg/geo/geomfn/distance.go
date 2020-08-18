@@ -59,7 +59,7 @@ func DWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
-	if !a.CartesianBoundingBox().Buffer(d).Intersects(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Buffer(d, d).Intersects(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	dist, err := minDistanceInternal(a, b, d, geo.EmptyBehaviorError)
@@ -82,7 +82,7 @@ func DFullyWithin(a *geo.Geometry, b *geo.Geometry, d float64) (bool, error) {
 	if d < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")
 	}
-	if !a.CartesianBoundingBox().Buffer(d).Covers(b.CartesianBoundingBox()) {
+	if !a.CartesianBoundingBox().Buffer(d, d).Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
 	dist, err := maxDistanceInternal(a, b, d, geo.EmptyBehaviorError)
