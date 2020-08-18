@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -301,14 +302,18 @@ type planTop struct {
 	// If we are collecting query diagnostics, flow diagrams are saved here.
 	distSQLDiagrams []execinfrapb.FlowDiagram
 
-	appStats          *appStats
-	savedPlanForStats *roachpb.ExplainTreePlanNode
+	// If savePlanForStats is true, an ExplainTreePlanNode tree will be saved in
+	// planForStats when the plan is closed.
+	savePlanForStats bool
+	// appStats is used to populate savePlanForStats.
+	appStats     *appStats
+	planForStats *roachpb.ExplainTreePlanNode
 
 	// If savePlanString is set to true, an EXPLAIN (VERBOSE)-style plan string
-	// will be saved in planString.
+	// will be saved in planString when the plan is closed.
 	savePlanString bool
-	explainPlan    *explain.Plan
 	planString     string
+	explainPlan    *explain.Plan
 }
 
 // physicalPlanTop is a utility wrapper around PhysicalPlan that allows for
@@ -419,40 +424,24 @@ func (p *planComponents) close(ctx context.Context) {
 
 // init resets planTop to point to a given statement; used at the start of the
 // planning process.
-func (p *planTop) init(stmt *Statement, appStats *appStats) {
-	*p = planTop{stmt: stmt, appStats: appStats}
+func (p *planTop) init(stmt *Statement, appStats *appStats, savePlanString bool) {
+	*p = planTop{
+		stmt:           stmt,
+		appStats:       appStats,
+		savePlanString: savePlanString,
+	}
 }
 
 // close ensures that the plan's resources have been deallocated.
 func (p *planTop) close(ctx context.Context) {
-	if p.main.planNode != nil && p.flags.IsSet(planFlagExecDone) {
-		// TODO(yuzefovich): update this once we support creating table reader
-		// specs directly in the optimizer (see #47474).
-		if p.appStats != nil && p.appStats.shouldSaveLogicalPlanDescription(
-			p.stmt,
-			p.flags.IsDistributed(),
-			p.flags.IsSet(planFlagVectorized),
-			p.flags.IsSet(planFlagImplicitTxn),
-			p.execErr,
-		) {
-			p.savedPlanForStats = planToTree(ctx, p)
-		}
-
-		if p.savePlanString && p.explainPlan != nil {
-			var err error
-			p.planString, err = p.formatExplain()
-			if err != nil {
-				p.planString = err.Error()
-			}
-		}
+	if p.explainPlan != nil && p.flags.IsSet(planFlagExecDone) {
+		p.savePlanInfo(ctx)
 	}
 	p.planComponents.close(ctx)
 }
 
-func (p *planTop) formatExplain() (string, error) {
-	if p.explainPlan == nil {
-		return "", errors.AssertionFailedf("no plan")
-	}
+// savePlanInfo uses p.explainPlan to populate the plan string and/or tree.
+func (p *planTop) savePlanInfo(ctx context.Context) {
 	vectorized := p.flags.IsSet(planFlagVectorized)
 	distribution := physicalplan.LocalPlan
 	if p.flags.IsSet(planFlagFullyDistributed) {
@@ -461,14 +450,28 @@ func (p *planTop) formatExplain() (string, error) {
 		distribution = physicalplan.PartiallyDistributedPlan
 	}
 
-	ob := explain.NewOutputBuilder(explain.Flags{
-		Verbose:   true,
-		ShowTypes: true,
-	})
-	if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
-		return "", err
+	if p.savePlanForStats {
+		ob := explain.NewOutputBuilder(explain.Flags{
+			HideValues: true,
+		})
+		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+			log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
+		} else {
+			p.planForStats = ob.BuildProtoTree()
+		}
 	}
-	return ob.BuildString(), nil
+
+	if p.savePlanString {
+		ob := explain.NewOutputBuilder(explain.Flags{
+			Verbose:   true,
+			ShowTypes: true,
+		})
+		if err := emitExplain(ob, p.codec, p.explainPlan, distribution, vectorized); err != nil {
+			p.planString = fmt.Sprintf("error emitting plan: %v", err)
+		} else {
+			p.planString = ob.BuildString()
+		}
+	}
 }
 
 // formatOptPlan returns a visual representation of the optimizer plan that was

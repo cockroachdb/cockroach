@@ -66,16 +66,16 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 
 			p.stmt = &Statement{Statement: stmt}
 			p.curPlan.savePlanString = true
+			p.curPlan.savePlanForStats = true
 			if err := p.makeOptimizerPlan(ctx); err != nil {
 				t.Fatal(err)
 			}
+			p.curPlan.flags.Set(planFlagExecDone)
+			p.curPlan.close(ctx)
 			if d.Cmd == "plan-string" {
-				p.curPlan.flags.Set(planFlagExecDone)
-				p.curPlan.close(ctx)
 				return p.curPlan.planString
 			}
-			tree := planToTree(ctx, &p.curPlan)
-			treeYaml, err := yaml.Marshal(tree)
+			treeYaml, err := yaml.Marshal(p.curPlan.planForStats)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -116,6 +116,9 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbas
 	if ob.flags.ShowTypes {
 		flags |= tree.FmtShowTypes
 	}
+	if ob.flags.HideValues {
+		flags |= tree.FmtHideConstants
+	}
 	f := tree.NewFmtCtx(flags)
 	f.SetIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
 		// Ensure proper quoting.

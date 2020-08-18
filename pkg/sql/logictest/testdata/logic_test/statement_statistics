@@ -120,7 +120,6 @@ SELECT sqrt(_)                                                    !
 SELECT x FROM (VALUES (_, _, __more1__), (__more1__)) AS t (x)    ·
 SELECT x FROM test WHERE y = (_ / z)                              !+
 SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
-SELECT x FROM test WHERE y IN (_, _, __more3__)                   ·
 SELECT x FROM test WHERE y IN (_, _, __more3__)                   +
 SELECT x FROM test WHERE y NOT IN (_, _, __more3__)               ·
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
@@ -146,7 +145,6 @@ SELECT sqrt(_)
 SELECT _ FROM (VALUES (_, _, __more1__), (__more1__)) AS _ (_)
 SELECT _ FROM _ WHERE _ = (_ / _)
 SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
-SELECT _ FROM _ WHERE _ IN (_, _, __more3__)
 SELECT _ FROM _ WHERE _ IN (_, _, __more3__)
 SELECT _ FROM _ WHERE _ NOT IN (_, _, __more3__)
 SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT

@@ -292,13 +292,14 @@ func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit b
 // sample logical plan for its corresponding fingerprint. We use
 // `logicalPlanCollectionPeriod` to assess how frequently to sample logical
 // plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, vectorized bool, implicitTxn bool, err error,
-) bool {
+func (a *appStats) shouldSaveLogicalPlanDescription(stmt *Statement, implicitTxn bool) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
-	stats := a.getStatsForStmt(stmt, implicitTxn, err, false /* createIfNonexistent */)
+	// We don't know yet if we will hit an error, so we assume we don't. The worst
+	// that can happen is that for statements that always error out, we will
+	// always save the tree plan.
+	stats := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
