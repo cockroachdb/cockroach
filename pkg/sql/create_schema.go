@@ -129,8 +129,7 @@ func (*createSchemaNode) Next(runParams) (bool, error) { return false, nil }
 func (*createSchemaNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *createSchemaNode) Close(ctx context.Context)  {}
 
-// CreateSchema creates a schema. Currently only works in IF NOT EXISTS mode,
-// for schemas that do in fact already exist.
+// CreateSchema creates a schema.
 func (p *planner) CreateSchema(ctx context.Context, n *tree.CreateSchema) (planNode, error) {
 	return &createSchemaNode{
 		n: n,
