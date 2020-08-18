@@ -942,6 +942,16 @@ func (tc *TestCluster) WaitForValues(t testing.TB, key roachpb.Key, expected []i
 	})
 }
 
+// GetFirstStoreFromServer get the first store from the specified server.
+func (tc *TestCluster) GetFirstStoreFromServer(t testing.TB, server int) *kvserver.Store {
+	ts := tc.Servers[server]
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	return store
+}
+
 type testClusterFactoryImpl struct{}
 
 // TestClusterFactory can be passed to serverutils.InitTestClusterFactory
