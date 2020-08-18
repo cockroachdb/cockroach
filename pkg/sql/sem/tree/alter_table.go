@@ -549,17 +549,21 @@ func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
 type AlterTableSetSchema struct {
-	Name       *UnresolvedObjectName
-	Schema     string
-	IfExists   bool
-	IsView     bool
-	IsSequence bool
+	Name           *UnresolvedObjectName
+	Schema         string
+	IfExists       bool
+	IsView         bool
+	IsMaterialized bool
+	IsSequence     bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER")
 	if node.IsView {
+		if node.IsMaterialized {
+			ctx.WriteString(" MATERIALIZED")
+		}
 		ctx.WriteString(" VIEW ")
 	} else if node.IsSequence {
 		ctx.WriteString(" SEQUENCE ")

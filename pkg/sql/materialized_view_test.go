@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMaterializedViewClearedAfterRefresh ensures that the old state of the
@@ -198,6 +199,50 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 			t.Fatal(err)
 		} else if len(kvs) != 2 {
 			return errors.Newf("expected to find only 2 KVs, but found %d", len(kvs))
+		}
+		return nil
+	})
+}
+
+func TestDropMaterializedView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlRaw, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Disable strict GC TTL enforcement because we're going to shove a zero-value
+	// TTL into the system with AddImmediateGCZoneConfig.
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlRaw)()
+
+	sqlDB := sqlutils.SQLRunner{DB: sqlRaw}
+
+	// Create a view with some data.
+	sqlDB.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.t (x INT);
+INSERT INTO t.t VALUES (1), (2);
+CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
+`)
+	desc := catalogkv.TestingGetImmutableTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	// Add a zone config to delete all table data.
+	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.ID)
+	require.NoError(t, err)
+
+	// Now drop the view.
+	sqlDB.Exec(t, `DROP MATERIALIZED VIEW t.v`)
+	require.NoError(t, err)
+
+	// All of the table data should be cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		tableStart := keys.SystemSQLCodec.TablePrefix(uint32(desc.ID))
+		tableEnd := tableStart.PrefixEnd()
+		if kvs, err := kvDB.Scan(ctx, tableStart, tableEnd, 0); err != nil {
+			t.Fatal(err)
+		} else if len(kvs) != 0 {
+			return errors.Newf("expected to find 0 KVs, but found %d", len(kvs))
 		}
 		return nil
 	})

@@ -56,6 +56,10 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
+	if err := checkViewMatchesMaterialized(tableDesc, n.IsView, n.IsMaterialized); err != nil {
+		return nil, err
+	}
+
 	if tableDesc.State != descpb.TableDescriptor_PUBLIC {
 		return nil, sqlbase.NewUndefinedRelationError(&oldTn)
 	}
