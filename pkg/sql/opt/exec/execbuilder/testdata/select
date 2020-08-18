@@ -1571,7 +1571,6 @@ limit                     ·              ·
       │                   order          +z
       └── project set     ·              ·
            └── hash join  ·              ·
-                │         type           inner
                 │         equality       (y) = (y)
                 ├── scan  ·              ·
                 │         missing stats  ·

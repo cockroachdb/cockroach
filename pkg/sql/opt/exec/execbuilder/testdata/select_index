@@ -195,31 +195,30 @@ output row: [2]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-·                     distribution         local                ·                         ·
-·                     vectorized           true                 ·                         ·
-project               ·                    ·                    (b, a, c, d, a, c, d)     ·
- │                    estimated row count  100 (missing stats)  ·                         ·
- └── merge join       ·                    ·                    (a, b, c, d, a, b, c, d)  ·
-      │               estimated row count  100 (missing stats)  ·                         ·
-      │               type                 inner                ·                         ·
-      │               equality             (b) = (b)            ·                         ·
-      │               merge ordering       +"(b=b)"             ·                         ·
-      ├── index join  ·                    ·                    (a, b, c, d)              ·
-      │    │          estimated row count  10 (missing stats)   ·                         ·
-      │    │          table                t@primary            ·                         ·
-      │    │          key columns          a, b                 ·                         ·
-      │    └── scan   ·                    ·                    (a, b, c)                 ·
-      │               estimated row count  10 (missing stats)   ·                         ·
-      │               table                t@bc                 ·                         ·
-      │               spans                /"3"-/"3"/PrefixEnd  ·                         ·
-      └── index join  ·                    ·                    (a, b, c, d)              ·
-           │          estimated row count  10 (missing stats)   ·                         ·
-           │          table                t@primary            ·                         ·
-           │          key columns          a, b                 ·                         ·
-           └── scan   ·                    ·                    (a, b, c)                 ·
-·                     estimated row count  10 (missing stats)   ·                         ·
-·                     table                t@bc                 ·                         ·
-·                     spans                /"3"-/"3"/PrefixEnd  ·                         ·
+·                        distribution         local                ·                         ·
+·                        vectorized           true                 ·                         ·
+project                  ·                    ·                    (b, a, c, d, a, c, d)     ·
+ │                       estimated row count  100 (missing stats)  ·                         ·
+ └── merge join (inner)  ·                    ·                    (a, b, c, d, a, b, c, d)  ·
+      │                  estimated row count  100 (missing stats)  ·                         ·
+      │                  equality             (b) = (b)            ·                         ·
+      │                  merge ordering       +"(b=b)"             ·                         ·
+      ├── index join     ·                    ·                    (a, b, c, d)              ·
+      │    │             estimated row count  10 (missing stats)   ·                         ·
+      │    │             table                t@primary            ·                         ·
+      │    │             key columns          a, b                 ·                         ·
+      │    └── scan      ·                    ·                    (a, b, c)                 ·
+      │                  estimated row count  10 (missing stats)   ·                         ·
+      │                  table                t@bc                 ·                         ·
+      │                  spans                /"3"-/"3"/PrefixEnd  ·                         ·
+      └── index join     ·                    ·                    (a, b, c, d)              ·
+           │             estimated row count  10 (missing stats)   ·                         ·
+           │             table                t@primary            ·                         ·
+           │             key columns          a, b                 ·                         ·
+           └── scan      ·                    ·                    (a, b, c)                 ·
+·                        estimated row count  10 (missing stats)   ·                         ·
+·                        table                t@bc                 ·                         ·
+·                        spans                /"3"-/"3"/PrefixEnd  ·                         ·
 
 statement ok
 TRUNCATE TABLE t

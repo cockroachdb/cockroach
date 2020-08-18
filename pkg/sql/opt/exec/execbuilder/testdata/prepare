@@ -61,7 +61,6 @@ EXECUTE change_stats
 ·           distribution        full
 ·           vectorized          true
 merge join  ·                   ·
- │          type                inner
  │          equality            (a) = (c)
  │          left cols are key   ·
  │          right cols are key  ·
@@ -87,7 +86,6 @@ EXECUTE change_stats
 ·            vectorized             true
 lookup join  ·                      ·
  │           table                  cd@primary
- │           type                   inner
  │           equality               (a) = (c)
  │           equality cols are key  ·
  └── scan    ·                      ·
