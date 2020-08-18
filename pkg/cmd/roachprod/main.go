@@ -89,6 +89,7 @@ var (
 	adminurlIPs       = false
 	useTreeDist       = true
 	encrypt           = false
+	skipInit          = false
 	quiet             = false
 	sig               = 9
 	waitFlag          = false
@@ -1035,6 +1036,31 @@ other signals.
 	}),
 }
 
+var initCmd = &cobra.Command{
+	Use:   "init <cluster>",
+	Short: "initialize the cluster",
+	Long: `Initialize the cluster.
+
+The "init" command bootstraps the cluster (using "cockroach init"). It also sets
+default cluster settings. It's intended to be used in conjunction with
+'roachprod start --skip-init'.
+`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		clusterName, err := verifyClusterName(args[0])
+		if err != nil {
+			return err
+		}
+
+		c, err := newCluster(clusterName)
+		if err != nil {
+			return err
+		}
+		c.Init()
+		return nil
+	}),
+}
+
 var statusCmd = &cobra.Command{
 	Use:   "status <cluster>",
 	Short: "retrieve the status of nodes in a cluster",
@@ -1558,6 +1584,7 @@ func main() {
 		monitorCmd,
 		startCmd,
 		stopCmd,
+		initCmd,
 		runCmd,
 		wipeCmd,
 		reformatCmd,
@@ -1754,6 +1781,8 @@ func main() {
 				&clusterType, "type", "t", clusterType, `cluster type ("cockroach" or "cassandra")`)
 			cmd.Flags().BoolVar(
 				&install.StartOpts.Encrypt, "encrypt", encrypt, "start nodes with encryption at rest turned on")
+			cmd.Flags().BoolVar(
+				&install.StartOpts.SkipInit, "skip-init", skipInit, "skip initializing the cluster")
 			fallthrough
 		case sqlCmd:
 			cmd.Flags().StringVarP(
