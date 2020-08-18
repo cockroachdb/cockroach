@@ -57,9 +57,9 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	}
 
 	// Get AWS KMS region from env variable.
-	kmsRegion := os.Getenv("AWS_REGION")
+	kmsRegion := os.Getenv("AWS_KMS_REGION_A")
 	if kmsRegion == "" {
-		skip.IgnoreLint(t, "AWS_REGION env var must be set")
+		skip.IgnoreLint(t, "AWS_KMS_REGION_A env var must be set")
 	}
 	q.Add(cloudimpl.KMSRegionParam, kmsRegion)
 
@@ -67,7 +67,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	// - AWS_KEY_ARN
 	// - AWS_KEY_ID
 	// - AWS_KEY_ALIAS
-	for _, id := range []string{"AWS_KEY_ARN", "AWS_KEY_ID", "AWS_KEY_ALIAS"} {
+	for _, id := range []string{"AWS_KMS_KEY_ARN_A", "AWS_KEY_ID", "AWS_KEY_ALIAS"} {
 		// Get AWS Key identifier from env variable.
 		keyID := os.Getenv(id)
 		if keyID == "" {
@@ -142,9 +142,9 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	keyARN := os.Getenv("AWS_KEY_ARN")
+	keyARN := os.Getenv("AWS_KMS_KEY_ARN_A")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 	}
 
 	t.Run("allow-endpoints", func(t *testing.T) {
@@ -165,14 +165,14 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	q := make(url.Values)
-	q.Add("AWS_REGION", cloudimpl.KMSRegionParam)
+	q.Add(cloudimpl.KMSRegionParam, "region")
 
 	// Set AUTH to implicit
 	q.Add(cloudimpl.AuthParam, cloudimpl.AuthParamImplicit)
 
-	keyARN := os.Getenv("AWS_KEY_ARN")
+	keyARN := os.Getenv("AWS_KMS_KEY_ARN_A")
 	if keyARN == "" {
-		skip.IgnoreLint(t, "AWS_KEY_ARN env var must be set")
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	_, err := cloud.KMSFromURI(uri, &testKMSEnv{cluster.NoSettings,
