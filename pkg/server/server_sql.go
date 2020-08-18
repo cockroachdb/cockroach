@@ -733,12 +733,6 @@ func (s *sqlServer) start(
 		return err
 	}
 
-	// Start the async migration to upgrade 19.2-style jobs so they can be run by
-	// the job registry in 20.1.
-	if err := migMgr.StartSchemaChangeJobMigration(ctx); err != nil {
-		return err
-	}
-
 	// Start the async migration to upgrade namespace entries from the old
 	// namespace table (id 2) to the new one (id 30).
 	if err := migMgr.StartSystemNamespaceMigration(ctx, bootstrapVersion); err != nil {

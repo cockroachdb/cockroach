@@ -148,10 +148,8 @@ var (
 // deprecatedIsOldSchemaChangeJob returns whether the provided payload is for a
 // job that is a 19.2-style schema change, and therefore cannot be run or
 // updated in 20.1 (without first having undergone a migration).
-// TODO(lucy): Remove this in 20.2. (I think it's possible in theory for a 19.2
-// schema change job to persist on a 20.1 cluster indefinitely, since the
-// migration is asynchronous, so this will take some care beyond just removing
-// the format version gate.)
+// TODO (lucy): The plan is to mark all 19.2 jobs as failed in a 20.2 startup
+// migration. Once we do that, this can remain as an assertion.
 func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 	schemaChangeDetails, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
 	return ok && schemaChangeDetails.FormatVersion < jobspb.JobResumerFormatVersion
