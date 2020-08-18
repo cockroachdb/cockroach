@@ -26,23 +26,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// explainNewPlanNode implements EXPLAIN (PLAN); it produces the output of
+// explainPlanNode implements EXPLAIN (PLAN); it produces the output of
 // EXPLAIN given an explain.Plan.
-//
-// TODO(radu): move and rename this once explainPlanNode is removed.
-type explainNewPlanNode struct {
+type explainPlanNode struct {
 	flags explain.Flags
 	plan  *explain.Plan
-	run   explainNewPlanNodeRun
+	run   explainPlanNodeRun
 
 	columns sqlbase.ResultColumns
 }
 
-type explainNewPlanNodeRun struct {
+type explainPlanNodeRun struct {
 	results *valuesNode
 }
 
-func (e *explainNewPlanNode) startExec(params runParams) error {
+func (e *explainPlanNode) startExec(params runParams) error {
 	realPlan := e.plan.WrappedPlan.(*planComponents)
 	distribution, willVectorize := explainGetDistributedAndVectorized(params, realPlan)
 
@@ -102,10 +100,10 @@ func emitExplain(
 	return explain.Emit(explainPlan, ob, spanFormatFn)
 }
 
-func (e *explainNewPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
-func (e *explainNewPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
+func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
+func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
-func (e *explainNewPlanNode) Close(ctx context.Context) {
+func (e *explainPlanNode) Close(ctx context.Context) {
 	e.plan.Root.WrappedNode().(planNode).Close(ctx)
 	for i := range e.plan.Subqueries {
 		e.plan.Subqueries[i].Root.(*explain.Node).WrappedNode().(planNode).Close(ctx)
