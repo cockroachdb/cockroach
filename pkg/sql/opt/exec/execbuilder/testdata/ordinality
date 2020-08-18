@@ -8,10 +8,9 @@ EXPLAIN (VERBOSE) SELECT max(ordinality) FROM foo WITH ORDINALITY
 ----
 ·                distribution         local                 ·               ·
 ·                vectorized           true                  ·               ·
-group            ·                    ·                     (max)           ·
+group (scalar)   ·                    ·                     (max)           ·
  │               estimated row count  1 (missing stats)     ·               ·
  │               aggregate 0          max(ordinality)       ·               ·
- │               scalar               ·                     ·               ·
  └── ordinality  ·                    ·                     ("ordinality")  ·
       │          estimated row count  1000 (missing stats)  ·               ·
       └── scan   ·                    ·                     ()              ·

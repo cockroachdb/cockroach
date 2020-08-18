@@ -204,8 +204,7 @@ EXPLAIN SELECT count(*) FROM [INSERT INTO t SELECT * FROM t2 RETURNING x]
 ·                         distribution   local
 ·                         vectorized     false
 root                      ·              ·
- ├── group                ·              ·
- │    │                   scalar         ·
+ ├── group (scalar)       ·              ·
  │    └── scan buffer     ·              ·
  │                        label          buffer 1
  └── subquery             ·              ·

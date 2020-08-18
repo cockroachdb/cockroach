@@ -390,30 +390,29 @@ EXPLAIN (VERBOSE)
     FROM
         kv
 ----
-·                    distribution         local                                                                    ·             ·
-·                    vectorized           false                                                                    ·             ·
-root                 ·                    ·                                                                        (avg)         ·
- ├── project         ·                    ·                                                                        (avg)         ·
- │    │              estimated row count  1000 (missing stats)                                                     ·             ·
- │    └── window     ·                    ·                                                                        (v, w, avg)   ·
- │         │         estimated row count  1000 (missing stats)                                                     ·             ·
- │         │         window 0             avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
- │         └── scan  ·                    ·                                                                        (v, w)        ·
- │                   estimated row count  1000 (missing stats)                                                     ·             ·
- │                   table                kv@primary                                                               ·             ·
- │                   spans                FULL SCAN                                                                ·             ·
- └── subquery        ·                    ·                                                                        ·             ·
-      │              id                   @S1                                                                      ·             ·
-      │              original sql         (SELECT count(*) FROM kv)                                                ·             ·
-      │              exec mode            one row                                                                  ·             ·
-      └── group      ·                    ·                                                                        (count_rows)  ·
-           │         estimated row count  1 (missing stats)                                                        ·             ·
-           │         aggregate 0          count_rows()                                                             ·             ·
-           │         scalar               ·                                                                        ·             ·
-           └── scan  ·                    ·                                                                        ()            ·
-·                    estimated row count  1000 (missing stats)                                                     ·             ·
-·                    table                kv@primary                                                               ·             ·
-·                    spans                FULL SCAN                                                                ·             ·
+·                         distribution         local                                                                    ·             ·
+·                         vectorized           false                                                                    ·             ·
+root                      ·                    ·                                                                        (avg)         ·
+ ├── project              ·                    ·                                                                        (avg)         ·
+ │    │                   estimated row count  1000 (missing stats)                                                     ·             ·
+ │    └── window          ·                    ·                                                                        (v, w, avg)   ·
+ │         │              estimated row count  1000 (missing stats)                                                     ·             ·
+ │         │              window 0             avg(v) OVER (PARTITION BY w ROWS BETWEEN @S1 PRECEDING AND 1 FOLLOWING)  ·             ·
+ │         └── scan       ·                    ·                                                                        (v, w)        ·
+ │                        estimated row count  1000 (missing stats)                                                     ·             ·
+ │                        table                kv@primary                                                               ·             ·
+ │                        spans                FULL SCAN                                                                ·             ·
+ └── subquery             ·                    ·                                                                        ·             ·
+      │                   id                   @S1                                                                      ·             ·
+      │                   original sql         (SELECT count(*) FROM kv)                                                ·             ·
+      │                   exec mode            one row                                                                  ·             ·
+      └── group (scalar)  ·                    ·                                                                        (count_rows)  ·
+           │              estimated row count  1 (missing stats)                                                        ·             ·
+           │              aggregate 0          count_rows()                                                             ·             ·
+           └── scan       ·                    ·                                                                        ()            ·
+·                         estimated row count  1000 (missing stats)                                                     ·             ·
+·                         table                kv@primary                                                               ·             ·
+·                         spans                FULL SCAN                                                                ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
