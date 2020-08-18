@@ -50,7 +50,7 @@ type TestCluster struct {
 	Conns           []*gosql.DB
 	stopper         *stop.Stopper
 	replicationMode base.TestClusterReplicationMode
-	scratchRangeID  roachpb.RangeID
+	scratchRangeKey roachpb.Key
 	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
@@ -689,15 +689,14 @@ func (tc *TestCluster) FindRangeLeaseHolder(
 // kv scratch space (it doesn't overlap system spans or SQL tables). The range
 // is lazily split off on the first call to ScratchRange.
 func (tc *TestCluster) ScratchRange(t testing.TB) roachpb.Key {
-	scratchKey := keys.TableDataMax
-	if tc.scratchRangeID > 0 {
-		return scratchKey
+	if tc.scratchRangeKey != nil {
+		return tc.scratchRangeKey
 	}
-	_, right, err := tc.SplitRange(scratchKey)
+	scratchKey, err := tc.Servers[0].ScratchRange()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tc.scratchRangeID = right.RangeID
+	tc.scratchRangeKey = scratchKey
 	return scratchKey
 }
 

@@ -1965,6 +1965,16 @@ func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 	v.Visit(visitor)
 }
 
+// IterationOrder specifies the order in which replicas will be iterated through
+// by VisitReplicasByKey.
+type IterationOrder int
+
+// Ordering options for VisitReplicasByKey.
+const (
+	AscendingKeyOrder  = IterationOrder(-1)
+	DescendingKeyOrder = IterationOrder(1)
+)
+
 // VisitReplicasByKey invokes the visitor on all the replicas for ranges that
 // overlap [startKey, endKey), or until the visitor returns false. Replicas are
 // visited in key order. store.mu is held during the visiting.
@@ -1975,6 +1985,7 @@ func (s *Store) VisitReplicas(visitor func(*Replica) (wantMore bool)) {
 func (s *Store) VisitReplicasByKey(
 	ctx context.Context,
 	startKey, endKey roachpb.RKey,
+	order IterationOrder,
 	visitor func(context.Context, KeyRange) (wantMore bool),
 ) {
 	s.mu.RLock()
@@ -1991,10 +2002,28 @@ func (s *Store) VisitReplicasByKey(
 	})
 
 	// Iterate though overlapping replicas.
-	s.mu.replicasByKey.AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey),
-		func(item btree.Item) bool {
-			return visitor(ctx, item.(KeyRange))
-		})
+	if order == AscendingKeyOrder {
+		s.mu.replicasByKey.AscendRange(rangeBTreeKey(startKey), rangeBTreeKey(endKey),
+			func(item btree.Item) bool {
+				return visitor(ctx, item.(KeyRange))
+			})
+	} else {
+		// Note that we can't use DescendRange() because it treats the lower end as
+		// exclusive and the high end as inclusive.
+		s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(endKey),
+			func(item btree.Item) bool {
+				kr := item.(KeyRange)
+				if kr.startKey().Equal(endKey) {
+					// Skip the range starting at endKey.
+					return true
+				}
+				if kr.Desc().EndKey.Compare(startKey) <= 0 {
+					// Stop when we hit a range below startKey.
+					return false
+				}
+				return visitor(ctx, item.(KeyRange))
+			})
+	}
 }
 
 // WriteLastUpTimestamp records the supplied timestamp into the "last up" key
