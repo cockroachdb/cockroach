@@ -730,8 +730,8 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	regionEnvVariable := "AWS_REGION"
-	keyIDEnvVariable := "AWS_KEY_ARN"
+	regionEnvVariable := "AWS_KMS_REGION_A"
+	keyIDEnvVariable := "AWS_KMS_KEY_ARN_A"
 
 	for _, tc := range []struct {
 		name   string
@@ -3515,8 +3515,8 @@ func TestEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	regionEnvVariable := "AWS_REGION"
-	keyIDEnvVariable := "AWS_KEY_ARN"
+	regionEnvVariable := "AWS_KMS_REGION_A"
+	keyIDEnvVariable := "AWS_KMS_KEY_ARN_A"
 
 	for _, tc := range []struct {
 		name   string
@@ -3624,8 +3624,8 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	regionEnvVariables := []string{"AWS_REGION", "AWS_REGION_2"}
-	keyIDEnvVariables := []string{"AWS_KEY_ARN", "AWS_KEY_ARN_2"}
+	regionEnvVariables := []string{"AWS_KMS_REGION_A", "AWS_KMS_REGION_B"}
+	keyIDEnvVariables := []string{"AWS_KMS_KEY_ARN_A", "AWS_KMS_KEY_ARN_B"}
 
 	var multiRegionKMSURIs []string
 	for i := range regionEnvVariables {
