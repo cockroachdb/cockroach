@@ -84,15 +84,15 @@ func (requiresCCLBinaryFactory) NewConnector(_ ConnectorConfig, _ []string) (Con
 }
 
 // AddressResolver wraps a Connector in an adapter that allows it be used as a
-// nodedialer.AddressResolver. Addresses are resolved to a node's tenant KV
-// address. See NodeDescriptor.CheckedTenantAddress.
+// nodedialer.AddressResolver. Addresses are resolved to a node's KV
+// address.
 func AddressResolver(c Connector) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
 		nd, err := c.GetNodeDescriptor(nodeID)
 		if err != nil {
 			return nil, err
 		}
-		return nd.CheckedTenantAddress(), nil
+		return &nd.Address, nil
 	}
 }
 

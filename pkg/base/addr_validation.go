@@ -67,22 +67,6 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	}
 	cfg.SQLAddr = net.JoinHostPort(sqlHost, sqlPort)
 
-	// Validate the tenant advertise address. Use the provided advertise
-	// addr as default.
-	advTenantHost, advTenantPort, err := validateAdvertiseAddr(ctx,
-		cfg.TenantAdvertiseAddr, cfg.TenantAddr, advHost, cliflags.ListenTenantAddr)
-	if err != nil {
-		return invalidFlagErr(err, cliflags.TenantAdvertiseAddr)
-	}
-	cfg.TenantAdvertiseAddr = net.JoinHostPort(advTenantHost, advTenantPort)
-
-	// Validate the tenant listen address - use the resolved listen addr as default.
-	tenantHost, tenantPort, err := validateListenAddr(ctx, cfg.TenantAddr, listenHost)
-	if err != nil {
-		return invalidFlagErr(err, cliflags.ListenTenantAddr)
-	}
-	cfg.TenantAddr = net.JoinHostPort(tenantHost, tenantPort)
-
 	// Validate the HTTP advertise address. Use the provided advertise
 	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,

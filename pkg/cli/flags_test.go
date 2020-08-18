@@ -552,55 +552,6 @@ func TestServerConnSettings(t *testing.T) {
 			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
 		},
 
-		// Tenant address override.
-		{[]string{"start", "--tenant-addr", "127.0.0.1"},
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-		},
-		{[]string{"start", "--tenant-addr", ":1234"},
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":1234", ":1234",
-		},
-		{[]string{"start", "--tenant-addr", "127.0.0.1:1234"},
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			"127.0.0.1:1234", "127.0.0.1:1234",
-		},
-		{[]string{"start", "--tenant-addr", "[::2]"},
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
-		},
-		{[]string{"start", "--tenant-addr", "[::2]:1234"},
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			":" + base.DefaultPort, ":" + base.DefaultPort,
-			"[::2]:1234", "[::2]:1234",
-		},
-
-		// Configuring the components of the Tenant address separately.
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", "127.0.0.2"},
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.2:" + base.DefaultPort, "127.0.0.2:" + base.DefaultPort,
-		},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", ":1234"},
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.1:1234", "127.0.0.1:1234",
-		},
-		{[]string{"start", "--listen-addr", "127.0.0.1", "--tenant-addr", "127.0.0.2:1234"},
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort,
-			"127.0.0.2:1234", "127.0.0.2:1234",
-		},
-		{[]string{"start", "--listen-addr", "[::2]", "--tenant-addr", ":1234"},
-			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
-			"[::2]:" + base.DefaultPort, "[::2]:" + base.DefaultPort,
-			"[::2]:1234", "[::2]:1234",
-		},
-
 		// --advertise-addr overrides.
 		{[]string{"start", "--advertise-addr", "192.168.0.111"},
 			":" + base.DefaultPort, "192.168.0.111:" + base.DefaultPort,
@@ -757,20 +708,14 @@ func TestServerConnSettings(t *testing.T) {
 			}
 
 			wantSQLSplit := false
-			wantTenantSplit := false
 			for _, r := range td.args {
 				switch r {
 				case "--sql-addr":
 					wantSQLSplit = true
-				case "--tenant-addr":
-					wantTenantSplit = true
 				}
 			}
 			if wantSQLSplit != serverCfg.SplitListenSQL {
 				t.Errorf("%d. expected combined RPC/SQL listen = %v, found %v", i, wantSQLSplit, serverCfg.SplitListenSQL)
-			}
-			if wantTenantSplit != serverCfg.SplitListenTenant {
-				t.Errorf("%d. expected split tenant KV listen = %v, found %v", i, wantTenantSplit, serverCfg.SplitListenTenant)
 			}
 
 			if td.expSQLAddr != serverCfg.SQLAddr {
