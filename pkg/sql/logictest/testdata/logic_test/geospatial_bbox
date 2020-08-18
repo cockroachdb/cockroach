@@ -1,3 +1,7 @@
+# LogicTest: local
+# Set to local as SET CLUSTER SETTING can take a while to propagate
+# on the fakedist and hence causing flakes.
+
 statement ok
 CREATE TABLE box2d_encoding_test(
   id int primary key,
@@ -70,6 +74,12 @@ INSERT INTO box2d_tbl VALUES
   ('NULL', NULL),
   ('box at origin', 'box(0 0, 0 0)'),
   ('box from origin to 1 1', 'box(0 0, 1 1)');
+
+statement error this box2d comparison operator is experimental
+SELECT 'box(0 0,1 1)'::box2d && 'box(1 1,2 2)'::box2d
+
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
 query TTBBBB
 SELECT
