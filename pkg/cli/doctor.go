@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"database/sql/driver"
 	hx "encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -51,7 +52,7 @@ var doctorZipDirCmd = &cobra.Command{
 Run doctor tool on system data from directory	created by unzipping debug.zip.
 `,
 	Args: cobra.ExactArgs(1),
-	RunE: RunZipDirDoctor,
+	RunE: runZipDirDoctor,
 }
 
 var doctorClusterCmd = &cobra.Command{
@@ -61,11 +62,24 @@ var doctorClusterCmd = &cobra.Command{
 Run doctor tool reading system data from a live cluster specified by --url.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(RunClusterDoctor),
+	RunE: MaybeDecorateGRPCError(runClusterDoctor),
 }
 
-// RunClusterDoctor runs the doctors tool reading data from a live cluster.
-func RunClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
+func wrapExamine(descTable []doctor.DescriptorTableRow) error {
+	// TODO(spaskob): add --verbose flag.
+	valid, err := doctor.Examine(descTable, false, os.Stdout)
+	if err != nil {
+		return &cliError{exitCode: 2, cause: errors.Wrap(err, "examine failed")}
+	}
+	if !valid {
+		return &cliError{exitCode: 1, cause: errors.New("validation failed")}
+	}
+	fmt.Println("No problems found!")
+	return nil
+}
+
+// runClusterDoctor runs the doctors tool reading data from a live cluster.
+func runClusterDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
 	if err != nil {
 		return errors.Wrap(err, "could not establish connection to cluster")
@@ -117,15 +131,11 @@ ORDER BY id`,
 		descTable = append(descTable, row)
 	}
 
-	// TODO(spaskob): add --verbose flag.
-	if err := doctor.Examine(descTable, false); err != nil {
-		return errors.Wrap(err, "examine failed")
-	}
-	return nil
+	return wrapExamine(descTable)
 }
 
-// RunZipDirDoctor runs the doctors tool reading data from a debug zip dir.
-func RunZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
+// runZipDirDoctor runs the doctors tool reading data from a debug zip dir.
+func runZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 	// To make parsing user functions code happy.
 	_ = builtins.AllBuiltinNames
 
@@ -158,9 +168,5 @@ func RunZipDirDoctor(cmd *cobra.Command, args []string) (retErr error) {
 		descTable = append(descTable, doctor.DescriptorTableRow{ID: int64(i), DescBytes: descBytes, ModTime: ts})
 	}
 
-	// TODO(spaskob): add --verbose flag.
-	if err := doctor.Examine(descTable, false); err != nil {
-		return errors.Wrap(err, "examine failed")
-	}
-	return nil
+	return wrapExamine(descTable)
 }
