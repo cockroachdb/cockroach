@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -41,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1670,10 +1670,43 @@ func (r *importResumer) dropTables(
 		}
 	}
 
+	var offlineUntil hlc.Timestamp
 	for i := range empty {
-		if err := gcjob.ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, empty[i]); err != nil {
-			return errors.Wrapf(err, "clearing data for table %d", empty[i].ID)
+		tableSpan := empty[i].TableSpan(execCfg.Codec)
+		var err error
+
+		for d := time.Millisecond * 25; d < time.Minute; d *= 2 {
+			offlineUntil.Forward(execCfg.Clock.Now().Add(d.Nanoseconds(), 0))
+			log.VEventf(ctx, 2, "ClearRange %s - %s (deadline +%s)", tableSpan.Key, tableSpan.EndKey, d)
+			var b kv.Batch
+			b.AddRawRequest(&roachpb.ClearRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    tableSpan.Key,
+					EndKey: tableSpan.EndKey,
+				},
+				Deadline: offlineUntil,
+			})
+			err = execCfg.DB.Run(ctx, &b)
+			if err == nil {
+				break
+			}
+			if strings.Contains(err.Error(), "ClearRange has deadline") {
+				log.VEventf(ctx, 2, "ClearRange hit deadline, trying again")
+				continue
+			}
+			return err
 		}
+		if err != nil {
+			return err
+		}
+	}
+
+	if !offlineUntil.IsEmpty() {
+		// Compute the last time any node will agree to run a replay of any of the
+		// ClearRanges we sent by adding max-offset to the deadline upper-bound.
+		offlineUntil = offlineUntil.Add(execCfg.Clock.MaxOffset().Nanoseconds(), 0)
+		log.VEventf(ctx, 2, "ClearRanges ran with deadlines up to %v, sleeping until then...", offlineUntil)
+		timeutil.SleepUntil(offlineUntil.WallTime, func() int64 { return execCfg.Clock.Now().WallTime })
 	}
 
 	b := txn.NewBatch()
