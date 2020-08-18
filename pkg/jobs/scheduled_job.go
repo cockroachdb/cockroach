@@ -88,6 +88,17 @@ func (j *ScheduledJob) SetScheduleName(name string) {
 	j.markDirty("schedule_name")
 }
 
+// Owner returns schedule owner.
+func (j *ScheduledJob) Owner() string {
+	return j.rec.Owner
+}
+
+// SetOwner updates schedule owner.
+func (j *ScheduledJob) SetOwner(owner string) {
+	j.rec.Owner = owner
+	j.markDirty("owner")
+}
+
 // NextRun returns the next time this schedule supposed to execute.
 // A sentinel value of time.Time{} indicates this schedule is paused.
 func (j *ScheduledJob) NextRun() time.Time {
