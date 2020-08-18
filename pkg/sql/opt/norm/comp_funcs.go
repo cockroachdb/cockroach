@@ -133,3 +133,98 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 		},
 	)
 }
+
+// MakeSTDWithinLeft returns an ST_DWithin function that replaces an expression
+// of the following form: ST_Distance(a,b) <= x. Note that the ST_Distance
+// function is on the left side of the inequality.
+func (c *CustomFuncs) MakeSTDWithinLeft(
+	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
+) opt.ScalarExpr {
+	return c.makeSTDWithin(op, args, bound, true /* fnIsLeftArg */)
+}
+
+// MakeSTDWithinRight returns an ST_DWithin function that replaces an expression
+// of the following form: x <= ST_Distance(a,b). Note that the ST_Distance
+// function is on the right side of the inequality.
+func (c *CustomFuncs) MakeSTDWithinRight(
+	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr,
+) opt.ScalarExpr {
+	return c.makeSTDWithin(op, args, bound, false /* fnIsLeftArg */)
+}
+
+// makeSTDWithin returns an ST_DWithin function that replaces an expression of
+// the following form: ST_Distance(a,b) <= x. The ST_Distance function can be on
+// either side of the inequality, and the inequality can be one of the
+// following: '<', '<=', '>', '>='. This replacement allows early-exit behavior,
+// and may enable use of an inverted index scan.
+func (c *CustomFuncs) makeSTDWithin(
+	op opt.Operator, args memo.ScalarListExpr, bound opt.ScalarExpr, fnIsLeftArg bool,
+) opt.ScalarExpr {
+	var not bool
+	var name string
+	const incName = "st_dwithin"
+	const exName = "st_dwithinexclusive"
+	switch op {
+	case opt.GeOp:
+		if fnIsLeftArg {
+			// Matched expression: ST_Distance(a,b) >= x.
+			not = true
+			name = exName
+		} else {
+			// Matched expression: x >= ST_Distance(a,b).
+			not = false
+			name = incName
+		}
+
+	case opt.GtOp:
+		if fnIsLeftArg {
+			// Matched expression: ST_Distance(a,b) > x.
+			not = true
+			name = incName
+		} else {
+			// Matched expression: x > ST_Distance(a,b).
+			not = false
+			name = exName
+		}
+
+	case opt.LeOp:
+		if fnIsLeftArg {
+			// Matched expression: ST_Distance(a,b) <= x.
+			not = false
+			name = incName
+		} else {
+			// Matched expression: x <= ST_Distance(a,b).
+			not = true
+			name = exName
+		}
+
+	case opt.LtOp:
+		if fnIsLeftArg {
+			// Matched expression: ST_Distance(a,b) < x.
+			not = false
+			name = exName
+		} else {
+			// Matched expression: x < ST_Distance(a,b).
+			not = true
+			name = incName
+		}
+	}
+	props, overload, ok := memo.FindFunction(&args, name)
+	if !ok {
+		panic(errors.AssertionFailedf("could not find overload for %s", name))
+	}
+	within := c.f.ConstructFunction(append(args, bound), &memo.FunctionPrivate{
+		Name:       name,
+		Typ:        types.Bool,
+		Properties: props,
+		Overload:   overload,
+	})
+	if not {
+		// ST_DWithin and ST_DWithinExclusive are equivalent to ST_Distance <= x and
+		// ST_Distance < x respectively. The comparison operator in the matched
+		// expression (if ST_Distance is normalized to be on the left) is either '>'
+		// or '>='. Therefore, we have to take the opposite of within.
+		within = c.f.ConstructNot(within)
+	}
+	return within
+}

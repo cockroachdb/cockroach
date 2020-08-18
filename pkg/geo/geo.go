@@ -42,6 +42,20 @@ const (
 	EmptyBehaviorOmit EmptyBehavior = 1
 )
 
+// FnExclusivity is used to indicate whether a geo function should have
+// inclusive or exclusive semantics. For example, DWithin == (Distance <= x),
+// while DWithinExclusive == (Distance < x).
+type FnExclusivity bool
+
+const (
+	// FnExclusive indicates that the corresponding geo function should have
+	// exclusive semantics.
+	FnExclusive FnExclusivity = true
+	// FnInclusive indicates that the corresponding geo function should have
+	// inclusive semantics.
+	FnInclusive FnExclusivity = false
+)
+
 //
 // Geospatial Type
 //

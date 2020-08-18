@@ -54,7 +54,9 @@ func MaxDistance(a *geo.Geometry, b *geo.Geometry) (float64, error) {
 // DWithin determines if any part of geometry A is within D units of geometry B.
 // If exclusive is false, DWithin is equivalent to Distance(a, b) <= d.
 // Otherwise, DWithin is equivalent to Distance(a, b) < d.
-func DWithin(a *geo.Geometry, b *geo.Geometry, d float64, exclusive bool) (bool, error) {
+func DWithin(
+	a *geo.Geometry, b *geo.Geometry, d float64, exclusive geo.FnExclusivity,
+) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
 	}
@@ -167,7 +169,7 @@ func minDistanceInternal(
 	b *geo.Geometry,
 	stopAfter float64,
 	emptyBehavior geo.EmptyBehavior,
-	exclusive bool,
+	exclusive geo.FnExclusivity,
 ) (float64, error) {
 	u := newGeomMinDistanceUpdater(stopAfter, exclusive)
 	c := &geomDistanceCalculator{updater: u, boundingBoxIntersects: a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox())}
@@ -391,7 +393,7 @@ func (c *geomGeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.P
 type geomMinDistanceUpdater struct {
 	currentValue float64
 	stopAfter    float64
-	exclusive    bool
+	exclusive    geo.FnExclusivity
 	// coordA represents the first vertex of the edge that holds the maximum distance.
 	coordA geom.Coord
 	// coordB represents the second vertex of the edge that holds the maximum distance.
@@ -404,7 +406,9 @@ var _ geodist.DistanceUpdater = (*geomMinDistanceUpdater)(nil)
 
 // newGeomMinDistanceUpdater returns a new geomMinDistanceUpdater with the
 // correct arguments set up.
-func newGeomMinDistanceUpdater(stopAfter float64, exclusive bool) *geomMinDistanceUpdater {
+func newGeomMinDistanceUpdater(
+	stopAfter float64, exclusive geo.FnExclusivity,
+) *geomMinDistanceUpdater {
 	return &geomMinDistanceUpdater{
 		currentValue:        math.MaxFloat64,
 		stopAfter:           stopAfter,
