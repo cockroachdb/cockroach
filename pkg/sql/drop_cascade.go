@@ -70,7 +70,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			ctx,
 			tree.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
-				// if we don't find the object,
+				// if we don't find the object.
 				CommonLookupFlags: tree.CommonLookupFlags{Required: false},
 				RequireMutable:    true,
 				IncludeOffline:    true,
