@@ -588,7 +588,7 @@ func (r *Replica) leaseStatus(
 // including the node liveness table must use expiration leases to avoid
 // circular dependencies on the node liveness table.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
-	return r.store.cfg.NodeLiveness == nil || !r.store.cfg.EnableEpochRangeLeases ||
+	return r.store.cfg.NodeLiveness == nil ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 

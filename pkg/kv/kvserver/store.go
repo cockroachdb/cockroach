@@ -182,7 +182,6 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
-		EnableEpochRangeLeases:      true,
 		ClosedTimestamp:             container.NoopContainer(),
 		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
 	}
@@ -702,9 +701,6 @@ type StoreConfig struct {
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
-
-	// EnableEpochRangeLeases controls whether epoch-based range leases are used.
-	EnableEpochRangeLeases bool
 
 	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity values which need be exceeded before the store will
