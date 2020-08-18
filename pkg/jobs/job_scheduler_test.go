@@ -415,15 +415,12 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
-	// Note: time is stored in the table with microsecond precision.
-	expectScheduledRuns(t, h,
-		expectedRun{scheduleIDs[0], nil},
-		expectedRun{scheduleIDs[1], nil},
-		expectedRun{scheduleIDs[2], scheduleRunTime.Round(time.Microsecond)},
-		expectedRun{scheduleIDs[3], scheduleRunTime.Round(time.Microsecond)},
-		expectedRun{scheduleIDs[4], scheduleRunTime.Round(time.Microsecond)},
-	)
-
+	testutils.SucceedsSoon(t, func() error {
+		if ready := daemon.metrics.ReadyToRun.Value(); numJobs != ready {
+			return errors.Errorf("waiting for metric %d = %d", ready, numJobs)
+		}
+		return nil
+	})
 	stopper.Stop(ctx)
 
 	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
