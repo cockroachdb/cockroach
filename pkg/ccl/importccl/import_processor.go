@@ -240,6 +240,15 @@ func ingestKvs(
 	writtenFraction := make([]uint32, len(spec.Uri))
 	pkDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
 	idxDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
+	tempDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
+	// Allocate space.
+	for i := range tempDefaultExprMetaData {
+		tempDefaultExprMetaData[i] = &jobspb.DefaultExprMetaData{
+			SequenceMap: &jobspb.SequenceChunkMap{
+				Chunks: make(map[int32]*jobspb.SequenceChunkArray, 0),
+			},
+		}
+	}
 
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
@@ -250,16 +259,19 @@ func ingestKvs(
 	pkIndexAdder.SetOnFlush(func() {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			pkDefaultExprMetaData[i] = tempDefaultExprMetaData[i]
 		}
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
 				atomic.StoreInt64(&idxFlushedRow[i], emitted)
+				idxDefaultExprMetaData[i] = tempDefaultExprMetaData[i]
 			}
 		}
 	})
 	indexAdder.SetOnFlush(func() {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			idxDefaultExprMetaData[i] = nil
 		}
 	})
 
@@ -289,8 +301,6 @@ func ingestKvs(
 				prog.DefaultExprMetaData[file] = idxDefaultExprMetaData[offset]
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-			// TODO: change this part.
-			prog.DefaultExprMetaData[file] = nil
 		}
 		progCh <- prog
 	}
@@ -367,6 +377,7 @@ func ingestKvs(
 			}
 			offset := offsets[kvBatch.Source]
 			writtenRow[offset] = kvBatch.LastRow
+			tempDefaultExprMetaData[offset] = kvBatch.DefaultMetaData
 			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
 				_ = pkIndexAdder.Flush(ctx)

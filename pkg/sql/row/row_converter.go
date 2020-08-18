@@ -450,12 +450,6 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	); err != nil {
 		return errors.Wrap(err, "insert row")
 	}
-	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
-		for _, chunk := range seq.newChunks.Chunks {
-			seq.oldChunks.Chunks = append(seq.oldChunks.Chunks, chunk)
-		}
-		seq.newChunks.Chunks = make([]*jobspb.ChunkInfo, 0)
-	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
@@ -488,7 +482,12 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 		},
 	}
 	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
-		c.KvBatch.DefaultMetaData.SequenceMap.Chunks[int32(seq.id)] = seq.oldChunks
+		for _, chunk := range seq.newChunks.Chunks {
+			seq.oldChunks.Chunks = append(seq.oldChunks.Chunks, chunk)
+		}
+		// Send the new chunks to the KvBatch and clear it.
+		c.KvBatch.DefaultMetaData.SequenceMap.Chunks[int32(seq.id)] = seq.newChunks
+		seq.newChunks.Chunks = make([]*jobspb.ChunkInfo, 0)
 	}
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 	return nil

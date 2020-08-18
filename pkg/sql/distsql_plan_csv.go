@@ -265,6 +265,13 @@ func DistIngest(
 					overall += fileProgress
 				}
 				for i := range defaultExprMetaData {
+					// Here we need to append it.
+					for id, chunks := range defaultExprMetaData[i].SequenceMap.Chunks {
+						for _, chunk := range chunks.Chunks {
+							prog.DefaultExprMetaData[i].SequenceMap.Chunks[id].Chunks = append(
+								prog.DefaultExprMetaData[i].SequenceMap.Chunks[id].Chunks, chunk)
+						}
+					}
 					prog.DefaultExprMetaData[i] = defaultExprMetaData[i]
 				}
 				return overall / float32(len(from))
