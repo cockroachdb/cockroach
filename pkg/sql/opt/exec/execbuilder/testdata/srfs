@@ -350,7 +350,7 @@ project                     ·                    ·                            
  └── project set            ·                    ·                              (a, a, generate_series)   ·
       │                     estimated row count  10                             ·                         ·
       │                     render 0             generate_series(a + 1, a + 1)  ·                         ·
-      └── union             ·                    ·                              (a, a)                    ·
+      └── except all        ·                    ·                              (a, a)                    ·
            │                estimated row count  1                              ·                         ·
            ├── project      ·                    ·                              (a, a)                    ·
            │    └── values  ·                    ·                              (a)                       ·

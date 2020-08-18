@@ -218,11 +218,11 @@ func (e *emitter) nodeName(n *Node) (string, error) {
 
 	case setOpOp:
 		a := n.args.(*setOpArgs)
-		// TODO(radu): fix these terrible names.
-		if a.Typ == tree.UnionOp && a.All {
-			return "append", nil
+		name := strings.ToLower(a.Typ.String())
+		if a.All {
+			name += " all"
 		}
-		return "union", nil
+		return name, nil
 
 	case opaqueOp:
 		a := n.args.(*opaqueArgs)
