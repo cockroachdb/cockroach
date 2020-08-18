@@ -64,7 +64,7 @@ type OwnerMetadata struct {
 // metadata used for github issue posting/slack rooms, etc.
 var roachtestOwners = map[Owner]OwnerMetadata{
 	OwnerAppDev: {SlackRoom: `app-dev`, ContactEmail: `rafi@cockroachlabs.com`,
-		TriageColumnID: 8532151,
+		TriageColumnID: 7259065,
 	},
 	OwnerBulkIO: {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`,
 		TriageColumnID: 3097123,
