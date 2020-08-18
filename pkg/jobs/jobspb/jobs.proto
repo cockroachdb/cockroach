@@ -203,12 +203,16 @@ message ImportDetails {
 // sequence).
 message chunkInfo {
   int64  chunkStart = 1;
-  int64  chunkSize = 2;
-  int64  rowNum = 3;
+  int64  chunkSize  = 2;
+  // startRow denotes the rownum (after adding timestamp) for this chunk;
+  // nextChunkRow denotes the next chunk when we're supposed to ask for a new
+  // chunk.
+  int64  startRow   = 3;
+  int64  nextChunkRow = 4;
 }
 
-// sequenceChunkArray specifies an array of chunks, corresponding to a specific sequence.
-// This is useful
+// sequenceChunkArray specifies an array of chunks, corresponding to a specific
+// sequence.
 message sequenceChunkArray {
   repeated chunkInfo chunks = 1;
 }

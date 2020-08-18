@@ -15,6 +15,7 @@ import (
 	"io"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -41,6 +42,7 @@ func newMysqloutfileReader(
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 	data map[int32]*jobspb.DefaultExprMetaData,
+	job *jobs.Job,
 ) (*mysqloutfileReader, error) {
 	return &mysqloutfileReader{
 		importCtx: &parallelImportContext{
@@ -51,6 +53,7 @@ func newMysqloutfileReader(
 			tableDesc:            tableDesc,
 			targetCols:           targetCols,
 			kvCh:                 kvCh,
+			job:                  job,
 		},
 		opts: opts,
 	}, nil

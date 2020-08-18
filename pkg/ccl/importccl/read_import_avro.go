@@ -16,6 +16,7 @@ import (
 	"io"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -454,6 +455,7 @@ func newAvroInputReader(
 	parallelism int,
 	evalCtx *tree.EvalContext,
 	data map[int32]*jobspb.DefaultExprMetaData,
+	job *jobs.Job,
 ) (*avroInputReader, error) {
 
 	return &avroInputReader{
@@ -464,6 +466,7 @@ func newAvroInputReader(
 			evalCtx:              evalCtx,
 			tableDesc:            tableDesc,
 			kvCh:                 kvCh,
+			job:                  job,
 		},
 		opts: avroOpts,
 	}, nil

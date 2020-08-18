@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -47,6 +48,7 @@ func newPgCopyReader(
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 	data map[int32]*jobspb.DefaultExprMetaData,
+	job *jobs.Job,
 ) (*pgCopyReader, error) {
 	return &pgCopyReader{
 		importCtx: &parallelImportContext{
@@ -56,6 +58,7 @@ func newPgCopyReader(
 			evalCtx:              evalCtx,
 			tableDesc:            tableDesc,
 			kvCh:                 kvCh,
+			job:                  job,
 		},
 		opts: opts,
 	}, nil

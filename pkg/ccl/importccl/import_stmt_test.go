@@ -40,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -3456,6 +3458,123 @@ func TestImportDefault(t *testing.T) {
 			})
 		}
 	})
+}
+
+// For now, the aim here is to simply test that the results we get
+// are sensible: even after a resume, we can ensure that the KVs
+// being written previously (before a checkpoint) are still the same.
+func TestImportDefaultWithResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer setImportReaderParallelism(1)()
+	const batchSize = 5
+	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+				},
+			},
+		})
+	registry := s.JobRegistry().(*jobs.Registry)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	testCases := []struct {
+		name       string
+		create     string
+		targetCols string
+		format     string
+	}{
+		{
+			name:       "random",
+			create:     "a INT, b STRING, c FLOAT DEFAULT random()",
+			targetCols: "a, b",
+		},
+	}
+	for _, test := range testCases {
+		defer sqlDB.Exec(t, `DROP TABLE t`)
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
+
+		jobCtx, cancelImport := context.WithCancel(ctx)
+		jobIDCh := make(chan int64)
+		var jobID int64 = -1
+		var importSummary backupccl.RowCount
+
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			// Arrange for our special job resumer to be
+			// returned the very first time we start the import.
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+
+				resumer := raw.(*importResumer)
+				resumer.testingKnobs.ignoreProtectedTimestamps = true
+				resumer.testingKnobs.alwaysFlushJobProgress = true
+				resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					importSummary = summary
+					return nil
+				}
+				if jobID == -1 {
+					return &cancellableImportResumer{
+						ctx:     jobCtx,
+						jobIDCh: jobIDCh,
+						wrapped: resumer,
+					}
+				}
+				return resumer
+			},
+		}
+
+		testBarrier, csvBarrier := newSyncBarrier()
+		csv1 := newCsvGenerator(0, 10*batchSize+1, &intGenerator{}, &strGenerator{})
+		csv1.addBreakpoint(7*batchSize, func() (bool, error) {
+			defer csvBarrier.Enter()()
+			return false, nil
+		})
+
+		// Convince distsql to use our "external" storage implementation.
+		storage := newGeneratedStorage(csv1)
+		s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+
+		// Execute import; ignore any errors returned
+		// (since we're aborting the first import run.).
+		go func() {
+			_, _ = sqlDB.DB.ExecContext(ctx,
+				fmt.Sprintf(`IMPORT INTO t (%s) CSV DATA ($1)`, test.targetCols), storage.getGeneratorURIs()[0])
+		}()
+		jobID = <-jobIDCh
+
+		// Wait until we are blocked handling breakpoint.
+		unblockImport := testBarrier.Enter()
+		// Wait until we have recorded some job progress.
+		js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
+
+		// Pause the job;
+		if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+			t.Fatal(err)
+		}
+		// Send cancellation and unblock breakpoint.
+		cancelImport()
+		unblockImport()
+
+		// Get updated resume position counter.
+		js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
+		resumePos := js.prog.ResumePos[0]
+		t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
+
+		// Unpause the job and wait for it to complete.
+		if err := registry.Unpause(ctx, nil, jobID); err != nil {
+			t.Fatal(err)
+		}
+		js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+		// Verify that the import proceeded from the resumeRow position.
+		assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
+	}
 }
 
 // goos: darwin

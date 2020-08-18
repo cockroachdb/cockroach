@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -101,9 +102,8 @@ type rowSequence struct {
 	id              descpb.ID
 	table           *sqlbase.ImmutableTableDescriptor
 	instancesPerRow int64
-	chunk           *jobspb.ChunkInfo
-	oldChunks       *jobspb.SequenceChunkArray
-	newChunks       *jobspb.SequenceChunkArray
+	chunk           *jobspb.ChunkInfo          // The current chunk we're working on.
+	seqChunks       *jobspb.SequenceChunkArray // All the chunks corresponding to the sequence.
 	currVal         int64
 	instancePos     int64
 }
@@ -120,6 +120,7 @@ type cellInfoAnnotation struct {
 	randSource          *importRand
 	randInstancePerRow  int
 	sequenceMap         map[tree.DString]*rowSequence
+	job                 *jobs.Job
 }
 
 func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
@@ -210,31 +211,50 @@ func importNextVal(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, err
 	if seqChunk != nil {
 		chunkSize = seqChunk.ChunkSize
 	}
-	if seqChunk == nil || seqMap.currVal == seqChunk.ChunkStart+seqChunk.ChunkSize-seqMap.instancePos {
+	if seqChunk == nil || c.rowID == seqChunk.NextChunkRow {
 		done := false
-		for _, chunk := range seqMap.oldChunks.Chunks {
-			if chunk.RowNum <= c.rowID && (c.rowID-chunk.RowNum)*seqMap.instancesPerRow < chunk.ChunkSize && !done {
+		for _, chunk := range seqMap.seqChunks.Chunks {
+			if chunk.StartRow <= c.rowID && c.rowID < chunk.NextChunkRow && !done {
+				// An existing chunk exists, use that.
 				seqChunk = chunk
+				seqMap.currVal = chunk.ChunkStart + seqMap.instancesPerRow*(c.rowID-chunk.StartRow)
 				done = true
 			}
 		}
-		// Request a new Chunk.
-		newChunkSize := 10 * chunkSize
-		if newChunkSize == 0 {
-			newChunkSize = 10
+		if !done {
+			// Request a new Chunk.
+			newChunkSize := 10 * chunkSize
+			if newChunkSize == 0 {
+				newChunkSize = 10
+			}
+			if newChunkSize < seqMap.instancesPerRow {
+				newChunkSize = seqMap.instancesPerRow
+			}
+			seqValueKey := evalCtx.Codec.SequenceKey(uint32(seqMap.id))
+			err := c.job.Update(evalCtx.Context, func(txn *kv.Txn, _ jobs.JobMetadata, _ *jobs.JobUpdater) error {
+				newChunkVal, err := kv.IncrementValRetryable(
+					evalCtx.Ctx(), evalCtx.DB, seqValueKey, newChunkSize)
+				if err != nil {
+					return err
+				}
+				seqMap.chunk = &jobspb.ChunkInfo{
+					ChunkStart:   newChunkVal - newChunkSize,
+					ChunkSize:    newChunkSize,
+					StartRow:     c.rowID,
+					NextChunkRow: c.rowID + (newChunkSize / seqMap.instancesPerRow),
+				}
+				seqMap.seqChunks.Chunks = append(seqMap.seqChunks.Chunks, seqMap.chunk)
+				// Update the sequence chunks directly at the job progress.
+				progress := c.job.Progress()
+				importProgress := progress.GetImport()
+				importProgress.DefaultExprMetaData[c.sourceID].SequenceMap.Chunks[int32(seqMap.id)].Chunks = seqMap.seqChunks.Chunks
+				return nil
+			})
+			if err != nil {
+				return nil, errors.Wrapf(err, "error storing the sequence chunk")
+			}
+			seqMap.currVal = seqMap.chunk.ChunkStart
 		}
-		seqValueKey := evalCtx.Codec.SequenceKey(uint32(seqMap.id))
-		val, err := kv.IncrementValRetryable(
-			evalCtx.Ctx(), evalCtx.DB, seqValueKey, newChunkSize)
-		if err != nil {
-			return nil, err
-		}
-		seqMap.chunk = &jobspb.ChunkInfo{
-			ChunkStart: val - newChunkSize,
-			ChunkSize:  newChunkSize,
-			RowNum:     c.rowID,
-		}
-		seqMap.newChunks.Chunks = append(seqMap.newChunks.Chunks, seqMap.chunk)
 	}
 	seqMap.currVal++
 	seqMap.instancePos++

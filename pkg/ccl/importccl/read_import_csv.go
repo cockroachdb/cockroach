@@ -13,6 +13,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -40,6 +41,7 @@ func newCSVInputReader(
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 	data map[int32]*jobspb.DefaultExprMetaData,
+	job *jobs.Job,
 ) *csvInputReader {
 	return &csvInputReader{
 		importCtx: &parallelImportContext{
@@ -50,6 +52,7 @@ func newCSVInputReader(
 			tableDesc:            tableDesc,
 			targetCols:           targetCols,
 			kvCh:                 kvCh,
+			job:                  job,
 		},
 		opts: opts,
 	}

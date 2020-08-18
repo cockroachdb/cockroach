@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -70,7 +71,12 @@ func runImport(
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.DB = flowCtx.Cfg.DB
-	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh)
+	// Retrieve information of job here to be populated into converter.
+	job, err := flowCtx.Cfg.JobRegistry.LoadJobWithTxn(ctx, spec.Progress.JobID, nil)
+	if err != nil {
+		return nil, err
+	}
+	conv, err := makeInputConverter(ctx, spec, evalCtx, kvCh, job)
 	if err != nil {
 		return nil, err
 	}
@@ -403,6 +409,7 @@ type parallelImportContext struct {
 	tableDesc            *sqlbase.ImmutableTableDescriptor     // Table descriptor we're importing into.
 	targetCols           tree.NameList                         // List of columns to import.  nil if importing all columns.
 	kvCh                 chan row.KVBatch                      // Channel for sending KV batches.
+	job                  *jobs.Job                             // Job (of this import) to be populated into row converter.
 	defaultValueMetaData map[int32]*jobspb.DefaultExprMetaData // Metadata of default values to be communicated.
 }
 

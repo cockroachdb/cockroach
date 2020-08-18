@@ -103,7 +103,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 
 	// TODO (anzoteh96): try populating defaultValueMetaData.
 	conv, err := row.NewDatumRowConverter(ctx,
-		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, nil, kvCh)
+		&sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, nil, kvCh, nil)
 	if err != nil {
 		return err
 	}

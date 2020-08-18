@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -236,6 +237,7 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	defaultValueMetaData *jobspb.DefaultExprMetaData,
 	kvCh chan<- KVBatch,
+	job *jobs.Job,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -337,15 +339,13 @@ func NewDatumRowConverter(
 		rowSeqForAnnot[*tree.NewDString(seqTable.Name)] = &rowSequence{
 			id:        id,
 			table:     seqTable,
-			oldChunks: oldChunks,
-			newChunks: &jobspb.SequenceChunkArray{
-				Chunks: make([]*jobspb.ChunkInfo, 0),
-			},
+			seqChunks: oldChunks,
 		}
 	}
 	annot.Set(cellInfoAddr, &cellInfoAnnotation{
 		uniqueRowIDInstance: 0,
 		sequenceMap:         rowSeqForAnnot,
+		job:                 job,
 	})
 	c.EvalCtx.Annotations = &annot
 	for i := range cols {
@@ -450,12 +450,6 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	); err != nil {
 		return errors.Wrap(err, "insert row")
 	}
-	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
-		for _, chunk := range seq.newChunks.Chunks {
-			seq.oldChunks.Chunks = append(seq.oldChunks.Chunks, chunk)
-		}
-		seq.newChunks.Chunks = make([]*jobspb.ChunkInfo, 0)
-	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.KvBatch.KVs) >= kvDatumRowConverterBatchSize {
 		if err := c.SendBatch(ctx); err != nil {
@@ -481,14 +475,6 @@ func (c *DatumRowConverter) SendBatch(ctx context.Context) error {
 	case c.KvCh <- c.KvBatch:
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-	c.KvBatch.DefaultMetaData = &jobspb.DefaultExprMetaData{
-		SequenceMap: &jobspb.SequenceChunkMap{
-			Chunks: make(map[int32]*jobspb.SequenceChunkArray),
-		},
-	}
-	for _, seq := range getCellInfoAnnotation(c.EvalCtx.Annotations).sequenceMap {
-		c.KvBatch.DefaultMetaData.SequenceMap.Chunks[int32(seq.id)] = seq.oldChunks
 	}
 	c.KvBatch.KVs = make([]roachpb.KeyValue, 0, c.BatchCap)
 	return nil

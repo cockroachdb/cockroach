@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -119,6 +120,7 @@ func makeInputConverter(
 	spec *execinfrapb.ReadImportDataSpec,
 	evalCtx *tree.EvalContext,
 	kvCh chan row.KVBatch,
+	job *jobs.Job,
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 	var singleTable *sqlbase.ImmutableTableDescriptor
@@ -151,22 +153,22 @@ func makeInputConverter(
 		}
 		return newCSVInputReader(
 			kvCh, spec.Format.Csv, spec.WalltimeNanos, int(spec.ReaderParallelism),
-			singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData), nil
+			singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job)
 	case roachpb.IOFileFormat_Mysqldump:
 		return newMysqldumpReader(ctx, kvCh, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData)
+			int(spec.ReaderParallelism), singleTable, singleTableTargetCols, evalCtx, spec.DefaultExprMetaData, job)
 	case roachpb.IOFileFormat_PgDump:
 		return newPgDumpReader(ctx, kvCh, spec.Format.PgDump, spec.WalltimeNanos, spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
 			kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
-			int(spec.ReaderParallelism), evalCtx, spec.DefaultExprMetaData)
+			int(spec.ReaderParallelism), evalCtx, spec.DefaultExprMetaData, job)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
@@ -240,6 +242,15 @@ func ingestKvs(
 	writtenFraction := make([]uint32, len(spec.Uri))
 	pkDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
 	idxDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
+	tempDefaultExprMetaData := make([]*jobspb.DefaultExprMetaData, len(spec.Uri))
+	// Allocate space.
+	for i := range tempDefaultExprMetaData {
+		tempDefaultExprMetaData[i] = &jobspb.DefaultExprMetaData{
+			SequenceMap: &jobspb.SequenceChunkMap{
+				Chunks: make(map[int32]*jobspb.SequenceChunkArray, 0),
+			},
+		}
+	}
 
 	pkFlushedRow := make([]int64, len(spec.Uri))
 	idxFlushedRow := make([]int64, len(spec.Uri))
@@ -250,16 +261,19 @@ func ingestKvs(
 	pkIndexAdder.SetOnFlush(func() {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&pkFlushedRow[i], emitted)
+			pkDefaultExprMetaData[i] = tempDefaultExprMetaData[i]
 		}
 		if indexAdder.IsEmpty() {
 			for i, emitted := range writtenRow {
 				atomic.StoreInt64(&idxFlushedRow[i], emitted)
+				idxDefaultExprMetaData[i] = tempDefaultExprMetaData[i]
 			}
 		}
 	})
 	indexAdder.SetOnFlush(func() {
 		for i, emitted := range writtenRow {
 			atomic.StoreInt64(&idxFlushedRow[i], emitted)
+			idxDefaultExprMetaData[i] = nil
 		}
 	})
 
@@ -289,8 +303,6 @@ func ingestKvs(
 				prog.DefaultExprMetaData[file] = idxDefaultExprMetaData[offset]
 			}
 			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
-			// TODO: change this part.
-			prog.DefaultExprMetaData[file] = nil
 		}
 		progCh <- prog
 	}
@@ -367,6 +379,7 @@ func ingestKvs(
 			}
 			offset := offsets[kvBatch.Source]
 			writtenRow[offset] = kvBatch.LastRow
+			tempDefaultExprMetaData[offset] = kvBatch.DefaultMetaData
 			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
 				_ = pkIndexAdder.Flush(ctx)
