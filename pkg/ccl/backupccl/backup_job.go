@@ -406,6 +406,24 @@ func (b *backupResumer) Resume(
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
+	// For all backups, partitioned or not, the main BACKUP manifest is stored at
+	// details.URI.
+	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, p.User())
+	if err != nil {
+		return errors.Wrapf(err, "export configuration")
+	}
+	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	if err != nil {
+		return errors.Wrapf(err, "make storage")
+	}
+	defer defaultStore.Close()
+
+	if err := writeBackupManifest(
+		ctx, p.ExecCfg().Settings, defaultStore, BackupManifestCheckpointName, details.Encryption, &BackupManifest{},
+	); err != nil {
+		return errors.Wrapf(err, "writing checkpoint to %s", details.URI)
+	}
+
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
@@ -428,17 +446,7 @@ func (b *backupResumer) Resume(
 		return pgerror.Wrapf(err, pgcode.DataCorrupted,
 			"unmarshal backup descriptor")
 	}
-	// For all backups, partitioned or not, the main BACKUP manifest is stored at
-	// details.URI.
-	defaultConf, err := cloudimpl.ExternalStorageConfFromURI(details.URI, p.User())
-	if err != nil {
-		return errors.Wrapf(err, "export configuration")
-	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
-	if err != nil {
-		return errors.Wrapf(err, "make storage")
-	}
-	defer defaultStore.Close()
+
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
 		conf, err := cloudimpl.ExternalStorageConfFromURI(uri, p.User())
