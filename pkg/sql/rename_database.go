@@ -28,7 +28,8 @@ import (
 )
 
 type renameDatabaseNode struct {
-	dbDesc  *sqlbase.ImmutableDatabaseDescriptor
+	n       *tree.RenameDatabase
+	dbDesc  *sqlbase.MutableDatabaseDescriptor
 	newName string
 }
 
@@ -47,7 +48,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, string(n.Name), true /*required*/)
+	dbDesc, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /*required*/)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +76,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	}
 
 	return &renameDatabaseNode{
+		n:       n,
 		dbDesc:  dbDesc,
 		newName: string(n.NewName),
 	}, nil
@@ -223,7 +225,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	return p.renameDatabase(ctx, dbDesc, n.newName)
+	return p.renameDatabase(ctx, dbDesc, n.newName, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // isAllowedDependentDescInRename determines when rename database is allowed with

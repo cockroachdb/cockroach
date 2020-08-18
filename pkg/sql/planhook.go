@@ -91,7 +91,7 @@ type PlanHookState interface {
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(ctx context.Context, asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(
-		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
+		ctx context.Context, dbName string, required bool) (*ImmutableDatabaseDescriptor, error)
 	ResolveMutableTableDescriptor(
 		ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 	) (table *MutableTableDescriptor, err error)

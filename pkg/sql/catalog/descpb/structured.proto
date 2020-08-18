@@ -1073,6 +1073,12 @@ message DatabaseDescriptor {
   // name resolution to know without a KV lookup whether a database has a
   // child schema with a target name. Temporary schemas are not stored here.
   map<string, SchemaInfo> schemas = 7 [(gogoproto.nullable) = false];
+
+  enum State {
+    PUBLIC = 0;
+    DROP = 1;
+  }
+  optional State state = 8 [(gogoproto.nullable) = false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
