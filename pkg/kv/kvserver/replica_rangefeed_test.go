@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -357,8 +356,6 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 52966)
-
 	ctx := context.Background()
 	startKey := []byte("a")
 
@@ -395,11 +392,16 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		subT *testing.T, stream *testStream, streamErrC <-chan *roachpb.Error, span roachpb.Span,
 	) {
 		subT.Helper()
-		expEvents := []*roachpb.RangeFeedEvent{
-			{Checkpoint: &roachpb.RangeFeedCheckpoint{
+		noResolveTimestampEvent := roachpb.RangeFeedEvent{
+			Checkpoint: &roachpb.RangeFeedCheckpoint{
 				Span:       span,
 				ResolvedTS: hlc.Timestamp{},
-			}},
+			},
+		}
+		resolveTimestampEvent := roachpb.RangeFeedEvent{
+			Checkpoint: &roachpb.RangeFeedCheckpoint{
+				Span: span,
+			},
 		}
 		var events []*roachpb.RangeFeedEvent
 		testutils.SucceedsSoon(t, func() error {
@@ -407,9 +409,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 				// Break if the error channel is already populated.
 				return nil
 			}
-
 			events = stream.Events()
-			if len(events) < len(expEvents) {
+			if len(events) < 1 {
 				return errors.Errorf("too few events: %v", events)
 			}
 			return nil
@@ -417,9 +418,21 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		if len(streamErrC) > 0 {
 			subT.Fatalf("unexpected error from stream: %v", <-streamErrC)
 		}
+		expEvents := []*roachpb.RangeFeedEvent{&noResolveTimestampEvent}
+		if len(events) > 1 {
+			// Unfortunately there is a timing issue here and the range feed may
+			// publish two checkpoints, one with a resolvedTs and one without, so we
+			// check for either case.
+			resolveTimestampEvent.Checkpoint.ResolvedTS = events[1].Checkpoint.ResolvedTS
+			expEvents = []*roachpb.RangeFeedEvent{
+				&noResolveTimestampEvent,
+				&resolveTimestampEvent,
+			}
+		}
 		if !reflect.DeepEqual(events, expEvents) {
 			subT.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
 		}
+
 	}
 
 	assertRangefeedRetryErr := func(

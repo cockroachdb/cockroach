@@ -34,10 +34,20 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
+	} else if n.Targets.Types != nil {
+		grantOn = privilege.Type
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnType)
 	} else {
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
@@ -47,6 +57,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
 			privDesc.Grant(grantee, n.Privileges)
 		},
+		grantOn: grantOn,
 	}, nil
 }
 
@@ -60,10 +71,20 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+	var grantOn privilege.ObjectType
 	if n.Targets.Databases != nil {
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
+		grantOn = privilege.Database
+	} else if n.Targets.Types != nil {
+		grantOn = privilege.Type
+		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnType)
 	} else {
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
+		grantOn = privilege.Table
+	}
+
+	if err := privilege.ValidatePrivileges(n.Privileges, grantOn); err != nil {
+		return nil, err
 	}
 
 	return &changePrivilegesNode{
@@ -71,8 +92,9 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		grantees:     n.Grantees,
 		desiredprivs: n.Privileges,
 		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, grantee string) {
-			privDesc.Revoke(grantee, n.Privileges)
+			privDesc.Revoke(grantee, n.Privileges, grantOn)
 		},
+		grantOn: grantOn,
 	}, nil
 }
 
@@ -81,6 +103,7 @@ type changePrivilegesNode struct {
 	grantees        tree.NameList
 	desiredprivs    privilege.List
 	changePrivilege func(*descpb.PrivilegeDescriptor, string)
+	grantOn         privilege.ObjectType
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -175,6 +198,11 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				if err := p.writeSchemaChangeToBatch(ctx, d, b); err != nil {
 					return err
 				}
+			}
+		case *sqlbase.MutableTypeDescriptor:
+			err := p.writeTypeSchemaChange(ctx, d, fmt.Sprintf("updating privileges for type %d", d.ID))
+			if err != nil {
+				return err
 			}
 		}
 	}

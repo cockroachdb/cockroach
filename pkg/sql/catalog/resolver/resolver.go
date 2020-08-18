@@ -277,7 +277,7 @@ func ResolveSchemaNameByID(
 // ResolveSchemaByID resolves a schema based on it's ID.
 // TODO(rohany,lucy-zhang): Move this into descs.Collection.
 func ResolveSchemaByID(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, schemaID descpb.ID,
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, schemaID descpb.ID,
 ) (sqlbase.ResolvedSchema, error) {
 	if schemaID == keys.PublicSchemaID {
 		return sqlbase.ResolvedSchema{

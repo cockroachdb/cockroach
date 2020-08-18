@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,13 +38,33 @@ const (
 	INSERT
 	DELETE
 	UPDATE
+	USAGE
 	ZONECONFIG
+)
+
+// ObjectType represents objects that can have privileges.
+type ObjectType string
+
+const (
+	// Any represents any object type.
+	Any ObjectType = "any"
+	// Database represents a database object.
+	Database ObjectType = "database"
+	// Schema represents a schema object.
+	Schema ObjectType = "schema"
+	// Table represents a table object.
+	Table ObjectType = "table"
+	// Type represents a type object.
+	Type ObjectType = "type"
 )
 
 // Predefined sets of privileges.
 var (
-	ReadData      = List{GRANT, SELECT}
-	ReadWriteData = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	AllPrivileges           = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	ReadData                = List{GRANT, SELECT}
+	ReadWriteData           = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
+	DBSchemaTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	TypePrivileges          = List{ALL, GRANT, USAGE}
 )
 
 // Mask returns the bitmask for a given privilege.
@@ -52,7 +74,7 @@ func (k Kind) Mask() uint32 {
 
 // ByValue is just an array of privilege kinds sorted by value.
 var ByValue = [...]Kind{
-	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG,
+	ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG,
 }
 
 // ByName is a map of string -> kind value.
@@ -66,6 +88,7 @@ var ByName = map[string]Kind{
 	"DELETE":     DELETE,
 	"UPDATE":     UPDATE,
 	"ZONECONFIG": ZONECONFIG,
+	"USAGE":      USAGE,
 }
 
 // List is a list of privileges.
@@ -136,12 +159,14 @@ func (pl List) ToBitField() uint32 {
 	return ret
 }
 
-// ListFromBitField takes a bitfield of privileges and
-// returns a list. It is ordered in increasing
-// value of privilege.Kind.
-func ListFromBitField(m uint32) List {
+// ListFromBitField takes a bitfield of privileges and a ObjectType
+// returns a List. It is ordered in increasing value of privilege.Kind.
+func ListFromBitField(m uint32, objectType ObjectType) List {
 	ret := List{}
-	for _, p := range ByValue {
+
+	privileges := GetValidPrivilegesForObject(objectType)
+
+	for _, p := range privileges {
 		if m&p.Mask() != 0 {
 			ret = append(ret, p)
 		}
@@ -162,4 +187,35 @@ func ListFromStrings(strs []string) (List, error) {
 		ret[i] = k
 	}
 	return ret, nil
+}
+
+// ValidatePrivileges returns an error if any privilege in
+// privileges cannot be granted on the given objectType.
+// Currently db/schema/table can all be granted the same privileges.
+func ValidatePrivileges(privileges List, objectType ObjectType) error {
+	validPrivs := GetValidPrivilegesForObject(objectType)
+	for _, priv := range privileges {
+		// Check if priv is in DBSchemaTablePrivileges.
+		if validPrivs.ToBitField()&priv.Mask() == 0 {
+			return pgerror.Newf(pgcode.InvalidGrantOperation,
+				"invalid privilege type %s for %s", priv.String(), objectType)
+		}
+	}
+
+	return nil
+}
+
+// GetValidPrivilegesForObject returns the list of valid privileges for the
+// specified object type.
+func GetValidPrivilegesForObject(objectType ObjectType) List {
+	switch objectType {
+	case Table, Database, Schema:
+		return DBSchemaTablePrivileges
+	case Type:
+		return TypePrivileges
+	case Any:
+		return AllPrivileges
+	default:
+		panic(errors.AssertionFailedf("unknown object type %s", objectType))
+	}
 }

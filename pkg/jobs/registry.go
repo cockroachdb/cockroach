@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -214,10 +213,7 @@ func MakeRegistry(
 }
 
 func (r *Registry) startUsingSQLLivenessAdoption(ctx context.Context) bool {
-	return r.settings.Version.IsActive(
-		ctx,
-		clusterversion.VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-	)
+	return sqlliveness.IsActive(ctx, r.settings)
 }
 
 // SetSessionBoundInternalExecutorFactory sets the

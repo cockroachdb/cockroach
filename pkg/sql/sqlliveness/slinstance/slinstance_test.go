@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
@@ -35,7 +36,10 @@ func TestSQLInstance(t *testing.T) {
 
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
-	settings := cluster.MakeClusterSettings()
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
 	slinstance.DefaultTTL.Override(&settings.SV, 2*time.Microsecond)
 	slinstance.DefaultHeartBeat.Override(&settings.SV, time.Microsecond)
 

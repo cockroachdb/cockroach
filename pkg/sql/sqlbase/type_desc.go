@@ -219,13 +219,6 @@ func (desc *ImmutableTypeDescriptor) GetAuditMode() descpb.TableDescriptor_Audit
 	return descpb.TableDescriptor_DISABLED
 }
 
-// GetPrivileges implements the DescriptorProto interface.
-//
-// Types do not carry privileges.
-func (desc *ImmutableTypeDescriptor) GetPrivileges() *descpb.PrivilegeDescriptor {
-	return nil
-}
-
 // TypeName implements the DescriptorProto interface.
 func (desc *ImmutableTypeDescriptor) TypeName() string {
 	return "type"

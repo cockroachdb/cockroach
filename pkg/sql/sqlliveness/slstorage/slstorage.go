@@ -50,6 +50,7 @@ var CacheSize = settings.RegisterIntSetting(
 
 // Storage implements sqlliveness.Storage.
 type Storage struct {
+	settings   *cluster.Settings
 	stopper    *stop.Stopper
 	clock      *hlc.Clock
 	db         *kv.DB
@@ -81,7 +82,11 @@ func NewStorage(
 	settings *cluster.Settings,
 ) *Storage {
 	s := &Storage{
-		stopper: stopper, clock: clock, db: db, ex: ie,
+		settings: settings,
+		stopper:  stopper,
+		clock:    clock,
+		db:       db,
+		ex:       ie,
 		gcInterval: func() time.Duration {
 			return DefaultGCInterval.Get(&settings.SV)
 		},
@@ -110,7 +115,7 @@ func (s *Storage) Start(ctx context.Context) {
 	if s.mu.started {
 		return
 	}
-	s.stopper.RunWorker(ctx, s.deleteSessionsLoop)
+	_ = s.stopper.RunAsyncTask(ctx, "slstorage", s.deleteSessionsLoop)
 	s.mu.started = true
 }
 
@@ -201,6 +206,9 @@ SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid.UnsafeByte
 
 // deleteSessionsLoop is launched in start and periodically deletes sessions.
 func (s *Storage) deleteSessionsLoop(ctx context.Context) {
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	sqlliveness.WaitForActive(ctx, s.settings)
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
@@ -208,8 +216,6 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 			t.Reset(s.gcInterval())
 		}
 		select {
-		case <-s.stopper.ShouldStop():
-			return
 		case <-ctx.Done():
 			return
 		case <-t.C:
