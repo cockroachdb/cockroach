@@ -76,6 +76,7 @@ const (
 	VersionAbortSpanBytes
 	VersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	VersionMaterializedViews
+	VersionBox2DType
 
 	// Add new versions here (step one of two).
 )
@@ -570,6 +571,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionMaterializedViews enables the use of materialized views.
 		Key:     VersionMaterializedViews,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 16},
+	},
+	{
+		// VersionBox2DType enables the use of the box2d type.
+		Key:     VersionBox2DType,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 17},
 	},
 
 	// Add new versions here (step two of two).

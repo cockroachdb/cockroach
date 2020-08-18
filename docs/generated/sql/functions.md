@@ -1171,6 +1171,10 @@ Bottom Left.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
+</span></td></tr>
+<tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.</p>
+</span></td></tr>
 <tr><td><a name="st_exteriorring"></a><code>st_exteriorring(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the exterior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon.</p>
 </span></td></tr>
 <tr><td><a name="st_force2d"></a><code>st_force2d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry which only contains X and Y coordinates.</p>
