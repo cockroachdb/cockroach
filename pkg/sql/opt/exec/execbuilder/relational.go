@@ -723,7 +723,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
-	planRightSideFn := func(leftRow tree.Datums) (exec.Plan, error) {
+	planRightSideFn := func(ef exec.Factory, leftRow tree.Datums) (exec.Plan, error) {
 		o.Init(b.evalCtx, b.catalog)
 		f := o.Factory()
 
@@ -746,7 +746,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			return nil, err
 		}
 
-		eb := New(b.factory, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb := New(ef, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
 		eb.disableTelemetry = true
 		plan, err := eb.Build()
 		if err != nil {
@@ -1795,7 +1795,6 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 	// To implement exec.RecursiveCTEIterationFn, we create a special Builder.
 
 	innerBldTemplate := &Builder{
-		factory: b.factory,
 		mem:     b.mem,
 		catalog: b.catalog,
 		evalCtx: b.evalCtx,
@@ -1806,9 +1805,10 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(bufferRef exec.Node) (exec.Plan, error) {
+	fn := func(ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
+		innerBld.factory = ef
 		innerBld.addBuiltWithExpr(rec.WithID, initial.outputCols, bufferRef)
 		plan, err := innerBld.build(rec.Recursive)
 		if err != nil {

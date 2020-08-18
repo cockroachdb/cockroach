@@ -641,7 +641,15 @@ func (e *emitter) emitSpans(
 			e.ob.Attr(field, "FULL SCAN")
 		}
 	} else {
-		e.ob.Attr(field, e.spanFormatFn(table, index, scanParams))
+		if e.ob.flags.HideValues {
+			n := len(scanParams.InvertedConstraint)
+			if scanParams.IndexConstraint != nil {
+				n = scanParams.IndexConstraint.Spans.Count()
+			}
+			e.ob.Attrf(field, "%d span%s", n, util.Pluralize(int64(n)))
+		} else {
+			e.ob.Attr(field, e.spanFormatFn(table, index, scanParams))
+		}
 	}
 }
 

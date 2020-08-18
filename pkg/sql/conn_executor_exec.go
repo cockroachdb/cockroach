@@ -913,10 +913,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // makeExecPlan creates an execution plan and populates planner.curPlan using
 // the cost-based optimizer.
 func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	planner.curPlan.init(planner.stmt, ex.appStats)
-	if planner.collectBundle {
-		planner.curPlan.savePlanString = true
-	}
+	savePlanString := planner.collectBundle
+	planner.curPlan.init(
+		planner.stmt,
+		ex.appStats,
+		savePlanString,
+	)
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)

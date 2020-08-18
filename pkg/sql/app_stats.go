@@ -37,8 +37,6 @@ import (
 type stmtKey struct {
 	stmt        string
 	failed      bool
-	distSQLUsed bool
-	vectorized  bool
 	implicitTxn bool
 }
 
@@ -56,6 +54,14 @@ type stmtStats struct {
 	syncutil.Mutex
 
 	data roachpb.StatementStatistics
+
+	// distSQLUsed records whether the last instance of this statement used
+	// distribution.
+	distSQLUsed bool
+
+	// vectorized records whether the last instance of this statement used
+	// vectorization.
+	vectorized bool
 }
 
 // transactionStats holds per-application transaction statistics.
@@ -105,18 +111,10 @@ var logicalPlanCollectionPeriod = settings.RegisterPublicNonNegativeDurationSett
 )
 
 func (s stmtKey) String() string {
-	return s.flags() + s.stmt
-}
-
-func (s stmtKey) flags() string {
-	var b bytes.Buffer
 	if s.failed {
-		b.WriteByte('!')
+		return "!" + s.stmt
 	}
-	if s.distSQLUsed {
-		b.WriteByte('+')
-	}
-	return b.String()
+	return s.stmt
 }
 
 // recordStatement saves per-statement statistics.
@@ -144,7 +142,7 @@ func (a *appStats) recordStatement(
 
 	// Get the statistics object.
 	s := a.getStatsForStmt(
-		stmt, distSQLUsed, vectorized, implicitTxn,
+		stmt, implicitTxn,
 		err, true, /* createIfNonexistent */
 	)
 
@@ -172,24 +170,19 @@ func (a *appStats) recordStatement(
 	s.data.OverheadLat.Record(s.data.Count, ovhLat)
 	s.data.BytesRead.Record(s.data.Count, float64(stats.bytesRead))
 	s.data.RowsRead.Record(s.data.Count, float64(stats.rowsRead))
+	s.distSQLUsed = distSQLUsed
+	s.vectorized = vectorized
 	s.Unlock()
 }
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement,
-	distSQLUsed bool,
-	vectorized bool,
-	implicitTxn bool,
-	err error,
-	createIfNonexistent bool,
+	stmt *Statement, implicitTxn bool, err error, createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key := stmtKey{
 		failed:      err != nil,
-		distSQLUsed: distSQLUsed,
-		vectorized:  vectorized,
 		implicitTxn: implicitTxn,
 	}
 	if stmt.AnonymizedStr != "" {
@@ -299,16 +292,14 @@ func (a *appStats) recordTransaction(txnTimeSec float64, ev txnEvent, implicit b
 // sample logical plan for its corresponding fingerprint. We use
 // `logicalPlanCollectionPeriod` to assess how frequently to sample logical
 // plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, vectorized bool, implicitTxn bool, err error,
-) bool {
+func (a *appStats) shouldSaveLogicalPlanDescription(stmt *Statement, implicitTxn bool) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
-	stats := a.getStatsForStmt(
-		stmt, useDistSQL, vectorized, implicitTxn,
-		err, false, /* createIfNonexistent */
-	)
+	// We don't know yet if we will hit an error, so we assume we don't. The worst
+	// that can happen is that for statements that always error out, we will
+	// always save the tree plan.
+	stats := a.getStatsForStmt(stmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
@@ -506,9 +497,9 @@ func (s *sqlStats) getStmtStats(
 			if ok {
 				k := roachpb.StatementStatisticsKey{
 					Query:       maybeScrubbed,
-					DistSQL:     q.distSQLUsed,
+					DistSQL:     stats.distSQLUsed,
 					Opt:         true,
-					Vec:         q.vectorized,
+					Vec:         stats.vectorized,
 					ImplicitTxn: q.implicitTxn,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,

@@ -778,10 +778,17 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				if s.data.SensitiveInfo.LastErr != "" {
 					errString = tree.NewDString(s.data.SensitiveInfo.LastErr)
 				}
+				var flags string
+				if s.distSQLUsed {
+					flags = "+"
+				}
+				if stmtKey.failed {
+					flags = "!" + flags
+				}
 				err := addRow(
 					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
-					tree.NewDString(stmtKey.flags()),
+					tree.NewDString(flags),
 					tree.NewDString(stmtKey.stmt),
 					anonymized,
 					tree.NewDInt(tree.DInt(s.data.Count)),
