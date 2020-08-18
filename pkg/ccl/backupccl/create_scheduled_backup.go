@@ -231,24 +231,8 @@ func doCreateBackupSchedules(
 		AppendToLatest: false,
 	}
 
-	if backupNode.Options.CaptureRevisionHistory && !eval.isEnterpriseUser {
-		// TODO(yevgeniy): Pull license check logic into a common helper.
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
-			"revision_history"); err != nil {
-			return err
-		}
-	}
-
 	// Evaluate encryption passphrase if set.
 	if eval.encryptionPassphrase != nil {
-		if !eval.isEnterpriseUser {
-			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
-				"encryption"); err != nil {
-				return err
-			}
-		}
 		pw, err := eval.encryptionPassphrase()
 		if err != nil {
 			return errors.Wrapf(err, "failed to evaluate backup encryption_passphrase")
@@ -262,20 +246,17 @@ func doCreateBackupSchedules(
 		return errors.Wrapf(err, "failed to evaluate backup destination paths")
 	}
 
-	if len(destinations) > 1 {
-		if !eval.isEnterpriseUser {
-			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(),
-				"partitioned destinations"); err != nil {
-				return err
-			}
-		}
-	}
 	for _, dest := range destinations {
 		backupNode.To = append(backupNode.To, tree.NewDString(dest))
 	}
 
 	backupNode.Targets = eval.Targets
+
+	// Run full backup in dry-run mode.  This will do all of the sanity checks
+	// and validation we need to make in order to ensure the schedule is sane.
+	if err := dryRunBackup(ctx, p, backupNode); err != nil {
+		return errors.Wrapf(err, "failed to dry run backup")
+	}
 
 	var fullScheduleName string
 	if eval.scheduleName != nil {
@@ -388,10 +369,6 @@ func makeBackupSchedule(
 
 	sj.SetScheduleDetails(details)
 
-	// TODO(yevgeniy): Validate backup schedule:
-	//  * Verify targets exist.  Provide a way for user to override this via option.
-	//  * Verify destination paths sane (i.e. valid schema://, etc)
-
 	// We do not set backupNode.AsOf: this is done when the scheduler kicks off the backup.
 	// Serialize backup statement and set schedule executor and its args.
 	args.BackupStatement = tree.AsString(backupNode)
@@ -405,6 +382,29 @@ func makeBackupSchedule(
 	)
 
 	return sj, nil
+}
+
+// dryRunBackup executes backup in dry-run mode: we simply execute backup
+// under transaction savepoint, and then rollback to that save point.
+func dryRunBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
+	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
+	if err != nil {
+		return err
+	}
+	err = dryRunInvokeBackup(ctx, p, backupNode)
+	rollbackErr := p.ExtendedEvalContext().Txn.RollbackToSavepoint(ctx, sp)
+	if err == nil {
+		return rollbackErr
+	}
+	return err
+}
+
+func dryRunInvokeBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
+	backupFn, err := planBackup(ctx, p, backupNode)
+	if err != nil {
+		return err
+	}
+	return invokeBackup(ctx, backupFn)
 }
 
 func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tree.Datums) error {
@@ -535,10 +535,6 @@ func createBackupScheduleHook(
 	return fn, scheduledBackupHeader, nil, false, nil
 }
 
-func init() {
-	sql.AddPlanHook(createBackupScheduleHook)
-}
-
 // MarshalJSONPB provides a custom Marshaller for jsonpb that redacts secrets in
 // URI fields.
 func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte, error) {
@@ -595,4 +591,8 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(x *jsonpb.Marshaler) ([]byte
 
 	m.BackupStatement = backup.String()
 	return json.Marshal(m)
+}
+
+func init() {
+	sql.AddPlanHook(createBackupScheduleHook)
 }
