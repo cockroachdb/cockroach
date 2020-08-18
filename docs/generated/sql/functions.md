@@ -800,6 +800,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="postgis_geos_version"></a><code>postgis_geos_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td></tr>
+<tr><td><a name="postgis_getbbox"></a><code>postgis_getbbox(geometry: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Returns a box2d encapsulating the given Geometry</p>
+</span></td></tr>
 <tr><td><a name="postgis_hasbbox"></a><code>postgis_hasbbox(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether a given Geometry has a bounding box. False for points and empty geometries; always true otherwise.</p>
 </span></td></tr>
 <tr><td><a name="postgis_lib_build_date"></a><code>postgis_lib_build_date() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>

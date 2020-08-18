@@ -403,6 +403,22 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"postgis_getbbox": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				if g.Geometry.Empty() {
+					return tree.DNull, nil
+				}
+				return tree.NewDBox2D(g.CartesianBoundingBox()), nil
+			},
+			types.Box2D,
+			infoBuilder{
+				info: "Returns a box2d encapsulating the given Geometry",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"postgis_extensions_upgrade": returnCompatibilityFixedStringBuiltin(
 		"Upgrade completed, run SELECT postgis_full_version(); for details",
 	),
