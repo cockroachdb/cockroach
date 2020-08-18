@@ -72,12 +72,13 @@ func (s *session) Expiration() hlc.Timestamp { return s.exp }
 // loop to extend the existing sessions' expirations or creating a new session
 // to replace a session that has expired and deleted from the table.
 type Instance struct {
-	clock   *hlc.Clock
-	stopper *stop.Stopper
-	storage Writer
-	ttl     func() time.Duration
-	hb      func() time.Duration
-	mu      struct {
+	clock    *hlc.Clock
+	settings *cluster.Settings
+	stopper  *stop.Stopper
+	storage  Writer
+	ttl      func() time.Duration
+	hb       func() time.Duration
+	mu       struct {
 		started bool
 		syncutil.Mutex
 		blockCh chan struct{}
@@ -121,8 +122,6 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     1.5,
 	}
-	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
-	defer cancel()
 	everySecond := log.Every(time.Second)
 	var err error
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
@@ -153,8 +152,6 @@ func (l *Instance) extendSession(ctx context.Context, s sqlliveness.Session) (bo
 		MaxBackoff:     2 * time.Second,
 		Multiplier:     1.5,
 	}
-	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
-	defer cancel()
 	var err error
 	var found bool
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
@@ -184,13 +181,14 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		log.Warning(ctx, "exiting heartbeat loop")
 	}()
+	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	sqlliveness.WaitForActive(ctx, l.settings)
 	t := timeutil.NewTimer()
 	t.Reset(0)
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-l.stopper.ShouldQuiesce():
 			return
 		case <-t.C:
 			t.Read = true
@@ -229,7 +227,10 @@ func NewSQLInstance(
 	stopper *stop.Stopper, clock *hlc.Clock, storage Writer, settings *cluster.Settings,
 ) *Instance {
 	l := &Instance{
-		clock: clock, storage: storage, stopper: stopper,
+		clock:    clock,
+		settings: settings,
+		storage:  storage,
+		stopper:  stopper,
 		ttl: func() time.Duration {
 			return DefaultTTL.Get(&settings.SV)
 		},
@@ -249,7 +250,7 @@ func (l *Instance) Start(ctx context.Context) {
 		return
 	}
 	log.Infof(ctx, "starting SQL liveness instance")
-	l.stopper.RunWorker(ctx, l.heartbeatLoop)
+	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
 	l.mu.started = true
 }
 

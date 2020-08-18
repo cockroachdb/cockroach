@@ -156,7 +156,9 @@ func (p *PrivilegeDescriptor) Grant(user string, privList privilege.List) {
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
-func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
+func (p *PrivilegeDescriptor) Revoke(
+	user string, privList privilege.List, objectType privilege.ObjectType,
+) {
 	userPriv, ok := p.findUser(user)
 	if !ok || userPriv.Privileges == 0 {
 		// Removing privileges from a user without privileges is a no-op.
@@ -175,8 +177,9 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		// User has 'ALL' privilege. Remove it and set
 		// all other privileges one.
+		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
 		userPriv.Privileges = 0
-		for _, v := range privilege.ByValue {
+		for _, v := range validPrivs {
 			if v != privilege.ALL {
 				userPriv.Privileges |= v.Mask()
 			}
@@ -251,6 +254,7 @@ func MaybeFixPrivileges(id ID, p *PrivilegeDescriptor) bool {
 // set of allowed privileges is looked up and applied.
 func (p PrivilegeDescriptor) Validate(id ID) error {
 	allowedPrivileges := privilege.List{privilege.ALL}
+
 	if IsReservedID(id) {
 		var ok bool
 		allowedPrivileges, ok = SystemAllowedPrivileges[id]
@@ -290,7 +294,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
 			return fmt.Errorf("user %s must not have %s privileges on system object with ID=%d",
-				u.User, privilege.ListFromBitField(remaining), id)
+				u.User, privilege.ListFromBitField(remaining, privilege.Any), id)
 		}
 	}
 
@@ -328,12 +332,12 @@ func (u UserPrivilegeString) PrivilegeString() string {
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p PrivilegeDescriptor) Show() []UserPrivilegeString {
+func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilegeString {
 	ret := make([]UserPrivilegeString, 0, len(p.Users))
 	for _, userPriv := range p.Users {
 		ret = append(ret, UserPrivilegeString{
 			User:       userPriv.User,
-			Privileges: privilege.ListFromBitField(userPriv.Privileges).SortedNames(),
+			Privileges: privilege.ListFromBitField(userPriv.Privileges, objectType).SortedNames(),
 		})
 	}
 	return ret
@@ -346,7 +350,7 @@ func (p PrivilegeDescriptor) CheckPrivilege(user string, priv privilege.Kind) bo
 		// User "node" has all privileges.
 		return user == security.NodeUser
 	}
-	// ALL is always good.
+
 	if isPrivilegeSet(userPriv.Privileges, privilege.ALL) {
 		return true
 	}
