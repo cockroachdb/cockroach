@@ -214,3 +214,9 @@ ALTER TABLE t ADD COLUMN geo GEOMETRY
 
 statement error type GEOGRAPHY.* is not supported until version upgrade is finalized
 ALTER TABLE t ADD COLUMN geo GEOGRAPHY
+
+statement error type BOX2D is not supported until version upgrade is finalized
+CREATE TABLE geo_test(a BOX2D)
+
+statement error type BOX2D.* is not supported until version upgrade is finalized
+ALTER TABLE t ADD COLUMN geo BOX2D
