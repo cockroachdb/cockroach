@@ -1,0 +1,53 @@
+statement ok
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+statement ok
+CREATE DATABASE pgdatabase;
+CREATE DATABASE pgschema;
+CREATE TABLE pgschema.t1 (x INT);
+CREATE TABLE pgschema.t2 (x INT);
+CREATE TYPE pgschema.typ AS ENUM ('schema');
+
+let $db_id
+SELECT id FROM system.namespace WHERE name = 'pgschema'
+
+statement ok
+ALTER DATABASE pgschema CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+query I
+SELECT * FROM pgdatabase.pgschema.t1
+
+query I
+SELECT * FROM pgdatabase.pgschema.t2
+
+query T
+SELECT 'schema'::pgdatabase.pgschema.typ
+----
+schema
+
+# Assert there aren't any namespace entries left with the old parentID.
+query T
+SELECT name FROM system.namespace WHERE "parentID" = $db_id
+
+# We can't reparent a database that has any child schemas.
+statement ok
+CREATE DATABASE parent;
+USE parent;
+CREATE SCHEMA child;
+USE test;
+
+statement error pq: cannot convert database with schemas into schema
+ALTER DATABASE parent CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+# We can't reparent a database if it causes a name conflict.
+statement ok
+CREATE DATABASE pgschema
+
+statement error pq: schema "pgschema" already exists
+ALTER DATABASE pgschema CONVERT TO SCHEMA WITH PARENT pgdatabase
+
+statement ok
+DROP DATABASE pgschema
+
+
