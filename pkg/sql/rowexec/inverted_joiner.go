@@ -13,7 +13,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -41,7 +40,7 @@ import (
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-const invertedJoinerBatchSize = 10
+const invertedJoinerBatchSize = 100
 
 // invertedJoinerState represents the state of the processor.
 type invertedJoinerState int
@@ -427,14 +426,14 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		}
 		return ijEmittingRows, nil
 	}
+	// NB: spans is already sorted, and that sorting is preserved when
+	// generating indexSpans.
 	indexSpans, err := ij.generateSpans(spans)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, ij.DrainHelper()
 	}
 
-	// Sort the spans for locality of reads.
-	sort.Sort(indexSpans)
 	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(indexSpans))
 	if err = ij.fetcher.StartScan(
 		ij.Ctx, ij.FlowCtx.Txn, indexSpans, false /* limitBatches */, 0, /* limitHint */
