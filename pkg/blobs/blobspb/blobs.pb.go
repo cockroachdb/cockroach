@@ -3,16 +3,15 @@
 
 package blobspb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
 import (
 	context "context"
+	fmt "fmt"
+	io "io"
+	math "math"
+
+	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
 )
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -479,7 +478,9 @@ func NewBlobClient(cc *grpc.ClientConn) BlobClient {
 	return &blobClient{cc}
 }
 
-func (c *blobClient) List(ctx context.Context, in *GlobRequest, opts ...grpc.CallOption) (*GlobResponse, error) {
+func (c *blobClient) List(
+	ctx context.Context, in *GlobRequest, opts ...grpc.CallOption,
+) (*GlobResponse, error) {
 	out := new(GlobResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.blobs.Blob/List", in, out, opts...)
 	if err != nil {
@@ -488,7 +489,9 @@ func (c *blobClient) List(ctx context.Context, in *GlobRequest, opts ...grpc.Cal
 	return out, nil
 }
 
-func (c *blobClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
+func (c *blobClient) Delete(
+	ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption,
+) (*DeleteResponse, error) {
 	out := new(DeleteResponse)
 	err := c.cc.Invoke(ctx, "/cockroach.blobs.Blob/Delete", in, out, opts...)
 	if err != nil {
@@ -497,7 +500,9 @@ func (c *blobClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc
 	return out, nil
 }
 
-func (c *blobClient) Stat(ctx context.Context, in *StatRequest, opts ...grpc.CallOption) (*BlobStat, error) {
+func (c *blobClient) Stat(
+	ctx context.Context, in *StatRequest, opts ...grpc.CallOption,
+) (*BlobStat, error) {
 	out := new(BlobStat)
 	err := c.cc.Invoke(ctx, "/cockroach.blobs.Blob/Stat", in, out, opts...)
 	if err != nil {
@@ -506,7 +511,9 @@ func (c *blobClient) Stat(ctx context.Context, in *StatRequest, opts ...grpc.Cal
 	return out, nil
 }
 
-func (c *blobClient) GetStream(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (Blob_GetStreamClient, error) {
+func (c *blobClient) GetStream(
+	ctx context.Context, in *GetRequest, opts ...grpc.CallOption,
+) (Blob_GetStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Blob_serviceDesc.Streams[0], "/cockroach.blobs.Blob/GetStream", opts...)
 	if err != nil {
 		return nil, err
@@ -538,7 +545,9 @@ func (x *blobGetStreamClient) Recv() (*StreamChunk, error) {
 	return m, nil
 }
 
-func (c *blobClient) PutStream(ctx context.Context, opts ...grpc.CallOption) (Blob_PutStreamClient, error) {
+func (c *blobClient) PutStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (Blob_PutStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Blob_serviceDesc.Streams[1], "/cockroach.blobs.Blob/PutStream", opts...)
 	if err != nil {
 		return nil, err
@@ -585,7 +594,12 @@ func RegisterBlobServer(s *grpc.Server, srv BlobServer) {
 	s.RegisterService(&_Blob_serviceDesc, srv)
 }
 
-func _Blob_List_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Blob_List_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(GlobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -603,7 +617,12 @@ func _Blob_List_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Blob_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Blob_Delete_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(DeleteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -621,7 +640,12 @@ func _Blob_Delete_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Blob_Stat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Blob_Stat_Handler(
+	srv interface{},
+	ctx context.Context,
+	dec func(interface{}) error,
+	interceptor grpc.UnaryServerInterceptor,
+) (interface{}, error) {
 	in := new(StatRequest)
 	if err := dec(in); err != nil {
 		return nil, err

@@ -185,7 +185,8 @@ type Fetcher struct {
 
 	// reverse denotes whether or not the spans should be read in reverse
 	// or not when StartScan is invoked.
-	reverse bool
+	reverse      bool
+	singleFamily bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvBatchFetcher's
@@ -477,16 +478,18 @@ func (rf *Fetcher) StartScan(
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
+	singleFamily bool,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-
+	rf.singleFamily = singleFamily
 	rf.traceKV = traceKV
 	f, err := makeKVBatchFetcher(
 		txn,
 		spans,
 		rf.reverse,
+		rf.singleFamily,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
 		rf.lockStr,
@@ -566,6 +569,7 @@ func (rf *Fetcher) StartInconsistentScan(
 		sendFunc(sendFn),
 		spans,
 		rf.reverse,
+		false,
 		limitBatches,
 		rf.firstBatchLimit(limitHint),
 		rf.lockStr,

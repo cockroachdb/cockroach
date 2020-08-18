@@ -13,6 +13,7 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -21,6 +22,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+)
+
+// familyType represents the type of span family generated
+type spanFamilyType int
+
+const (
+	// singleFamilyType means we are using single family spans
+	singleFamilyType spanFamilyType = iota
+
+	// multipleFamilyType means we are using multiple family spans
+	multipleFamilyType
 )
 
 type defaultSpanGenerator struct {
@@ -32,6 +44,8 @@ type defaultSpanGenerator struct {
 	keyToInputRowIndices map[string][]int
 
 	scratchSpans roachpb.Spans
+	familyType   spanFamilyType
+	useGets      bool
 }
 
 // Generate spans for a given row.
@@ -83,8 +97,26 @@ func (g *defaultSpanGenerator) generateSpans(rows []sqlbase.EncDatumRow) (roachp
 		}
 		inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
 		if inputRowIndices == nil {
+			prevLen := len(g.scratchSpans)
 			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
 				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+
+			if g.spanBuilder.MultipleFamily() || !g.useGets {
+				g.familyType = multipleFamilyType
+			} else {
+				g.familyType = singleFamilyType
+			}
+
+			switch g.familyType {
+			case singleFamilyType:
+				for i := prevLen; i < len(g.scratchSpans); i++ {
+					familyID := uint32(g.spanBuilder.NeededFamilies[0])
+					g.scratchSpans[i].Key = keys.MakeFamilyKey(g.scratchSpans[i].Key, familyID)
+					g.scratchSpans[i].EndKey = nil
+				}
+			case multipleFamilyType:
+				// TODO: maybe convert into point spans for every family
+			}
 		}
 		g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
 	}
@@ -97,6 +129,7 @@ type joinReaderStrategy interface {
 	getLookupRowsBatchSizeHint() int64
 	// processLookupRows consumes the rows the joinReader has buffered and should
 	// return the lookup spans.
+	getSpanFamilyType() spanFamilyType
 	processLookupRows(rows []sqlbase.EncDatumRow) (roachpb.Spans, error)
 	// processLookedUpRow processes a looked up row. A joinReaderState is returned
 	// to indicate the next state to transition to. If this next state is
@@ -157,6 +190,10 @@ type joinReaderNoOrderingStrategy struct {
 // small to no marginal improvements.
 func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 2 << 20 /* 2 MiB */
+}
+
+func (s *joinReaderNoOrderingStrategy) getSpanFamilyType() spanFamilyType {
+	return s.defaultSpanGenerator.familyType
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookupRows(
@@ -300,6 +337,10 @@ func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint() int64 {
 	return 4 << 20 /* 4 MB */
 }
 
+func (s *joinReaderIndexJoinStrategy) getSpanFamilyType() spanFamilyType {
+	return s.defaultSpanGenerator.familyType
+}
+
 func (s *joinReaderIndexJoinStrategy) processLookupRows(
 	rows []sqlbase.EncDatumRow,
 ) (roachpb.Spans, error) {
@@ -379,6 +420,10 @@ func (s *joinReaderOrderingStrategy) getLookupRowsBatchSizeHint() int64 {
 	// TODO(asubiotto): Eventually we might want to adjust this batch size
 	//  dynamically based on whether the result row container spilled or not.
 	return 10 << 10 /* 10 KiB */
+}
+
+func (s *joinReaderOrderingStrategy) getSpanFamilyType() spanFamilyType {
+	return s.defaultSpanGenerator.familyType
 }
 
 func (s *joinReaderOrderingStrategy) processLookupRows(

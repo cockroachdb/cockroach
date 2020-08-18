@@ -41,7 +41,7 @@ type Builder struct {
 	//  This work is tracked in #42738.
 	interstices [][]byte
 
-	neededFamilies []descpb.FamilyID
+	NeededFamilies []descpb.FamilyID
 }
 
 // Use some functions that aren't needed right now to make the linter happy.
@@ -59,7 +59,7 @@ func MakeBuilder(
 		index:          index,
 		KeyPrefix:      sqlbase.MakeIndexKeyPrefix(codec, table, index.ID),
 		interstices:    make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1),
-		neededFamilies: nil,
+		NeededFamilies: nil,
 	}
 
 	var columnIDs descpb.ColumnIDs
@@ -102,25 +102,25 @@ func MakeBuilder(
 // SetNeededColumns sets the needed columns on the Builder. This information
 // is used by MaybeSplitSpanIntoSeparateFamilies.
 func (s *Builder) SetNeededColumns(neededCols util.FastIntSet) {
-	s.neededFamilies = sqlbase.NeededColumnFamilyIDs(neededCols, s.table, s.index)
+	s.NeededFamilies = sqlbase.NeededColumnFamilyIDs(neededCols, s.table, s.index)
 }
 
 // UnsetNeededColumns resets the needed columns for column family specific optimizations
 // that the Builder performs.
 func (s *Builder) UnsetNeededColumns() {
-	s.neededFamilies = nil
+	s.NeededFamilies = nil
 }
 
 // SetNeededFamilies sets the needed families of the span builder directly. This information
 // is used by MaybeSplitSpanIntoSeparateFamilies.
 func (s *Builder) SetNeededFamilies(neededFamilies []descpb.FamilyID) {
-	s.neededFamilies = neededFamilies
+	s.NeededFamilies = neededFamilies
 }
 
 // UnsetNeededFamilies resets the needed families for column family specific optimizations
 // that the Builder performs.
 func (s *Builder) UnsetNeededFamilies() {
-	s.neededFamilies = nil
+	s.NeededFamilies = nil
 }
 
 // SpanFromEncDatums encodes a span with prefixLen constraint columns from the index.
@@ -152,6 +152,10 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family descpb.FamilyID) roa
 	return roachpb.Span{Key: key, EndKey: roachpb.Key(key).PrefixEnd()}
 }
 
+func (s *Builder) MultipleFamily() bool {
+	return len(s.table.Families) > 1
+}
+
 // MaybeSplitSpanIntoSeparateFamilies uses the needed columns configured by
 // SetNeededColumns to conditionally split the input span into multiple family
 // specific spans. prefixLen is the number of index columns encoded in the span.
@@ -160,8 +164,8 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family descpb.FamilyID) roa
 func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 	appendTo roachpb.Spans, span roachpb.Span, prefixLen int, containsNull bool,
 ) roachpb.Spans {
-	if s.neededFamilies != nil && s.CanSplitSpanIntoSeparateFamilies(len(s.neededFamilies), prefixLen, containsNull) {
-		return sqlbase.SplitSpanIntoSeparateFamilies(appendTo, span, s.neededFamilies)
+	if s.NeededFamilies != nil && s.CanSplitSpanIntoSeparateFamilies(len(s.NeededFamilies), prefixLen, containsNull) {
+		return sqlbase.SplitSpanIntoSeparateFamilies(appendTo, span, s.NeededFamilies)
 	}
 	return append(appendTo, span)
 }
