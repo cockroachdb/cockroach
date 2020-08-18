@@ -359,7 +359,11 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"st_makeline": makeBuiltin(
-		aggPropsNullableArgs(),
+		tree.FunctionProperties{
+			Class:                   tree.AggregateClass,
+			NullableArgs:            true,
+			AvailableOnPublicSchema: true,
+		},
 		makeAggOverload(
 			[]*types.T{types.Geometry},
 			types.Geometry,
