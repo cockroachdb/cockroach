@@ -250,8 +250,9 @@ message JoinReaderSpec {
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 10 [(gogoproto.nullable) = false];
 
   // Indicates that the join reader should maintain the ordering of the input
-  // stream. This is only applicable to lookup joins, where doing so is
-  // expensive. Index joins do this by default regardless of the parameter.
+  // stream. This is applicable to both lookup joins and index joins.
+  // Maintaining ordering with lookup joins is expensive. With index joins,
+  // not maintaining ordering allows for optimizations at lower layers.
   optional bool maintain_ordering = 11 [(gogoproto.nullable) = false];
 
   // Indicates what implicit system columns this JoinReader is expected to
