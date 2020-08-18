@@ -328,7 +328,7 @@ func doCreateBackupSchedules(
 		}
 
 		if err := createBackupSchedule(
-			ctx, env, fullScheduleName, fullRecurrence,
+			ctx, env, p.User(), fullScheduleName, fullRecurrence,
 			fullFirstRun, details, backupNode, resultsCh, ex, txn,
 		); err != nil {
 			return err
@@ -339,7 +339,7 @@ func doCreateBackupSchedules(
 			backupNode.AppendToLatest = true
 
 			if err := createBackupSchedule(
-				ctx, env, fullScheduleName+": INCREMENTAL", incRecurrence,
+				ctx, env, p.User(), fullScheduleName+": INCREMENTAL", incRecurrence,
 				firstRun, details, backupNode, resultsCh, ex, txn,
 			); err != nil {
 				return err
@@ -354,6 +354,7 @@ func doCreateBackupSchedules(
 func createBackupSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
+	owner string,
 	name string,
 	recurrence *scheduleRecurrence,
 	firstRun *time.Time,
@@ -365,6 +366,7 @@ func createBackupSchedule(
 ) error {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleName(name)
+	sj.SetOwner(owner)
 
 	// Prepare arguments for scheduled backup execution.
 	args := &ScheduledBackupExecutionArgs{}
