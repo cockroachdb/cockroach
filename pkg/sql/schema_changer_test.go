@@ -633,7 +633,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
-	rows, err := sqlDB.Query(`SELECT v, x from t.test@foo`)
+	rows, err := sqlDB.Query(`SELECT v, x from t.test@foo ORDER BY v`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4520,7 +4520,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 
 	// Verify that the index bar over is consistent, and that columns c, d
 	// have been backfilled properly.
-	rows, err := sqlDB.Query(`SELECT c, d from t.test@bar`)
+	rows, err := sqlDB.Query(`SELECT c, d from t.test@bar ORDER BY c`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4535,7 +4535,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 			continue
 		}
 		if count+4 != c {
-			t.Errorf("e = %d, v = %d", count, c)
+			t.Errorf("e = %d, v = %d", count+4, c)
 		}
 		if d != 23 {
 			t.Errorf("e = %d, v = %d", 23, d)
