@@ -1409,9 +1409,12 @@ func doRestorePlan(
 	if restoreStmt.Options.Detached {
 		// When running in detached mode, we simply create the job record.
 		// We do not wait for the job to finish.
-		if err := utilccl.StartAsyncJob(ctx, p, &jr, resultsCh); err != nil {
+		aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, jr, p.ExtendedEvalContext().Txn)
+		if err != nil {
 			return err
 		}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
 		collectTelemetry()
 		return nil
 	}

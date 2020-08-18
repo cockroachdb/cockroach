@@ -5020,80 +5020,110 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
 	close(allowRequest)
-	runner.Exec(t, `BACKUP TABLE FOO TO 'nodelocal://0/foo'`) // create a base backup.
-	allowRequest = make(chan struct{})
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
-	runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
-	rRand, _ := randutil.NewPseudoRand()
-	writeGarbage := func(from, to int) {
-		for i := from; i < to; i++ {
-			runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))
+
+	for _, testrun := range []struct {
+		name      string
+		runBackup func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner)
+	}{
+		{
+			"backup-normal",
+			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
+				sqlDB.Exec(t, query)
+			},
+		},
+		{
+			"backup-detached",
+			func(t *testing.T, query string, sqlDB *sqlutils.SQLRunner) {
+				backupWithDetachedOption := query + ` WITH DETACHED`
+				db := sqlDB.DB.(*gosql.DB)
+				var jobID int64
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				err = tx.QueryRow(backupWithDetachedOption).Scan(&jobID)
+				require.NoError(t, err)
+				require.NoError(t, tx.Commit())
+				waitForSuccessfulJob(t, tc, jobID)
+			},
+		},
+	} {
+		baseBackupURI := "nodelocal://0/foo" + testrun.name
+		testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s'`, baseBackupURI), runner) // create a base backup.
+		allowRequest = make(chan struct{})
+		runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '100ms';")
+		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		rRand, _ := randutil.NewPseudoRand()
+		writeGarbage := func(from, to int) {
+			for i := from; i < to; i++ {
+				runner.Exec(t, "UPSERT INTO foo VALUES ($1, $2)", i, randutil.RandBytes(rRand, 1<<10))
+			}
 		}
-	}
-	writeGarbage(3, 10)
-	rowCount := runner.QueryStr(t, "SELECT * FROM foo")
-
-	g, _ := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		// If BACKUP does not protect the timestamp, the ExportRequest will
-		// throw an error and fail the backup.
-		_, err := conn.Exec(`BACKUP TABLE FOO TO 'nodelocal://0/foo-inc' INCREMENTAL FROM 'nodelocal://0/foo'`)
-		return err
-	})
-
-	var jobID string
-	testutils.SucceedsSoon(t, func() error {
-		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
-		return row.Scan(&jobID)
-	})
-
-	time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
-	gcTable := func(skipShouldQueue bool) (traceStr string) {
-		rows := runner.Query(t, "SELECT start_key"+
-			" FROM crdb_internal.ranges_no_leases"+
-			" WHERE table_name = $1"+
-			" AND database_name = current_database()"+
-			" ORDER BY start_key ASC", "foo")
-		var traceBuf strings.Builder
-		for rows.Next() {
-			var startKey roachpb.Key
-			require.NoError(t, rows.Scan(&startKey))
-			r := tc.LookupRangeOrFatal(t, startKey)
-			l, _, err := tc.FindRangeLease(r, nil)
-			require.NoError(t, err)
-			lhServer := tc.Server(int(l.Replica.NodeID) - 1)
-			s, repl := getFirstStoreReplica(t, lhServer, startKey)
-			trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, skipShouldQueue)
-			require.NoError(t, err)
-			fmt.Fprintf(&traceBuf, "%s\n", trace.String())
-		}
-		require.NoError(t, rows.Err())
-		return traceBuf.String()
-	}
-
-	// We should have refused to GC over the timestamp which we needed to protect.
-	gcTable(true /* skipShouldQueue */)
-
-	// Unblock the blocked backup request.
-	close(allowRequest)
-
-	runner.CheckQueryResultsRetry(t, "SELECT * FROM foo", rowCount)
-
-	// Wait for the ranges to learn about the removed record and ensure that we
-	// can GC from the range soon.
-	// This regex matches when all float priorities other than 0.00000. It does
-	// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
-	// 0.000123).
-	matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
-	nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
-	testutils.SucceedsSoon(t, func() error {
 		writeGarbage(3, 10)
-		if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
-			return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
+		rowCount := runner.QueryStr(t, "SELECT * FROM foo")
+
+		g, _ := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			// If BACKUP does not protect the timestamp, the ExportRequest will
+			// throw an error and fail the backup.
+			incURI := "nodelocal://0/foo-inc" + testrun.name
+			testrun.runBackup(t, fmt.Sprintf(`BACKUP TABLE FOO TO '%s' INCREMENTAL FROM '%s'`, incURI, baseBackupURI), runner)
+			return nil
+		})
+
+		var jobID string
+		testutils.SucceedsSoon(t, func() error {
+			row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+			return row.Scan(&jobID)
+		})
+
+		time.Sleep(3 * time.Second) // Wait for the data to definitely be expired and GC to run.
+		gcTable := func(skipShouldQueue bool) (traceStr string) {
+			rows := runner.Query(t, "SELECT start_key"+
+				" FROM crdb_internal.ranges_no_leases"+
+				" WHERE table_name = $1"+
+				" AND database_name = current_database()"+
+				" ORDER BY start_key ASC", "foo")
+			var traceBuf strings.Builder
+			for rows.Next() {
+				var startKey roachpb.Key
+				require.NoError(t, rows.Scan(&startKey))
+				r := tc.LookupRangeOrFatal(t, startKey)
+				l, _, err := tc.FindRangeLease(r, nil)
+				require.NoError(t, err)
+				lhServer := tc.Server(int(l.Replica.NodeID) - 1)
+				s, repl := getFirstStoreReplica(t, lhServer, startKey)
+				trace, _, err := s.ManuallyEnqueue(ctx, "gc", repl, skipShouldQueue)
+				require.NoError(t, err)
+				fmt.Fprintf(&traceBuf, "%s\n", trace.String())
+			}
+			require.NoError(t, rows.Err())
+			return traceBuf.String()
 		}
-		return nil
-	})
-	require.NoError(t, g.Wait())
+
+		// We should have refused to GC over the timestamp which we needed to protect.
+		gcTable(true /* skipShouldQueue */)
+
+		// Unblock the blocked backup request.
+		close(allowRequest)
+
+		runner.CheckQueryResultsRetry(t, "SELECT * FROM foo", rowCount)
+
+		// Wait for the ranges to learn about the removed record and ensure that we
+		// can GC from the range soon.
+		// This regex matches when all float priorities other than 0.00000. It does
+		// this by matching either a float >= 1 (e.g. 1230.012) or a float < 1 (e.g.
+		// 0.000123).
+		matchNonZero := "[1-9]\\d*\\.\\d+|0\\.\\d*[1-9]\\d*"
+		nonZeroProgressRE := regexp.MustCompile(fmt.Sprintf("priority=(%s)", matchNonZero))
+		testutils.SucceedsSoon(t, func() error {
+			writeGarbage(3, 10)
+			if trace := gcTable(false /* skipShouldQueue */); !nonZeroProgressRE.MatchString(trace) {
+				return fmt.Errorf("expected %v in trace: %v", nonZeroProgressRE, trace)
+			}
+			return nil
+		})
+		require.NoError(t, g.Wait())
+	}
+
 }
 
 func getFirstStoreReplica(

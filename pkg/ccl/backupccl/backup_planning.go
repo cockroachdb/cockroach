@@ -1084,11 +1084,24 @@ func backupPlanHook(
 		}
 
 		if backupStmt.Options.Detached {
-			// When running in detached mode, we simply create the job record.
-			// We do not wait for the job to finish.
-			if err := utilccl.StartAsyncJob(ctx, p, &jr, resultsCh); err != nil {
+			// When running inside an explicit transaction, we simply create the job
+			// record. We do not wait for the job to finish.
+			aj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, p.ExtendedEvalContext().Txn)
+			if err != nil {
 				return err
 			}
+
+			// The protect timestamp logic for a DETACHED BACKUP can be run within the
+			// same txn as the BACKUP is being planned in, because we do not wait for
+			// the BACKUP job to complete.
+			err = protectTimestampForBackup(ctx, p, p.ExtendedEvalContext().Txn, *aj.ID(), spans,
+				startTime, endTime, backupDetails)
+			if err != nil {
+				return err
+			}
+
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(*aj.ID()))}
 			collectTelemetry()
 			return nil
 		}
@@ -1099,15 +1112,9 @@ func backupPlanHook(
 			if err != nil {
 				return err
 			}
-			if len(spans) > 0 {
-				tsToProtect := endTime
-				if !startTime.IsEmpty() {
-					tsToProtect = startTime
-				}
-				rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, *sj.ID(), tsToProtect, spans)
-				return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
-			}
-			return nil
+			err = protectTimestampForBackup(ctx, p, txn, *sj.ID(), spans, startTime, endTime,
+				backupDetails)
+			return err
 		}); err != nil {
 			if sj != nil {
 				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
@@ -1125,6 +1132,30 @@ func backupPlanHook(
 		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func protectTimestampForBackup(
+	ctx context.Context,
+	p sql.PlanHookState,
+	txn *kv.Txn,
+	jobID int64,
+	spans []roachpb.Span,
+	startTime, endTime hlc.Timestamp,
+	backupDetails jobspb.BackupDetails,
+) error {
+	if len(spans) > 0 {
+		tsToProtect := endTime
+		if !startTime.IsEmpty() {
+			tsToProtect = startTime
+		}
+		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, jobID,
+			tsToProtect, spans)
+		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getEncryptedDataKeyFromURI(

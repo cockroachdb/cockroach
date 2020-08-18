@@ -466,12 +466,8 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccCustomerStats(),
 	}
 	history := workload.Table{
-		Name: `history`,
-		Schema: maybeAddFkSuffix(
-			w.fks,
-			tpccHistorySchemaBase,
-			tpccHistorySchemaFkSuffix,
-		),
+		Name:   `history`,
+		Schema: tpccHistorySchemaBase,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numHistoryPerWarehouse * w.warehouses,
 			FillBatch:  w.tpccHistoryInitialRowBatch,
@@ -540,11 +536,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			maybeAddFkSuffix(
-				w.fks,
-				tpccOrderLineSchemaBase,
-				tpccOrderLineSchemaFkSuffix,
-			),
+			tpccOrderLineSchemaBase,
 			tpccOrderLineSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
