@@ -264,9 +264,9 @@ func newInternalPlanner(
 		},
 	}
 	// The table collection used by the internal planner does not rely on the
-	// DatabaseCache and there are no subscribers to the DatabaseCache, so we can
-	// leave it uninitialized.
-	tables := descs.NewCollection(execCfg.LeaseManager, execCfg.Settings)
+	// deprecatedDatabaseCache and there are no subscribers to the
+	// deprecatedDatabaseCache, so we can leave it uninitialized.
+	tables := descs.NewCollection(ctx, execCfg.Settings, execCfg.LeaseManager)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{

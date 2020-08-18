@@ -1,5 +1,3 @@
-# LogicTest: !3node-tenant(52567)
-
 statement ok
 SET experimental_enable_enums = true;
 SET sql_safe_updates = false;

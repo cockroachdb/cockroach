@@ -341,7 +341,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	// Create the FlowCtx for the flow.
-	flowCtx := ds.NewFlowContext(req.Flow.FlowID, evalCtx, req.TraceKV, localState)
+	flowCtx := ds.NewFlowContext(ctx, req.Flow.FlowID, evalCtx, req.TraceKV, localState)
 
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext
@@ -410,7 +410,11 @@ func (ds *ServerImpl) setupFlow(
 // NewFlowContext creates a new FlowCtx that can be used during execution of
 // a flow.
 func (ds *ServerImpl) NewFlowContext(
-	id execinfrapb.FlowID, evalCtx *tree.EvalContext, traceKV bool, localState LocalState,
+	ctx context.Context,
+	id execinfrapb.FlowID,
+	evalCtx *tree.EvalContext,
+	traceKV bool,
+	localState LocalState,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -435,7 +439,7 @@ func (ds *ServerImpl) NewFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := descs.NewCollection(ds.ServerConfig.LeaseManager.(*lease.Manager), ds.ServerConfig.Settings)
+		collection := descs.NewCollection(ctx, ds.ServerConfig.Settings, ds.ServerConfig.LeaseManager.(*lease.Manager))
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
 			CleanupFunc: func(ctx context.Context) {

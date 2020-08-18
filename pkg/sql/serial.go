@@ -117,13 +117,13 @@ func (p *planner) processSerialInColumnDef(
 		tree.Name(tableName.Table() + "_" + string(d.Name) + "_seq"))
 
 	// The first step in the search is to prepare the seqName to fill in
-	// the catalog/schema parent. This is what ResolveUncachedDatabase does.
+	// the catalog/schema parent. This is what ResolveTargetObject does.
 	//
 	// Here and below we skip the cache because name resolution using
 	// the cache does not work (well) if the txn retries and the
 	// descriptor was written already in an early txn attempt.
 	un := seqName.ToUnresolvedObjectName()
-	dbDesc, prefix, err := p.ResolveUncachedDatabase(ctx, un)
+	dbDesc, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

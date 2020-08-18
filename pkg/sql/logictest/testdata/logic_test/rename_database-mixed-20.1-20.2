@@ -1,3 +1,5 @@
+# TestLogic: local-mixed-20.1-20.2
+
 query T
 SHOW DATABASES
 ----
@@ -87,10 +89,10 @@ SELECT * FROM kv
 5 6
 7 8
 
-statement error pgcode 42601 empty database name
+statement error empty database name
 ALTER DATABASE "" RENAME TO u
 
-statement error pgcode 42601 empty database name
+statement error empty database name
 ALTER DATABASE u RENAME TO ""
 
 statement ok
@@ -210,67 +212,3 @@ DROP TABLE db2.a; CREATE TABLE db2.a (a int default nextval('a_seq') + nextval('
 
 statement ok
 USE defaultdb; DROP DATABASE db1 CASCADE
-
-# Test that names cannot be reused within the same transaction.
-
-statement ok
-CREATE DATABASE foo; CREATE DATABASE bar
-
-# rename foo -> baz, create foo
-
-statement ok
-BEGIN
-
-statement ok
-ALTER DATABASE foo RENAME TO baz
-
-statement error pgcode 42P04 database "foo" already exists
-CREATE DATABASE foo
-
-statement ok
-ROLLBACK
-
-# drop foo, rename bar -> foo
-
-statement ok
-BEGIN
-
-statement ok
-DROP DATABASE foo
-
-statement error pgcode 42P04 the new database name "foo" already exists
-ALTER DATABASE bar RENAME TO foo
-
-statement ok
-ROLLBACK
-
-# rename foo -> baz, rename bar -> foo
-
-statement ok
-BEGIN
-
-statement ok
-ALTER DATABASE foo RENAME TO baz
-
-statement error pgcode 42P04 the new database name "foo" already exists
-ALTER DATABASE bar RENAME TO foo
-
-statement ok
-ROLLBACK
-
-# drop foo, create foo
-
-statement ok
-BEGIN
-
-statement ok
-DROP DATABASE foo
-
-statement error pgcode 42P04 database "foo" already exists
-CREATE DATABASE foo
-
-statement ok
-ROLLBACK
-
-statement ok
-DROP DATABASE foo; DROP DATABASE bar

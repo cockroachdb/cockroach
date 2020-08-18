@@ -144,7 +144,7 @@ func (dc *Cache) GetDatabaseDesc(
 			}
 			a := catalogkv.UncachedPhysicalAccessor{}
 			descI, err := a.GetDatabaseDesc(ctx, txn, dc.codec, name,
-				tree.DatabaseLookupFlags{Required: required})
+				tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: required}})
 			if err != nil {
 				return err
 			}
@@ -175,40 +175,6 @@ func (dc *Cache) GetDatabaseDescByID(
 		desc, err = catalogkv.MustGetDatabaseDescByID(ctx, txn, dc.codec, id)
 	}
 	return desc, err
-}
-
-// GetDatabaseID returns the ID of a database given its name. It
-// uses the descriptor cache if possible, otherwise falls back to KV
-// operations.
-func (dc *Cache) GetDatabaseID(
-	ctx context.Context,
-	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
-	name string,
-	required bool,
-) (descpb.ID, error) {
-	dbID, err := dc.GetCachedDatabaseID(name)
-	if err != nil {
-		return dbID, err
-	}
-	if dbID == descpb.InvalidID {
-		if err := txnRunner(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			// Run the namespace read as high-priority, thereby pushing any intents out
-			// of its way. We don't want schema changes to prevent database acquisitions;
-			// we'd rather force them to refresh. Also this prevents deadlocks in cases
-			// where the name resolution is triggered by the transaction doing the
-			// schema change itself.
-			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
-				return err
-			}
-			var err error
-			dbID, err = catalogkv.GetDatabaseID(ctx, txn, dc.codec, name, required)
-			return err
-		}); err != nil {
-			return descpb.InvalidID, err
-		}
-	}
-	dc.setID(name, dbID)
-	return dbID, nil
 }
 
 // GetCachedDatabaseID returns the ID of a database given its name

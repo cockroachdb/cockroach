@@ -368,13 +368,14 @@ const SystemDatabaseName = "system"
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
 func MakeSystemDatabaseDesc() *ImmutableDatabaseDescriptor {
-	return NewInitialDatabaseDescriptorWithPrivileges(
-		keys.SystemDatabaseID,
-		SystemDatabaseName,
+	return NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+		Name:    SystemDatabaseName,
+		ID:      keys.SystemDatabaseID,
+		Version: 1,
 		// Assign max privileges to root user.
-		descpb.NewCustomSuperuserPrivilegeDescriptor(
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.SystemDatabaseID], security.NodeUser),
-	)
+	})
 }
 
 // These system config descpb.TableDescriptor literals should match the descriptor

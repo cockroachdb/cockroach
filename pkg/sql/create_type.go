@@ -55,7 +55,7 @@ func resolveNewTypeName(
 	params runParams, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, *sqlbase.ImmutableDatabaseDescriptor, error) {
 	// Resolve the target schema and database.
-	db, prefix, err := params.p.ResolveUncachedDatabase(params.ctx, name)
+	db, prefix, err := params.p.ResolveTargetObject(params.ctx, name)
 	if err != nil {
 		return nil, nil, err
 	}

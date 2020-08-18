@@ -1011,7 +1011,7 @@ type oneAtATimeSchemaResolver struct {
 func (r oneAtATimeSchemaResolver) getDatabaseByID(
 	id descpb.ID,
 ) (*sqlbase.ImmutableDatabaseDescriptor, error) {
-	return r.p.Descriptors().DatabaseCache().GetDatabaseDescByID(r.ctx, r.p.txn, id)
+	return r.p.Descriptors().GetDatabaseVersionByID(r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{})
 }
 
 func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (sqlbase.TableDescriptor, error) {

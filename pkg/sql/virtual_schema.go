@@ -455,7 +455,11 @@ func (e virtualDefEntry) getPlanInfo(
 		var dbDesc *sqlbase.ImmutableDatabaseDescriptor
 		if dbName != "" {
 			dbDescI, err := p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
-				dbName, tree.DatabaseLookupFlags{Required: true, AvoidCached: p.avoidCachedDescriptors})
+				dbName, tree.DatabaseLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{
+						Required: true, AvoidCached: p.avoidCachedDescriptors,
+					},
+				})
 			if err != nil {
 				return nil, err
 			}
@@ -667,7 +671,12 @@ var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
 )
 
 func initVirtualDatabaseDesc(id descpb.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
-	return sqlbase.NewInitialDatabaseDescriptorWithPrivileges(id, name, publicSelectPrivileges)
+	return sqlbase.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+		Name:       name,
+		ID:         id,
+		Version:    1,
+		Privileges: publicSelectPrivileges,
+	})
 }
 
 // getEntries is part of the VirtualTabler interface.

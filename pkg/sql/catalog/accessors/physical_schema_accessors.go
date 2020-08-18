@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
@@ -71,38 +70,18 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc sqlbase.DatabaseDescriptor, err error) {
-	isSystemDB := name == sqlbase.SystemDatabaseName
-	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
-		refuseFurtherLookup, dbID, err := a.tc.GetUncommittedDatabaseID(name, flags.Required)
-		if refuseFurtherLookup || err != nil {
+	if flags.RequireMutable {
+		db, err := a.tc.GetMutableDatabaseDescriptor(ctx, txn, name, flags)
+		if db == nil {
 			return nil, err
 		}
-
-		if dbID != descpb.InvalidID {
-			// Some database ID was found in the list of uncommitted DB changes.
-			// Use that to get the descriptor.
-			desc, err := a.tc.DatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
-			if desc == nil && flags.Required {
-				return nil, sqlbase.NewUndefinedDatabaseError(name)
-			} else if desc == nil {
-				// NB: We must return the actual value nil here as a typed nil will not
-				// be easily detectable by the caller.
-				return nil, nil
-			}
-			return desc, err
-		}
-
-		// The database was not known in the uncommitted list. Have the db
-		// cache look it up by name for us.
-		desc, err := a.tc.DatabaseCache().GetDatabaseDesc(ctx, a.tc.LeaseManager().DB().Txn, name, flags.Required)
-		if desc == nil || err != nil {
-			return nil, err
-		}
-		return desc, nil
+		return db, err
 	}
-
-	// We avoided the cache. Go lower.
-	return a.Accessor.GetDatabaseDesc(ctx, txn, codec, name, flags)
+	typ, err := a.tc.GetDatabaseVersion(ctx, txn, name, flags)
+	if typ == nil {
+		return nil, err
+	}
+	return typ, err
 }
 
 // GetSchema implements the Accessor interface.

@@ -568,6 +568,7 @@ func newSourceNotFoundError(fmt string, args ...interface{}) error {
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.
+// TODO (lucy): Extract RequireMutable into the common flags.
 type CommonLookupFlags struct {
 	// if required is set, lookup will return an error if the item is not found.
 	Required bool
@@ -576,7 +577,10 @@ type CommonLookupFlags struct {
 }
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
-type DatabaseLookupFlags = CommonLookupFlags
+type DatabaseLookupFlags struct {
+	CommonLookupFlags
+	RequireMutable bool
+}
 
 // DatabaseListFlags is the flag struct suitable for GetObjectNames().
 type DatabaseListFlags struct {

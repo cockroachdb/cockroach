@@ -49,6 +49,10 @@ func (p *planner) createDropDatabaseJob(
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
 	}
+	formatVersion := jobspb.DatabaseJobFormatVersion
+	if p.Descriptors().DatabaseLeasingUnsupported() {
+		formatVersion--
+	}
 	jobRecord := jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
@@ -57,12 +61,44 @@ func (p *planner) createDropDatabaseJob(
 			DroppedTables:     tableDropDetails,
 			DroppedTypes:      typeIDs,
 			DroppedDatabaseID: databaseID,
-			FormatVersion:     jobspb.JobResumerFormatVersion,
+			FormatVersion:     formatVersion,
 		},
 		Progress: jobspb.SchemaChangeProgress{},
 	}
-	_, err := p.extendedEvalCtx.QueueJob(jobRecord)
-	return err
+	newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new drop database job %d for database %d", *newJob.ID(), databaseID)
+	return nil
+}
+
+// createNonDropDatabaseChangeJob covers all database descriptor updates other
+// than dropping the database.
+// TODO (lucy): This should ideally look into the set of queued jobs so that we
+// don't queue multiple jobs for the same database.
+func (p *planner) createNonDropDatabaseChangeJob(
+	ctx context.Context, databaseID descpb.ID, jobDesc string,
+) error {
+	formatVersion := jobspb.DatabaseJobFormatVersion
+	if p.Descriptors().DatabaseLeasingUnsupported() {
+		formatVersion--
+	}
+	jobRecord := jobs.Record{
+		Description: jobDesc,
+		Username:    p.User(),
+		Details: jobspb.SchemaChangeDetails{
+			DescID:        databaseID,
+			FormatVersion: formatVersion,
+		},
+		Progress: jobspb.SchemaChangeProgress{},
+	}
+	newJob, err := p.extendedEvalCtx.QueueJob(jobRecord)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new database schema change job %d for database %d", *newJob.ID(), databaseID)
+	return nil
 }
 
 // createOrUpdateSchemaChangeJob queues a new job for the schema change if there
@@ -107,7 +143,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 				DescID:          tableDesc.ID,
 				TableMutationID: mutationID,
 				ResumeSpanList:  spanList,
-				FormatVersion:   jobspb.JobResumerFormatVersion,
+				// The version distinction for database jobs doesn't matter for jobs on
+				// tables.
+				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 		}
@@ -131,7 +169,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			DescID:          tableDesc.ID,
 			TableMutationID: oldDetails.TableMutationID,
 			ResumeSpanList:  spanList,
-			FormatVersion:   jobspb.JobResumerFormatVersion,
+			// The version distinction for database jobs doesn't matter for jobs on
+			// tables.
+			FormatVersion: jobspb.DatabaseJobFormatVersion,
 		}
 		if oldDetails.TableMutationID != descpb.InvalidMutationID {
 			// The previous queued schema change job was associated with a mutation,

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -469,8 +470,10 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 	buf := &logtags.Buffer{}
 	buf = buf.Add("scExec", nil)
 
-	buf = buf.Add("table", sc.descID)
-	buf = buf.Add("mutation", sc.mutationID)
+	buf = buf.Add("id", sc.descID)
+	if sc.mutationID != descpb.InvalidMutationID {
+		buf = buf.Add("mutation", sc.mutationID)
+	}
 	if sc.droppedDatabaseID != descpb.InvalidID {
 		buf = buf.Add("db", sc.droppedDatabaseID)
 	}
@@ -591,7 +594,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		}
 		// Some descriptors should be deleted if they are in the DROP state.
 		switch desc.(type) {
-		case sqlbase.SchemaDescriptor:
+		case sqlbase.SchemaDescriptor, sqlbase.DatabaseDescriptor:
 			if desc.Dropped() {
 				if err := sc.execCfg.DB.Del(ctx, sqlbase.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
 					return err
@@ -1561,12 +1564,13 @@ func (sc *SchemaChanger) updateJobForRollback(
 			)
 		}
 	}
+	oldDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
 	if err := sc.job.WithTxn(txn).SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
 			DescID:          sc.descID,
 			TableMutationID: sc.mutationID,
 			ResumeSpanList:  spanList,
-			FormatVersion:   jobspb.JobResumerFormatVersion,
+			FormatVersion:   oldDetails.FormatVersion,
 		},
 	); err != nil {
 		return err
@@ -1989,48 +1993,63 @@ func (r schemaChangeResumer) Resume(
 		return scErr
 	}
 
-	// For an empty database, the zone config for it was already GC'ed and there's
-	// nothing left to do.
-	if details.DroppedDatabaseID != descpb.InvalidID &&
-		len(details.DroppedTables) == 0 &&
-		len(details.DroppedTypes) == 0 &&
-		len(details.DroppedSchemas) == 0 {
-		return nil
-	}
-
 	// If a database or a set of schemas is being dropped, drop all objects as
 	// part of this schema change job.
-	//
-	// This also covers other cases where we have a leftover 19.2 job that drops
-	// multiple tables in a single job (e.g., TRUNCATE on multiple tables), so
-	if details.DroppedDatabaseID != descpb.InvalidID ||
-		len(details.DroppedTables) > 1 ||
-		len(details.DroppedSchemas) > 0 {
-		// Drop all schemas.
-		for _, id := range details.DroppedSchemas {
-			if err := execSchemaChange(id, descpb.InvalidMutationID, descpb.InvalidID); err != nil {
-				return err
-			}
-		}
+	// TODO (lucy): Now that the schema change job is responsible for removing
+	// namespace entries for every type of descriptor and we specify exactly which
+	// descriptors need to be dropped, we should consider unconditionally removing
+	// namespace entries even when the descriptor no longer exists.
 
-		// Drop all of the types in the database.
-		for i := range details.DroppedTypes {
-			ts := &typeSchemaChanger{
-				typeID:  details.DroppedTypes[i],
-				execCfg: p.ExecCfg(),
-			}
-			if err := ts.execWithRetry(ctx); err != nil {
-				return err
-			}
+	// Drop the child types in the dropped database or schemas.
+	for i := range details.DroppedTypes {
+		ts := &typeSchemaChanger{
+			typeID:  details.DroppedTypes[i],
+			execCfg: p.ExecCfg(),
 		}
+		if err := ts.execWithRetry(ctx); err != nil {
+			return err
+		}
+	}
 
-		// Drop the tables now.
-		for i := range details.DroppedTables {
-			droppedTable := &details.DroppedTables[i]
-			if err := execSchemaChange(droppedTable.ID, descpb.InvalidMutationID, details.DroppedDatabaseID); err != nil {
+	// Drop the child tables.
+	for i := range details.DroppedTables {
+		droppedTable := &details.DroppedTables[i]
+		if err := execSchemaChange(droppedTable.ID, descpb.InvalidMutationID, details.DroppedDatabaseID); err != nil {
+			return err
+		}
+	}
+
+	// Drop all schemas.
+	for _, id := range details.DroppedSchemas {
+		if err := execSchemaChange(id, descpb.InvalidMutationID, descpb.InvalidID); err != nil {
+			return err
+		}
+	}
+
+	// Drop the database, if applicable.
+	if details.FormatVersion >= jobspb.DatabaseJobFormatVersion {
+		if dbID := details.DroppedDatabaseID; dbID != descpb.InvalidID {
+			if err := execSchemaChange(dbID, descpb.InvalidMutationID, descpb.InvalidID); err != nil {
 				return err
 			}
+			// If there are no tables to GC, the zone config needs to be deleted now.
+			if p.ExecCfg().Codec.ForSystemTenant() && len(details.DroppedTables) == 0 {
+				zoneKeyPrefix := config.MakeZoneKeyPrefix(config.SystemTenantObjectID(dbID))
+				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+				}
+				// Delete the zone config entry for this database.
+				if err := p.ExecCfg().DB.DelRange(ctx, zoneKeyPrefix, zoneKeyPrefix.PrefixEnd()); err != nil {
+					return err
+				}
+			}
 		}
+	}
+
+	// Queue the GC job for any dropped tables. This should happen after the
+	// database (if applicable) has been dropped. Currently the table GC job is
+	// responsible for deleting the database zone config at the end.
+	if len(details.DroppedTables) > 0 {
 		dropTime := timeutil.Now().UnixNano()
 		tablesToGC := make([]jobspb.SchemaChangeGCDetails_DroppedID, len(details.DroppedTables))
 		for i, table := range details.DroppedTables {
@@ -2041,20 +2060,25 @@ func (r schemaChangeResumer) Resume(
 			ParentID: details.DroppedDatabaseID,
 		}
 
-		return startGCJob(
+		if err := startGCJob(
 			ctx,
 			p.ExecCfg().DB,
 			p.ExecCfg().JobRegistry,
 			r.job.Payload().Username,
 			r.job.Payload().Description,
 			multiTableGCDetails,
-		)
-	}
-	if details.DescID == descpb.InvalidID {
-		return errors.AssertionFailedf("schema change has no specified database or table(s)")
+		); err != nil {
+			return err
+		}
 	}
 
-	return execSchemaChange(details.DescID, details.TableMutationID, details.DroppedDatabaseID)
+	// Finally, if there's a main descriptor undergoing a schema change, run the
+	// schema changer. This can be any single-table schema change or any change to
+	// a database or schema other than a drop.
+	if details.DescID != descpb.InvalidID {
+		return execSchemaChange(details.DescID, details.TableMutationID, details.DroppedDatabaseID)
+	}
+	return nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
@@ -2191,7 +2215,9 @@ func (sc *SchemaChanger) queueCleanupJobs(
 				DescID:          sc.descID,
 				TableMutationID: mutationID,
 				ResumeSpanList:  spanList,
-				FormatVersion:   jobspb.JobResumerFormatVersion,
+				// The version distinction for database jobs doesn't matter for jobs on
+				// tables.
+				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
 			Progress:      jobspb.SchemaChangeProgress{},
 			NonCancelable: true,
