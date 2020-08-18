@@ -423,8 +423,8 @@ CR_GEOS_Status CR_GEOS_WKTToEWKB(CR_GEOS* lib, CR_GEOS_Slice wkt, int srid, CR_G
   return toGEOSString(error.data(), error.length());
 }
 
-CR_GEOS_Status CR_GEOS_ClipEWKBByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin, double ymin,
-                                      double xmax, double ymax, CR_GEOS_String* clippedEWKB) {
+CR_GEOS_Status CR_GEOS_ClipByRect(CR_GEOS* lib, CR_GEOS_Slice ewkb, double xmin, double ymin,
+                                  double xmax, double ymax, CR_GEOS_String* clippedEWKB) {
   std::string error;
   auto handle = initHandleWithErrorBuffer(lib, &error);
   *clippedEWKB = {.data = NULL, .len = 0};
