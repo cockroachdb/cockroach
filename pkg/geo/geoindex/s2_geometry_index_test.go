@@ -78,7 +78,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 	})
 }
 
-func TestClipEWKBByRect(t *testing.T) {
+func TestClipByRect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var g *geo.Geometry
@@ -97,8 +97,13 @@ func TestClipEWKBByRect(t *testing.T) {
 			d.ScanArgs(t, "ymin", &yMin)
 			d.ScanArgs(t, "xmax", &xMax)
 			d.ScanArgs(t, "ymax", &yMax)
-			ewkb, err := geos.ClipEWKBByRect(
-				g.EWKB(), float64(xMin), float64(yMin), float64(xMax), float64(yMax))
+			ewkb, err := geos.ClipByRect(
+				g.EWKB(),
+				float64(xMin),
+				float64(yMin),
+				float64(xMax),
+				float64(yMax),
+			)
 			if err != nil {
 				return err.Error()
 			}

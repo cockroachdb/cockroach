@@ -2831,6 +2831,26 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			),
 		)...,
 	),
+	"st_clipbybox2d": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"box2d", types.Box2D}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				bbox := tree.MustBeDBox2D(args[1])
+				ret, err := geomfn.ClipByRect(g.Geometry, bbox.CartesianBoundingBox)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Clips the geometry to conform to the bounding box specified by box2d.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_convexhull": makeBuiltin(
 		defProps(),
 		geometryOverload1(
