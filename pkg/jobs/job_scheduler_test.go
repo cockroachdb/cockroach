@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -78,7 +79,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 
 			// The job should not run -- it should be rescheduled `recheckJobAfter` time in the
 			// future.
-			s := newJobScheduler(h.cfg, h.env)
+			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
 
 			if wait == jobspb.ScheduleDetails_WAIT {
@@ -132,7 +133,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 			h.env.SetTime(expectedRunTime.Add(time.Second))
 
 			// Execute the job and verify it has the next run scheduled.
-			s := newJobScheduler(h.cfg, h.env)
+			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
 
 			expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
@@ -169,7 +170,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 	h.env.SetTime(expectedRunTime.Add(time.Second))
 
 	// Execute the job and verify it has the next run scheduled.
-	s := newJobScheduler(h.cfg, h.env)
+	s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
 
 	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
@@ -236,6 +237,10 @@ func (n *recordScheduleExecutor) NotifyJobTermination(
 	return nil
 }
 
+func (n *recordScheduleExecutor) Metrics() metric.Struct {
+	return nil
+}
+
 var _ ScheduledJobExecutor = &recordScheduleExecutor{}
 
 func fastDaemonKnobs(scanDelay func() time.Duration) *TestingKnobs {
@@ -285,7 +290,7 @@ func TestJobSchedulerCanBeDisabledWhileSleeping(t *testing.T) {
 	})
 
 	h.cfg.TestingKnobs = knobs
-	daemon := newJobScheduler(h.cfg, h.env)
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
 	// Wait for daemon to run it's scan loop few times.
@@ -356,7 +361,7 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 
 	// Start daemon.
 	stopper := stop.NewStopper()
-	daemon := newJobScheduler(h.cfg, h.env)
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
 	// Advance our fake time 1 hour forward (plus a bit)
@@ -369,8 +374,10 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 		expectedRun{scheduleIDs[3], nil},
 		expectedRun{scheduleIDs[4], nil},
 	)
-
 	stopper.Stop(ctx)
+
+	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
+	require.EqualValues(t, numJobs, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
@@ -397,14 +404,15 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 
 	// Advance our fake time 1 hour forward (plus a bit) so that the daemon finds matching jobs.
 	h.env.AdvanceTime(time.Hour + time.Second)
-	schedulerMaxJobsPerIterationSetting.Override(&h.cfg.Settings.SV, 2)
+	const jobsPerIteration = 2
+	schedulerMaxJobsPerIterationSetting.Override(&h.cfg.Settings.SV, jobsPerIteration)
 
 	// Make daemon execute initial scan immediately, but block subsequent scans.
 	h.cfg.TestingKnobs = fastDaemonKnobs(overridePaceSetting(time.Hour))
 
 	// Start daemon.
 	stopper := stop.NewStopper()
-	daemon := newJobScheduler(h.cfg, h.env)
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 	daemon.runDaemon(ctx, stopper)
 
 	// Note: time is stored in the table with microsecond precision.
@@ -417,6 +425,9 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 	)
 
 	stopper.Stop(ctx)
+
+	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
+	require.EqualValues(t, jobsPerIteration, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
