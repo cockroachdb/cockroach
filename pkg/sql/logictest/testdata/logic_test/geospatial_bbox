@@ -135,3 +135,33 @@ NULL
 BOX(-1 -1,1 1)
 BOX(4 -5,4 -5)
 BOX(-1 -5,4 1)
+
+subtest cast_test
+
+query T
+SELECT
+  ST_AsEWKT(b::box2d::geometry)
+FROM ( VALUES
+  (NULL),
+  ('box(-1 -1,-1 -1)'),
+  ('box(-1 -2, 4 6)')
+) tbl(b)
+----
+NULL
+POINT (-1 -1)
+LINESTRING (-1 -2, 4 6)
+
+query T
+SELECT
+  g::geometry::box2d
+FROM ( VALUES
+  ('point empty'),
+  (null),
+  ('point(5 5)'),
+  ('linestring(4 5, 9 10)')
+) tbl(g)
+----
+NULL
+NULL
+BOX(5 5,5 5)
+BOX(4 5,9 10)
