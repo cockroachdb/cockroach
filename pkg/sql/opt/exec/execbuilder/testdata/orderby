@@ -293,7 +293,6 @@ sort             ·                ·
  │               already ordered  +b,+a
  └── index join  ·                ·
       │          table            abc@primary
-      │          key columns      a, b, c
       └── scan   ·                ·
 ·                missing stats    ·
 ·                table            abc@ba
@@ -908,7 +907,6 @@ project                     ·                      ·                  (k)     
                 │           type                   inner              ·                ·
                 │           equality               (column1) = (k)    ·                ·
                 │           equality cols are key  ·                  ·                ·
-                │           parallel               ·                  ·                ·
                 └── values  ·                      ·                  (column1)        ·
 ·                           size                   1 column, 2 rows   ·                ·
 ·                           row 0, expr 0          1                  ·                ·
@@ -928,7 +926,7 @@ project               ·                    ·                     (k)          
            │          equality             (v, k) = (v, k)       ·             ·
            │          left cols are key    ·                     ·             ·
            │          right cols are key   ·                     ·             ·
-           │          mergeJoinOrder       -"(v=v)",+"(k=k)"     ·             ·
+           │          merge ordering       -"(v=v)",+"(k=k)"     ·             ·
            ├── scan   ·                    ·                     (k, v)        -v,+k
            │          estimated row count  1000 (missing stats)  ·             ·
            │          table                kv@foo                ·             ·

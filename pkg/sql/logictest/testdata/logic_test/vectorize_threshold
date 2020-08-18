@@ -21,7 +21,6 @@ EXPLAIN SELECT count(*) from small
 ·          distribution   full
 ·          vectorized     false
 group      ·              ·
- │         aggregate 0    count_rows()
  │         scalar         ·
  └── scan  ·              ·
 ·          missing stats  ·
@@ -39,7 +38,6 @@ EXPLAIN SELECT count(*) from small
 ·          distribution   full
 ·          vectorized     true
 group      ·              ·
- │         aggregate 0    count_rows()
  │         scalar         ·
  └── scan  ·              ·
 ·          missing stats  ·
@@ -66,7 +64,6 @@ EXPLAIN SELECT count(*) from small
 ·          distribution         full
 ·          vectorized           false
 group      ·                    ·
- │         aggregate 0          count_rows()
  │         scalar               ·
  └── scan  ·                    ·
 ·          estimated row count  100
@@ -84,7 +81,6 @@ EXPLAIN SELECT count(*) from small
 ·          distribution         full
 ·          vectorized           true
 group      ·                    ·
- │         aggregate 0          count_rows()
  │         scalar               ·
  └── scan  ·                    ·
 ·          estimated row count  100
@@ -114,7 +110,6 @@ EXPLAIN SELECT count(*) from large
 ·          distribution         full
 ·          vectorized           true
 group      ·                    ·
- │         aggregate 0          count_rows()
  │         scalar               ·
  └── scan  ·                    ·
 ·          estimated row count  100000
@@ -132,7 +127,6 @@ EXPLAIN SELECT count(*) from large
 ·          distribution         full
 ·          vectorized           false
 group      ·                    ·
- │         aggregate 0          count_rows()
  │         scalar               ·
  └── scan  ·                    ·
 ·          estimated row count  100000

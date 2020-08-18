@@ -171,7 +171,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -185,7 +185,7 @@ index join  ·                    ·                                        (a, 
  │          table                d@primary                                ·       ·
  │          key columns          a                                        ·       ·
  └── scan   ·                    ·                                        (a)     ·
-·           estimated row count  111 (missing stats)                      ·       ·
+·           estimated row count  110 (missing stats)                      ·       ·
 ·           table                d@foo_inv                                ·       ·
 ·           spans                /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
@@ -199,7 +199,7 @@ index join  ·                    ·                                            
  │          table                d@primary                                        ·       ·
  │          key columns          a                                                ·       ·
  └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  111 (missing stats)                              ·       ·
+·           estimated row count  110 (missing stats)                              ·       ·
 ·           table                d@foo_inv                                        ·       ·
 ·           spans                /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
 
@@ -213,7 +213,7 @@ index join  ·                    ·                             (a, b)  ·
  │          table                d@primary                     ·       ·
  │          key columns          a                             ·       ·
  └── scan   ·                    ·                             (a)     ·
-·           estimated row count  111 (missing stats)           ·       ·
+·           estimated row count  110 (missing stats)           ·       ·
 ·           table                d@foo_inv                     ·       ·
 ·           spans                /"a"/"b"/True-/"a"/"b"/False  ·       ·
 
@@ -227,7 +227,7 @@ index join  ·                    ·                        (a, b)  ·
  │          table                d@primary                ·       ·
  │          key columns          a                        ·       ·
  └── scan   ·                    ·                        (a)     ·
-·           estimated row count  111 (missing stats)      ·       ·
+·           estimated row count  110 (missing stats)      ·       ·
 ·           table                d@foo_inv                ·       ·
 ·           spans                /Arr/1-/Arr/1/PrefixEnd  ·       ·
 
@@ -241,7 +241,7 @@ index join  ·                    ·                                            
  │          table                d@primary                                        ·       ·
  │          key columns          a                                                ·       ·
  └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  111 (missing stats)                              ·       ·
+·           estimated row count  110 (missing stats)                              ·       ·
 ·           table                d@foo_inv                                        ·       ·
 ·           spans                /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
@@ -283,7 +283,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -297,7 +297,7 @@ index join  ·                    ·                                    (a, b)  
  │          table                d@primary                            ·       ·
  │          key columns          a                                    ·       ·
  └── scan   ·                    ·                                    (a)     ·
-·           estimated row count  111 (missing stats)                  ·       ·
+·           estimated row count  110 (missing stats)                  ·       ·
 ·           table                d@foo_inv                            ·       ·
 ·           spans                /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
 
@@ -318,7 +318,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -373,11 +373,9 @@ lookup join       ·                      ·                                   (
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
- │                parallel               ·                                   ·       ·
  │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag join  ·                      ·                                   (a)     ·
 ·                 estimated row count    12 (missing stats)                  ·       ·
-·                 type                   inner                               ·       ·
 ·                 left table             d@foo_inv                           ·       ·
 ·                 left columns           (a)                                 ·       ·
 ·                 left fixed values      1 column                            ·       ·
@@ -396,11 +394,9 @@ lookup join       ·                      ·                                    
  │                type                   inner                                         ·       ·
  │                equality               (a) = (a)                                     ·       ·
  │                equality cols are key  ·                                             ·       ·
- │                parallel               ·                                             ·       ·
  │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
  └── zigzag join  ·                      ·                                             (a)     ·
 ·                 estimated row count    12 (missing stats)                            ·       ·
-·                 type                   inner                                         ·       ·
 ·                 left table             d@foo_inv                                     ·       ·
 ·                 left columns           (a)                                           ·       ·
 ·                 left fixed values      1 column                                      ·       ·
@@ -419,11 +415,9 @@ lookup join       ·                      ·                                  (a
  │                type                   inner                              ·       ·
  │                equality               (a) = (a)                          ·       ·
  │                equality cols are key  ·                                  ·       ·
- │                parallel               ·                                  ·       ·
  │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
  └── zigzag join  ·                      ·                                  (a)     ·
 ·                 estimated row count    12 (missing stats)                 ·       ·
-·                 type                   inner                              ·       ·
 ·                 left table             d@foo_inv                          ·       ·
 ·                 left columns           (a)                                ·       ·
 ·                 left fixed values      1 column                           ·       ·
@@ -445,11 +439,9 @@ lookup join       ·                      ·                                   (
  │                type                   inner                               ·       ·
  │                equality               (a) = (a)                           ·       ·
  │                equality cols are key  ·                                   ·       ·
- │                parallel               ·                                   ·       ·
  │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
  └── zigzag join  ·                      ·                                   (a)     ·
 ·                 estimated row count    12 (missing stats)                  ·       ·
-·                 type                   inner                               ·       ·
 ·                 left table             d@foo_inv                           ·       ·
 ·                 left columns           (a)                                 ·       ·
 ·                 left fixed values      1 column                            ·       ·
@@ -468,11 +460,9 @@ lookup join       ·                      ·                                    
  │                type                   inner                                         ·       ·
  │                equality               (a) = (a)                                     ·       ·
  │                equality cols are key  ·                                             ·       ·
- │                parallel               ·                                             ·       ·
  │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
  └── zigzag join  ·                      ·                                             (a)     ·
 ·                 estimated row count    12 (missing stats)                            ·       ·
-·                 type                   inner                                         ·       ·
 ·                 left table             d@foo_inv                                     ·       ·
 ·                 left columns           (a)                                           ·       ·
 ·                 left fixed values      1 column                                      ·       ·
@@ -491,11 +481,9 @@ lookup join       ·                      ·                                  (a
  │                type                   inner                              ·       ·
  │                equality               (a) = (a)                          ·       ·
  │                equality cols are key  ·                                  ·       ·
- │                parallel               ·                                  ·       ·
  │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
  └── zigzag join  ·                      ·                                  (a)     ·
 ·                 estimated row count    12 (missing stats)                 ·       ·
-·                 type                   inner                              ·       ·
 ·                 left table             d@foo_inv                          ·       ·
 ·                 left columns           (a)                                ·       ·
 ·                 left fixed values      1 column                           ·       ·
@@ -512,11 +500,11 @@ filter           ·                    ·                         (a, b)  ·
  │               estimated row count  12 (missing stats)        ·       ·
  │               filter               b @> '{"a": {}, "b": 2}'  ·       ·
  └── index join  ·                    ·                         (a, b)  ·
-      │          estimated row count  111 (missing stats)       ·       ·
+      │          estimated row count  110 (missing stats)       ·       ·
       │          table                d@primary                 ·       ·
       │          key columns          a                         ·       ·
       └── scan   ·                    ·                         (a)     ·
-·                estimated row count  111 (missing stats)       ·       ·
+·                estimated row count  110 (missing stats)       ·       ·
 ·                table                d@foo_inv                 ·       ·
 ·                spans                /"b"/2-/"b"/2/PrefixEnd   ·       ·
 
@@ -546,7 +534,7 @@ index join  ·                    ·                    (a, b)  ·
  │          table                e@primary            ·       ·
  │          key columns          a                    ·       ·
  └── scan   ·                    ·                    (a)     ·
-·           estimated row count  111 (missing stats)  ·       ·
+·           estimated row count  110 (missing stats)  ·       ·
 ·           table                e@e_b_idx            ·       ·
 ·           spans                /1-/2                ·       ·
 
@@ -606,11 +594,9 @@ lookup join       ·                      ·                    (a, b)  ·
  │                type                   inner                ·       ·
  │                equality               (a) = (a)            ·       ·
  │                equality cols are key  ·                    ·       ·
- │                parallel               ·                    ·       ·
  │                pred                   b @> ARRAY[1,2]      ·       ·
  └── zigzag join  ·                      ·                    (a)     ·
 ·                 estimated row count    12 (missing stats)   ·       ·
-·                 type                   inner                ·       ·
 ·                 left table             e@e_b_idx            ·       ·
 ·                 left columns           (a)                  ·       ·
 ·                 left fixed values      1 column             ·       ·
@@ -629,11 +615,9 @@ lookup join       ·                      ·                                    
  │                type                   inner                                ·       ·
  │                equality               (a) = (a)                            ·       ·
  │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
  │                pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
  └── zigzag join  ·                      ·                                    (a)     ·
 ·                 estimated row count    12 (missing stats)                   ·       ·
-·                 type                   inner                                ·       ·
 ·                 left table             e@e_b_idx                            ·       ·
 ·                 left columns           (a)                                  ·       ·
 ·                 left fixed values      1 column                             ·       ·
@@ -738,15 +722,13 @@ lookup join              ·                      ·                             
  │                       type                   inner                                   ·                                ·
  │                       equality               (k) = (k)                               ·                                ·
  │                       equality cols are key  ·                                       ·                                ·
- │                       parallel               ·                                       ·                                ·
  │                       pred                   st_intersects(geom, geom)               ·                                ·
  └── project             ·                      ·                                       (k, geom, k)                     ·
       │                  estimated row count    10000 (missing stats)                   ·                                ·
       └── inverted join  ·                      ·                                       (k, geom, k, geom_inverted_key)  ·
            │             table                  geo_table@geom_index                    ·                                ·
            │             type                   inner                                   ·                                ·
-           │             ·                      st_intersects(geom, geom_inverted_key)  ·                                ·
-           │             parallel               ·                                       ·                                ·
+           │             inverted expr          st_intersects(geom, geom_inverted_key)  ·                                ·
            └── scan      ·                      ·                                       (k, geom)                        ·
 ·                        estimated row count    1000 (missing stats)                    ·                                ·
 ·                        table                  geo_table2@primary                      ·                                ·

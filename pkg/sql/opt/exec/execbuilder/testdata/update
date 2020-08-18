@@ -101,17 +101,16 @@ CREATE TABLE xyz (
 query TTT
 EXPLAIN UPDATE xyz SET y = x
 ----
-·          distribution      local
-·          vectorized        false
-update     ·                 ·
- │         table             xyz
- │         set               y
- │         auto commit       ·
- └── scan  ·                 ·
-·          missing stats     ·
-·          table             xyz@primary
-·          spans             FULL SCAN
-·          locking strength  for update
+·          distribution   local
+·          vectorized     false
+update     ·              ·
+ │         table          xyz
+ │         set            y
+ │         auto commit    ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          xyz@primary
+·          spans          FULL SCAN
 
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE xyz SET (x, y) = (1, 2)
@@ -242,19 +241,18 @@ update                    ·              ·
 query TTT
 EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             [ - /2]
-·               limit             1
-·               locking strength  for update
+·               distribution   local
+·               vectorized     false
+update          ·              ·
+ │              table          kv
+ │              set            v
+ │              auto commit    ·
+ └── render     ·              ·
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          kv@primary
+·               spans          [ - /2]
+·               limit          1
 
 # Check that updates on tables with multiple column families behave as
 # they should.
@@ -420,50 +418,46 @@ update                     ·                    ·                     ()      
 query TTT
 EXPLAIN UPDATE kv SET v = 10 WHERE k = 3
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             [/3 - /3]
-·               locking strength  for update
+·               distribution   local
+·               vectorized     false
+update          ·              ·
+ │              table          kv
+ │              set            v
+ │              auto commit    ·
+ └── render     ·              ·
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          kv@primary
+·               spans          [/3 - /3]
 
 query TTT
 EXPLAIN UPDATE kv SET v = k WHERE k > 1 AND k < 10
 ----
-·          distribution      local
-·          vectorized        false
-update     ·                 ·
- │         table             kv
- │         set               v
- │         auto commit       ·
- └── scan  ·                 ·
-·          missing stats     ·
-·          table             kv@primary
-·          spans             [/2 - /9]
-·          parallel          ·
-·          locking strength  for update
+·          distribution   local
+·          vectorized     false
+update     ·              ·
+ │         table          kv
+ │         set            v
+ │         auto commit    ·
+ └── scan  ·              ·
+·          missing stats  ·
+·          table          kv@primary
+·          spans          [/2 - /9]
 
 query TTT
 EXPLAIN UPDATE kv SET v = 10
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             kv
- │              set               v
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             kv@primary
-·               spans             FULL SCAN
-·               locking strength  for update
+·               distribution   local
+·               vectorized     false
+update          ·              ·
+ │              table          kv
+ │              set            v
+ │              auto commit    ·
+ └── render     ·              ·
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          kv@primary
+·               spans          FULL SCAN
 
 statement ok
 CREATE TABLE kv3 (
@@ -477,39 +471,35 @@ CREATE TABLE kv3 (
 query TTT
 EXPLAIN UPDATE kv3 SET k = 3 WHERE v = 10
 ----
-·                     distribution      local
-·                     vectorized        false
-update                ·                 ·
- │                    table             kv3
- │                    set               k
- │                    auto commit       ·
- └── render           ·                 ·
-      └── index join  ·                 ·
-           │          table             kv3@primary
-           │          key columns       k
-           └── scan   ·                 ·
-·                     missing stats     ·
-·                     table             kv3@kv3_v_idx
-·                     spans             [/10 - /10]
-·                     locking strength  for update
+·                     distribution   local
+·                     vectorized     false
+update                ·              ·
+ │                    table          kv3
+ │                    set            k
+ │                    auto commit    ·
+ └── render           ·              ·
+      └── index join  ·              ·
+           │          table          kv3@primary
+           └── scan   ·              ·
+·                     missing stats  ·
+·                     table          kv3@kv3_v_idx
+·                     spans          [/10 - /10]
 
 query TTT
 EXPLAIN UPDATE kv3 SET k = v WHERE v > 1 AND v < 10
 ----
-·                distribution      local
-·                vectorized        false
-update           ·                 ·
- │               table             kv3
- │               set               k
- │               auto commit       ·
- └── index join  ·                 ·
-      │          table             kv3@primary
-      │          key columns       k
-      └── scan   ·                 ·
-·                missing stats     ·
-·                table             kv3@kv3_v_idx
-·                spans             [/2 - /9]
-·                locking strength  for update
+·                distribution   local
+·                vectorized     false
+update           ·              ·
+ │               table          kv3
+ │               set            k
+ │               auto commit    ·
+ └── index join  ·              ·
+      │          table          kv3@primary
+      └── scan   ·              ·
+·                missing stats  ·
+·                table          kv3@kv3_v_idx
+·                spans          [/2 - /9]
 
 statement ok
 SET enable_implicit_select_for_update = false
@@ -542,7 +532,6 @@ update     ·              ·
 ·          missing stats  ·
 ·          table          kv@primary
 ·          spans          [/2 - /9]
-·          parallel       ·
 
 query TTT
 EXPLAIN UPDATE kv SET v = 10
@@ -609,7 +598,6 @@ update                ·              ·
  └── render           ·              ·
       └── index join  ·              ·
            │          table          kv3@primary
-           │          key columns    k
            └── scan   ·              ·
 ·                     missing stats  ·
 ·                     table          kv3@kv3_v_idx
@@ -626,7 +614,6 @@ update           ·              ·
  │               auto commit    ·
  └── index join  ·              ·
       │          table          kv3@primary
-      │          key columns    k
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          kv3@kv3_v_idx

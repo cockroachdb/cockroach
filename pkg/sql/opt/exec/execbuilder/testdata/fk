@@ -31,7 +31,6 @@ root                             ·                      ·
                 │                type                   anti
                 │                equality               (column2) = (p)
                 │                equality cols are key  ·
-                │                parallel               ·
                 └── scan buffer  ·                      ·
 ·                                label                  buffer 1
 
@@ -90,7 +89,6 @@ root                                  ·                      ·
                 │                     type                   anti
                 │                     equality               (column2) = (p)
                 │                     equality cols are key  ·
-                │                     parallel               ·
                 └── filter            ·                      ·
                      │                filter                 column2 IS NOT NULL
                      └── scan buffer  ·                      ·
@@ -127,7 +125,6 @@ root                                  ·                      ·
                 │                     type                   anti
                 │                     equality               (column2, column3, column4) = (p,q,r)
                 │                     equality cols are key  ·
-                │                     parallel               ·
                 └── filter            ·                      ·
                      │                filter                 (column2 IS NOT NULL) AND (column3 IS NOT NULL)
                      └── scan buffer  ·                      ·
@@ -168,7 +165,6 @@ root                                  ·                      ·
  │              │                     type                   anti
  │              │                     equality               (column2) = (a)
  │              │                     equality cols are key  ·
- │              │                     parallel               ·
  │              └── filter            ·                      ·
  │                   │                filter                 column2 IS NOT NULL
  │                   └── scan buffer  ·                      ·
@@ -180,7 +176,6 @@ root                                  ·                      ·
                 │                     type                   anti
                 │                     equality               (column3, column4) = (b,c)
                 │                     equality cols are key  ·
-                │                     parallel               ·
                 └── filter            ·                      ·
                      │                filter                 (column3 IS NOT NULL) AND (column4 IS NOT NULL)
                      └── scan buffer  ·                      ·
@@ -326,7 +321,6 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
- │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
@@ -356,7 +350,6 @@ root                             ·                      ·
  │                               missing stats          ·
  │                               table                  child@primary
  │                               spans                  [/10 - /10]
- │                               locking strength       for update
  └── fk-check                    ·                      ·
       └── error if rows          ·                      ·
            └── lookup join       ·                      ·
@@ -364,7 +357,6 @@ root                             ·                      ·
                 │                type                   anti
                 │                equality               (p_new) = (p)
                 │                equality cols are key  ·
-                │                parallel               ·
                 └── scan buffer  ·                      ·
 ·                                label                  buffer 1
 
@@ -384,7 +376,6 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               parent@primary
  │                                    spans               FULL SCAN
- │                                    locking strength    for update
  ├── fk-check                         ·                   ·
  │    └── error if rows               ·                   ·
  │         └── hash join              ·                   ·
@@ -427,42 +418,41 @@ root                                  ·                   ·
 query TTT
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
-·                                     distribution      local
-·                                     vectorized        false
-root                                  ·                 ·
- ├── update                           ·                 ·
- │    │                               table             parent
- │    │                               set               p
- │    └── buffer                      ·                 ·
- │         │                          label             buffer 1
- │         └── render                 ·                 ·
- │              └── scan              ·                 ·
- │                                    missing stats     ·
- │                                    table             parent@parent_other_key
- │                                    spans             [/10 - /10]
- │                                    locking strength  for update
- ├── fk-check                         ·                 ·
- │    └── error if rows               ·                 ·
- │         └── lookup join            ·                 ·
- │              │                     table             child@child_p_idx
- │              │                     type              semi
- │              │                     equality          (p) = (p)
- │              └── union             ·                 ·
- │                   ├── scan buffer  ·                 ·
- │                   │                label             buffer 1
- │                   └── scan buffer  ·                 ·
- │                                    label             buffer 1
- └── fk-check                         ·                 ·
-      └── error if rows               ·                 ·
-           └── lookup join            ·                 ·
-                │                     table             child_nullable@child_nullable_p_idx
-                │                     type              semi
-                │                     equality          (p) = (p)
-                └── union             ·                 ·
-                     ├── scan buffer  ·                 ·
-                     │                label             buffer 1
-                     └── scan buffer  ·                 ·
-·                                     label             buffer 1
+·                                     distribution   local
+·                                     vectorized     false
+root                                  ·              ·
+ ├── update                           ·              ·
+ │    │                               table          parent
+ │    │                               set            p
+ │    └── buffer                      ·              ·
+ │         │                          label          buffer 1
+ │         └── render                 ·              ·
+ │              └── scan              ·              ·
+ │                                    missing stats  ·
+ │                                    table          parent@parent_other_key
+ │                                    spans          [/10 - /10]
+ ├── fk-check                         ·              ·
+ │    └── error if rows               ·              ·
+ │         └── lookup join            ·              ·
+ │              │                     table          child@child_p_idx
+ │              │                     type           semi
+ │              │                     equality       (p) = (p)
+ │              └── union             ·              ·
+ │                   ├── scan buffer  ·              ·
+ │                   │                label          buffer 1
+ │                   └── scan buffer  ·              ·
+ │                                    label          buffer 1
+ └── fk-check                         ·              ·
+      └── error if rows               ·              ·
+           └── lookup join            ·              ·
+                │                     table          child_nullable@child_nullable_p_idx
+                │                     type           semi
+                │                     equality       (p) = (p)
+                └── union             ·              ·
+                     ├── scan buffer  ·              ·
+                     │                label          buffer 1
+                     └── scan buffer  ·              ·
+·                                     label          buffer 1
 
 statement ok
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -483,7 +473,6 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
- │                                    locking strength    for update
  └── fk-check                         ·                   ·
       └── error if rows               ·                   ·
            └── hash join              ·                   ·
@@ -520,7 +509,6 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
- │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
@@ -549,7 +537,6 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
- │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
@@ -579,7 +566,6 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
- │                                    locking strength    for update
  ├── fk-check                         ·                   ·
  │    └── error if rows               ·                   ·
  │         └── hash join              ·                   ·
@@ -631,7 +617,6 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
- │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
@@ -664,7 +649,6 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               self@primary
  │                               spans               FULL SCAN
- │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
@@ -694,7 +678,6 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               self@primary
  │                                    spans               FULL SCAN
- │                                    locking strength    for update
  └── fk-check                         ·                   ·
       └── error if rows               ·                   ·
            └── hash join              ·                   ·
@@ -899,7 +882,6 @@ filter               ·                   ·
       │              type                left outer
       │              equality            (a_z, a_y, a_x) = (z, y, x)
       │              right cols are key  ·
-      │              mergeJoinOrder      +"(a_z=z)",+"(a_y=y)",+"(a_x=x)"
       ├── filter     ·                   ·
       │    │         filter              (a_y IS NOT NULL) AND (a_x IS NOT NULL)
       │    └── scan  ·                   ·

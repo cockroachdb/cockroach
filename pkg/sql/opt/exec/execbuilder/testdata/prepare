@@ -65,7 +65,6 @@ merge join  ·                   ·
  │          equality            (a) = (c)
  │          left cols are key   ·
  │          right cols are key  ·
- │          mergeJoinOrder      +"(a=c)"
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               ab@primary
@@ -91,7 +90,6 @@ lookup join  ·                      ·
  │           type                   inner
  │           equality               (a) = (c)
  │           equality cols are key  ·
- │           parallel               ·
  └── scan    ·                      ·
 ·            estimated row count    1
 ·            table                  ab@primary

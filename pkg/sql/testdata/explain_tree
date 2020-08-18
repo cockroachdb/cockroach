@@ -89,8 +89,6 @@ children:
   children:
   - name: group
     attrs:
-    - key: aggregate 0
-      value: sum(value)
     - key: group by
       value: cid
     children:

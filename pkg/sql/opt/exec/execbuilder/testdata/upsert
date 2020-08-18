@@ -96,7 +96,6 @@ upsert                              ·                      ·
       │                             type                   inner
       │                             equality               (k) = (k)
       │                             equality cols are key  ·
-      │                             parallel               ·
       └── distinct                  ·                      ·
            │                        estimated row count    2 (missing stats)
            │                        distinct on            k
@@ -417,7 +416,6 @@ upsert                 ·                      ·                   ()          
            │           type                   inner               ·                      ·
            │           equality               (a) = (a)           ·                      ·
            │           equality cols are key  ·                   ·                      ·
-           │           parallel               ·                   ·                      ·
            └── scan    ·                      ·                   (a, b)                 ·
 ·                      estimated row count    1 (missing stats)   ·                      ·
 ·                      table                  table38627@primary  ·                      ·
@@ -461,7 +459,6 @@ upsert                           ·                      ·                     
                 │                type                   left outer                                   ·                                                  ·
                 │                equality               (column2, column3) = (y,z)                   ·                                                  ·
                 │                equality cols are key  ·                                            ·                                                  ·
-                │                parallel               ·                                            ·                                                  ·
                 └── distinct     ·                      ·                                            (column1, column2, column3)                        ·
                      │           estimated row count    2                                            ·                                                  ·
                      │           distinct on            column2, column3                             ·                                                  ·
@@ -509,7 +506,7 @@ upsert                              ·                    ·                    
                 │                   estimated row count  311 (missing stats)                    ·                                ·
                 │                   type                 right outer                            ·                                ·
                 │                   equality             (b, c) = (y, z)                        ·                                ·
-                │                   mergeJoinOrder       +"(b=y)",+"(c=z)"                      ·                                ·
+                │                   merge ordering       +"(b=y)",+"(c=z)"                      ·                                ·
                 ├── scan            ·                    ·                                      (a, b, c)                        +b,+c
                 │                   estimated row count  1000 (missing stats)                   ·                                ·
                 │                   table                target@target_b_c_key                  ·                                ·
