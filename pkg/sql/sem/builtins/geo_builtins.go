@@ -403,6 +403,22 @@ var geoBuiltins = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"postgis_getbbox": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				if g.Geometry.Empty() {
+					return tree.DNull, nil
+				}
+				return tree.NewDBox2D(g.CartesianBoundingBox()), nil
+			},
+			types.Box2D,
+			infoBuilder{
+				info: "Returns a box2d encapsulating the given Geometry",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"postgis_extensions_upgrade": returnCompatibilityFixedStringBuiltin(
 		"Upgrade completed, run SELECT postgis_full_version(); for details",
 	),
@@ -3564,6 +3580,46 @@ Bottom Left.`,
 	// BoundingBox
 	//
 
+	"st_makebox2d": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
+				if a.Geometry.SRID() != b.Geometry.SRID() {
+					return nil, geo.NewMismatchingSRIDsError(a, b)
+				}
+				aGeomT, err := a.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				bGeomT, err := b.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+
+				switch aGeomT := aGeomT.(type) {
+				case *geom.Point:
+					switch bGeomT := bGeomT.(type) {
+					case *geom.Point:
+						if aGeomT.Empty() || bGeomT.Empty() {
+							return nil, errors.Newf("cannot use POINT EMPTY")
+						}
+						return tree.NewDBox2D(
+							a.CartesianBoundingBox().Combine(b.CartesianBoundingBox()),
+						), nil
+					default:
+						return nil, errors.Newf("second argument is not a POINT")
+					}
+				default:
+					return nil, errors.Newf("first argument is not a POINT")
+				}
+			},
+			types.Box2D,
+			infoBuilder{
+				info: "Creates a box2d from two points. Errors if arguments are not two non-empty points.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_combinebbox": makeBuiltin(
 		tree.FunctionProperties{NullableArgs: true},
 		tree.Overload{

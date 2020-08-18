@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
 
@@ -22,34 +23,15 @@ func Envelope(g *geo.Geometry) (*geo.Geometry, error) {
 	if g.Empty() {
 		return g, nil
 	}
-	bbox := g.CartesianBoundingBox()
-	if bbox.LoX == bbox.HiX && bbox.LoY == bbox.HiY {
-		return geo.NewGeometryFromGeomT(
-			geom.NewPointFlat(geom.XY, []float64{bbox.LoX, bbox.LoY}).SetSRID(int(g.SRID())),
-		)
+	t := g.CartesianBoundingBox().ToGeomT()
+	switch t := t.(type) {
+	case *geom.Point:
+		return geo.NewGeometryFromGeomT(t.SetSRID(int(g.SRID())))
+	case *geom.LineString:
+		return geo.NewGeometryFromGeomT(t.SetSRID(int(g.SRID())))
+	case *geom.Polygon:
+		return geo.NewGeometryFromGeomT(t.SetSRID(int(g.SRID())))
+	default:
+		return nil, errors.Newf("unknown geom type: %T", t)
 	}
-	if bbox.LoX == bbox.HiX || bbox.LoY == bbox.HiY {
-		return geo.NewGeometryFromGeomT(
-			geom.NewLineStringFlat(
-				geom.XY,
-				[]float64{
-					bbox.LoX, bbox.LoY,
-					bbox.HiX, bbox.HiY,
-				},
-			).SetSRID(int(g.SRID())),
-		)
-	}
-	return geo.NewGeometryFromGeomT(
-		geom.NewPolygonFlat(
-			geom.XY,
-			[]float64{
-				bbox.LoX, bbox.LoY,
-				bbox.LoX, bbox.HiY,
-				bbox.HiX, bbox.HiY,
-				bbox.HiX, bbox.LoY,
-				bbox.LoX, bbox.LoY,
-			},
-			[]int{10},
-		).SetSRID(int(g.SRID())),
-	)
 }

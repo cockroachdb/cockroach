@@ -181,7 +181,11 @@ func (ex *connExecutor) execPortal(
 			// Note that the portal is considered exhausted regardless of
 			// the fact whether an error occurred or not - if it did, we
 			// still don't want to re-execute the portal from scratch.
-			ex.exhaustPortal(portalName)
+			// The current statement may have just closed and deleted the portal,
+			// so only exhaust it if it still exists.
+			if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+				ex.exhaustPortal(portalName)
+			}
 		}
 	default:
 		ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
