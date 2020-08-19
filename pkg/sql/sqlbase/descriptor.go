@@ -138,7 +138,7 @@ func GetDescriptorDropped(desc *descpb.Descriptor) bool {
 	case *descpb.Descriptor_Schema:
 		return t.Schema.Dropped()
 	case *descpb.Descriptor_Database:
-		return false
+		return t.Database.Dropped()
 	default:
 		debug.PrintStack()
 		panic(errors.AssertionFailedf("Dropped: unknown Descriptor type %T", t))

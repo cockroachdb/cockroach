@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -100,8 +99,6 @@ func (n *createDatabaseNode) startExec(params runParams) error {
 		); err != nil {
 			return err
 		}
-		params.extendedEvalCtx.Descs.AddUncommittedDatabase(
-			desc.GetName(), desc.GetID(), descs.DBCreated)
 	}
 	return nil
 }

@@ -211,25 +211,6 @@ INSERT INTO d.kv (k,v) VALUES ('g', 'h')
 statement ok
 ROLLBACK
 
-# The reuse of a name is allowed.
-statement ok
-BEGIN
-
-statement ok
-ALTER DATABASE d RENAME TO dnew
-
-statement ok
-CREATE DATABASE d
-
-statement ok
-CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR)
-
-statement ok
-INSERT INTO d.kv (k,v) VALUES ('a', 'b')
-
-statement ok
-COMMIT
-
 # Check that on a rollback a database name cannot be used.
 statement ok
 BEGIN

@@ -641,7 +641,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
+	ex.extraTxnState.descCollection = descs.MakeCollection(ctx, s.cfg.LeaseManager,
 		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache, sd)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
@@ -2232,7 +2232,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.descCollection.WaitForCacheToDropDatabases(ex.Ctx())
+		ex.extraTxnState.descCollection.WaitForCacheToDropDatabasesDeprecated(ex.Ctx())
 
 		fallthrough
 	case txnRestart, txnRollback:

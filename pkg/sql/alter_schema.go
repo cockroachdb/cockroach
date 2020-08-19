@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -32,13 +33,10 @@ type alterSchemaNode struct {
 var _ planNode = &alterSchemaNode{n: nil}
 
 func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNode, error) {
-	// TODO (rohany, lucy): There should be an API to get a MutableSchemaDescriptor
-	//  by name from the descs.Collection.
-	db, err := p.ResolveUncachedDatabaseByName(ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
 	if err != nil {
 		return nil, err
 	}
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*db.DatabaseDesc())
 	found, schema, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.ID, n.Schema)
 	if err != nil {
 		return nil, err
@@ -55,7 +53,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		if err != nil {
 			return nil, err
 		}
-		return &alterSchemaNode{n: n, db: mutDB, desc: desc}, nil
+		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown schema kind")
 	}
@@ -135,7 +133,10 @@ func (p *planner) renameSchema(
 		ID:      desc.ID,
 		Dropped: false,
 	}
-	if err := p.writeDatabaseChange(ctx, db); err != nil {
+	if err := p.writeNonDropDatabaseChange(
+		ctx, db,
+		fmt.Sprintf("updating parent database %s for %s", db.GetName(), jobDesc),
+	); err != nil {
 		return err
 	}
 
