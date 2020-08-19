@@ -46,6 +46,9 @@ type scheduledJobRecord struct {
 	ScheduleChanges jobspb.ScheduleChangeInfo `col:"schedule_changes"`
 }
 
+// InvalidScheduleID is a constant indicating the schedule ID is not valid.
+const InvalidScheduleID int64 = 0
+
 // ScheduledJob  is a representation of the scheduled job.
 // This struct can marshal/unmarshal changes made to the underlying system.scheduled_job table.
 type ScheduledJob struct {
@@ -70,6 +73,36 @@ func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 		env:   env,
 		dirty: make(map[string]struct{}),
 	}
+}
+
+// LoadScheduledJob loads scheduled job record from the database.
+func LoadScheduledJob(
+	ctx context.Context,
+	env scheduledjobs.JobSchedulerEnv,
+	id int64,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) (*ScheduledJob, error) {
+	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
+			env.ScheduledJobsTableName(), id))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(rows) != 1 {
+		return nil, errors.Newf(
+			"expected to find 1 schedule, found %d with schedule_id=%d",
+			len(rows), id)
+	}
+
+	j := NewScheduledJob(env)
+	if err := j.InitFromDatums(rows[0], cols); err != nil {
+		return nil, err
+	}
+	return j, nil
 }
 
 // ScheduleID returns schedule ID.
@@ -201,6 +234,20 @@ func (j *ScheduledJob) AddScheduleChangeReason(reasonFmt string, args ...interfa
 			Reason: fmt.Sprintf(reasonFmt, args...),
 		})
 	j.markDirty("schedule_changes")
+}
+
+// LastChangeReason returns the last schedule change reason.
+func (j *ScheduledJob) LastChangeReason() string {
+	l := len(j.rec.ScheduleChanges.Changes)
+	if l > 0 {
+		return j.rec.ScheduleChanges.Changes[l-1].Reason
+	}
+	return ""
+}
+
+// ScheduleExpr returns the schedule expression for this schedule.
+func (j *ScheduledJob) ScheduleExpr() string {
+	return j.rec.ScheduleExpr
 }
 
 // Pause pauses this schedule.

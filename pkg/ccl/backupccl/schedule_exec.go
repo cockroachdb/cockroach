@@ -14,11 +14,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -132,18 +134,68 @@ func planBackup(
 
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (e *scheduledBackupExecutor) NotifyJobTermination(
-	ctx context.Context, jobID int64, jobStatus jobs.Status, schedule *jobs.ScheduledJob, _ *kv.Txn,
+	ctx context.Context,
+	jobID int64,
+	jobStatus jobs.Status,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *jobs.ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) error {
 	if jobStatus == jobs.StatusSucceeded {
 		e.metrics.NumSucceeded.Inc(1)
-	} else {
-		err := errors.Errorf(
-			"backup job %d scheduled by %d failed with status %s",
-			jobID, schedule.ScheduleID(), jobStatus)
-		log.Errorf(ctx, "backup error: %v	", err)
-		e.metrics.NumFailed.Inc(1)
-		jobs.DefaultHandleFailedRun(schedule, jobID, err)
+		log.Infof(ctx, "backup job %d scheduled by %d succeeded", jobID, schedule.ScheduleID())
+		return e.backupSucceeded(ctx, schedule, env, ex, txn)
 	}
+
+	e.metrics.NumFailed.Inc(1)
+	err := errors.Errorf(
+		"backup job %d scheduled by %d failed with status %s",
+		jobID, schedule.ScheduleID(), jobStatus)
+	log.Errorf(ctx, "backup error: %v	", err)
+	jobs.DefaultHandleFailedRun(schedule, jobID, err)
+
+	return nil
+}
+
+func (e *scheduledBackupExecutor) backupSucceeded(
+	ctx context.Context,
+	schedule *jobs.ScheduledJob,
+	env scheduledjobs.JobSchedulerEnv,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
+) error {
+	args := &ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+
+	if args.UnpauseOnSuccess == jobs.InvalidScheduleID {
+		return nil
+	}
+
+	s, err := jobs.LoadScheduledJob(ctx, env, args.UnpauseOnSuccess, ex, txn)
+	if err != nil {
+		return err
+	}
+	if err := s.Unpause("FULL backup completed"); err != nil {
+		return err
+	}
+	if err := s.Update(ctx, ex, txn); err != nil {
+		return err
+	}
+
+	// Clear UnpauseOnSuccess; caller updates schedule.
+	args.UnpauseOnSuccess = jobs.InvalidScheduleID
+	any, err := pbtypes.MarshalAny(args)
+	if err != nil {
+		return errors.Wrap(err, "marshaling args")
+	}
+	schedule.SetExecutionDetails(
+		schedule.ExecutorType(),
+		jobspb.ExecutionArguments{Args: any},
+	)
+
 	return nil
 }
 

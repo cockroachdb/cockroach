@@ -236,7 +236,13 @@ func (n *recordScheduleExecutor) ExecuteJob(
 }
 
 func (n *recordScheduleExecutor) NotifyJobTermination(
-	ctx context.Context, jobID int64, jobStatus Status, schedule *ScheduledJob, txn *kv.Txn,
+	ctx context.Context,
+	jobID int64,
+	jobStatus Status,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	ex sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) error {
 	return nil
 }

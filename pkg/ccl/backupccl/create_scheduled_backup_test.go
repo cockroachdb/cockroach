@@ -130,7 +130,7 @@ func (h *testHelper) createBackupSchedule(
 	var schedules []*jobs.ScheduledJob
 	for rows.Next() {
 		var id int64
-		require.NoError(t, rows.Scan(&id, &unusedStr, &unusedTS, &unusedStr, &unusedStr))
+		require.NoError(t, rows.Scan(&id, &unusedStr, &unusedStr, &unusedTS, &unusedStr, &unusedStr))
 		// Query system.scheduled_job table and load those schedules.
 		datums, cols, err := h.cfg.InternalExecutor.QueryWithCols(
 			context.Background(), "sched-load", nil,
@@ -181,6 +181,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		period     time.Duration
 		runsNow    bool
 		shownStmt  string
+		paused     bool
 	}
 
 	testCases := []struct {
@@ -237,6 +238,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "BACKUP .*: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
+					paused:     true,
 				},
 				{
 					nameRe:     "BACKUP .+",
@@ -255,6 +257,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "my-backup: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
+					paused:     true,
 				},
 				{
 					nameRe:     "my-backup",
@@ -304,6 +307,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 					nameRe:     "my_backup_name: INCREMENTAL",
 					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     time.Hour,
+					paused:     true,
 				},
 				{
 					nameRe:     "my_backup_name",
@@ -414,6 +418,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, expectedSchedule.period, frequency, expectedSchedule)
 
+				require.Equal(t, expectedSchedule.paused, s.IsPaused())
 				if expectedSchedule.runsNow {
 					require.EqualValues(t, th.env.Now().Round(time.Microsecond), s.ScheduledRunTime())
 				}
@@ -478,7 +483,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 	}{
 		{
 			name:     "cluster-backup",
-			schedule: "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS",
+			schedule: "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'",
 			verifyTables: expectBackupTables(
 				dbTables{"db", []string{"t1", "t2", "t3"}},
 				dbTables{"other_db", []string{"t1"}},
@@ -505,18 +510,52 @@ INSERT INTO t1 values (-1), (10), (-100);
 			destination := "nodelocal://0/backup/" + tc.name
 			schedules, err := th.createBackupSchedule(t, tc.schedule, destination)
 			require.NoError(t, err)
-			require.EqualValues(t, 1, len(schedules))
-			defer th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[0].ScheduleID())
+			require.LessOrEqual(t, 1, len(schedules))
+
+			// Either 1 or two schedules will be created.
+			// One of them (incremental) must be paused.
+			var full, inc *jobs.ScheduledJob
+			if len(schedules) == 1 {
+				full = schedules[0]
+			} else {
+				require.Equal(t, 2, len(schedules))
+				full, inc = schedules[0], schedules[1]
+				if full.IsPaused() {
+					full, inc = inc, full // Swap: inc should be paused.
+				}
+				require.True(t, inc.IsPaused())
+				require.False(t, full.IsPaused())
+
+				// The full should list incremental as a schedule to unpause.
+				args := &ScheduledBackupExecutionArgs{}
+				require.NoError(t, pbtypes.UnmarshalAny(full.ExecutionArgs().Args, args))
+				require.EqualValues(t, inc.ScheduleID(), args.UnpauseOnSuccess)
+			}
+
+			defer func() {
+				th.sqlDB.Exec(t, "DROP SCHEDULE $1", full.ScheduleID())
+				if inc != nil {
+					th.sqlDB.Exec(t, "DROP SCHEDULE $1", inc.ScheduleID())
+				}
+			}()
 
 			// Force the schedule to execute.
-			th.env.SetTime(schedules[0].NextRun().Add(time.Second))
+			th.env.SetTime(full.NextRun().Add(time.Second))
 			require.NoError(t,
 				th.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 					return th.executeSchedules(ctx, allSchedules, txn)
 				}))
 
 			// Wait for the backup complete.
-			th.waitForSuccessfulScheduledJob(t, schedules[0].ScheduleID())
+			th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+			if inc != nil {
+				// Once the full backup completes, the incremental one should no longer be paused.
+				loadedInc, err := jobs.LoadScheduledJob(
+					context.Background(), th.env, inc.ScheduleID(), th.cfg.InternalExecutor, nil)
+				require.NoError(t, err)
+				require.False(t, loadedInc.IsPaused())
+			}
 
 			// Verify backup.
 			latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", tc.name, latestFileName))
