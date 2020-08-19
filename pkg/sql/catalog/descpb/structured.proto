@@ -551,6 +551,11 @@ message MaterializedViewRefresh {
   repeated IndexDescriptor new_indexes = 2 [(gogoproto.nullable) = false];
   // AsOf is the timestamp to perform the view query at.
   optional util.hlc.Timestamp as_of = 3 [(gogoproto.nullable) = false];
+  // ShouldBackfill indicates whether or not the schema changer should backfill
+  // the query into the new indexes. This can be false if the `WITH NO DATA` flag
+  // was specified for the `REFRESH MATERIALIZED VIEW` statement. `WITH NO DATA`
+  // indicates that the user just wants the space used by the view to be reclaimed.
+  optional bool should_backfill = 4 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that

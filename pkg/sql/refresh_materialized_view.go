@@ -90,6 +90,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 		NewPrimaryIndex: *newPrimaryIndex,
 		NewIndexes:      newIndexes,
 		AsOf:            params.p.Txn().ReadTimestamp(),
+		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
 	})
 
 	return params.p.writeSchemaChange(
