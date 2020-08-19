@@ -2146,6 +2146,120 @@ project
            ├── st_covers('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4) [outer=(4), immutable]
            └── v:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
 
+# Bounding box operations.
+opt
+SELECT k FROM g WHERE 'BOX(1 2, 3 4)'::box2d ~ geom
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         └── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x18")
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x18")
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── 'BOX(1 2,3 4)' ~ geom:3 [outer=(3), immutable]
+
+opt
+SELECT k FROM g WHERE geom ~ 'BOX(1 2, 3 4)'::box2d
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans
+      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── geom:3 ~ 'BOX(1 2,3 4)' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
+
+opt
+SELECT k FROM g WHERE geom ~ 'MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    ├── union spans
+      │         │    │    ├── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    │    └── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │         │    └── INTERSECTION
+      │         │         ├── span expression
+      │         │         │    ├── tight: false
+      │         │         │    └── union spans: ["\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
+      │         │         └── span expression
+      │         │              ├── tight: false
+      │         │              └── union spans: ["\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans
+      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         ├── ["\xfd\x11\x00\x00\x00\x00\x00\x00\x00", "\xfd\x11\x00\x00\x00\x00\x00\x00\x00"]
+      │              │         └── ["\xfd\x15\x00\x00\x00\x00\x00\x00\x00", "\xfd\x15\x00\x00\x00\x00\x00\x00\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── geom:3 ~ '01040000000200000001010000009A999999999901409A99999999990140010100000000000000000008400000000000000840' [outer=(3), immutable, constraints=(/3: (/NULL - ])]
 
 # --------------------------------------------------
 # SplitDisjunction

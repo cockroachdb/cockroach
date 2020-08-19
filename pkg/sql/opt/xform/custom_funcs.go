@@ -1004,7 +1004,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// Check whether the filter can constrain the index.
 		// TODO(rytaft): Unify these two cases so both return a spanExpr.
 		spanExpr, geoOk = invertedidx.TryConstrainGeoIndex(
-			c.e.evalCtx.Context, filters, scanPrivate.Table, iter.Index(),
+			c.e.evalCtx.Context, c.e.f, filters, scanPrivate.Table, iter.Index(),
 		)
 		if geoOk {
 			// Geo index scans can never be tight, so remaining filters is always the
