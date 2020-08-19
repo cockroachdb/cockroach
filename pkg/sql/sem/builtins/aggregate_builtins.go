@@ -378,6 +378,26 @@ var aggregates = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_extent": makeBuiltin(
+		tree.FunctionProperties{
+			Class:                   tree.AggregateClass,
+			NullableArgs:            true,
+			AvailableOnPublicSchema: true,
+		},
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Box2D,
+			func(
+				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+			) tree.AggregateFunc {
+				return &stExtentAgg{}
+			},
+			infoBuilder{
+				info: "Forms a Box2D that encapsulates all provided geometries.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
@@ -629,6 +649,45 @@ func (agg *stMakeLineAgg) Size() int64 {
 	return sizeOfSTMakeLineAggregate
 }
 
+type stExtentAgg struct {
+	bbox *geo.CartesianBoundingBox
+}
+
+// Add implements the AggregateFunc interface.
+func (agg *stExtentAgg) Add(_ context.Context, firstArg tree.Datum, otherArgs ...tree.Datum) error {
+	if firstArg == tree.DNull {
+		return nil
+	}
+	geomArg := tree.MustBeDGeometry(firstArg)
+	if geomArg.Empty() {
+		return nil
+	}
+	b := geomArg.CartesianBoundingBox()
+	agg.bbox = agg.bbox.WithPoint(b.LoX, b.LoY).WithPoint(b.HiX, b.HiY)
+	return nil
+}
+
+// Result implements the AggregateFunc interface.
+func (agg *stExtentAgg) Result() (tree.Datum, error) {
+	if agg.bbox == nil {
+		return tree.DNull, nil
+	}
+	return tree.NewDBox2D(agg.bbox), nil
+}
+
+// Reset implements the AggregateFunc interface.
+func (agg *stExtentAgg) Reset(context.Context) {
+	agg.bbox = nil
+}
+
+// Close implements the AggregateFunc interface.
+func (agg *stExtentAgg) Close(context.Context) {}
+
+// Size implements the AggregateFunc interface.
+func (agg *stExtentAgg) Size() int64 {
+	return sizeOfSTExtentAggregate
+}
+
 func makeVarianceBuiltin() builtinDefinition {
 	return makeBuiltin(aggProps(),
 		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
@@ -680,6 +739,7 @@ var _ tree.AggregateFunc = &bitBitOrAggregate{}
 var _ tree.AggregateFunc = &percentileDiscAggregate{}
 var _ tree.AggregateFunc = &percentileContAggregate{}
 var _ tree.AggregateFunc = &stMakeLineAgg{}
+var _ tree.AggregateFunc = &stExtentAgg{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
 const sizeOfAvgAggregate = int64(unsafe.Sizeof(avgAggregate{}))
@@ -719,6 +779,7 @@ const sizeOfBitBitOrAggregate = int64(unsafe.Sizeof(bitBitOrAggregate{}))
 const sizeOfPercentileDiscAggregate = int64(unsafe.Sizeof(percentileDiscAggregate{}))
 const sizeOfPercentileContAggregate = int64(unsafe.Sizeof(percentileContAggregate{}))
 const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
+const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
 
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
 // that store a single datum internally track their memory usage related to

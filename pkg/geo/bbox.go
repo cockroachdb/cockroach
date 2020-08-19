@@ -91,9 +91,9 @@ func (b *CartesianBoundingBox) Compare(o *CartesianBoundingBox) int {
 	return 0
 }
 
-// withPoint includes a new point to the CartesianBoundingBox.
+// WithPoint includes a new point to the CartesianBoundingBox.
 // It will edit any bounding box in place.
-func (b *CartesianBoundingBox) withPoint(x, y float64) *CartesianBoundingBox {
+func (b *CartesianBoundingBox) WithPoint(x, y float64) *CartesianBoundingBox {
 	if b == nil {
 		return &CartesianBoundingBox{
 			BoundingBox: geopb.BoundingBox{
@@ -248,12 +248,12 @@ func BoundingBoxFromGeomTGeometryType(g geom.T) *CartesianBoundingBox {
 			if shapeBBox == nil {
 				continue
 			}
-			bbox = bbox.withPoint(shapeBBox.LoX, shapeBBox.LoY).withPoint(shapeBBox.HiX, shapeBBox.HiY)
+			bbox = bbox.WithPoint(shapeBBox.LoX, shapeBBox.LoY).WithPoint(shapeBBox.HiX, shapeBBox.HiY)
 		}
 	default:
 		flatCoords := g.FlatCoords()
 		for i := 0; i < len(flatCoords); i += g.Stride() {
-			bbox = bbox.withPoint(flatCoords[i], flatCoords[i+1])
+			bbox = bbox.WithPoint(flatCoords[i], flatCoords[i+1])
 		}
 	}
 	return bbox
