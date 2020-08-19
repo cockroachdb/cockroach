@@ -203,6 +203,10 @@ func (sc *SchemaChanger) refreshMaterializedView(
 	table *sqlbase.MutableTableDescriptor,
 	refresh *descpb.MaterializedViewRefresh,
 ) error {
+	// If we aren't requested to backfill any data, then return immediately.
+	if !refresh.ShouldBackfill {
+		return nil
+	}
 	// The data for the materialized view is stored under the current set of
 	// indexes in table. We want to keep all of that data untouched, and write
 	// out all the data into the new set of indexes denoted by refresh. So, just

@@ -126,3 +126,20 @@ DROP VIEW materialized_view
 
 statement error pq: "normal_view" is not a materialized view
 DROP MATERIALIZED VIEW normal_view
+
+# Using REFRESH MATERIALIZED VIEW ... WITH NO DATA should result in
+# an empty view.
+statement ok
+CREATE MATERIALIZED VIEW with_options AS SELECT 1;
+REFRESH MATERIALIZED VIEW with_options WITH DATA
+
+query I
+SELECT * FROM with_options
+----
+1
+
+statement ok
+REFRESH MATERIALIZED VIEW with_options WITH NO DATA
+
+query I
+SELECT * FROM with_options
