@@ -494,7 +494,7 @@ func (r *createStatsResumer) Resume(
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]*types.T{})
-	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
+	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci)
 	defer func() {
 		if rows != nil {
 			rows.Close(ctx)

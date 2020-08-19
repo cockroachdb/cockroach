@@ -44,7 +44,6 @@ func (s *spoolNode) startExec(params runParams) error {
 	s.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(planColumns(s.source)),
-		0, /* rowCapacity */
 	)
 
 	// Accumulate all the rows up to the hardLimit, if any.

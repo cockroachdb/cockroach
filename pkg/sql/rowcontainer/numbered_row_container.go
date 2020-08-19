@@ -56,8 +56,6 @@ type DiskBackedNumberedRowContainer struct {
 //    spills to disk.
 //  - memoryMonitor is used to monitor this container's memory usage.
 //  - diskMonitor is used to monitor this container's disk usage.
-//  - rowCapacity (if not 0) specifies the number of rows in-memory container
-//    should be preallocated for.
 func NewDiskBackedNumberedRowContainer(
 	deDup bool,
 	types []*types.T,
@@ -65,7 +63,6 @@ func NewDiskBackedNumberedRowContainer(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
-	rowCapacity int,
 ) *DiskBackedNumberedRowContainer {
 	d := &DiskBackedNumberedRowContainer{
 		deDup:         deDup,
@@ -73,7 +70,7 @@ func NewDiskBackedNumberedRowContainer(
 		rowIterMemAcc: memoryMonitor.MakeBoundAccount(),
 	}
 	d.rc = &DiskBackedRowContainer{}
-	d.rc.Init(nil /*ordering*/, types, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+	d.rc.Init(nil /*ordering*/, types, evalCtx, engine, memoryMonitor, diskMonitor)
 	if deDup {
 		ordering := make(sqlbase.ColumnOrdering, len(types))
 		for i := range types {
@@ -81,7 +78,7 @@ func NewDiskBackedNumberedRowContainer(
 			ordering[i].Direction = encoding.Ascending
 		}
 		deduper := &DiskBackedRowContainer{}
-		deduper.Init(ordering, types, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+		deduper.Init(ordering, types, evalCtx, engine, memoryMonitor, diskMonitor)
 		deduper.DoDeDuplicate()
 		d.deduper = deduper
 	}

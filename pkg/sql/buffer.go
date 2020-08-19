@@ -38,7 +38,6 @@ func (n *bufferNode) startExec(params runParams) error {
 	n.bufferedRows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(getPlanColumns(n.plan, false /* mut */)),
-		0, /* rowCapacity */
 	)
 	return nil
 }

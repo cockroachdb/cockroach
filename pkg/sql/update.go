@@ -130,7 +130,8 @@ func (u *updateNode) startExec(params runParams) error {
 	if u.run.rowsNeeded {
 		u.run.tu.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
+			sqlbase.ColTypeInfoFromResCols(u.columns),
+		)
 	}
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }

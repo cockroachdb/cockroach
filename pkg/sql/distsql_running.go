@@ -892,7 +892,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	} else {
 		typ = sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
 	}
-	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ, 0)
+	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ)
 	defer rows.Close(ctx)
 
 	subqueryRowReceiver := NewRowResultWriter(rows)
