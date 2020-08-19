@@ -1140,6 +1140,14 @@ fetched: /noncover/primary/1/c -> 3
 fetched: /noncover/primary/1/d -> 4
 output row: [1 2 3 4]
 
+# Verify that the index join span created doesn't include any potential child
+# interleaved tables.
+query T rowsort
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message LIKE 'Scan /Table/67/1%'
+----
+Scan /Table/67/1/1{-/#}
+
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
