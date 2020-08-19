@@ -423,7 +423,7 @@ func processLocalKeyRange(
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
 		if !txn.Status.IsFinalized() || len(txn.LockSpans) > 0 {
-			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsLockUpdates(txn, txn.LockSpans))
+			return cleanupTxnIntentsAsyncFn(ctx, txn, txn.LocksAsLockUpdates())
 		}
 		b.FlushingAdd(ctx, key)
 		return nil

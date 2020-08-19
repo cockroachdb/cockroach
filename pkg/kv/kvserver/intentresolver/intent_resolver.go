@@ -554,7 +554,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans)
+			intents := et.Txn.LocksAsLockUpdates()
 			if err := ir.cleanupFinishedTxnIntents(
 				ctx, rangeID, et.Txn, intents, et.Poison, nil, /* onComplete */
 			); err != nil {

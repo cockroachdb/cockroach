@@ -1178,6 +1178,15 @@ func (t *Transaction) IsLocking() bool {
 	return t.Key != nil
 }
 
+// LocksAsLockUpdates turns t.LockSpans into a bunch of LockUpdates.
+func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
+	ret := make([]LockUpdate, len(t.LockSpans))
+	for i, sp := range t.LockSpans {
+		ret[i] = MakeLockUpdate(t, sp)
+	}
+	return ret
+}
+
 // String formats transaction into human readable string.
 //
 // NOTE: When updating String(), you probably want to also update SafeMessage().
@@ -1993,20 +2002,12 @@ func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcq
 }
 
 // MakeLockUpdate makes a lock update from the given txn and span.
+//
+// See also txn.LocksAsLockUpdates().
 func MakeLockUpdate(txn *Transaction, span Span) LockUpdate {
 	u := LockUpdate{Span: span}
 	u.SetTxn(txn)
 	return u
-}
-
-// AsLockUpdates takes a slice of spans and returns it as a slice of
-// lock updates.
-func AsLockUpdates(txn *Transaction, spans []Span) []LockUpdate {
-	ret := make([]LockUpdate, len(spans))
-	for i := range spans {
-		ret[i] = MakeLockUpdate(txn, spans[i])
-	}
-	return ret
 }
 
 // SetTxn updates the transaction details in the lock update.

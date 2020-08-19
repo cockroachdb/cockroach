@@ -1902,9 +1902,9 @@ func TestChangeReplicasTrigger_ConfChange(t *testing.T) {
 	}
 }
 
-// TestAsLockUpdates verifies that AsLockUpdates propagates all the important
-// fields from a txn to each intent.
-func TestAsLockUpdates(t *testing.T) {
+// TestAsLockUpdates verifies that txn.LocksAsLockUpdates propagates all the
+// important fields from the txn to each intent.
+func TestTxnLocksAsLockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ts := hlc.Timestamp{WallTime: 1}
@@ -1912,9 +1912,8 @@ func TestAsLockUpdates(t *testing.T) {
 
 	txn.Status = COMMITTED
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 0, End: 0}}
-
-	spans := []Span{{Key: Key("a"), EndKey: Key("b")}}
-	for _, intent := range AsLockUpdates(&txn, spans) {
+	txn.LockSpans = []Span{{Key: Key("a"), EndKey: Key("b")}}
+	for _, intent := range txn.LocksAsLockUpdates() {
 		require.Equal(t, txn.Status, intent.Status)
 		require.Equal(t, txn.IgnoredSeqNums, intent.IgnoredSeqNums)
 		require.Equal(t, txn.TxnMeta, intent.Txn)
