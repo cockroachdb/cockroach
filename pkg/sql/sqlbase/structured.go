@@ -845,7 +845,6 @@ func maybeUpgradeForeignKeyRepOnIndex(
 					// To find a match, we find a foreign key reference that has the same
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
-					// TODO (rohany): I'm unsure about this... Could there be multiple FK's?
 					if otherFK.ReferencedTableID == desc.ID &&
 						descpb.ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.

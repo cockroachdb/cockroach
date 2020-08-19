@@ -112,3 +112,39 @@ func perimeterFromGeomT(geomRepr geom.T) (float64, error) {
 func Area(g *geo.Geometry) (float64, error) {
 	return geos.Area(g.EWKB())
 }
+
+// Dimension returns the topological dimension of a given Geometry.
+func Dimension(g *geo.Geometry) (int, error) {
+	t, err := g.AsGeomT()
+	if err != nil {
+		return 0, err
+	}
+	return dimensionFromGeomT(t)
+}
+
+// dimensionFromGeomT returns the dimension from a geom.T, recursing down
+// GeometryCollections if required.
+func dimensionFromGeomT(geomRepr geom.T) (int, error) {
+	switch geomRepr := geomRepr.(type) {
+	case *geom.Point, *geom.MultiPoint:
+		return 0, nil
+	case *geom.LineString, *geom.MultiLineString:
+		return 1, nil
+	case *geom.Polygon, *geom.MultiPolygon:
+		return 2, nil
+	case *geom.GeometryCollection:
+		maxDim := 0
+		for _, g := range geomRepr.Geoms() {
+			dim, err := dimensionFromGeomT(g)
+			if err != nil {
+				return 0, err
+			}
+			if dim > maxDim {
+				maxDim = dim
+			}
+		}
+		return maxDim, nil
+	default:
+		return 0, errors.AssertionFailedf("unknown geometry type: %T", geomRepr)
+	}
+}
