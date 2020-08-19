@@ -173,6 +173,7 @@ message ScheduledBackupExecutionArgs {
   }
   BackupType backup_type = 1;
   string backup_statement = 2;
+  int64 unpause_on_success = 3;
 }
 
 // RestoreProgress is the information that the RestoreData processor sends back
