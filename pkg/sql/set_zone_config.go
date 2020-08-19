@@ -901,7 +901,7 @@ func getZoneConfigRaw(
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
 // indexs being dropped. It is a no-op if there is no zone
-// configuration.
+// configuration or run on behalf of a tenant.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
@@ -912,6 +912,10 @@ func RemoveIndexZoneConfigs(
 	tableID descpb.ID,
 	indexDescs []descpb.IndexDescriptor,
 ) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		// Tenants are agnostic to zone configs.
+		return nil
+	}
 	desc, err := catalogkv.GetDescriptorByID(ctx, txn, execCfg.Codec, tableID,
 		catalogkv.Mutable, catalogkv.TableDescriptorKind, true)
 	if err != nil {
