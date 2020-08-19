@@ -280,7 +280,7 @@ func (b *Builder) buildScalar(
 		} else {
 			left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 			right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
-			out = b.constructComparison(t.Operator, left, right)
+			out = b.constructComparison(t, left, right)
 		}
 
 	case *tree.DTuple:
@@ -635,9 +635,9 @@ func (b *Builder) checkSubqueryOuterCols(
 }
 
 func (b *Builder) constructComparison(
-	cmp tree.ComparisonOperator, left, right opt.ScalarExpr,
+	cmp *tree.ComparisonExpr, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
-	switch cmp {
+	switch cmp.Operator {
 	case tree.EQ:
 		return b.factory.ConstructEq(left, right)
 	case tree.LT:
@@ -667,6 +667,13 @@ func (b *Builder) constructComparison(
 	case tree.NotSimilarTo:
 		return b.factory.ConstructNotSimilarTo(left, right)
 	case tree.RegMatch:
+		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
+			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
+			// The ~ operator means "covers" when used with geometry or bounding box
+			// operands.
+			return b.factory.ConstructBBoxCovers(left, right)
+		}
 		return b.factory.ConstructRegMatch(left, right)
 	case tree.NotRegMatch:
 		return b.factory.ConstructNotRegMatch(left, right)
@@ -690,9 +697,16 @@ func (b *Builder) constructComparison(
 	case tree.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
 	case tree.Overlaps:
+		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
+		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
+			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
+			// The && operator means "intersects" when used with geometry or bounding
+			// box operands.
+			return b.factory.ConstructBBoxIntersects(left, right)
+		}
 		return b.factory.ConstructOverlaps(left, right)
 	}
-	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp)))
+	panic(errors.AssertionFailedf("unhandled comparison operator: %s", log.Safe(cmp.Operator)))
 }
 
 func (b *Builder) constructBinary(

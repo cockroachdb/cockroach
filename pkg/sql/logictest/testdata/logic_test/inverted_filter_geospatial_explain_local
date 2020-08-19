@@ -57,3 +57,75 @@ filter                     ·                ·
 ·                          missing stats    ·
 ·                          table            geo_table2@geom_index
 ·                          spans            20 spans
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query TTT
+EXPLAIN SELECT k FROM geo_table2 WHERE geom && 'POINT(3.0 3.0)'::geometry
+----
+·                          distribution     local
+·                          vectorized       false
+filter                     ·                ·
+ │                         filter           geom && '010100000000000000000008400000000000000840'
+ └── index join            ·                ·
+      │                    table            geo_table2@primary
+      └── inverted filter  ·                ·
+           │               inverted column  geom_inverted_key
+           │               num spans        31
+           └── scan        ·                ·
+·                          missing stats    ·
+·                          table            geo_table2@geom_index
+·                          spans            31 spans
+
+query TTT
+EXPLAIN SELECT k FROM geo_table2 WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom
+----
+·                          distribution     local
+·                          vectorized       false
+filter                     ·                ·
+ │                         filter           'BOX(3 3,3 3)' && geom
+ └── index join            ·                ·
+      │                    table            geo_table2@primary
+      └── inverted filter  ·                ·
+           │               inverted column  geom_inverted_key
+           │               num spans        31
+           └── scan        ·                ·
+·                          missing stats    ·
+·                          table            geo_table2@geom_index
+·                          spans            31 spans
+
+query TTT
+EXPLAIN SELECT k FROM geo_table2 WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom
+----
+·                          distribution     local
+·                          vectorized       false
+filter                     ·                ·
+ │                         filter           '010200000002000000000000000000F03F000000000000F03F00000000000014400000000000001440' ~ geom
+ └── index join            ·                ·
+      │                    table            geo_table2@primary
+      └── inverted filter  ·                ·
+           │               inverted column  geom_inverted_key
+           │               num spans        38
+           └── scan        ·                ·
+·                          missing stats    ·
+·                          table            geo_table2@geom_index
+·                          spans            38 spans
+
+query TTT
+EXPLAIN SELECT k FROM geo_table2 WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d
+----
+·                          distribution     local
+·                          vectorized       false
+filter                     ·                ·
+ │                         filter           geom ~ 'BOX(1 1,5 5)'
+ └── index join            ·                ·
+      │                    table            geo_table2@primary
+      └── inverted filter  ·                ·
+           │               inverted column  geom_inverted_key
+           │               num spans        93
+           └── scan        ·                ·
+·                          missing stats    ·
+·                          table            geo_table2@geom_index
+·                          spans            93 spans

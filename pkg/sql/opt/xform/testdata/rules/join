@@ -3457,6 +3457,107 @@ anti-join (cross)
  └── filters
       └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
 
+# Bounding box operations.
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON c.geom::box2d && n.geom
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_intersects(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── c.geom:10::BOX2D && n.geom:16 [outer=(10,16), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON c.geom::box2d ~ n.geom
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_covers(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── c.geom:10::BOX2D ~ n.geom:16 [outer=(10,16), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON n.geom ~ c.geom::box2d
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16!null
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_coveredby(c.geom:10::BOX2D::GEOMETRY, n.geom:16)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── n.geom:16 ~ c.geom:10::BOX2D [outer=(10,16), immutable, constraints=(/16: (/NULL - ])]
+
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON n.geom ~ c.geom
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10!null name:15 n.geom:16!null
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_coveredby(c.geom:10, n.geom:16)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── n.geom:16 ~ c.geom:10 [outer=(10,16), immutable, constraints=(/10: (/NULL - ]; /16: (/NULL - ])]
+
 # --------------------------------------------------
 # GenerateZigZagJoins
 # --------------------------------------------------
