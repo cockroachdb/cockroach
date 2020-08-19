@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -38,12 +39,15 @@ func TestGossipInvalidation(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
+	s := tc.Server(0)
 	sc := stats.NewTableStatisticsCache(
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(tc.Server(0).GossipI().(*gossip.Gossip)),
-		tc.Server(0).DB(),
-		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
+		s.DB(),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
 		keys.SystemSQLCodec,
+		s.LeaseManager().(*lease.Manager),
+		s.ClusterSettings(),
 	)
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
