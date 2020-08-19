@@ -14,7 +14,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,11 +39,6 @@ func (p *planner) createDropDatabaseJob(
 	typesToDrop []*sqlbase.MutableTypeDescriptor,
 	jobDesc string,
 ) error {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
-		if descs.MigrationSchemaChangeRequiredFromContext(ctx) {
-			return descs.ErrSchemaChangeDisallowedInMixedState
-		}
-	}
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
 	tableIDs := make([]descpb.ID, 0, len(tableDropDetails))
@@ -81,11 +74,6 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	jobDesc string,
 	mutationID descpb.MutationID,
 ) error {
-	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionSchemaChangeJob) {
-		if descs.MigrationSchemaChangeRequiredFromContext(ctx) {
-			return descs.ErrSchemaChangeDisallowedInMixedState
-		}
-	}
 	var job *jobs.Job
 	if cachedJob, ok := p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID]; ok {
 		job = cachedJob
