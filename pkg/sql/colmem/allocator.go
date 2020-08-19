@@ -124,6 +124,9 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 // minCapacity. The method will grow the allocated capacity of the batch
 // exponentially (possibly incurring a reallocation), until the batch reaches
 // coldata.BatchSize().
+// NOTE: if the reallocation occurs, then the memory under the old batch is
+// released, so it is expected that the caller will lose the references to the
+// old batch.
 // Note: the method assumes that minCapacity is at least 1 and will "truncate"
 // minCapacity if it is larger than coldata.BatchSize().
 func (a *Allocator) ResetMaybeReallocate(
@@ -139,6 +142,7 @@ func (a *Allocator) ResetMaybeReallocate(
 	if oldBatch == nil {
 		newBatch = a.NewMemBatchWithFixedCapacity(typs, minCapacity)
 	} else if oldBatch.Capacity() < coldata.BatchSize() {
+		a.ReleaseBatch(oldBatch)
 		newCapacity := oldBatch.Capacity() * 2
 		if newCapacity < minCapacity {
 			newCapacity = minCapacity
