@@ -234,3 +234,16 @@
     $tz
     (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
 )
+
+# FoldEqZeroSTDistance matches an expression of the form: 'ST_Distance(a,b) = 0'
+# and replaces it with 'ST_Intersects(a,b)'. This replacement allows for
+# early-exit behavior, and may allow an inverted index scan to be generated.
+[FoldEqZeroSTDistance, Normalize]
+(Eq
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
+    $right:(Const
+        $value:* & (IsFloatDatum $value) & (DatumsEqual $value 0)
+    )
+)
+=>
+(MakeIntersectionFunction $args)
