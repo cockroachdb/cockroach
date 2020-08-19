@@ -112,7 +112,6 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti sqlbase.ColTypeInfo, rowCap
 		// If there are no columns, every row gets mapped to the first chunk.
 		c.rowsPerChunkShift = 32
 		c.rowsPerChunk = 1 << c.rowsPerChunkShift
-		c.chunks = [][]tree.Datum{{}}
 	}
 
 	for i := 0; i < nCols; i++ {
@@ -213,6 +212,9 @@ func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums
 		panic(errors.AssertionFailedf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
 	if c.numCols == 0 {
+		if c.chunks == nil {
+			c.chunks = [][]tree.Datum{{}}
+		}
 		c.numRows++
 		return nil, nil
 	}

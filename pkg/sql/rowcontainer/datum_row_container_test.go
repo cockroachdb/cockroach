@@ -129,6 +129,26 @@ func TestRowContainerZeroCols(t *testing.T) {
 	if len(row) != 0 {
 		t.Fatalf("expected empty row")
 	}
+
+	// Clear and try again.
+	rc.Clear(context.Background())
+
+	const numRowsAfterClear = 5
+	for i := 0; i < numRowsAfterClear; i++ {
+		if _, err := rc.AddRow(context.Background(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rc.Len() != numRowsAfterClear {
+		t.Fatalf("expected %d rows, but found %d", numRowsAfterClear, rc.Len())
+	}
+	row = rc.At(0)
+	if row == nil {
+		t.Fatalf("expected non-nil row")
+	}
+	if len(row) != 0 {
+		t.Fatalf("expected empty row")
+	}
 }
 
 func BenchmarkRowContainerAt(b *testing.B) {
