@@ -12,6 +12,7 @@ package jobs
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -106,4 +107,13 @@ func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestam
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	nl.mu.livenessMap[id].Expiration = hlc.LegacyTimestamp(ts)
+}
+
+// ResetConstructors resets the registered Resumer constructors.
+func ResetConstructors() func() {
+	old := make(map[jobspb.Type]Constructor)
+	for k, v := range constructors {
+		old[k] = v
+	}
+	return func() { constructors = old }
 }
