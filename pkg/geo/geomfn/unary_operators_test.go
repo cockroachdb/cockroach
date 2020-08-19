@@ -96,3 +96,30 @@ func TestArea(t *testing.T) {
 		})
 	}
 }
+
+func TestDimension(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected int
+	}{
+		{"POINT(1.0 1.0)", 0},
+		{"LINESTRING(1.0 1.0, 2.0 2.0, 3.0 3.0)", 1},
+		{"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))", 2},
+		{"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0), (0.1 0.1, 0.2 0.1, 0.2 0.2, 0.1 0.1))", 2},
+		{"MULTIPOINT((1.0 1.0), (2.0 2.0))", 0},
+		{"MULTILINESTRING((1.0 1.0, 2.0 2.0, 3.0 3.0), (6.0 6.0, 7.0 6.0))", 1},
+		{"MULTIPOLYGON(((3.0 3.0, 4.0 3.0, 4.0 4.0, 3.0 3.0)), ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0), (0.1 0.1, 0.2 0.1, 0.2 0.2, 0.1 0.1)))", 2},
+		{"GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))", 2},
+		{"GEOMETRYCOLLECTION (GEOMETRYCOLLECTION(POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40))))", 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := Dimension(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
