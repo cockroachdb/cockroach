@@ -302,6 +302,7 @@ var debugCtx struct {
 	ballastSize       base.SizeSpec
 	printSystemConfig bool
 	maxResults        int
+	decodeAsTableDesc string
 }
 
 // setDebugContextDefaults set the default values in debugCtx.  This
@@ -317,6 +318,7 @@ func setDebugContextDefaults() {
 	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
 	debugCtx.maxResults = 0
 	debugCtx.printSystemConfig = false
+	debugCtx.decodeAsTableDesc = ""
 }
 
 // startCtx captures the command-line arguments for the `start` command.
