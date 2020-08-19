@@ -144,7 +144,9 @@ func computeScheduleRecurrence(
 	}
 	expr, err := cronexpr.Parse(cron)
 	if err != nil {
-		return nil, err
+		return nil, errors.Newf(
+			`error parsing schedule expression: %q; it must be a valid cron expression`,
+			cron)
 	}
 	nextRun := expr.Next(now)
 	frequency := expr.Next(nextRun).Sub(nextRun)

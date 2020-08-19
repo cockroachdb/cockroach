@@ -181,7 +181,9 @@ func (j *ScheduledJob) Frequency() (time.Duration, error) {
 	}
 	expr, err := cronexpr.Parse(j.rec.ScheduleExpr)
 	if err != nil {
-		return 0, errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)
+		return 0, errors.Wrapf(err,
+			"parsing schedule expression: %q; it must be a valid cron expression",
+			j.rec.ScheduleExpr)
 	}
 	next := expr.Next(j.env.Now())
 	nextNext := expr.Next(next)
