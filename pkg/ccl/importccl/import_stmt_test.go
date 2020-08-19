@@ -3486,7 +3486,6 @@ func BenchmarkImportDefault(b *testing.B) {
 			defer sqlDB.Exec(b, `DROP TABLE t`)
 			sqlDB.Exec(b, fmt.Sprintf(`CREATE TABLE t (%s)`, test.create))
 			b.ResetTimer()
-			// Try importing 3 times within each test.
 			for i := 0; i < b.N; i++ {
 				sqlDB.Exec(b, fmt.Sprintf(
 					`IMPORT INTO t (%s) %s DATA (%s)`,
