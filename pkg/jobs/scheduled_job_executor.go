@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
@@ -43,7 +41,9 @@ type ScheduledJobExecutor interface {
 		ctx context.Context,
 		jobID int64,
 		jobStatus Status,
+		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
+		ex sqlutil.InternalExecutor,
 		txn *kv.Txn,
 	) error
 
@@ -108,53 +108,21 @@ func NotifyJobTermination(
 		env = scheduledjobs.ProdJobSchedulerEnv
 	}
 
-	// Get the executor for this schedule.
-	schedule, executor, err := lookupScheduleAndExecutor(
-		ctx, env, ex, scheduleID, txn)
+	schedule, err := LoadScheduledJob(ctx, env, scheduleID, ex, txn)
+	if err != nil {
+		return err
+	}
+	executor, err := NewScheduledJobExecutor(schedule.ExecutorType())
 	if err != nil {
 		return err
 	}
 
 	// Delegate handling of the job termination to the executor.
-	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, schedule, txn)
+	err = executor.NotifyJobTermination(ctx, jobID, jobStatus, env, schedule, ex, txn)
 	if err != nil {
 		return err
 	}
 
 	// Update this schedule in case executor made changes to it.
 	return schedule.Update(ctx, ex, txn)
-}
-
-func lookupScheduleAndExecutor(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	ex sqlutil.InternalExecutor,
-	scheduleID int64,
-	txn *kv.Txn,
-) (*ScheduledJob, ScheduledJobExecutor, error) {
-	rows, cols, err := ex.QueryWithCols(ctx, "lookup-schedule", txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
-		fmt.Sprintf(
-			"SELECT schedule_id, schedule_details, executor_type FROM %s WHERE schedule_id = %d",
-			env.ScheduledJobsTableName(), scheduleID))
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if len(rows) != 1 {
-		return nil, nil, errors.Newf(
-			"expected to find 1 schedule, found %d with schedule_id=%d",
-			len(rows), scheduleID)
-	}
-
-	j := NewScheduledJob(env)
-	if err := j.InitFromDatums(rows[0], cols); err != nil {
-		return nil, nil, err
-	}
-	executor, err := NewScheduledJobExecutor(j.ExecutorType())
-	if err == nil {
-		return j, executor, nil
-	}
-	return nil, nil, err
 }

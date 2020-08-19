@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -32,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -577,24 +578,45 @@ func (b *backupResumer) Resume(
 		}
 	}
 
-	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg().InternalExecutor)
-
+	b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
 	return nil
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
-	ctx context.Context, jobStatus jobs.Status, ex sqlutil.InternalExecutor,
+	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
 ) {
-	if b.job.CreatedBy() == nil || b.job.CreatedBy().Name != jobs.CreatedByScheduledJobs {
-		return
-	}
-	info := b.job.CreatedBy()
+	env := scheduledjobs.ProdJobSchedulerEnv
 
-	if err := jobs.NotifyJobTermination(
-		ctx, nil /* env */, *b.job.ID(), jobStatus, info.ID, ex, nil); err != nil {
-		log.Warningf(ctx,
-			"failed to notify schedule %d of completion of job %d; err=%s",
-			info.ID, *b.job.ID(), err)
+	if err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Do not rely on b.job containing created_by_id.  Query it directly.
+		datums, err := exec.InternalExecutor.QueryRowEx(
+			ctx,
+			"lookup-schedule-info",
+			txn,
+			sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
+			fmt.Sprintf(
+				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
+				env.SystemJobsTableName()),
+			*b.job.ID(), jobs.CreatedByScheduledJobs)
+
+		if err != nil {
+			return errors.Wrap(err, "schedule info lookup")
+		}
+		if datums == nil {
+			// Not a scheduled backup.
+			return nil
+		}
+
+		scheduleID := int64(tree.MustBeDInt(datums[0]))
+		if err := jobs.NotifyJobTermination(
+			ctx, env, *b.job.ID(), jobStatus, scheduleID, exec.InternalExecutor, txn); err != nil {
+			log.Warningf(ctx,
+				"failed to notify schedule %d of completion of job %d; err=%s",
+				scheduleID, *b.job.ID(), err)
+		}
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "maybeNotifySchedule error: %v", err)
 	}
 }
 
@@ -621,7 +643,7 @@ func (b *backupResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	defer b.maybeNotifyScheduledJobCompletion(
 		ctx,
 		jobs.StatusFailed,
-		phs.(sql.PlanHookState).ExecCfg().InternalExecutor,
+		phs.(sql.PlanHookState).ExecCfg(),
 	)
 
 	telemetry.Count("backup.total.failed")
