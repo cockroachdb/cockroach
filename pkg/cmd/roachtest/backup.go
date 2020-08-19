@@ -81,7 +81,7 @@ func registerBackup(r *testRegistry) {
 
 	KMSSpec := makeClusterSpec(3)
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec),
+		Name:       fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
 		Owner:      OwnerBulkIO,
 		Cluster:    KMSSpec,
 		MinVersion: "v20.2.0",
