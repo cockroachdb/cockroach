@@ -51,7 +51,7 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 			tree.AsStringWithFQNames(n.Type, &p.semaCtx.Annotations),
 		)
 	}
-	// TODO (rohany): Check permissions here once we track them.
+
 	return &alterTypeNode{
 		n:    n,
 		desc: desc,
