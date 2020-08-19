@@ -149,7 +149,7 @@ func showBackupPlanHook(
 				KMSInfo: defaultKMSInfo}
 		}
 
-		incPaths, err := findPriorBackups(ctx, store)
+		incPaths, err := findPriorBackupNames(ctx, store)
 		if err != nil {
 			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				// If we do not support listing, we have to just assume there are none
