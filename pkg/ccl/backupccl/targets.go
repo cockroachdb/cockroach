@@ -465,8 +465,6 @@ func getRelevantDescChanges(
 				interestingIDs[j] = struct{}{}
 			}
 		}
-		// TODO (rohany): Once we start tracking modification time on type
-		//  descriptors we need to consider them here.
 	}
 
 	// We're also interested in any desc that belonged to a DB we're backing up.
@@ -569,8 +567,6 @@ func getAllDescChanges(
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
-				// TODO (rohany): Once we track modification time on type descriptors,
-				//  they need to be checked for updates here.
 			}
 			res = append(res, r)
 		}
