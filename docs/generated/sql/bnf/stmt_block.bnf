@@ -1740,7 +1740,8 @@ family_def ::=
 	'FAMILY' opt_family_name '(' name_list ')'
 
 table_constraint ::=
-	'CONSTRAINT' constraint_name constraint_elem
+	'CONSTRAINT' 'IF' 'NOT' 'EXISTS' constraint_name constraint_elem
+	| 'CONSTRAINT' constraint_name constraint_elem
 	| constraint_elem
 
 like_table_option_list ::=

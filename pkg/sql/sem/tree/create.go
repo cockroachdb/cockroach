@@ -706,17 +706,30 @@ type ConstraintTableDef interface {
 
 	// SetName replaces the name of the definition in-place. Used in the parser.
 	SetName(name Name)
+
+	// SetIfNotExists sets the IfNotExists flag (do not raise an error if constraint exists). Used in the parser.
+	SetIfNotExists()
 }
 
 func (*UniqueConstraintTableDef) constraintTableDef()     {}
 func (*ForeignKeyConstraintTableDef) constraintTableDef() {}
 func (*CheckConstraintTableDef) constraintTableDef()      {}
 
+// SetIfNotExists implements the TableDef interface.
+func (node *UniqueConstraintTableDef) SetIfNotExists() { node.IfNotExists = true }
+
+// SetIfNotExists implements the TableDef interface.
+func (node *ForeignKeyConstraintTableDef) SetIfNotExists() { node.IfNotExists = true }
+
+// SetIfNotExists implements the TableDef interface.
+func (node *CheckConstraintTableDef) SetIfNotExists() { node.IfNotExists = true }
+
 // UniqueConstraintTableDef represents a unique constraint within a CREATE
 // TABLE statement.
 type UniqueConstraintTableDef struct {
 	IndexTableDef
-	PrimaryKey bool
+	PrimaryKey  bool
+	IfNotExists bool
 }
 
 // SetName implements the TableDef interface.
@@ -728,6 +741,9 @@ func (node *UniqueConstraintTableDef) SetName(name Name) {
 func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
+		if node.IfNotExists {
+			ctx.WriteString("IF NOT EXISTS ")
+		}
 		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
@@ -828,18 +844,22 @@ func (c CompositeKeyMatchMethod) String() string {
 
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
-	Name     Name
-	Table    TableName
-	FromCols NameList
-	ToCols   NameList
-	Actions  ReferenceActions
-	Match    CompositeKeyMatchMethod
+	Name        Name
+	Table       TableName
+	FromCols    NameList
+	ToCols      NameList
+	Actions     ReferenceActions
+	Match       CompositeKeyMatchMethod
+	IfNotExists bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ForeignKeyConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
+		if node.IfNotExists {
+			ctx.WriteString("IF NOT EXISTS ")
+		}
 		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}
@@ -871,9 +891,10 @@ func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.
 type CheckConstraintTableDef struct {
-	Name   Name
-	Expr   Expr
-	Hidden bool
+	Name        Name
+	Expr        Expr
+	Hidden      bool
+	IfNotExists bool
 }
 
 // SetName implements the ConstraintTableDef interface.
@@ -885,6 +906,9 @@ func (node *CheckConstraintTableDef) SetName(name Name) {
 func (node *CheckConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.Name != "" {
 		ctx.WriteString("CONSTRAINT ")
+		if node.IfNotExists {
+			ctx.WriteString("IF NOT EXISTS ")
+		}
 		ctx.FormatNode(&node.Name)
 		ctx.WriteByte(' ')
 	}

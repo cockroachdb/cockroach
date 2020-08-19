@@ -5778,6 +5778,13 @@ family_def:
 // column definition. col_qualification_elem specifies the embedded form.
 // - thomas 1997-12-03
 table_constraint:
+  CONSTRAINT IF NOT EXISTS constraint_name constraint_elem
+  {
+    $$.val = $6.constraintDef()
+    $$.val.(tree.ConstraintTableDef).SetName(tree.Name($5))
+    $$.val.(tree.ConstraintTableDef).SetIfNotExists()
+  }
+|
   CONSTRAINT constraint_name constraint_elem
   {
     $$.val = $3.constraintDef()

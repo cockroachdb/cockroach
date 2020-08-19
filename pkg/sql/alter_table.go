@@ -143,6 +143,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
+	skipIfExists := false
 	resolved := params.p.ResolvedName(n.n.Table)
 	tn, ok := resolved.(*tree.TableName)
 	if !ok {
@@ -217,6 +218,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := n.tableDesc.AddIndexMutation(&idx, descpb.DescriptorMutation_ADD); err != nil {
 					return err
 				}
+				skipIfExists = d.IfNotExists
 
 			case *tree.CheckConstraintTableDef:
 				var err error
@@ -245,6 +247,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
+				skipIfExists = d.IfNotExists
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
@@ -295,6 +298,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
+				skipIfExists = d.IfNotExists
+
 				// TODO(lucy): Validate() can't be called here because it reads the
 				// referenced table descs, which may have to be upgraded to the new FK
 				// representation. That requires reading the original table descriptor
@@ -748,6 +753,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
 		if err := n.tableDesc.AllocateIDs(); err != nil {
+			if skipIfExists && pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+				return nil
+			}
 			return err
 		}
 	}
