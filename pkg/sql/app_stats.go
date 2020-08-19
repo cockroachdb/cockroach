@@ -495,18 +495,21 @@ func (s *sqlStats) getStmtStats(
 				}
 			}
 			if ok {
+				stats.Lock()
+				data := stats.data
+				distSQLUsed := stats.distSQLUsed
+				vectorized := stats.vectorized
+				stats.Unlock()
+
 				k := roachpb.StatementStatisticsKey{
 					Query:       maybeScrubbed,
-					DistSQL:     stats.distSQLUsed,
+					DistSQL:     distSQLUsed,
 					Opt:         true,
-					Vec:         stats.vectorized,
+					Vec:         vectorized,
 					ImplicitTxn: q.implicitTxn,
 					Failed:      q.failed,
 					App:         maybeHashedAppName,
 				}
-				stats.Lock()
-				data := stats.data
-				stats.Unlock()
 
 				if scrub {
 					// Quantize the counts to avoid leaking information that way.
