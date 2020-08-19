@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -272,55 +271,6 @@ func ResolveSchemaNameByID(
 		return schema, nil
 	}
 	return "", errors.Newf("unable to resolve schema id %d for db %d", schemaID, dbID)
-}
-
-// ResolveTypeDescByID resolves a TypeDescriptor and fully qualified name
-// from an ID.
-// TODO (rohany): Once we start to cache type descriptors, this needs to
-//  look into the set of leased copies.
-// TODO (rohany): Once we lease types, this should be pushed down into the
-//  leased object collection.
-func ResolveTypeDescByID(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	id descpb.ID,
-	lookupFlags tree.ObjectLookupFlags,
-) (tree.TypeName, sqlbase.TypeDescriptor, error) {
-	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, id, catalogkv.Immutable,
-		catalogkv.TypeDescriptorKind, lookupFlags.Required)
-	if err != nil {
-		if pgerror.GetPGCode(err) == pgcode.WrongObjectType {
-			err = errors.HandleAsAssertionFailure(err)
-		}
-		return tree.TypeName{}, nil, err
-	}
-	// Get the parent database and schema names to create a fully qualified
-	// name for the type.
-	// TODO (SQLSchema): As we add leasing for all descriptors, these calls
-	//  should look into those leased copies, rather than do raw reads.
-	typDesc := desc.(*sqlbase.ImmutableTypeDescriptor)
-	db, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, typDesc.ParentID)
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
-	schemaName, err := ResolveSchemaNameByID(ctx, txn, codec, typDesc.ParentID, typDesc.ParentSchemaID)
-	if err != nil {
-		return tree.TypeName{}, nil, err
-	}
-	name := tree.MakeNewQualifiedTypeName(db.GetName(), schemaName, typDesc.GetName())
-	var ret sqlbase.TypeDescriptor
-	if lookupFlags.RequireMutable {
-		// TODO(ajwerner): Figure this out later when we construct this inside of
-		// the name resolution. This really shouldn't be happening here. Instead we
-		// should be taking a SchemaResolver and resolving through it which should
-		// be able to hit a descs.Collection and determine whether this is a new
-		// type or not.
-		desc = sqlbase.NewMutableExistingTypeDescriptor(*typDesc.TypeDesc())
-	} else {
-		ret = typDesc
-	}
-	return name, ret, nil
 }
 
 // GetForDatabase looks up and returns all available

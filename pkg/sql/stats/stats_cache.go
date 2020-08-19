@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -61,6 +63,9 @@ type TableStatisticsCache struct {
 	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
 	Codec       keys.SQLCodec
+
+	LeaseMgr *lease.Manager
+	Settings *cluster.Settings
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -99,11 +104,15 @@ func NewTableStatisticsCache(
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
+	leaseManager *lease.Manager,
+	settings *cluster.Settings,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		ClientDB:    db,
 		SQLExecutor: sqlExecutor,
 		Codec:       codec,
+		LeaseMgr:    leaseManager,
+		Settings:    settings,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -334,8 +343,8 @@ const (
 
 // parseStats converts the given datums to a TableStatistic object. It might
 // need to run a query to get user defined type metadata.
-func parseStats(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, datums tree.Datums,
+func (sc *TableStatisticsCache) parseStats(
+	ctx context.Context, datums tree.Datums,
 ) (*TableStatistic, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
@@ -401,28 +410,22 @@ func parseStats(
 
 		// Decode the histogram data so that it's usable by the opt catalog.
 		res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
-		typ := res.HistogramData.ColumnType
 		// Hydrate the type in case any user defined types are present.
 		// There are cases where typ is nil, so don't do anything if so.
-		if typ != nil && typ.UserDefined() {
-			// TODO (rohany): This should instead query a leased copy of the type.
-			// TODO (rohany): If we are caching data about types here, then this
-			//  cache needs to be invalidated as well when type metadata changes.
-			// TODO (rohany): It might be better to store the type metadata used when
-			//  collecting the stats in the HistogramData object itself, and avoid
-			//  this query and caching/leasing problem.
+		if typ := res.HistogramData.ColumnType; typ != nil && typ.UserDefined() {
 			// The metadata accessed here is never older than the metadata used when
 			// collecting the stats. Changes to types are backwards compatible across
 			// versions, so using a newer version of the type metadata here is safe.
-			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
-					return resolver.ResolveTypeDescByID(ctx, txn, codec, id, tree.ObjectLookupFlags{})
-				}
-				name, typeDesc, err := typeLookup(ctx, sqlbase.GetTypeDescID(typ))
-				if err != nil {
-					return err
-				}
-				return typeDesc.HydrateTypeInfoWithName(ctx, typ, &name, sqlbase.TypeLookupFunc(typeLookup))
+			// Additionally, the leased type that is accessed here is guaranteed to
+			// be able to read values of the type at any time due to invariants
+			// maintained when types are changed.
+			err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				collection := descs.NewCollection(sc.LeaseMgr, sc.Settings)
+				defer collection.ReleaseAll(ctx)
+				resolver := descs.NewDistSQLTypeResolver(collection, txn)
+				var err error
+				res.HistogramData.ColumnType, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
+				return err
 			})
 			if err != nil {
 				return nil, err
@@ -431,7 +434,7 @@ func parseStats(
 		var a sqlbase.DatumAlloc
 		for i := range res.Histogram {
 			bucket := &res.HistogramData.Buckets[i]
-			datum, _, err := sqlbase.DecodeTableKey(&a, typ, bucket.UpperBound, encoding.Ascending)
+			datum, _, err := sqlbase.DecodeTableKey(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
 			if err != nil {
 				return nil, err
 			}
@@ -476,7 +479,7 @@ ORDER BY "createdAt" DESC
 
 	var statsList []*TableStatistic
 	for _, row := range rows {
-		stats, err := parseStats(ctx, sc.ClientDB, sc.Codec, row)
+		stats, err := sc.parseStats(ctx, row)
 		if err != nil {
 			return nil, err
 		}
