@@ -610,6 +610,7 @@ message AggregatorSpec {
     VAR_POP = 29;
     STDDEV_POP = 30;
     ST_MAKELINE = 31;
+    ST_EXTENT = 32;
   }
 
   enum Type {
