@@ -71,6 +71,10 @@ type SessionData struct {
 	SerialNormalizationMode SerialNormalizationMode
 	// SearchPath is a list of namespaces to search builtins in.
 	SearchPath SearchPath
+	// TemporarySchemaID is the ID of the current session's temporary schema,
+	// if it exists. It is a descpb.ID, but cannot be stored as one due to
+	// packaging dependencies.
+	TemporarySchemaID uint32
 	// StmtTimeout is the duration a query is permitted to run before it is
 	// canceled by the session. If set to 0, there is no timeout.
 	StmtTimeout time.Duration

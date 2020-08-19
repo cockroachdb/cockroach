@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1101,11 +1100,11 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					scName, err := resolver.ResolveSchemaNameByID(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), table.Desc.GetParentSchemaID())
+					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, table.Desc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, scName, table.Desc, scResolver,
+					if err := populateFromTable(ctx, p, h, db, sc.Name, table.Desc, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -2805,11 +2804,11 @@ CREATE TABLE pg_catalog.pg_type (
 
 				// Now generate rows for user defined types in this database.
 				return forEachTypeDesc(ctx, p, dbContext, func(_ *sqlbase.ImmutableDatabaseDescriptor, _ string, typDesc *sqlbase.ImmutableTypeDescriptor) error {
-					schema, err := p.getSchemaNameFromID(ctx, typDesc.ParentSchemaID)
+					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
 					if err != nil {
 						return err
 					}
-					nspOid := h.NamespaceOid(db, schema)
+					nspOid := h.NamespaceOid(db, sc.Name)
 					typ, err := typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 					if err != nil {
 						return err
@@ -2850,11 +2849,11 @@ CREATE TABLE pg_catalog.pg_type (
 					}
 					return false, err
 				}
-				schema, err := p.getSchemaNameFromID(ctx, typDesc.ParentSchemaID)
+				sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
 				if err != nil {
 					return false, err
 				}
-				nspOid = h.NamespaceOid(db, schema)
+				nspOid = h.NamespaceOid(db, sc.Name)
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
 				if err != nil {
 					return false, err
