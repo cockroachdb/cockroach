@@ -1291,7 +1291,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
-// indexes from the old index over to the new index.
+// indexes from the old index over to the new index. Noop if run on behalf of a
+// tenant.
 func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1299,6 +1300,10 @@ func maybeUpdateZoneConfigsForPKChange(
 	table *sqlbase.MutableTableDescriptor,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		// Tenants are agnostic to zone configs.
+		return nil
+	}
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, table.ID)
 	if err != nil {
 		return err
