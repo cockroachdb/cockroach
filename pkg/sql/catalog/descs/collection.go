@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -130,18 +131,20 @@ func MakeCollection(
 	settings *cluster.Settings,
 	dbCache *database.Cache,
 	dbCacheSubscriber DatabaseCacheSubscriber,
+	sessionData *sessiondata.SessionData,
 ) Collection {
 	return Collection{
 		leaseMgr:          leaseMgr,
 		settings:          settings,
 		databaseCache:     dbCache,
 		dbCacheSubscriber: dbCacheSubscriber,
+		sessionData:       sessionData,
 	}
 }
 
 // NewCollection constructs a new *Collection.
 func NewCollection(leaseMgr *lease.Manager, settings *cluster.Settings) *Collection {
-	tc := MakeCollection(leaseMgr, settings, nil, nil)
+	tc := MakeCollection(leaseMgr, settings, nil, nil, nil)
 	return &tc
 }
 
@@ -211,6 +214,11 @@ type Collection struct {
 	// mixed version (19.2/20.1) clusters.
 	// TODO(solon): This field could maybe be removed in 20.2.
 	settings *cluster.Settings
+
+	// sessionData is the SessionData of the current session, if this Collection
+	// is being used in the context of a session. It is stored so that the Collection
+	// knows about state of temporary schemas (name and ID) for resolution.
+	sessionData *sessiondata.SessionData
 }
 
 // GetMutableTableDescriptor returns a mutable table descriptor.
@@ -618,6 +626,58 @@ func (tc *Collection) GetMutableSchemaDescriptorByID(
 	return desc.(*sqlbase.MutableSchemaDescriptor), nil
 }
 
+// ResolveSchemaByID looks up a schema by ID.
+func (tc *Collection) ResolveSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID,
+) (sqlbase.ResolvedSchema, error) {
+	if schemaID == keys.PublicSchemaID {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaPublic,
+			ID:   schemaID,
+			Name: tree.PublicSchema,
+		}, nil
+	}
+
+	// We have already considered if the schemaID is PublicSchemaID,
+	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
+	if scName, ok := resolver.StaticSchemaIDMap[schemaID]; ok {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaVirtual,
+			ID:   schemaID,
+			Name: scName,
+		}, nil
+	}
+
+	// If this collection is attached to a session and the session has created
+	// a temporary schema, then check if the schema ID matches.
+	if tc.sessionData != nil && tc.sessionData.TemporarySchemaID == uint32(schemaID) {
+		return sqlbase.ResolvedSchema{
+			Kind: sqlbase.SchemaTemporary,
+			ID:   schemaID,
+			Name: tc.sessionData.SearchPath.GetTemporarySchemaName(),
+		}, nil
+	}
+
+	// Otherwise, fall back to looking up the descriptor with the desired ID.
+	desc, err := tc.getDescriptorVersionByID(
+		ctx, txn, schemaID, tree.ObjectLookupFlagsWithRequired(), true /* setTxnDeadline */)
+	if err != nil {
+		return sqlbase.ResolvedSchema{}, err
+	}
+
+	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	if !ok {
+		return sqlbase.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
+	}
+
+	return sqlbase.ResolvedSchema{
+		Kind: sqlbase.SchemaUserDefined,
+		ID:   schemaID,
+		Desc: schemaDesc,
+		Name: schemaDesc.Name,
+	}, nil
+}
+
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
 // present in the input TableDescriptor. It always returns the same type of
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
@@ -640,9 +700,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			// TODO (rohany): Once we can lookup schemas by ID in the collection,
-			//  resolve the correct schema name here.
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+			sc, err := tc.ResolveSchemaByID(ctx, txn, desc.ParentSchemaID)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
 			return name, desc, nil
 		}
 
@@ -670,9 +732,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			// TODO (rohany): Once we can lookup schemas by ID in the collection,
-			//  resolve the correct schema name here.
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, tree.PublicSchema, desc.Name)
+			sc, err := tc.ResolveSchemaByID(ctx, txn, desc.ParentSchemaID)
+			if err != nil {
+				return tree.TypeName{}, nil, err
+			}
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
 			return name, desc, nil
 		}
 
@@ -1033,12 +1097,15 @@ func (tc *Collection) GetAllDescriptors(
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
 		typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
+		schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *sqlbase.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
 			case *sqlbase.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
+			case *sqlbase.ImmutableSchemaDescriptor:
+				schemaDescs[desc.GetID()] = desc
 			}
 		}
 		// If we found any type descriptors, that means that some of the tables we
@@ -1058,11 +1125,19 @@ func (tc *Collection) GetAllDescriptors(
 					//  be performed.
 					return tree.TypeName{}, nil, errors.Newf("database id %d not found", typDesc.ParentID)
 				}
-				schemaName, err := resolver.ResolveSchemaNameByID(ctx, txn, tc.codec(), dbDesc.GetID(), typDesc.ParentSchemaID)
-				if err != nil {
-					return tree.TypeName{}, nil, err
+
+				// We don't use the collection's ResolveSchemaByID method here because
+				// we already have all of the descriptors. User defined types are only
+				// members of the public schema or a user defined schema, so those are
+				// the only cases we have to consider here.
+				var scName string
+				switch typDesc.ParentSchemaID {
+				case keys.PublicSchemaID:
+					scName = tree.PublicSchema
+				default:
+					scName = schemaDescs[typDesc.ParentSchemaID].Name
 				}
-				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), schemaName, typDesc.GetName())
+				name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
 				return name, typDesc, nil
 			}
 			// Now hydrate all table descriptors.

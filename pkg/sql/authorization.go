@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -467,7 +466,7 @@ const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
 const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
 
 func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, user string) error {
-	resolvedSchema, err := resolver.ResolveSchemaByID(ctx, p.Txn(), p.ExecCfg().Codec, schemaID)
+	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
 	if err != nil {
 		return err
 	}
