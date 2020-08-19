@@ -120,3 +120,6 @@
     - The TableReader field MaxResults was retired in favor of the new field
       Parallelize. The change is backwards compatible (mixed versions will
       prevent parallelization).
+- Version: 32 (MinAcceptedVersion: 30)
+    - Added an aggregator for ST_Extent. The change is backwards compatible
+      (mixed versions will prevent parallelization).
