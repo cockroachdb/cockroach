@@ -236,7 +236,7 @@ func (ds *DistSender) singleRangeFeed(
 	// The RangeFeed is not used for system critical traffic so use a DefaultClass
 	// connection regardless of the range.
 	opts := SendOptions{class: rpc.DefaultClass}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.Descriptors())
 	if err != nil {
 		return args.Timestamp, err
 	}

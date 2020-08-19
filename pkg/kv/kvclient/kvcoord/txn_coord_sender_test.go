@@ -201,12 +201,10 @@ func TestTxnCoordSenderCondenseLockSpans(t *testing.T) {
 	// Check end transaction locks, which should be condensed and split
 	// at range boundaries.
 	expLocks := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
-	var sendFn simpleSendFn = func(
-		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
-	) (*roachpb.BatchResponse, error) {
-		resp := args.CreateReply()
-		resp.Txn = args.Txn
-		if req, ok := args.GetArg(roachpb.EndTxn); ok {
+	sendFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		resp := ba.CreateReply()
+		resp.Txn = ba.Txn
+		if req, ok := ba.GetArg(roachpb.EndTxn); ok {
 			if !req.(*roachpb.EndTxnRequest).Commit {
 				t.Errorf("expected commit to be true")
 			}
