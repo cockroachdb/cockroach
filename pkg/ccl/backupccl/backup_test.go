@@ -4871,7 +4871,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	)
 }
 
-func TestBackupCreatedStatsWithUniqueName(t *testing.T) {
+func TestBackupCreatedStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
