@@ -113,3 +113,23 @@ func findTimeZoneFunction(typ *types.T) (*tree.FunctionProperties, *tree.Overloa
 	}
 	panic(errors.AssertionFailedf("could not find overload for timezone"))
 }
+
+// MakeIntersectionFunction returns an ST_Intersects function for the given
+// arguments.
+func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.ScalarExpr {
+	const name = "st_intersects"
+	resultType := types.Bool
+	props, overload, ok := memo.FindFunction(&args, name)
+	if !ok {
+		panic(errors.AssertionFailedf("could not find overload for %s", name))
+	}
+	return c.f.ConstructFunction(
+		args,
+		&memo.FunctionPrivate{
+			Name:       name,
+			Typ:        resultType,
+			Properties: props,
+			Overload:   overload,
+		},
+	)
+}

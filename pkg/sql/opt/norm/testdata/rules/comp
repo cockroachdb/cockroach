@@ -2,6 +2,14 @@ exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, d DATE)
 ----
 
+exec-ddl
+CREATE TABLE geom_geog (
+  geom GEOMETRY,
+  geog GEOGRAPHY,
+  val FLOAT
+)
+----
+
 # --------------------------------------------------
 # CommuteVarInequality
 # --------------------------------------------------
@@ -719,3 +727,43 @@ project
  │    └── columns: ts:1
  └── projections
       └── ts:1 <= '2020-06-01 13:35:55' [as="?column?":5, outer=(1)]
+
+# --------------------------------------------------
+# FoldEqZeroSTDistance
+# --------------------------------------------------
+
+# Geography case.
+norm expect=FoldEqZeroSTDistance
+SELECT * FROM geom_geog WHERE st_distance(geom, 'POINT(0.0 0.0)') = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_intersects(geom:1, '010100000000000000000000000000000000000000') [outer=(1), immutable]
+
+# Geometry case.
+norm expect=FoldEqZeroSTDistance
+SELECT * FROM geom_geog WHERE st_distance(geog, 'POINT(0.0 0.0)') = 0
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_intersects(geog:2, '0101000020E610000000000000000000000000000000000000') [outer=(2), immutable]
+
+# No-op case because the constant is nonzero.
+norm expect-not=FoldEqZeroSTDistance
+SELECT * FROM geom_geog WHERE st_distance(geom, 'POINT(0.0 0.0)') = 1
+----
+select
+ ├── columns: geom:1 geog:2 val:3
+ ├── immutable
+ ├── scan geom_geog
+ │    └── columns: geom:1 geog:2 val:3
+ └── filters
+      └── st_distance(geom:1, '010100000000000000000000000000000000000000') = 1.0 [outer=(1), immutable]

@@ -137,6 +137,12 @@ func (c *CustomFuncs) IsConstJSON(expr opt.ScalarExpr) bool {
 	return false
 }
 
+// IsFloatDatum returns true if the given tree.Datum is a DFloat.
+func (c *CustomFuncs) IsFloatDatum(datum tree.Datum) bool {
+	_, ok := datum.(*tree.DFloat)
+	return ok
+}
+
 // ----------------------------------------------------------------------
 //
 // Column functions
@@ -1014,6 +1020,11 @@ func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 // second.
 func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
 	return first.Compare(c.f.evalCtx, second) == 1
+}
+
+// DatumsEqual returns true if the first datum compares as equal to the second.
+func (c *CustomFuncs) DatumsEqual(first, second tree.Datum) bool {
+	return first.Compare(c.f.evalCtx, second) == 0
 }
 
 // ----------------------------------------------------------------------
