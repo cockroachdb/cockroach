@@ -110,11 +110,23 @@ func TestTenantHTTP(t *testing.T) {
 		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
 	})
 	require.NoError(t, err)
-	resp, err := http.Get("http://" + httpAddr + "/_status/vars")
-	defer http.DefaultClient.CloseIdleConnections()
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.Contains(t, string(body), "sql_ddl_started_count_internal")
+	t.Run("prometheus", func(t *testing.T) {
+		resp, err := http.Get("http://" + httpAddr + "/_status/vars")
+		defer http.DefaultClient.CloseIdleConnections()
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "sql_ddl_started_count_internal")
+	})
+	t.Run("pprof", func(t *testing.T) {
+		resp, err := http.Get("http://" + httpAddr + "/debug/pprof/goroutine?debug=2")
+		defer http.DefaultClient.CloseIdleConnections()
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "goroutine")
+	})
+
 }
