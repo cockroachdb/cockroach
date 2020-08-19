@@ -4303,6 +4303,23 @@ SELECT ST_AsEWKT(ST_MakeLine(g::geometry)) FROM ( VALUES
 ----
 NULL
 
+query T
+SELECT ST_Extent(g::geometry) FROM ( VALUES
+  (NULL),
+  ('POINT(-10.5 10.5)'),
+  ('LINESTRING(0 0, 15 15)'),
+  ('POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10), (20 30, 35 35, 30 20, 20 30))'),
+  ('POINT EMPTY')
+) t(g)
+----
+BOX(-10.5 0,45 45)
+
+query T
+SELECT ST_Extent(g::geometry) FROM ( VALUES (NULL), ('POINT EMPTY') ) t(g)
+----
+NULL
+
+
 subtest set_point_test
 
 query T
