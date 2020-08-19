@@ -101,13 +101,13 @@ CANCEL QUERY 'aaa'::NAME
 
 user testuser
 
-query error only users with the admin role are allowed to CANCEL JOBS
+query error pq: user testuser does not have CONTROLJOB privilege
 CANCEL JOB 1
 
-query error only users with the admin role are allowed to PAUSE JOBS
+query error pq: user testuser does not have CONTROLJOB privilege
 PAUSE JOB 1
 
-query error only users with the admin role are allowed to RESUME JOBS
+query error pq: user testuser does not have CONTROLJOB privilege
 RESUME JOB 1
 
 user root
