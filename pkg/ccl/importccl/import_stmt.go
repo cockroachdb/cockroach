@@ -149,6 +149,10 @@ var mysqlDumpAllowedOptions = makeStringSet(importOptionSkipFKs)
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 var pgDumpAllowedOptions = makeStringSet(optMaxRowSize, importOptionSkipFKs)
 
+// DROP is required because the target table needs to be take offline during
+// IMPORT INTO.
+var importIntoRequiredPrivileges = []privilege.Kind{privilege.INSERT, privilege.DROP}
+
 // File formats supported for IMPORT INTO
 var allowedIntoFormats = map[string]struct{}{
 	"CSV":       {},
@@ -204,6 +208,22 @@ func importJobDescription(
 	return tree.AsStringWithFQNames(&stmt, ann), nil
 }
 
+func ensureRequiredPrivileges(
+	ctx context.Context,
+	requiredPrivileges []privilege.Kind,
+	p sql.PlanHookState,
+	desc *sqlbase.MutableTableDescriptor,
+) error {
+	for _, priv := range requiredPrivileges {
+		err := p.CheckPrivilege(ctx, desc, priv)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -243,10 +263,6 @@ func importPlanHook(
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
-		if err := p.RequireAdminRole(ctx, "IMPORT"); err != nil {
-			return err
-		}
-
 		if !p.ExtendedEvalContext().TxnImplicit {
 			return errors.Errorf("IMPORT cannot be used inside a transaction")
 		}
@@ -260,6 +276,23 @@ func importPlanHook(
 		if err != nil {
 			return err
 		}
+
+		// Certain ExternalStorage URIs require super-user access. Check all the
+		// URIs passed to the IMPORT command.
+		for _, file := range filenamePatterns {
+			hasExplicitAuth, uriScheme, err := cloudimpl.AccessIsWithExplicitAuth(file)
+			if err != nil {
+				return err
+			}
+			if !hasExplicitAuth {
+				err := p.RequireAdminRole(ctx,
+					fmt.Sprintf("IMPORT from the specified %s URI", uriScheme))
+				if err != nil {
+					return err
+				}
+			}
+		}
+
 		var files []string
 		if _, ok := opts[importOptionDisableGlobMatch]; ok {
 			files = filenamePatterns
@@ -595,8 +628,8 @@ func importPlanHook(
 				return err
 			}
 
-			// TODO(dt): checking *CREATE* on an *existing table* is weird.
-			if err := p.CheckPrivilege(ctx, found, privilege.CREATE); err != nil {
+			err = ensureRequiredPrivileges(ctx, importIntoRequiredPrivileges, p, found)
+			if err != nil {
 				return err
 			}
 
@@ -949,7 +982,7 @@ func prepareNewTableDescsForIngestion(
 		return nil, err
 	}
 
-	// tableDescs constains the same slice as newMutableTableDescriptors but
+	// tableDescs contains the same slice as newMutableTableDescriptors but
 	// as sqlbase.TableDescriptor.
 	tableDescs := make([]sqlbase.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
@@ -1318,7 +1351,6 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}
-
 		return nil
 	})
 

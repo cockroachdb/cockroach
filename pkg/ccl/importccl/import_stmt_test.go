@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1767,11 +1769,12 @@ func TestImportCSVStmt(t *testing.T) {
 
 	// Test basic role based access control. Users who have the admin role should
 	// be able to IMPORT.
-	t.Run("RBAC", func(t *testing.T) {
+	t.Run("RBAC-SuperUser", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE USER testuser`)
 		sqlDB.Exec(t, `GRANT admin TO testuser`)
 		pgURL, cleanupFunc := sqlutils.PGUrl(
-			t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser", url.User("testuser"),
+			t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+			url.User("testuser"),
 		)
 		defer cleanupFunc()
 		testuser, err := gosql.Open("postgres", pgURL.String())
@@ -1781,16 +1784,18 @@ func TestImportCSVStmt(t *testing.T) {
 		defer testuser.Close()
 
 		t.Run("IMPORT TABLE", func(t *testing.T) {
-			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_table_t (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_superuser (a INT8 PRIMARY KEY, 
+b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 				t.Fatal(err)
 			}
 		})
 
 		t.Run("IMPORT INTO", func(t *testing.T) {
-			if _, err := testuser.Exec("CREATE TABLE rbac_into_t (a INT8 PRIMARY KEY, b STRING)"); err != nil {
+			if _, err := testuser.Exec("CREATE TABLE rbac_into_superuser (a INT8 PRIMARY KEY, " +
+				"b STRING)"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_t (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+			if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_superuser (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1811,14 +1816,14 @@ func TestImportCSVStmt(t *testing.T) {
 
 		const (
 			query = `IMPORT TABLE t (
-			a SERIAL8,
-			b INT8 DEFAULT unique_rowid(),
-			c STRING DEFAULT 's',
-			d SERIAL8,
-			e INT8 DEFAULT unique_rowid(),
-			f STRING DEFAULT 's',
-			PRIMARY KEY (a, b, c)
-		) CSV DATA ($1)`
+				a SERIAL8,
+				b INT8 DEFAULT unique_rowid(),
+				c STRING DEFAULT 's',
+				d SERIAL8,
+				e INT8 DEFAULT unique_rowid(),
+				f STRING DEFAULT 's',
+				PRIMARY KEY (a, b, c)
+			) CSV DATA ($1)`
 			nullif = ` WITH nullif=''`
 		)
 
@@ -1889,7 +1894,7 @@ func TestImportCSVStmt(t *testing.T) {
 		sqlDB.Exec(t, `GRANT ALL ON DATABASE defaultdb TO foo`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`
-IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
+	IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 			testFiles.files[0]))
 
 		// Verify correct number of rows via COUNT.
@@ -1912,6 +1917,208 @@ IMPORT TABLE import_with_db_privs (a INT8 PRIMARY KEY, b STRING) CSV DATA (%s)`,
 		sqlDB.QueryRow(t, `SELECT count(*) FROM uds.sc.t`).Scan(&result)
 		require.Equal(t, rowsPerFile, result)
 	})
+}
+
+func TestImportObjectLevelRBAC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const nodes = 3
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		SQLMemoryPoolSize: 256 << 20,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	rootDB := sqlutils.MakeSQLRunner(conn)
+
+	rootDB.Exec(t, `CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		url.User("testuser"),
+	)
+	defer cleanupFunc()
+
+	startTestUser := func() *gosql.DB {
+		testuser, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return testuser
+	}
+
+	qualifiedTableName := "defaultdb.public.user_file_table_test"
+	filename := "path/to/file"
+	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, filename)
+
+	writeToUserfile := func(filename string) {
+		// Write to userfile storage now that testuser has CREATE privileges.
+		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
+		fileTableSystem1, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, "testuser", ie, tc.Server(0).DB())
+		require.NoError(t, err)
+		require.NoError(t, fileTableSystem1.WriteFile(ctx, filename, bytes.NewReader([]byte("1,aaa"))))
+	}
+
+	t.Run("import-RBAC", func(t *testing.T) {
+		userfileDest := dest + "/" + t.Name()
+		testuser := startTestUser()
+
+		// User has no privileges at this point. Check that an IMPORT requires
+		// CREATE privileges on the database.
+		_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY, 
+b STRING) CSV DATA ('%s')`, userfileDest))
+		require.True(t, testutils.IsError(err, "testuser does not have CREATE privilege on database"))
+
+		// Grant user CREATE privilege on the database.
+		rootDB.Exec(t, `GRANT create ON DATABASE defaultdb TO testuser`)
+		// Reopen testuser sql connection.
+		// TODO(adityamaru): The above GRANT does not reflect unless we restart
+		// the testuser SQL connection, understand why.
+		require.NoError(t, testuser.Close())
+
+		testuser = startTestUser()
+		defer testuser.Close()
+
+		// Write to userfile now that the user has CREATE privileges.
+		writeToUserfile(t.Name())
+
+		// Import should now have the required privileges to start the job.
+		_, err = testuser.Exec(fmt.Sprintf(`IMPORT TABLE rbac_import_priv (a INT8 PRIMARY KEY, 
+b STRING) CSV DATA ('%s')`, userfileDest))
+		require.NoError(t, err)
+	})
+
+	t.Run("import-into-RBAC", func(t *testing.T) {
+		// Create table to IMPORT INTO.
+		rootDB.Exec(t, `CREATE TABLE rbac_import_into_priv (a INT8 PRIMARY KEY, b STRING)`)
+		userFileDest := dest + "/" + t.Name()
+		testuser := startTestUser()
+
+		// User has no privileges at this point. Check that an IMPORT INTO requires
+		// INSERT and DROP privileges.
+		for _, privilege := range []string{"INSERT", "DROP"} {
+			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a, 
+b) CSV DATA ('%s')`, userFileDest))
+			require.True(t, testutils.IsError(err,
+				fmt.Sprintf("user testuser does not have %s privilege on relation rbac_import_into_priv",
+					privilege)))
+
+			rootDB.Exec(t, fmt.Sprintf(`GRANT %s ON TABLE rbac_import_into_priv TO testuser`, privilege))
+		}
+
+		// Grant user CREATE privilege on the database.
+		rootDB.Exec(t, `GRANT create ON DATABASE defaultdb TO testuser`)
+		// Reopen testuser sql connection.
+		// TODO(adityamaru): The above GRANT does not reflect unless we restart
+		// the testuser SQL connection, understand why.
+		require.NoError(t, testuser.Close())
+		testuser = startTestUser()
+		defer testuser.Close()
+
+		// Write to userfile now that the user has CREATE privileges.
+		writeToUserfile(t.Name())
+
+		// Import should now have the required privileges to start the job.
+		_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_import_into_priv (a,b) CSV DATA ('%s')`,
+			userFileDest))
+		require.NoError(t, err)
+	})
+}
+
+// TestURIRequiresAdminRole tests the IMPORT logic which guards certain
+// privileged ExternalStorage IO paths with an admin only check.
+func TestURIRequiresAdminRole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const nodes = 3
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		SQLMemoryPoolSize: 256 << 20,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	rootDB := sqlutils.MakeSQLRunner(conn)
+
+	rootDB.Exec(t, `CREATE USER testuser`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	require.NoError(t, err)
+	defer testuser.Close()
+
+	for _, tc := range []struct {
+		name          string
+		uri           string
+		requiresAdmin bool
+	}{
+		{
+			name:          "s3-implicit",
+			uri:           "s3://foo/bar?AUTH=implicit",
+			requiresAdmin: true,
+		},
+		{
+			name:          "s3-specified",
+			uri:           "s3://foo/bar?AUTH=specified",
+			requiresAdmin: false,
+		},
+		{
+			name:          "s3-custom",
+			uri:           "s3://foo/bar?AUTH=specified&AWS_ENDPOINT=baz",
+			requiresAdmin: true,
+		},
+		{
+			name:          "gs-implicit",
+			uri:           "gs://foo/bar?AUTH=implicit",
+			requiresAdmin: true,
+		},
+		{
+			name:          "gs-specified",
+			uri:           "gs://foo/bar?AUTH=specified",
+			requiresAdmin: false,
+		},
+		{
+			name:          "userfile",
+			uri:           "userfile:///foo",
+			requiresAdmin: false,
+		},
+		{
+			name:          "nodelocal",
+			uri:           "nodelocal://self/foo",
+			requiresAdmin: true,
+		},
+		{
+			name:          "http",
+			uri:           "http://foo/bar",
+			requiresAdmin: true,
+		},
+		{
+			name:          "https",
+			uri:           "https://foo/bar",
+			requiresAdmin: true,
+		},
+	} {
+		t.Run(tc.name+"-via-import", func(t *testing.T) {
+			_, err := testuser.Exec(fmt.Sprintf(`IMPORT TABLE foo (id INT) CSV DATA ('%s')`, tc.uri))
+			if tc.requiresAdmin {
+				require.True(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
+			} else {
+				require.False(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
+			}
+		})
+
+		t.Run(tc.name+"-direct", func(t *testing.T) {
+			requires, scheme, err := cloudimpl.AccessIsWithExplicitAuth(tc.uri)
+			require.NoError(t, err)
+			require.Equal(t, requires, !tc.requiresAdmin)
+
+			url, err := url.Parse(tc.uri)
+			require.NoError(t, err)
+			require.Equal(t, scheme, url.Scheme)
+		})
+	}
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
@@ -3906,6 +4113,144 @@ func TestImportControlJob(t *testing.T) {
 			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
 		)
 	})
+}
+
+// FakeResumer calls optional callbacks during the job lifecycle.
+type fakeResumer struct {
+	OnResume     func(context.Context, chan<- tree.Datums) error
+	FailOrCancel func(context.Context) error
+}
+
+var _ jobs.Resumer = fakeResumer{}
+
+func (d fakeResumer) Resume(
+	ctx context.Context, _ interface{}, resultsCh chan<- tree.Datums,
+) error {
+	if d.OnResume != nil {
+		if err := d.OnResume(ctx, resultsCh); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}) error {
+	if d.FailOrCancel != nil {
+		return d.FailOrCancel(ctx)
+	}
+	return nil
+}
+
+// TestImportControlJobRBAC tests that a root user can control any job, but
+// a non-admin user can only control jobs which are created by them.
+// TODO(adityamaru): Verifying the state of the job after the control command
+// has been issued would also be nice, but it makes the test flaky.
+func TestImportControlJobRBAC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	rootDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+
+	// Create non-root user.
+	rootDB.Exec(t, `CREATE USER testuser`)
+	rootDB.Exec(t, `ALTER ROLE testuser CONTROLJOB`)
+	pgURL, cleanupFunc := sqlutils.PGUrl(
+		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
+		url.User("testuser"),
+	)
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	done := make(chan struct{})
+	defer close(done)
+
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return fakeResumer{
+			OnResume: func(ctx context.Context, _ chan<- tree.Datums) error {
+				<-done
+				return nil
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				<-done
+				return nil
+			},
+		}
+	})
+
+	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.Job {
+		job, _, err := registry.CreateAndStartJob(ctx, nil, record)
+		require.NoError(t, err)
+		return job
+	}
+
+	defaultRecord := jobs.Record{
+		// Job does not accept an empty Details field, so arbitrarily provide
+		// ImportDetails.
+		Details:  jobspb.ImportDetails{},
+		Progress: jobspb.ImportProgress{},
+	}
+
+	for _, tc := range []struct {
+		name         string
+		controlQuery string
+	}{
+		{
+			"pause",
+			`PAUSE JOB $1`,
+		},
+		{
+			"cancel",
+			`CANCEL JOB $1`,
+		},
+		{
+			"resume",
+			`RESUME JOB $1`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Start import job as root.
+			rootJobRecord := defaultRecord
+			rootJobRecord.Username = "root"
+			rootJob := startLeasedJob(t, rootJobRecord)
+
+			// Test root can control root job.
+			rootDB.Exec(t, tc.controlQuery, *rootJob.ID())
+			require.NoError(t, err)
+
+			// Start import job as non-admin user.
+			nonAdminJobRecord := defaultRecord
+			nonAdminJobRecord.Username = "testuser"
+			userJob := startLeasedJob(t, nonAdminJobRecord)
+
+			// Test testuser can control testuser job.
+			_, err := testuser.Exec(tc.controlQuery, *userJob.ID())
+			require.NoError(t, err)
+
+			// Start second import job as root.
+			rootJob2 := startLeasedJob(t, rootJobRecord)
+
+			// Start second import job as non-admin user.
+			userJob2 := startLeasedJob(t, nonAdminJobRecord)
+
+			// Test root can control testuser job.
+			rootDB.Exec(t, tc.controlQuery, *userJob2.ID())
+			require.NoError(t, err)
+
+			// Test testuser CANNOT control root job.
+			_, err = testuser.Exec(tc.controlQuery, *rootJob2.ID())
+			require.True(t, testutils.IsError(err, "only admins can control jobs owned by other admins"))
+		})
+	}
 }
 
 // TestImportWorkerFailure tests that IMPORT can restart after the failure
