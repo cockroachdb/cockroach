@@ -171,7 +171,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -185,7 +185,7 @@ index join  ·                    ·                                        (a, 
  │          table                d@primary                                ·       ·
  │          key columns          a                                        ·       ·
  └── scan   ·                    ·                                        (a)     ·
-·           estimated row count  111 (missing stats)                      ·       ·
+·           estimated row count  110 (missing stats)                      ·       ·
 ·           table                d@foo_inv                                ·       ·
 ·           spans                /"a"/"b"/Arr/1-/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
@@ -199,7 +199,7 @@ index join  ·                    ·                                            
  │          table                d@primary                                        ·       ·
  │          key columns          a                                                ·       ·
  └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  111 (missing stats)                              ·       ·
+·           estimated row count  110 (missing stats)                              ·       ·
 ·           table                d@foo_inv                                        ·       ·
 ·           spans                /"a"/"b"/Arr/Arr/2-/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
 
@@ -213,7 +213,7 @@ index join  ·                    ·                             (a, b)  ·
  │          table                d@primary                     ·       ·
  │          key columns          a                             ·       ·
  └── scan   ·                    ·                             (a)     ·
-·           estimated row count  111 (missing stats)           ·       ·
+·           estimated row count  110 (missing stats)           ·       ·
 ·           table                d@foo_inv                     ·       ·
 ·           spans                /"a"/"b"/True-/"a"/"b"/False  ·       ·
 
@@ -227,7 +227,7 @@ index join  ·                    ·                        (a, b)  ·
  │          table                d@primary                ·       ·
  │          key columns          a                        ·       ·
  └── scan   ·                    ·                        (a)     ·
-·           estimated row count  111 (missing stats)      ·       ·
+·           estimated row count  110 (missing stats)      ·       ·
 ·           table                d@foo_inv                ·       ·
 ·           spans                /Arr/1-/Arr/1/PrefixEnd  ·       ·
 
@@ -241,7 +241,7 @@ index join  ·                    ·                                            
  │          table                d@primary                                        ·       ·
  │          key columns          a                                                ·       ·
  └── scan   ·                    ·                                                (a)     ·
-·           estimated row count  111 (missing stats)                              ·       ·
+·           estimated row count  110 (missing stats)                              ·       ·
 ·           table                d@foo_inv                                        ·       ·
 ·           spans                /Arr/"a"/"b"/Arr/1-/Arr/"a"/"b"/Arr/1/PrefixEnd  ·       ·
 
@@ -283,7 +283,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -297,7 +297,7 @@ index join  ·                    ·                                    (a, b)  
  │          table                d@primary                            ·       ·
  │          key columns          a                                    ·       ·
  └── scan   ·                    ·                                    (a)     ·
-·           estimated row count  111 (missing stats)                  ·       ·
+·           estimated row count  110 (missing stats)                  ·       ·
 ·           table                d@foo_inv                            ·       ·
 ·           spans                /"a"/"c"/"b"-/"a"/"c"/"b"/PrefixEnd  ·       ·
 
@@ -318,7 +318,7 @@ index join  ·                    ·                            (a, b)  ·
  │          table                d@primary                    ·       ·
  │          key columns          a                            ·       ·
  └── scan   ·                    ·                            (a)     ·
-·           estimated row count  111 (missing stats)          ·       ·
+·           estimated row count  110 (missing stats)          ·       ·
 ·           table                d@foo_inv                    ·       ·
 ·           spans                /"a"/"b"-/"a"/"b"/PrefixEnd  ·       ·
 
@@ -512,11 +512,11 @@ filter           ·                    ·                         (a, b)  ·
  │               estimated row count  12 (missing stats)        ·       ·
  │               filter               b @> '{"a": {}, "b": 2}'  ·       ·
  └── index join  ·                    ·                         (a, b)  ·
-      │          estimated row count  111 (missing stats)       ·       ·
+      │          estimated row count  110 (missing stats)       ·       ·
       │          table                d@primary                 ·       ·
       │          key columns          a                         ·       ·
       └── scan   ·                    ·                         (a)     ·
-·                estimated row count  111 (missing stats)       ·       ·
+·                estimated row count  110 (missing stats)       ·       ·
 ·                table                d@foo_inv                 ·       ·
 ·                spans                /"b"/2-/"b"/2/PrefixEnd   ·       ·
 
@@ -546,7 +546,7 @@ index join  ·                    ·                    (a, b)  ·
  │          table                e@primary            ·       ·
  │          key columns          a                    ·       ·
  └── scan   ·                    ·                    (a)     ·
-·           estimated row count  111 (missing stats)  ·       ·
+·           estimated row count  110 (missing stats)  ·       ·
 ·           table                e@e_b_idx            ·       ·
 ·           spans                /1-/2                ·       ·
 
