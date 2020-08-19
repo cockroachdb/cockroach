@@ -1,4 +1,3 @@
-# LogicTest: !3node-tenant(49582)
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, c));
 INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
@@ -578,78 +577,6 @@ SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=
 4  8
 5  10
 6  12
-
-# The following tests check that if the joiners can separate a row request
-# into separate families that it does, and generates spans for each family
-# instead of reading the entire row when it doesn't need to.
-
-statement ok
-CREATE TABLE family_split_1 (x INT, PRIMARY KEY (x))
-
-statement ok
-INSERT INTO family_split_1 VALUES (1)
-
-statement ok
-CREATE TABLE family_split_2 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
-
-statement ok
-INSERT INTO family_split_2 VALUES (1, 2, 3)
-
-statement ok
-SET tracing = on; SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
-
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/70/1/1/{0-1}, /Table/70/1/1/2/{1-2}'
-----
-Scan /Table/70/1/1/{0-1}, /Table/70/1/1/2/{1-2}
-
-statement ok
-CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
-
-statement ok
-INSERT INTO family_index_join VALUES (1, 2, 3, 4)
-
-statement ok
-SET tracing = on
-
-query II
-SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
-----
-2 4
-
-statement ok
-SET tracing = off
-
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/71/1/%'
-----
-Scan /Table/71/1/1/{0-1/2}, /Table/71/1/1/3/{1-2}
-
-# Test generating tighter spans on interleaved tables.
-statement ok
-CREATE TABLE family_interleave_1 (x INT, y INT, z INT, PRIMARY KEY (x), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z))
-
-statement ok
-CREATE TABLE family_interleave_2 (x INT, y INT, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT family_interleave_1 (x)
-
-statement ok
-INSERT INTO family_interleave_1 VALUES (1, 2, 3)
-
-statement ok
-INSERT INTO family_interleave_2 VALUES (1, 3)
-
-statement ok
-SET TRACING = on
-
-query II
-SELECT family_interleave_1.x, family_interleave_1.z FROM family_interleave_2 INNER LOOKUP JOIN family_interleave_1 ON family_interleave_1.x = family_interleave_2.x
-----
-1 3
-
-query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'Scan /Table/72/1/1/{0-1}, /Table/72/1/1/2/{1-2}'
-----
-Scan /Table/72/1/1/{0-1}, /Table/72/1/1/2/{1-2}
 
 # Regression test for #50964.
 statement ok
