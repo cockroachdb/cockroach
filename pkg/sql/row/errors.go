@@ -93,21 +93,18 @@ func NewUniquenessConstraintViolationError(
 	key roachpb.Key,
 	value *roachpb.Value,
 ) error {
-	index, datums, err := decodeRowInfo(ctx, tableDesc, key, value)
+	index, names, values, err := DecodeRowInfo(ctx, tableDesc, key, value, false)
 	if err != nil {
 		return pgerror.Newf(pgcode.UniqueViolation,
 			"duplicate key value: decoding err=%s", err)
 	}
 
-	datumStrs := make([]string, len(datums))
-	for i := range datums {
-		datumStrs[i] = datums[i].String()
-	}
 	return pgerror.Newf(pgcode.UniqueViolation,
 		"duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(datumStrs, ","),
-		index.Name)
+		strings.Join(names, ","),
+		strings.Join(values, ","),
+		index.Name,
+	)
 }
 
 // NewLockNotAvailableError creates an error that represents an inability to
@@ -122,61 +119,70 @@ func NewLockNotAvailableError(
 			"could not obtain lock on row in interleaved table")
 	}
 
-	index, datums, err := decodeRowInfo(ctx, tableDesc, key, nil)
+	index, colNames, values, err := DecodeRowInfo(ctx, tableDesc, key, nil, false)
 	if err != nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
 			"could not obtain lock on row: decoding err=%s", err)
 	}
 
-	datumStrs := make([]string, len(datums))
-	for i := range datums {
-		datumStrs[i] = datums[i].String()
-	}
 	return pgerror.Newf(pgcode.LockNotAvailable,
 		"could not obtain lock on row (%s)=(%s) in %s@%s",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(datumStrs, ","),
+		strings.Join(colNames, ","),
+		strings.Join(values, ","),
 		tableDesc.Name,
 		index.Name)
 }
 
-// decodeRowInfo takes a table descriptor, a key, and an optional value and
+// DecodeRowInfo takes a table descriptor, a key, and an optional value and
 // returns information about the corresponding SQL row. If successful, the index
-// and datums corresponding to the provided key are returned.
-func decodeRowInfo(
+// and corresponding column names and values to the provided KV are returned.
+func DecodeRowInfo(
 	ctx context.Context,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	key roachpb.Key,
 	value *roachpb.Value,
-) (*descpb.IndexDescriptor, tree.Datums, error) {
+	allColumns bool,
+) (_ *descpb.IndexDescriptor, columnNames []string, columnValues []string, _ error) {
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
 	// to decode the corresponding datums and never escapes this function.
 	codec := keys.SystemSQLCodec
 	key, _, err := keys.DecodeTenantPrefix(key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	index, err := tableDesc.FindIndexByID(indexID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	var rf Fetcher
 
+	colIDs := index.ColumnIDs
+	if allColumns {
+		if index.ID == tableDesc.PrimaryIndex.ID {
+			colIDs = make([]descpb.ColumnID, len(tableDesc.Columns))
+			for i := range tableDesc.Columns {
+				colIDs[i] = tableDesc.Columns[i].ID
+			}
+		} else {
+			colIDs, _ = index.FullColumnIDs()
+			colIDs = append(colIDs, index.StoreColumnIDs...)
+		}
+	}
 	var valNeededForCol util.FastIntSet
-	valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
+	valNeededForCol.AddRange(0, len(colIDs)-1)
 
-	colIdxMap := make(map[descpb.ColumnID]int, len(index.ColumnIDs))
-	cols := make([]descpb.ColumnDescriptor, len(index.ColumnIDs))
-	for i, colID := range index.ColumnIDs {
+	colIdxMap := make(map[descpb.ColumnID]int, len(colIDs))
+	cols := make([]descpb.ColumnDescriptor, len(colIDs))
+	for i, colID := range colIDs {
 		colIdxMap[colID] = i
 		col, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		cols[i] = *col
 	}
@@ -189,6 +195,7 @@ func decodeRowInfo(
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
+	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
 		codec,
 		false, /* reverse */
@@ -198,7 +205,7 @@ func decodeRowInfo(
 		&sqlbase.DatumAlloc{},
 		tableArgs,
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
 	if value != nil {
@@ -207,11 +214,21 @@ func decodeRowInfo(
 	// Use the Fetcher to decode the single kv pair above by passing in
 	// this singleKVFetcher implementation, which doesn't actually hit KV.
 	if err := rf.StartScanFrom(ctx, &f); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	datums, _, _, err := rf.NextRowDecoded(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return index, datums, nil
+
+	names := make([]string, len(cols))
+	values := make([]string, len(cols))
+	for i := range cols {
+		names[i] = cols[i].Name
+		if datums[i] == tree.DNull {
+			continue
+		}
+		values[i] = datums[i].String()
+	}
+	return index, names, values, nil
 }

@@ -38,6 +38,9 @@ func SprintKey(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
 }
 
+// DebugSprintKeyValueDecoders allows injecting alternative debug decoders.
+var DebugSprintKeyValueDecoders []func(kv storage.MVCCKeyValue) (string, error)
+
 // SprintKeyValue is like PrintKeyValue, but returns a string. If
 // printKey is true, prints the key and the value together; otherwise,
 // prints just the value.
@@ -46,7 +49,8 @@ func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 	if printKey {
 		sb.WriteString(SprintKey(kv.Key))
 	}
-	decoders := []func(kv storage.MVCCKeyValue) (string, error){
+
+	decoders := append(DebugSprintKeyValueDecoders,
 		tryRaftLogEntry,
 		tryRangeDescriptor,
 		tryMeta,
@@ -58,7 +62,8 @@ func SprintKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
 			return fmt.Sprintf("%q", kv.Value), nil
 		},
-	}
+	)
+
 	for _, decoder := range decoders {
 		out, err := decoder(kv)
 		if err != nil {
