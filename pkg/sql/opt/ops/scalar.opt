@@ -853,6 +853,11 @@ define STMakeLine {
 }
 
 [Scalar, Aggregate]
+define STExtent {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define XorAgg {
     Input ScalarExpr
 }
