@@ -184,21 +184,18 @@ SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 sort                                              ·                  ·
  │                                                order              +nspname,+relname
  └── render                                       ·                  ·
-      └── hash join                               ·                  ·
-           │                                      type               right outer
+      └── hash join (right outer)                 ·                  ·
            │                                      equality           (table_id) = (column44)
            ├── virtual table                      ·                  ·
            │                                      table              table_row_statistics@primary
            └── render                             ·                  ·
                 └── hash join                     ·                  ·
-                     │                            type               inner
                      │                            equality           (oid) = (relnamespace)
                      ├── filter                   ·                  ·
                      │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                      │    └── virtual table       ·                  ·
                      │                            table              pg_namespace@primary
-                     └── hash join                ·                  ·
-                          │                       type               left outer
+                     └── hash join (left outer)   ·                  ·
                           │                       equality           (oid) = (objoid)
                           │                       left cols are key  ·
                           ├── filter              ·                  ·
@@ -219,21 +216,18 @@ SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 sort                                              ·                  ·
  │                                                order              +nspname,+relname
  └── render                                       ·                  ·
-      └── hash join                               ·                  ·
-           │                                      type               right outer
+      └── hash join (right outer)                 ·                  ·
            │                                      equality           (table_id) = (column44)
            ├── virtual table                      ·                  ·
            │                                      table              table_row_statistics@primary
            └── render                             ·                  ·
                 └── hash join                     ·                  ·
-                     │                            type               inner
                      │                            equality           (oid) = (relnamespace)
                      ├── filter                   ·                  ·
                      │    │                       filter             nspname NOT IN ('crdb_internal', 'information_schema', 'pg_catalog', 'pg_extension')
                      │    └── virtual table       ·                  ·
                      │                            table              pg_namespace@primary
-                     └── hash join                ·                  ·
-                          │                       type               left outer
+                     └── hash join (left outer)   ·                  ·
                           │                       equality           (oid) = (objoid)
                           │                       left cols are key  ·
                           ├── filter              ·                  ·
@@ -312,13 +306,11 @@ EXPLAIN SHOW COLUMNS FROM foo
 ·                                       vectorized    false
 render                                  ·             ·
  └── group                              ·             ·
-      │                                 aggregate 0   array_agg(index_name)
       │                                 group by      column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
       │                                 ordered       +ordinal_position
       └── sort                          ·             ·
            │                            order         +ordinal_position
-           └── hash join                ·             ·
-                │                       type          left outer
+           └── hash join (left outer)   ·             ·
                 │                       equality      (column_name) = (column_name)
                 ├── filter              ·             ·
                 │    │                  filter        ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
@@ -361,7 +353,6 @@ sort                                      ·                      ·
  │                                        order                  +conname
  └── render                               ·                      ·
       └── hash join                       ·                      ·
-           │                              type                   inner
            │                              equality               (oid) = (relnamespace)
            ├── filter                     ·                      ·
            │    │                         filter                 nspname = 'public'
@@ -369,10 +360,8 @@ sort                                      ·                      ·
            │                              table                  pg_namespace@primary
            └── virtual table lookup join  ·                      ·
                 │                         table                  pg_constraint@pg_constraint_conrelid_idx
-                │                         type                   inner
                 │                         equality               (oid) = (conrelid)
                 │                         equality cols are key  ·
-                │                         parallel               ·
                 └── filter                ·                      ·
                      │                    filter                 relname = 'foo'
                      └── virtual table    ·                      ·
@@ -381,44 +370,37 @@ sort                                      ·                      ·
 query TTT
 EXPLAIN SHOW USERS
 ----
-·                                                   distribution       local
-·                                                   vectorized         true
-sort                                                ·                  ·
- │                                                  order              +username
- └── render                                         ·                  ·
-      └── group                                     ·                  ·
-           │                                        aggregate 0        array_agg(role)
-           │                                        aggregate 1        any_not_null(any_not_null)
-           │                                        aggregate 2        any_not_null(role)
-           │                                        group by           username
-           └── sort                                 ·                  ·
-                │                                   order              +role
-                └── hash join                       ·                  ·
-                     │                              type               left outer
-                     │                              equality           (username) = (member)
-                     │                              left cols are key  ·
-                     ├── group                      ·                  ·
-                     │    │                         aggregate 0        any_not_null(string_agg)
-                     │    │                         group by           username
-                     │    └── window                ·                  ·
-                     │         └── render           ·                  ·
-                     │              └── merge join  ·                  ·
-                     │                   │          type               left outer
-                     │                   │          equality           (username) = (username)
-                     │                   │          left cols are key  ·
-                     │                   │          mergeJoinOrder     +"(username=username)"
-                     │                   ├── scan   ·                  ·
-                     │                   │          missing stats      ·
-                     │                   │          table              users@primary
-                     │                   │          spans              FULL SCAN
-                     │                   └── scan   ·                  ·
-                     │                              missing stats      ·
-                     │                              table              role_options@primary
-                     │                              spans              FULL SCAN
-                     └── scan                       ·                  ·
-·                                                   missing stats      ·
-·                                                   table              role_members@role_members_role_idx
-·                                                   spans              FULL SCAN
+·                                                                distribution       local
+·                                                                vectorized         true
+sort                                                             ·                  ·
+ │                                                               order              +username
+ └── render                                                      ·                  ·
+      └── group                                                  ·                  ·
+           │                                                     group by           username
+           └── sort                                              ·                  ·
+                │                                                order              +role
+                └── hash join (left outer)                       ·                  ·
+                     │                                           equality           (username) = (member)
+                     │                                           left cols are key  ·
+                     ├── group                                   ·                  ·
+                     │    │                                      group by           username
+                     │    └── window                             ·                  ·
+                     │         └── render                        ·                  ·
+                     │              └── merge join (left outer)  ·                  ·
+                     │                   │                       equality           (username) = (username)
+                     │                   │                       left cols are key  ·
+                     │                   ├── scan                ·                  ·
+                     │                   │                       missing stats      ·
+                     │                   │                       table              users@primary
+                     │                   │                       spans              FULL SCAN
+                     │                   └── scan                ·                  ·
+                     │                                           missing stats      ·
+                     │                                           table              role_options@primary
+                     │                                           spans              FULL SCAN
+                     └── scan                                    ·                  ·
+·                                                                missing stats      ·
+·                                                                table              role_members@role_members_role_idx
+·                                                                spans              FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
@@ -499,7 +481,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
 ·     spans          [/1 - /1] [/3 - /3]
-·     parallel       ·
 
 statement ok
 CREATE TABLE t2 (x INT PRIMARY KEY)
@@ -511,10 +492,8 @@ EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ·            vectorized             true
 lookup join  ·                      ·
  │           table                  t2@primary
- │           type                   inner
  │           equality               (k) = (x)
  │           equality cols are key  ·
- │           parallel               ·
  └── scan    ·                      ·
 ·            missing stats          ·
 ·            table                  t@primary
@@ -1082,27 +1061,23 @@ sort
 query TTT colnames
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
-tree         field         description
-·            distribution  local
-·            vectorized    false
-group        ·             ·
- │           aggregate 0   string_agg(column1, column2)
- │           scalar        ·
- └── values  ·             ·
-·            size          2 columns, 2 rows
+tree            field         description
+·               distribution  local
+·               vectorized    false
+group (scalar)  ·             ·
+ └── values     ·             ·
+·               size          2 columns, 2 rows
 
 query TTT
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
-·          distribution   local
-·          vectorized     true
-group      ·              ·
- │         aggregate 0    corr(a, b)
- │         scalar         ·
- └── scan  ·              ·
-·          missing stats  ·
-·          table          tc@primary
-·          spans          FULL SCAN
+·               distribution   local
+·               vectorized     true
+group (scalar)  ·              ·
+ └── scan       ·              ·
+·               missing stats  ·
+·               table          tc@primary
+·               spans          FULL SCAN
 
 # Verify that subqueries are handled correctly, namely that we can have
 # subqueries outside of the EXPLAINed query.
@@ -1146,4 +1121,3 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t@primary
 ·     spans          [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40] … (4 more)
-·     parallel       ·

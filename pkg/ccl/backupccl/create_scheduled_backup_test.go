@@ -193,54 +193,54 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 	}{
 		{
 			name:  "full-cluster",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=neverappars' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' RECURRING '@hourly'",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=neverappars' WITH detached",
-					shownStmt:  "BACKUP INTO 'somewhere?AWS_SECRET_ACCESS_KEY=redacted' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=neverappears' WITH detached",
+					shownStmt:  "BACKUP INTO 'nodelocal://0/backup?AWS_SECRET_ACCESS_KEY=redacted' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster-with-name",
-			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'somewhere' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@hourly' FULL BACKUP ALWAYS",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP ALWAYS",
 			user:  freeUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:  "full-cluster",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .*: INCREMENTAL",
-					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
 				},
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     24 * time.Hour,
 					runsNow:    true,
 				},
@@ -248,17 +248,17 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:  "full-cluster-with-name",
-			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'somewhere' RECURRING '@hourly'",
+			query: "CREATE SCHEDULE 'my-backup' FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "my-backup: INCREMENTAL",
-					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
 				},
 				{
 					nameRe:     "my-backup",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     24 * time.Hour,
 					runsNow:    true,
 				},
@@ -266,48 +266,48 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		},
 		{
 			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@hourly' FULL BACKUP ALWAYS",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP ALWAYS",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'somewhere' WITH detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH detached",
 					period:     time.Hour,
 				},
 			},
 		},
 		{
 			name:   "enterprise-license-required-for-incremental",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@hourly' FULL BACKUP '@weekly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' RECURRING '@hourly' FULL BACKUP '@weekly'",
 			user:   freeUser,
 			errMsg: "use of BACKUP INTO LATEST requires an enterprise license",
 		},
 		{
 			name:   "enterprise-license-required-for-revision-history",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'somewhere' WITH revision_history RECURRING '@hourly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history RECURRING '@hourly'",
 			user:   freeUser,
-			errMsg: "use of revision_history requires an enterprise license",
+			errMsg: "use of BACKUP with revision_history requires an enterprise license",
 		},
 		{
 			name:   "enterprise-license-required-for-encryption",
-			query:  "CREATE SCHEDULE FOR BACKUP INTO 'somewhere'  WITH encryption_passphrase='secret' RECURRING '@hourly'",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup'  WITH encryption_passphrase='secret' RECURRING '@hourly'",
 			user:   freeUser,
-			errMsg: "use of encryption requires an enterprise license",
+			errMsg: "use of BACKUP with encryption requires an enterprise license",
 		},
 		{
 			name:      "full-cluster-with-name-arg",
-			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'somewhere' WITH revision_history, detached RECURRING '@hourly'`,
+			query:     `CREATE SCHEDULE $1 FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached RECURRING '@hourly'`,
 			queryArgs: []interface{}{"my_backup_name"},
 			user:      enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "my_backup_name: INCREMENTAL",
-					backupStmt: "BACKUP INTO LATEST IN 'somewhere' WITH revision_history, detached",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     time.Hour,
 				},
 				{
 					nameRe:     "my_backup_name",
-					backupStmt: "BACKUP INTO 'somewhere' WITH revision_history, detached",
+					backupStmt: "BACKUP INTO 'nodelocal://0/backup' WITH revision_history, detached",
 					period:     24 * time.Hour,
 					runsNow:    true,
 				},
@@ -317,13 +317,13 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "multiple-tables-with-encryption",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP TABLE db.*, other_db.foo INTO 'somewhere'
+		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup'
 		WITH encryption_passphrase='secret' RECURRING '@weekly'`,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP TABLE db.*, other_db.foo INTO 'somewhere' WITH encryption_passphrase='secret', detached",
-					shownStmt:  "BACKUP TABLE db.*, other_db.foo INTO 'somewhere' WITH encryption_passphrase='redacted', detached",
+					backupStmt: "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase='secret', detached",
+					shownStmt:  "BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://0/backup' WITH encryption_passphrase='redacted', detached",
 					period:     7 * 24 * time.Hour,
 				},
 			},
@@ -332,7 +332,8 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "partitioned-backup",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP DATABASE db1, db2 INTO ('somewhere', 'anywhere')
+		CREATE SCHEDULE FOR BACKUP DATABASE system 
+    INTO ('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default')
 		WITH revision_history
     RECURRING '1 2 * * *'
     FULL BACKUP ALWAYS
@@ -341,9 +342,11 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			queryArgs: []interface{}{th.env.Now().Add(time.Minute)},
 			expectedSchedules: []expectedSchedule{
 				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP DATABASE db1, db2 INTO ('somewhere', 'anywhere') WITH revision_history, detached",
-					period:     24 * time.Hour,
+					nameRe: "BACKUP .+",
+					backupStmt: "BACKUP DATABASE system INTO " +
+						"('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default') " +
+						"WITH revision_history, detached",
+					period: 24 * time.Hour,
 				},
 			},
 		},

@@ -1335,7 +1335,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
 ·     spans          [/10 - /10] [/20 - /20]
-·     parallel       ·
 
 query TTT
 EXPLAIN SELECT * FROM a WHERE a IN (10, 20)
@@ -1346,7 +1345,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
 ·     spans          [/10 - /10] [/20 - /20]
-·     parallel       ·
 
 # Verify that consolidated point spans are still parallelized.
 query TTT
@@ -1358,7 +1356,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
 ·     spans          [/10 - /11]
-·     parallel       ·
 
 query TTT
 EXPLAIN SELECT * FROM a WHERE a > 10 AND a < 20
@@ -1369,7 +1366,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          a@primary
 ·     spans          [/11 - /19]
-·     parallel       ·
 
 # This ticks all the boxes for parallelization apart from the fact that there
 # is no end key in the span.
@@ -1393,12 +1389,10 @@ EXPLAIN SELECT price FROM a WHERE item IN ('sock', 'ball')
 ·           vectorized     true
 index join  ·              ·
  │          table          a@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          a@item
 ·           spans          [/'ball' - /'ball'] [/'sock' - /'sock']
-·           parallel       ·
 
 # Range queries on non-int types are not parallel due to unbounded number of
 # results.
@@ -1409,7 +1403,6 @@ EXPLAIN SELECT item FROM a WHERE price > 5 AND price < 10 OR price > 20 AND pric
 ·           vectorized     true
 index join  ·              ·
  │          table          a@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          a@p
@@ -1424,7 +1417,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          b@primary
 ·     spans          [/10/10 - /10/10] [/20/20 - /20/20]
-·     parallel       ·
 
 # This one isn't parallelizable because it's not a point lookup - only part of
 # the primary key is specified.
@@ -1478,7 +1470,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_c_key
 ·     spans          [/10 - /10] [/20 - /20]
-·     parallel       ·
 
 query TTT
 EXPLAIN SELECT c FROM b WHERE c = 10 OR c < 2
@@ -1536,7 +1527,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          b@b_b_key
 ·     spans          [/10 - /10] [/20 - /20]
-·     parallel       ·
 
 statement ok
 ALTER TABLE a SPLIT AT VALUES(5)
@@ -1581,7 +1571,6 @@ limit                     ·              ·
       │                   order          +z
       └── project set     ·              ·
            └── hash join  ·              ·
-                │         type           inner
                 │         equality       (y) = (y)
                 ├── scan  ·              ·
                 │         missing stats  ·

@@ -273,31 +273,29 @@ distinct        ·                    ·                     (y, z, x)  +x
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
-·          distribution         local                 ·      ·
-·          vectorized           true                  ·      ·
-group      ·                    ·                     (max)  ·
- │         estimated row count  1 (missing stats)     ·      ·
- │         aggregate 0          max(x)                ·      ·
- │         scalar               ·                     ·      ·
- └── scan  ·                    ·                     (x)    ·
-·          estimated row count  1000 (missing stats)  ·      ·
-·          table                xyz@primary           ·      ·
-·          spans                FULL SCAN             ·      ·
+·               distribution         local                 ·      ·
+·               vectorized           true                  ·      ·
+group (scalar)  ·                    ·                     (max)  ·
+ │              estimated row count  1 (missing stats)     ·      ·
+ │              aggregate 0          max(x)                ·      ·
+ └── scan       ·                    ·                     (x)    ·
+·               estimated row count  1000 (missing stats)  ·      ·
+·               table                xyz@primary           ·      ·
+·               spans                FULL SCAN             ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
-·             distribution         local              ·      ·
-·             vectorized           true               ·      ·
-group         ·                    ·                  (max)  ·
- │            estimated row count  1 (missing stats)  ·      ·
- │            aggregate 0          any_not_null(a)    ·      ·
- │            scalar               ·                  ·      ·
- └── revscan  ·                    ·                  (a)    ·
-·             estimated row count  1 (missing stats)  ·      ·
-·             table                abc@primary        ·      ·
-·             spans                LIMITED SCAN       ·      ·
-·             limit                1                  ·      ·
+·               distribution         local              ·      ·
+·               vectorized           true               ·      ·
+group (scalar)  ·                    ·                  (max)  ·
+ │              estimated row count  1 (missing stats)  ·      ·
+ │              aggregate 0          any_not_null(a)    ·      ·
+ └── revscan    ·                    ·                  (a)    ·
+·               estimated row count  1 (missing stats)  ·      ·
+·               table                abc@primary        ·      ·
+·               spans                LIMITED SCAN       ·      ·
+·               limit                1                  ·      ·
 
 #################
 # With GROUP BY #
@@ -500,10 +498,9 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHE
 ----
 ·                              distribution         local                 ·        ·
 ·                              vectorized           true                  ·        ·
-group                          ·                    ·                     (count)  ·
+group (scalar)                 ·                    ·                     (count)  ·
  │                             estimated row count  1 (missing stats)     ·        ·
  │                             aggregate 0          count_rows()          ·        ·
- │                             scalar               ·                     ·        ·
  └── project                   ·                    ·                     ()       ·
       └── limit                ·                    ·                     (x, y)   ·
            │                   estimated row count  1 (missing stats)     ·        ·

@@ -539,7 +539,9 @@ use_stmt ::=
 	'USE' var_value
 
 show_backup_stmt ::=
-	'SHOW' 'BACKUP' string_or_placeholder opt_with_options
+	'SHOW' 'BACKUPS' 'IN' string_or_placeholder
+	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder opt_with_options
 	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
 
 show_columns_stmt ::=
@@ -714,6 +716,7 @@ unreserved_keyword ::=
 	| 'AUTOMATIC'
 	| 'AUTHORIZATION'
 	| 'BACKUP'
+	| 'BACKUPS'
 	| 'BEFORE'
 	| 'BEGIN'
 	| 'BINARY'

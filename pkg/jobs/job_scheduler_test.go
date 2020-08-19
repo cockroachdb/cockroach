@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +42,9 @@ import (
 func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 52959)
+
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -375,9 +379,6 @@ func TestJobSchedulerDaemonProcessesJobs(t *testing.T) {
 		expectedRun{scheduleIDs[4], nil},
 	)
 	stopper.Stop(ctx)
-
-	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
-	require.EqualValues(t, numJobs, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
@@ -422,9 +423,6 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 		return nil
 	})
 	stopper.Stop(ctx)
-
-	require.EqualValues(t, numJobs, daemon.metrics.ReadyToRun.Value())
-	require.EqualValues(t, jobsPerIteration, daemon.metrics.NumStarted.Value())
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {

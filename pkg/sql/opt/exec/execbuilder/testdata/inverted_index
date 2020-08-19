@@ -365,71 +365,62 @@ filter     ·              ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distribution           local                               ·       ·
-·                 vectorized             true                                ·       ·
-lookup join       ·                      ·                                   (a, b)  ·
- │                estimated row count    12 (missing stats)                  ·       ·
- │                table                  d@primary                           ·       ·
- │                type                   inner                               ·       ·
- │                equality               (a) = (a)                           ·       ·
- │                equality cols are key  ·                                   ·       ·
- │                parallel               ·                                   ·       ·
- │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag join  ·                      ·                                   (a)     ·
-·                 estimated row count    12 (missing stats)                  ·       ·
-·                 type                   inner                               ·       ·
-·                 left table             d@foo_inv                           ·       ·
-·                 left columns           (a)                                 ·       ·
-·                 left fixed values      1 column                            ·       ·
-·                 right table            d@foo_inv                           ·       ·
-·                 right columns          ()                                  ·       ·
-·                 right fixed values     1 column                            ·       ·
+·                    distribution           local                               ·       ·
+·                    vectorized             true                                ·       ·
+lookup join (inner)  ·                      ·                                   (a, b)  ·
+ │                   estimated row count    12 (missing stats)                  ·       ·
+ │                   table                  d@primary                           ·       ·
+ │                   equality               (a) = (a)                           ·       ·
+ │                   equality cols are key  ·                                   ·       ·
+ │                   pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ └── zigzag join     ·                      ·                                   (a)     ·
+·                    estimated row count    12 (missing stats)                  ·       ·
+·                    left table             d@foo_inv                           ·       ·
+·                    left columns           (a)                                 ·       ·
+·                    left fixed values      1 column                            ·       ·
+·                    right table            d@foo_inv                           ·       ·
+·                    right columns          ()                                  ·       ·
+·                    right fixed values     1 column                            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                 distribution           local                                         ·       ·
-·                 vectorized             true                                          ·       ·
-lookup join       ·                      ·                                             (a, b)  ·
- │                estimated row count    1 (missing stats)                             ·       ·
- │                table                  d@primary                                     ·       ·
- │                type                   inner                                         ·       ·
- │                equality               (a) = (a)                                     ·       ·
- │                equality cols are key  ·                                             ·       ·
- │                parallel               ·                                             ·       ·
- │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag join  ·                      ·                                             (a)     ·
-·                 estimated row count    12 (missing stats)                            ·       ·
-·                 type                   inner                                         ·       ·
-·                 left table             d@foo_inv                                     ·       ·
-·                 left columns           (a)                                           ·       ·
-·                 left fixed values      1 column                                      ·       ·
-·                 right table            d@foo_inv                                     ·       ·
-·                 right columns          ()                                            ·       ·
-·                 right fixed values     1 column                                      ·       ·
+·                    distribution           local                                         ·       ·
+·                    vectorized             true                                          ·       ·
+lookup join (inner)  ·                      ·                                             (a, b)  ·
+ │                   estimated row count    1 (missing stats)                             ·       ·
+ │                   table                  d@primary                                     ·       ·
+ │                   equality               (a) = (a)                                     ·       ·
+ │                   equality cols are key  ·                                             ·       ·
+ │                   pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag join     ·                      ·                                             (a)     ·
+·                    estimated row count    12 (missing stats)                            ·       ·
+·                    left table             d@foo_inv                                     ·       ·
+·                    left columns           (a)                                           ·       ·
+·                    left fixed values      1 column                                      ·       ·
+·                    right table            d@foo_inv                                     ·       ·
+·                    right columns          ()                                            ·       ·
+·                    right fixed values     1 column                                      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                 distribution           local                              ·       ·
-·                 vectorized             true                               ·       ·
-lookup join       ·                      ·                                  (a, b)  ·
- │                estimated row count    12 (missing stats)                 ·       ·
- │                table                  d@primary                          ·       ·
- │                type                   inner                              ·       ·
- │                equality               (a) = (a)                          ·       ·
- │                equality cols are key  ·                                  ·       ·
- │                parallel               ·                                  ·       ·
- │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag join  ·                      ·                                  (a)     ·
-·                 estimated row count    12 (missing stats)                 ·       ·
-·                 type                   inner                              ·       ·
-·                 left table             d@foo_inv                          ·       ·
-·                 left columns           (a)                                ·       ·
-·                 left fixed values      1 column                           ·       ·
-·                 right table            d@foo_inv                          ·       ·
-·                 right columns          ()                                 ·       ·
-·                 right fixed values     1 column                           ·       ·
+·                    distribution           local                              ·       ·
+·                    vectorized             true                               ·       ·
+lookup join (inner)  ·                      ·                                  (a, b)  ·
+ │                   estimated row count    12 (missing stats)                 ·       ·
+ │                   table                  d@primary                          ·       ·
+ │                   equality               (a) = (a)                          ·       ·
+ │                   equality cols are key  ·                                  ·       ·
+ │                   pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag join     ·                      ·                                  (a)     ·
+·                    estimated row count    12 (missing stats)                 ·       ·
+·                    left table             d@foo_inv                          ·       ·
+·                    left columns           (a)                                ·       ·
+·                    left fixed values      1 column                           ·       ·
+·                    right table            d@foo_inv                          ·       ·
+·                    right columns          ()                                 ·       ·
+·                    right fixed values     1 column                           ·       ·
 
 statement ok
 SET enable_zigzag_join = true
@@ -437,71 +428,62 @@ SET enable_zigzag_join = true
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-·                 distribution           local                               ·       ·
-·                 vectorized             true                                ·       ·
-lookup join       ·                      ·                                   (a, b)  ·
- │                estimated row count    12 (missing stats)                  ·       ·
- │                table                  d@primary                           ·       ·
- │                type                   inner                               ·       ·
- │                equality               (a) = (a)                           ·       ·
- │                equality cols are key  ·                                   ·       ·
- │                parallel               ·                                   ·       ·
- │                pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
- └── zigzag join  ·                      ·                                   (a)     ·
-·                 estimated row count    12 (missing stats)                  ·       ·
-·                 type                   inner                               ·       ·
-·                 left table             d@foo_inv                           ·       ·
-·                 left columns           (a)                                 ·       ·
-·                 left fixed values      1 column                            ·       ·
-·                 right table            d@foo_inv                           ·       ·
-·                 right columns          ()                                  ·       ·
-·                 right fixed values     1 column                            ·       ·
+·                    distribution           local                               ·       ·
+·                    vectorized             true                                ·       ·
+lookup join (inner)  ·                      ·                                   (a, b)  ·
+ │                   estimated row count    12 (missing stats)                  ·       ·
+ │                   table                  d@primary                           ·       ·
+ │                   equality               (a) = (a)                           ·       ·
+ │                   equality cols are key  ·                                   ·       ·
+ │                   pred                   b @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ └── zigzag join     ·                      ·                                   (a)     ·
+·                    estimated row count    12 (missing stats)                  ·       ·
+·                    left table             d@foo_inv                           ·       ·
+·                    left columns           (a)                                 ·       ·
+·                    left fixed values      1 column                            ·       ·
+·                    right table            d@foo_inv                           ·       ·
+·                    right columns          ()                                  ·       ·
+·                    right fixed values     1 column                            ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-·                 distribution           local                                         ·       ·
-·                 vectorized             true                                          ·       ·
-lookup join       ·                      ·                                             (a, b)  ·
- │                estimated row count    1 (missing stats)                             ·       ·
- │                table                  d@primary                                     ·       ·
- │                type                   inner                                         ·       ·
- │                equality               (a) = (a)                                     ·       ·
- │                equality cols are key  ·                                             ·       ·
- │                parallel               ·                                             ·       ·
- │                pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── zigzag join  ·                      ·                                             (a)     ·
-·                 estimated row count    12 (missing stats)                            ·       ·
-·                 type                   inner                                         ·       ·
-·                 left table             d@foo_inv                                     ·       ·
-·                 left columns           (a)                                           ·       ·
-·                 left fixed values      1 column                                      ·       ·
-·                 right table            d@foo_inv                                     ·       ·
-·                 right columns          ()                                            ·       ·
-·                 right fixed values     1 column                                      ·       ·
+·                    distribution           local                                         ·       ·
+·                    vectorized             true                                          ·       ·
+lookup join (inner)  ·                      ·                                             (a, b)  ·
+ │                   estimated row count    1 (missing stats)                             ·       ·
+ │                   table                  d@primary                                     ·       ·
+ │                   equality               (a) = (a)                                     ·       ·
+ │                   equality cols are key  ·                                             ·       ·
+ │                   pred                   b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag join     ·                      ·                                             (a)     ·
+·                    estimated row count    12 (missing stats)                            ·       ·
+·                    left table             d@foo_inv                                     ·       ·
+·                    left columns           (a)                                           ·       ·
+·                    left fixed values      1 column                                      ·       ·
+·                    right table            d@foo_inv                                     ·       ·
+·                    right columns          ()                                            ·       ·
+·                    right fixed values     1 column                                      ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-·                 distribution           local                              ·       ·
-·                 vectorized             true                               ·       ·
-lookup join       ·                      ·                                  (a, b)  ·
- │                estimated row count    12 (missing stats)                 ·       ·
- │                table                  d@primary                          ·       ·
- │                type                   inner                              ·       ·
- │                equality               (a) = (a)                          ·       ·
- │                equality cols are key  ·                                  ·       ·
- │                parallel               ·                                  ·       ·
- │                pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
- └── zigzag join  ·                      ·                                  (a)     ·
-·                 estimated row count    12 (missing stats)                 ·       ·
-·                 type                   inner                              ·       ·
-·                 left table             d@foo_inv                          ·       ·
-·                 left columns           (a)                                ·       ·
-·                 left fixed values      1 column                           ·       ·
-·                 right table            d@foo_inv                          ·       ·
-·                 right columns          ()                                 ·       ·
-·                 right fixed values     1 column                           ·       ·
+·                    distribution           local                              ·       ·
+·                    vectorized             true                               ·       ·
+lookup join (inner)  ·                      ·                                  (a, b)  ·
+ │                   estimated row count    12 (missing stats)                 ·       ·
+ │                   table                  d@primary                          ·       ·
+ │                   equality               (a) = (a)                          ·       ·
+ │                   equality cols are key  ·                                  ·       ·
+ │                   pred                   b @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag join     ·                      ·                                  (a)     ·
+·                    estimated row count    12 (missing stats)                 ·       ·
+·                    left table             d@foo_inv                          ·       ·
+·                    left columns           (a)                                ·       ·
+·                    left fixed values      1 column                           ·       ·
+·                    right table            d@foo_inv                          ·       ·
+·                    right columns          ()                                 ·       ·
+·                    right fixed values     1 column                           ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
@@ -598,48 +580,42 @@ filter     ·                    ·                     (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1,2]
 ----
-·                 distribution           local                ·       ·
-·                 vectorized             true                 ·       ·
-lookup join       ·                      ·                    (a, b)  ·
- │                estimated row count    333 (missing stats)  ·       ·
- │                table                  e@primary            ·       ·
- │                type                   inner                ·       ·
- │                equality               (a) = (a)            ·       ·
- │                equality cols are key  ·                    ·       ·
- │                parallel               ·                    ·       ·
- │                pred                   b @> ARRAY[1,2]      ·       ·
- └── zigzag join  ·                      ·                    (a)     ·
-·                 estimated row count    12 (missing stats)   ·       ·
-·                 type                   inner                ·       ·
-·                 left table             e@e_b_idx            ·       ·
-·                 left columns           (a)                  ·       ·
-·                 left fixed values      1 column             ·       ·
-·                 right table            e@e_b_idx            ·       ·
-·                 right columns          ()                   ·       ·
-·                 right fixed values     1 column             ·       ·
+·                    distribution           local                ·       ·
+·                    vectorized             true                 ·       ·
+lookup join (inner)  ·                      ·                    (a, b)  ·
+ │                   estimated row count    333 (missing stats)  ·       ·
+ │                   table                  e@primary            ·       ·
+ │                   equality               (a) = (a)            ·       ·
+ │                   equality cols are key  ·                    ·       ·
+ │                   pred                   b @> ARRAY[1,2]      ·       ·
+ └── zigzag join     ·                      ·                    (a)     ·
+·                    estimated row count    12 (missing stats)   ·       ·
+·                    left table             e@e_b_idx            ·       ·
+·                    left columns           (a)                  ·       ·
+·                    left fixed values      1 column             ·       ·
+·                    right table            e@e_b_idx            ·       ·
+·                    right columns          ()                   ·       ·
+·                    right fixed values     1 column             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from e where b @> ARRAY[1] AND b @> ARRAY[2]
 ----
-·                 distribution           local                                ·       ·
-·                 vectorized             true                                 ·       ·
-lookup join       ·                      ·                                    (a, b)  ·
- │                estimated row count    111 (missing stats)                  ·       ·
- │                table                  e@primary                            ·       ·
- │                type                   inner                                ·       ·
- │                equality               (a) = (a)                            ·       ·
- │                equality cols are key  ·                                    ·       ·
- │                parallel               ·                                    ·       ·
- │                pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
- └── zigzag join  ·                      ·                                    (a)     ·
-·                 estimated row count    12 (missing stats)                   ·       ·
-·                 type                   inner                                ·       ·
-·                 left table             e@e_b_idx                            ·       ·
-·                 left columns           (a)                                  ·       ·
-·                 left fixed values      1 column                             ·       ·
-·                 right table            e@e_b_idx                            ·       ·
-·                 right columns          ()                                   ·       ·
-·                 right fixed values     1 column                             ·       ·
+·                    distribution           local                                ·       ·
+·                    vectorized             true                                 ·       ·
+lookup join (inner)  ·                      ·                                    (a, b)  ·
+ │                   estimated row count    111 (missing stats)                  ·       ·
+ │                   table                  e@primary                            ·       ·
+ │                   equality               (a) = (a)                            ·       ·
+ │                   equality cols are key  ·                                    ·       ·
+ │                   pred                   (b @> ARRAY[1]) AND (b @> ARRAY[2])  ·       ·
+ └── zigzag join     ·                      ·                                    (a)     ·
+·                    estimated row count    12 (missing stats)                   ·       ·
+·                    left table             e@e_b_idx                            ·       ·
+·                    left columns           (a)                                  ·       ·
+·                    left fixed values      1 column                             ·       ·
+·                    right table            e@e_b_idx                            ·       ·
+·                    right columns          ()                                   ·       ·
+·                    right fixed values     1 column                             ·       ·
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
@@ -732,21 +708,17 @@ ON ST_Intersects(geo_table2.geom, geo_table.geom)
 ----
 ·                        distribution           local                                   ·                                ·
 ·                        vectorized             true                                    ·                                ·
-lookup join              ·                      ·                                       (k, geom, k, geom)               ·
+lookup join (inner)      ·                      ·                                       (k, geom, k, geom)               ·
  │                       estimated row count    10000 (missing stats)                   ·                                ·
  │                       table                  geo_table@primary                       ·                                ·
- │                       type                   inner                                   ·                                ·
  │                       equality               (k) = (k)                               ·                                ·
  │                       equality cols are key  ·                                       ·                                ·
- │                       parallel               ·                                       ·                                ·
  │                       pred                   st_intersects(geom, geom)               ·                                ·
  └── project             ·                      ·                                       (k, geom, k)                     ·
       │                  estimated row count    10000 (missing stats)                   ·                                ·
       └── inverted join  ·                      ·                                       (k, geom, k, geom_inverted_key)  ·
            │             table                  geo_table@geom_index                    ·                                ·
-           │             type                   inner                                   ·                                ·
-           │             ·                      st_intersects(geom, geom_inverted_key)  ·                                ·
-           │             parallel               ·                                       ·                                ·
+           │             inverted expr          st_intersects(geom, geom_inverted_key)  ·                                ·
            └── scan      ·                      ·                                       (k, geom)                        ·
 ·                        estimated row count    1000 (missing stats)                    ·                                ·
 ·                        table                  geo_table2@primary                      ·                                ·

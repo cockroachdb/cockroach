@@ -1450,6 +1450,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_point"></a><code>st_point(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
+<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a Geometry point from a GeoHash string with max precision.</p>
+</span></td></tr>
+<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a Geometry point from a GeoHash string with supplied precision.</p>
+</span></td></tr>
 <tr><td><a name="st_pointfromtext"></a><code>st_pointfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Point, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
 <tr><td><a name="st_pointfromtext"></a><code>st_pointfromtext(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation. If the shape underneath is not Point, NULL is returned.</p>

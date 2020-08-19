@@ -21,7 +21,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@primary
 ·     spans          [/20 - /30]
-·     parallel       ·
 
 # No hint, reverse scan.
 query TTT
@@ -33,7 +32,6 @@ revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
 ·        spans          [/20 - /30]
-·        parallel       ·
 
 # Force primary
 query TTT
@@ -45,7 +43,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          abcd@primary
 ·     spans          [/20 - /30]
-·     parallel       ·
 
 # Force primary, reverse scan.
 query TTT
@@ -57,7 +54,6 @@ revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
 ·        spans          [/20 - /30]
-·        parallel       ·
 
 # Force primary, allow reverse scan.
 query TTT
@@ -69,7 +65,6 @@ revscan  ·              ·
 ·        missing stats  ·
 ·        table          abcd@primary
 ·        spans          [/20 - /30]
-·        parallel       ·
 
 # Force primary, forward scan.
 query TTT
@@ -83,7 +78,6 @@ sort       ·              ·
 ·          missing stats  ·
 ·          table          abcd@primary
 ·          spans          [/20 - /30]
-·          parallel       ·
 
 # Force index b
 query TTT
@@ -95,7 +89,6 @@ filter           ·              ·
  │               filter         (a >= 20) AND (a <= 30)
  └── index join  ·              ·
       │          table          abcd@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          abcd@b
@@ -111,7 +104,6 @@ filter             ·              ·
  │                 filter         (a >= 20) AND (a <= 30)
  └── index join    ·              ·
       │            table          abcd@primary
-      │            key columns    a
       └── revscan  ·              ·
 ·                  missing stats  ·
 ·                  table          abcd@b
@@ -125,7 +117,6 @@ EXPLAIN SELECT * FROM abcd@b ORDER BY b DESC LIMIT 5
 ·             vectorized     true
 index join    ·              ·
  │            table          abcd@primary
- │            key columns    a
  └── revscan  ·              ·
 ·             missing stats  ·
 ·             table          abcd@b
@@ -140,7 +131,6 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,DESC} ORDER BY b DESC LIMIT 5
 ·             vectorized     true
 index join    ·              ·
  │            table          abcd@primary
- │            key columns    a
  └── revscan  ·              ·
 ·             missing stats  ·
 ·             table          abcd@b
@@ -156,7 +146,6 @@ EXPLAIN SELECT * FROM abcd@{FORCE_INDEX=b,ASC} ORDER BY b DESC LIMIT 5
 ·                    vectorized     true
 index join           ·              ·
  │                   table          abcd@primary
- │                   key columns    a
  └── limit           ·              ·
       │              count          5
       └── sort       ·              ·
@@ -176,7 +165,6 @@ filter           ·              ·
  │               filter         (a >= 20) AND (a <= 30)
  └── index join  ·              ·
       │          table          abcd@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          abcd@cd
@@ -218,7 +206,6 @@ filter           ·              ·
  │               filter         (c >= 20) AND (c <= 30)
  └── index join  ·              ·
       │          table          abcd@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          abcd@b
@@ -258,7 +245,6 @@ filter           ·              ·
  │               filter         (c >= 20) AND (c < 40)
  └── index join  ·              ·
       │          table          abcd@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          abcd@b
@@ -273,7 +259,6 @@ filter           ·              ·
  │               filter         (a >= 20) AND (a <= 30)
  └── index join  ·              ·
       │          table          abcd@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          abcd@b
@@ -286,7 +271,6 @@ EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
 ·           vectorized     true
 index join  ·              ·
  │          table          abcd@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          abcd@cd

@@ -33,7 +33,6 @@ filter                     ·                ·
  │                         filter           st_intersects('010100000000000000000008400000000000000840', geom)
  └── index join            ·                ·
       │                    table            geo_table2@primary
-      │                    key columns      k, k_plus_one
       └── inverted filter  ·                ·
            │               inverted column  geom_inverted_key
            │               num spans        31
@@ -51,7 +50,6 @@ filter                     ·                ·
  │                         filter           st_dfullywithin('010100000000000000000008400000000000000840', geom, 1.0)
  └── index join            ·                ·
       │                    table            geo_table2@primary
-      │                    key columns      k, k_plus_one
       └── inverted filter  ·                ·
            │               inverted column  geom_inverted_key
            │               num spans        20

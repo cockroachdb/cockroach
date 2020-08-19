@@ -10,6 +10,8 @@ package backupccl
 
 import (
 	"context"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -51,9 +53,21 @@ func showBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	if backup.Path == nil && backup.InCollection != nil {
+		return showBackupsInCollectionPlanHook(ctx, backup, p)
+	}
+
 	toFn, err := p.TypeAsString(ctx, backup.Path, "SHOW BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
+	}
+
+	var inColFn func() (string, error)
+	if backup.InCollection != nil {
+		inColFn, err = p.TypeAsString(ctx, backup.InCollection, "SHOW BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
 	}
 
 	expected := map[string]sql.KVStringOptValidate{
@@ -88,6 +102,19 @@ func showBackupPlanHook(
 		str, err := toFn()
 		if err != nil {
 			return err
+		}
+
+		if inColFn != nil {
+			collection, err := inColFn()
+			if err != nil {
+				return err
+			}
+			parsed, err := url.Parse(collection)
+			if err != nil {
+				return err
+			}
+			parsed.Path = path.Join(parsed.Path, str)
+			str = parsed.String()
 		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, str, p.User())
@@ -386,6 +413,42 @@ var backupShowerFiles = backupShower{
 		}
 		return rows, nil
 	},
+}
+
+// showBackupPlanHook implements PlanHookFn.
+func showBackupsInCollectionPlanHook(
+	ctx context.Context, backup *tree.ShowBackup, p sql.PlanHookState,
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+
+	collectionFn, err := p.TypeAsString(ctx, backup.InCollection, "SHOW BACKUPS")
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
+		defer tracing.FinishSpan(span)
+
+		collection, err := collectionFn()
+		if err != nil {
+			return err
+		}
+
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, collection, p.User())
+		if err != nil {
+			return errors.Wrapf(err, "connect to external storage")
+		}
+		defer store.Close()
+		res, err := store.ListFiles(ctx, "/*/*/BACKUP")
+		if err != nil {
+			return err
+		}
+		for _, i := range res {
+			resultsCh <- tree.Datums{tree.NewDString(strings.TrimSuffix(i, "/BACKUP"))}
+		}
+		return nil
+	}
+	return fn, sqlbase.ResultColumns{{Name: "path", Typ: types.String}}, nil, false, nil
 }
 
 func init() {

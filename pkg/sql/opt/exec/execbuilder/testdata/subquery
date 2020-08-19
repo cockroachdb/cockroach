@@ -74,10 +74,9 @@ root                              ·                    ·                      
       │                           id                   @S2                                                                          ·               ·
       │                           original sql         (SELECT max(a) FROM abc WHERE EXISTS (SELECT * FROM abc WHERE c = (a + 3)))  ·               ·
       │                           exec mode            one row                                                                      ·               ·
-      └── group                   ·                    ·                                                                            (any_not_null)  ·
+      └── group (scalar)          ·                    ·                                                                            (any_not_null)  ·
            │                      estimated row count  1 (missing stats)                                                            ·               ·
            │                      aggregate 0          any_not_null(a)                                                              ·               ·
-           │                      scalar               ·                                                                            ·               ·
            └── limit              ·                    ·                                                                            (a)             ·
                 │                 estimated row count  1 (missing stats)                                                            ·               ·
                 │                 count                1                                                                            ·               ·
@@ -93,26 +92,25 @@ root                              ·                    ·                      
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE b < 0)
 ----
-·               distribution         local                 ·       ·
-·               vectorized           true                  ·       ·
-merge join      ·                    ·                     (a)     ·
- │              estimated row count  333 (missing stats)   ·       ·
- │              type                 semi                  ·       ·
- │              equality             (a) = (a)             ·       ·
- │              left cols are key    ·                     ·       ·
- │              right cols are key   ·                     ·       ·
- │              mergeJoinOrder       +"(a=a)"              ·       ·
- ├── scan       ·                    ·                     (a)     +a
- │              estimated row count  1000 (missing stats)  ·       ·
- │              table                abc@primary           ·       ·
- │              spans                FULL SCAN             ·       ·
- └── filter     ·                    ·                     (a, b)  +a
-      │         estimated row count  333 (missing stats)   ·       ·
-      │         filter               b < 0                 ·       ·
-      └── scan  ·                    ·                     (a, b)  +a
-·               estimated row count  1000 (missing stats)  ·       ·
-·               table                abc@primary           ·       ·
-·               spans                FULL SCAN             ·       ·
+·                  distribution         local                 ·       ·
+·                  vectorized           true                  ·       ·
+merge join (semi)  ·                    ·                     (a)     ·
+ │                 estimated row count  333 (missing stats)   ·       ·
+ │                 equality             (a) = (a)             ·       ·
+ │                 left cols are key    ·                     ·       ·
+ │                 right cols are key   ·                     ·       ·
+ │                 merge ordering       +"(a=a)"              ·       ·
+ ├── scan          ·                    ·                     (a)     +a
+ │                 estimated row count  1000 (missing stats)  ·       ·
+ │                 table                abc@primary           ·       ·
+ │                 spans                FULL SCAN             ·       ·
+ └── filter        ·                    ·                     (a, b)  +a
+      │            estimated row count  333 (missing stats)   ·       ·
+      │            filter               b < 0                 ·       ·
+      └── scan     ·                    ·                     (a, b)  +a
+·                  estimated row count  1000 (missing stats)  ·       ·
+·                  table                abc@primary           ·       ·
+·                  spans                FULL SCAN             ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -186,88 +184,84 @@ CREATE TABLE b (x INT PRIMARY KEY, z INT);
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE a.x=b.x)
 ----
-·           distribution         local                 ·       ·
-·           vectorized           true                  ·       ·
-merge join  ·                    ·                     (x, y)  ·
- │          estimated row count  1000 (missing stats)  ·       ·
- │          type                 semi                  ·       ·
- │          equality             (x) = (x)             ·       ·
- │          left cols are key    ·                     ·       ·
- │          right cols are key   ·                     ·       ·
- │          mergeJoinOrder       +"(x=x)"              ·       ·
- ├── scan   ·                    ·                     (x, y)  +x
- │          estimated row count  1000 (missing stats)  ·       ·
- │          table                a@primary             ·       ·
- │          spans                FULL SCAN             ·       ·
- └── scan   ·                    ·                     (x)     +x
-·           estimated row count  1000 (missing stats)  ·       ·
-·           table                b@primary             ·       ·
-·           spans                FULL SCAN             ·       ·
+·                  distribution         local                 ·       ·
+·                  vectorized           true                  ·       ·
+merge join (semi)  ·                    ·                     (x, y)  ·
+ │                 estimated row count  1000 (missing stats)  ·       ·
+ │                 equality             (x) = (x)             ·       ·
+ │                 left cols are key    ·                     ·       ·
+ │                 right cols are key   ·                     ·       ·
+ │                 merge ordering       +"(x=x)"              ·       ·
+ ├── scan          ·                    ·                     (x, y)  +x
+ │                 estimated row count  1000 (missing stats)  ·       ·
+ │                 table                a@primary             ·       ·
+ │                 spans                FULL SCAN             ·       ·
+ └── scan          ·                    ·                     (x)     +x
+·                  estimated row count  1000 (missing stats)  ·       ·
+·                  table                b@primary             ·       ·
+·                  spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x-1 = a.x)
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-hash join       ·                    ·                     (x, y)     ·
- │              estimated row count  1000 (missing stats)  ·          ·
- │              type                 semi                  ·          ·
- │              equality             (x) = (column7)       ·          ·
- │              left cols are key    ·                     ·          ·
- ├── scan       ·                    ·                     (x, y)     ·
- │              estimated row count  1000 (missing stats)  ·          ·
- │              table                a@primary             ·          ·
- │              spans                FULL SCAN             ·          ·
- └── render     ·                    ·                     (column7)  ·
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         render 0             x - 1                 ·          ·
-      └── scan  ·                    ·                     (x)        ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                b@primary             ·          ·
-·               spans                FULL SCAN             ·          ·
+·                 distribution         local                 ·          ·
+·                 vectorized           true                  ·          ·
+hash join (semi)  ·                    ·                     (x, y)     ·
+ │                estimated row count  1000 (missing stats)  ·          ·
+ │                equality             (x) = (column7)       ·          ·
+ │                left cols are key    ·                     ·          ·
+ ├── scan         ·                    ·                     (x, y)     ·
+ │                estimated row count  1000 (missing stats)  ·          ·
+ │                table                a@primary             ·          ·
+ │                spans                FULL SCAN             ·          ·
+ └── render       ·                    ·                     (column7)  ·
+      │           estimated row count  1000 (missing stats)  ·          ·
+      │           render 0             x - 1                 ·          ·
+      └── scan    ·                    ·                     (x)        ·
+·                 estimated row count  1000 (missing stats)  ·          ·
+·                 table                b@primary             ·          ·
+·                 spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE b.x = a.x)
 ----
-·           distribution         local                 ·       ·
-·           vectorized           true                  ·       ·
-merge join  ·                    ·                     (x, y)  ·
- │          estimated row count  0 (missing stats)     ·       ·
- │          type                 anti                  ·       ·
- │          equality             (x) = (x)             ·       ·
- │          left cols are key    ·                     ·       ·
- │          right cols are key   ·                     ·       ·
- │          mergeJoinOrder       +"(x=x)"              ·       ·
- ├── scan   ·                    ·                     (x, y)  +x
- │          estimated row count  1000 (missing stats)  ·       ·
- │          table                a@primary             ·       ·
- │          spans                FULL SCAN             ·       ·
- └── scan   ·                    ·                     (x)     +x
-·           estimated row count  1000 (missing stats)  ·       ·
-·           table                b@primary             ·       ·
-·           spans                FULL SCAN             ·       ·
+·                  distribution         local                 ·       ·
+·                  vectorized           true                  ·       ·
+merge join (anti)  ·                    ·                     (x, y)  ·
+ │                 estimated row count  0 (missing stats)     ·       ·
+ │                 equality             (x) = (x)             ·       ·
+ │                 left cols are key    ·                     ·       ·
+ │                 right cols are key   ·                     ·       ·
+ │                 merge ordering       +"(x=x)"              ·       ·
+ ├── scan          ·                    ·                     (x, y)  +x
+ │                 estimated row count  1000 (missing stats)  ·       ·
+ │                 table                a@primary             ·       ·
+ │                 spans                FULL SCAN             ·       ·
+ └── scan          ·                    ·                     (x)     +x
+·                  estimated row count  1000 (missing stats)  ·       ·
+·                  table                b@primary             ·       ·
+·                  spans                FULL SCAN             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE NOT EXISTS(SELECT * FROM a WHERE x-1 = b.x)
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-hash join       ·                    ·                     (x, z)     ·
- │              estimated row count  0 (missing stats)     ·          ·
- │              type                 anti                  ·          ·
- │              equality             (x) = (column7)       ·          ·
- │              left cols are key    ·                     ·          ·
- ├── scan       ·                    ·                     (x, z)     ·
- │              estimated row count  1000 (missing stats)  ·          ·
- │              table                b@primary             ·          ·
- │              spans                FULL SCAN             ·          ·
- └── render     ·                    ·                     (column7)  ·
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         render 0             x - 1                 ·          ·
-      └── scan  ·                    ·                     (x)        ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                a@primary             ·          ·
-·               spans                FULL SCAN             ·          ·
+·                 distribution         local                 ·          ·
+·                 vectorized           true                  ·          ·
+hash join (anti)  ·                    ·                     (x, z)     ·
+ │                estimated row count  0 (missing stats)     ·          ·
+ │                equality             (x) = (column7)       ·          ·
+ │                left cols are key    ·                     ·          ·
+ ├── scan         ·                    ·                     (x, z)     ·
+ │                estimated row count  1000 (missing stats)  ·          ·
+ │                table                b@primary             ·          ·
+ │                spans                FULL SCAN             ·          ·
+ └── render       ·                    ·                     (column7)  ·
+      │           estimated row count  1000 (missing stats)  ·          ·
+      │           render 0             x - 1                 ·          ·
+      └── scan    ·                    ·                     (x)        ·
+·                 estimated row count  1000 (missing stats)  ·          ·
+·                 table                a@primary             ·          ·
+·                 spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ARRAY(SELECT x FROM b)
@@ -291,13 +285,12 @@ root            ·                    ·                     ("array")  ·
 query TTTTT
 EXPLAIN(verbose) SELECT * FROM abc WHERE EXISTS(SELECT * FROM (VALUES (a), (b)) WHERE column1=a)
 ----
-·           distribution         local                 ·          ·
-·           vectorized           false                 ·          ·
-apply join  ·                    ·                     (a, b, c)  ·
- │          estimated row count  2 (missing stats)     ·          ·
- │          type                 semi                  ·          ·
- │          pred                 column1 = a           ·          ·
- └── scan   ·                    ·                     (a, b, c)  ·
-·           estimated row count  1000 (missing stats)  ·          ·
-·           table                abc@primary           ·          ·
-·           spans                FULL SCAN             ·          ·
+·                  distribution         local                 ·          ·
+·                  vectorized           false                 ·          ·
+apply join (semi)  ·                    ·                     (a, b, c)  ·
+ │                 estimated row count  2 (missing stats)     ·          ·
+ │                 pred                 column1 = a           ·          ·
+ └── scan          ·                    ·                     (a, b, c)  ·
+·                  estimated row count  1000 (missing stats)  ·          ·
+·                  table                abc@primary           ·          ·
+·                  spans                FULL SCAN             ·          ·

@@ -568,7 +568,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC
 
-%token <str> BACKUP BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
+%token <str> BACKUP BACKUPS BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
@@ -4236,12 +4236,27 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUP string_or_placeholder opt_with_options
+  SHOW BACKUPS IN string_or_placeholder
+ {
+    $$.val = &tree.ShowBackup{
+      InCollection:    $4.expr(),
+    }
+  }
+| SHOW BACKUP string_or_placeholder opt_with_options
   {
     $$.val = &tree.ShowBackup{
       Details: tree.BackupDefaultDetails,
       Path:    $3.expr(),
       Options: $4.kvOptions(),
+    }
+  }
+| SHOW BACKUP string_or_placeholder IN string_or_placeholder opt_with_options
+  {
+    $$.val = &tree.ShowBackup{
+      Details: tree.BackupDefaultDetails,
+      Path:    $3.expr(),
+      InCollection: $5.expr(),
+      Options: $6.kvOptions(),
     }
   }
 | SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
@@ -11113,6 +11128,7 @@ unreserved_keyword:
 | AUTOMATIC
 | AUTHORIZATION
 | BACKUP
+| BACKUPS
 | BEFORE
 | BEGIN
 | BINARY

@@ -86,18 +86,14 @@ func (e *scheduledBackupExecutor) executeBackup(
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
 	defer cleanup()
-	planBackup, cols, _, _, err := backupPlanHook(ctx, backupStmt, hook.(sql.PlanHookState))
-
+	backupFn, err := planBackup(ctx, hook.(sql.PlanHookState), backupStmt)
 	if err != nil {
-		return errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))
+		return err
 	}
-	if planBackup == nil {
-		return errors.Newf("backup eval: %q", tree.AsString(backupStmt))
-	}
-	if len(cols) != len(utilccl.DetachedJobExecutionResultHeader) {
-		return errors.Newf("unexpected result columns")
-	}
+	return invokeBackup(ctx, backupFn)
+}
 
+func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
 
@@ -111,13 +107,27 @@ func (e *scheduledBackupExecutor) executeBackup(
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
-		if err := planBackup(ctx, nil, resultCh); err != nil {
-			return errors.Wrapf(err, "backup planning error: %q", tree.AsString(backupStmt))
-		}
-		return nil
+		return backupFn(ctx, nil, resultCh)
 	})
 
 	return g.Wait()
+}
+
+func planBackup(
+	ctx context.Context, p sql.PlanHookState, backupStmt tree.Statement,
+) (sql.PlanHookRowFn, error) {
+	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
+
+	if err != nil {
+		return nil, errors.Wrapf(err, "backup eval: %q", tree.AsString(backupStmt))
+	}
+	if fn == nil {
+		return nil, errors.Newf("backup eval: %q", tree.AsString(backupStmt))
+	}
+	if len(cols) != len(utilccl.DetachedJobExecutionResultHeader) {
+		return nil, errors.Newf("unexpected result columns")
+	}
+	return fn, nil
 }
 
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
