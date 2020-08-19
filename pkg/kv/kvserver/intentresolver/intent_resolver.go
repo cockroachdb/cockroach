@@ -546,7 +546,6 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	endTxns []result.EndTxnIntents,
 	allowSyncProcessing bool,
 ) error {
-	now := ir.clock.Now()
 	for i := range endTxns {
 		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
@@ -556,7 +555,9 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 			}
 			defer release()
 			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans)
-			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(
+				ctx, rangeID, et.Txn, intents, et.Poison, nil, /* onComplete */
+			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
@@ -668,7 +669,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			// Set onComplete to nil to disable the deferred call as the call has now
 			// been delegated to the callback passed to cleanupFinishedTxnIntents.
 			onComplete = nil
-			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, now, false /* poison */, onCleanupComplete)
+			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, false /* poison */, onCleanupComplete)
 			if err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
@@ -736,7 +737,6 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
 	intents []roachpb.LockUpdate,
-	now hlc.Timestamp,
 	poison bool,
 	onComplete func(error),
 ) (err error) {
