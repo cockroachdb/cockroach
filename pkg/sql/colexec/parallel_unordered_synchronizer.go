@@ -23,9 +23,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// unorderedSynchronizerMsg is a light wrapper over a coldata.Batch sent over a
-// channel so that the main goroutine can know which input this message
-// originated from.
+// unorderedSynchronizerMsg is a light wrapper over a coldata.Batch or metadata
+// sent over a channel so that the main goroutine can know which input this
+// message originated from.
+// Note that either a batch or metadata must be sent, but not both.
 type unorderedSynchronizerMsg struct {
 	inputIdx int
 	b        coldata.Batch
@@ -237,6 +238,11 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 					// In case of a zero-length batch, proceed to drain the input.
 					fallthrough
 				case parallelUnorderedSynchronizerStateDraining:
+					// Create a new message for metadata. The previous message cannot be
+					// overwritten since it might still be in the channel.
+					msg = &unorderedSynchronizerMsg{
+						inputIdx: inputIdx,
+					}
 					if input.MetadataSources != nil {
 						msg.meta = input.MetadataSources.DrainMeta(ctx)
 					}
