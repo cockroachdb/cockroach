@@ -36,27 +36,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Files that may appear in a backup directory.
 const (
-	// BackupManifestName is the file name used for serialized
-	// BackupManifest protos.
+	// BackupManifestName is the file name used for serialized BackupManifest
+	// protos.
 	BackupManifestName = "BACKUP"
-	// BackupNewManifestName is a future name for the serialized
-	// BackupManifest proto.
+	// BackupNewManifestName is a future name for the serialized BackupManifest
+	// proto.
 	BackupNewManifestName = "BACKUP_MANIFEST"
 
 	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	BackupPartitionDescriptorPrefix = "BACKUP_PART"
-	// BackupManifestCheckpointName is the file name used to store the
-	// serialized BackupManifest proto while the backup is in progress.
+	// BackupManifestCheckpointName is the file name used to store the serialized
+	// BackupManifest proto while the backup is in progress.
 	BackupManifestCheckpointName = "BACKUP-CHECKPOINT"
+	// BackupStatisticsFileName is the file name used to store the serialized
+	// table statistics for the tables being backed up.
+	BackupStatisticsFileName = "BACKUP-STATISTICS"
+	// BackupSentinelWriteFile is a file that we write to the backup directory to
+	// ensure that we have write privileges to the directory. Nothing should check
+	// for its existence since we don't guarantee that it's cleaned up after it is
+	// written (for example, we may not have DELETE permissions for the
+	// destination, which should be allowed).
+	BackupSentinelWriteFile = "COCKROACH-BACKUP-PLACEHOLDER"
+)
+
+const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 	// ZipType is the format of a GZipped compressed file.
 	ZipType = "application/x-gzip"
-	// BackupStatisticsFileName is the file name used to store the serialized table
-	// statistics for the tables being backed up.
-	BackupStatisticsFileName = "BACKUP-STATISTICS"
 
 	dateBasedFolderName = "/20060102/150405.00"
 	latestFileName      = "LATEST"
@@ -846,18 +856,45 @@ func writeEncryptionOptions(
 	return nil
 }
 
-// VerifyUsableExportTarget ensures that the target location does not already
-// contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
-// that the location is writable and locking out accidental concurrent
-// operations on that location if subsequently try this check. Callers must
-// clean up the written checkpoint file (BackupManifestCheckpointName) only
-// after writing to the backup file location (BackupManifestName).
-func VerifyUsableExportTarget(
+// createCheckpointIfNotExists creates a checkpoint file if it does not exist.
+// This is used to lock out other BACKUPs (which check for this file during
+// planning) from starting a backup to this location.
+func createCheckpointIfNotExists(
 	ctx context.Context,
 	settings *cluster.Settings,
 	exportStore cloud.ExternalStorage,
-	readable string,
 	encryption *jobspb.BackupEncryptionOptions,
+) error {
+	r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName)
+	if err == nil {
+		r.Close()
+		// If the file already exists, then we don't need to create a new one.
+		return nil
+	}
+
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		return errors.Wrapf(err,
+			"returned an unexpected error when checking for the existence of %s file",
+			BackupManifestCheckpointName)
+	}
+
+	// If there is not checkpoint manifest yet, write one to lock out other
+	// backups from starting to write to this destination.
+	if err := writeBackupManifest(
+		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
+	); err != nil {
+		return errors.Wrapf(err, "writing checkpoint file %s", BackupManifestCheckpointName)
+	}
+
+	return nil
+}
+
+// checkForPreviousBackup ensures that the target location does not already
+// contain a BACKUP or checkpoint, locking out accidental concurrent operations
+// on that location. Note that the checkpoint file should be written as soon as
+// the job actually starts.
+func checkForPreviousBackup(
+	ctx context.Context, exportStore cloud.ExternalStorage, readable string,
 ) error {
 	r, err := exportStore.ReadFile(ctx, BackupManifestName)
 	if err == nil {
@@ -868,7 +905,9 @@ func VerifyUsableExportTarget(
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestName)
+		return errors.Wrapf(err,
+			"%s returned an unexpected error when checking for the existence of %s file",
+			readable, BackupManifestName)
 	}
 
 	r, err = exportStore.ReadFile(ctx, BackupManifestCheckpointName)
@@ -880,13 +919,36 @@ func VerifyUsableExportTarget(
 	}
 
 	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-		return errors.Wrapf(err, "%s returned an unexpected error when checking for the existence of %s file", readable, BackupManifestCheckpointName)
+		return errors.Wrapf(err,
+			"%s returned an unexpected error when checking for the existence of %s file",
+			readable, BackupManifestCheckpointName)
 	}
 
-	if err := writeBackupManifest(
-		ctx, settings, exportStore, BackupManifestCheckpointName, encryption, &BackupManifest{},
-	); err != nil {
-		return errors.Wrapf(err, "cannot write to %s", readable)
+	return nil
+}
+
+// verifyWritableDestination writes a test file, verifying that the location is
+// writable. This method will do a best-effort clean up of the temporary file.
+// We don't require DELETE permissions on their backup directory, so we do not
+// enforce that this file be deleted.
+func verifyWriteableDestination(
+	ctx context.Context, exportStore cloud.ExternalStorage, writeable string,
+) error {
+	// Write arbitrary bytes to a sentinel file in the backup directory to ensure
+	// that we're able to write to this directory.
+	arbitraryBytes := bytes.NewReader([]byte("✇"))
+	if err := exportStore.WriteFile(ctx, BackupSentinelWriteFile, arbitraryBytes); err != nil {
+		return errors.Wrapf(err, "writing sentinel file to %s", writeable)
 	}
+
+	if err := exportStore.Delete(ctx, BackupSentinelWriteFile); err != nil {
+		// Don't require that we're able to clean up the sentinel file. Nothing
+		// should check for it's existence so it should be fine to leave it around.
+		// Let's still log if we can't clean up.
+		log.Warningf(ctx,
+			"could not clean up sentinel backup %s file in %s: %+v",
+			BackupSentinelWriteFile, writeable, err)
+	}
+
 	return nil
 }
