@@ -15,11 +15,9 @@ update                ·                   ·
  │                    auto commit         ·
  └── render           ·                   ·
       └── merge join  ·                   ·
-           │          type                inner
            │          equality            (a) = (a)
            │          left cols are key   ·
            │          right cols are key  ·
-           │          mergeJoinOrder      +"(a=a)"
            ├── scan   ·                   ·
            │          missing stats       ·
            │          table               abc@primary
@@ -45,7 +43,6 @@ update               ·                  ·
  └── distinct        ·                  ·
       │              distinct on        a
       └── hash join  ·                  ·
-           │         type               inner
            │         equality           (a) = (a)
            │         left cols are key  ·
            ├── scan  ·                  ·
@@ -77,11 +74,9 @@ update                ·                   ·
  │                    auto commit         ·
  └── render           ·                   ·
       └── merge join  ·                   ·
-           │          type                inner
            │          equality            (a) = (a)
            │          left cols are key   ·
            │          right cols are key  ·
-           │          mergeJoinOrder      +"(a=a)"
            ├── scan   ·                   ·
            │          missing stats       ·
            │          table               abc@primary
@@ -95,38 +90,37 @@ update                ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) UPDATE abc SET b = old.b + 1, c = old.c + 2 FROM abc AS old WHERE abc.a = old.a RETURNING *
 ----
-·                     distribution         local                 ·                                 ·
-·                     vectorized           false                 ·                                 ·
-update                ·                    ·                     (a, b, c, a, b, c)                ·
- │                    estimated row count  1000 (missing stats)  ·                                 ·
- │                    table                abc                   ·                                 ·
- │                    set                  b, c                  ·                                 ·
- │                    auto commit          ·                     ·                                 ·
- └── render           ·                    ·                     (a, b, c, b_new, c_new, a, b, c)  ·
-      │               estimated row count  1000 (missing stats)  ·                                 ·
-      │               render 0             b + 1                 ·                                 ·
-      │               render 1             c + 2                 ·                                 ·
-      │               render 2             a                     ·                                 ·
-      │               render 3             b                     ·                                 ·
-      │               render 4             c                     ·                                 ·
-      │               render 5             a                     ·                                 ·
-      │               render 6             b                     ·                                 ·
-      │               render 7             c                     ·                                 ·
-      └── merge join  ·                    ·                     (a, b, c, a, b, c)                ·
-           │          estimated row count  1000 (missing stats)  ·                                 ·
-           │          type                 inner                 ·                                 ·
-           │          equality             (a) = (a)             ·                                 ·
-           │          left cols are key    ·                     ·                                 ·
-           │          right cols are key   ·                     ·                                 ·
-           │          mergeJoinOrder       +"(a=a)"              ·                                 ·
-           ├── scan   ·                    ·                     (a, b, c)                         +a
-           │          estimated row count  1000 (missing stats)  ·                                 ·
-           │          table                abc@primary           ·                                 ·
-           │          spans                FULL SCAN             ·                                 ·
-           └── scan   ·                    ·                     (a, b, c)                         +a
-·                     estimated row count  1000 (missing stats)  ·                                 ·
-·                     table                abc@primary           ·                                 ·
-·                     spans                FULL SCAN             ·                                 ·
+·                             distribution         local                 ·                                 ·
+·                             vectorized           false                 ·                                 ·
+update                        ·                    ·                     (a, b, c, a, b, c)                ·
+ │                            estimated row count  1000 (missing stats)  ·                                 ·
+ │                            table                abc                   ·                                 ·
+ │                            set                  b, c                  ·                                 ·
+ │                            auto commit          ·                     ·                                 ·
+ └── render                   ·                    ·                     (a, b, c, b_new, c_new, a, b, c)  ·
+      │                       estimated row count  1000 (missing stats)  ·                                 ·
+      │                       render 0             b + 1                 ·                                 ·
+      │                       render 1             c + 2                 ·                                 ·
+      │                       render 2             a                     ·                                 ·
+      │                       render 3             b                     ·                                 ·
+      │                       render 4             c                     ·                                 ·
+      │                       render 5             a                     ·                                 ·
+      │                       render 6             b                     ·                                 ·
+      │                       render 7             c                     ·                                 ·
+      └── merge join (inner)  ·                    ·                     (a, b, c, a, b, c)                ·
+           │                  estimated row count  1000 (missing stats)  ·                                 ·
+           │                  equality             (a) = (a)             ·                                 ·
+           │                  left cols are key    ·                     ·                                 ·
+           │                  right cols are key   ·                     ·                                 ·
+           │                  merge ordering       +"(a=a)"              ·                                 ·
+           ├── scan           ·                    ·                     (a, b, c)                         +a
+           │                  estimated row count  1000 (missing stats)  ·                                 ·
+           │                  table                abc@primary           ·                                 ·
+           │                  spans                FULL SCAN             ·                                 ·
+           └── scan           ·                    ·                     (a, b, c)                         +a
+·                             estimated row count  1000 (missing stats)  ·                                 ·
+·                             table                abc@primary           ·                                 ·
+·                             spans                FULL SCAN             ·                                 ·
 
 # Update values of table from values expression
 query TTT
@@ -142,10 +136,8 @@ update                 ·                      ·
       │                distinct on            a
       └── lookup join  ·                      ·
            │           table                  abc@primary
-           │           type                   inner
            │           equality               (column1) = (a)
            │           equality cols are key  ·
-           │           parallel               ·
            └── values  ·                      ·
 ·                      size                   3 columns, 2 rows
 
@@ -168,14 +160,12 @@ update                    ·                  ·
  └── distinct             ·                  ·
       │                   distinct on        a
       └── hash join       ·                  ·
-           │              type               inner
            │              equality           (a) = (a)
            ├── scan       ·                  ·
            │              missing stats      ·
            │              table              ab@primary
            │              spans              FULL SCAN
            └── hash join  ·                  ·
-                │         type               inner
                 │         equality           (a) = (a)
                 │         left cols are key  ·
                 ├── scan  ·                  ·
@@ -209,14 +199,12 @@ update                    ·                  ·
  └── distinct             ·                  ·
       │                   distinct on        a
       └── hash join       ·                  ·
-           │              type               inner
            │              equality           (a) = (a)
            ├── scan       ·                  ·
            │              missing stats      ·
            │              table              ab@primary
            │              spans              FULL SCAN
            └── hash join  ·                  ·
-                │         type               inner
                 │         equality           (a) = (a)
                 │         left cols are key  ·
                 ├── scan  ·                  ·

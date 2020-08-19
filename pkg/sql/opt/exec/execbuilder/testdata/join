@@ -14,7 +14,6 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ·          distribution   local
 ·          vectorized     true
 hash join  ·              ·
- │         type           inner
  │         equality       (x) = (x)
  ├── scan  ·              ·
  │         missing stats  ·
@@ -31,7 +30,6 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ·          distribution   local
 ·          vectorized     true
 hash join  ·              ·
- │         type           inner
  │         equality       (x) = (y)
  ├── scan  ·              ·
  │         missing stats  ·
@@ -48,7 +46,6 @@ EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ·               distribution   local
 ·               vectorized     true
 cross join      ·              ·
- │              type           cross
  ├── scan       ·              ·
  │              missing stats  ·
  │              table          twocolumn@primary
@@ -66,7 +63,6 @@ EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ·          distribution   local
 ·          vectorized     true
 hash join  ·              ·
- │         type           inner
  │         equality       (x) = (y)
  ├── scan  ·              ·
  │         missing stats  ·
@@ -83,7 +79,6 @@ EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ·          distribution   local
 ·          vectorized     true
 hash join  ·              ·
- │         type           inner
  │         equality       (x) = (y)
  ├── scan  ·              ·
  │         missing stats  ·
@@ -107,10 +102,8 @@ LIMIT 1
 limit                ·              ·
  │                   count          1
  └── hash join       ·              ·
-      │              type           inner
       │              equality       (x) = (x)
       ├── hash join  ·              ·
-      │    │         type           inner
       │    │         equality       (x) = (x)
       │    ├── scan  ·              ·
       │    │         missing stats  ·
@@ -121,7 +114,6 @@ limit                ·              ·
       │              table          twocolumn@primary
       │              spans          FULL SCAN
       └── hash join  ·              ·
-           │         type           inner
            │         equality       (x) = (x)
            ├── scan  ·              ·
            │         missing stats  ·
@@ -136,139 +128,133 @@ limit                ·              ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-·           distribution         local                    ·       ·
-·           vectorized           true                     ·       ·
-cross join  ·                    ·                        (x, y)  ·
- │          estimated row count  1000000 (missing stats)  ·       ·
- │          type                 cross                    ·       ·
- ├── scan   ·                    ·                        (x)     ·
- │          estimated row count  1000 (missing stats)     ·       ·
- │          table                twocolumn@primary        ·       ·
- │          spans                FULL SCAN                ·       ·
- └── scan   ·                    ·                        (y)     ·
-·           estimated row count  1000 (missing stats)     ·       ·
-·           table                twocolumn@primary        ·       ·
-·           spans                FULL SCAN                ·       ·
+·                   distribution         local                    ·       ·
+·                   vectorized           true                     ·       ·
+cross join (inner)  ·                    ·                        (x, y)  ·
+ │                  estimated row count  1000000 (missing stats)  ·       ·
+ ├── scan           ·                    ·                        (x)     ·
+ │                  estimated row count  1000 (missing stats)     ·       ·
+ │                  table                twocolumn@primary        ·       ·
+ │                  spans                FULL SCAN                ·       ·
+ └── scan           ·                    ·                        (y)     ·
+·                   estimated row count  1000 (missing stats)     ·       ·
+·                   table                twocolumn@primary        ·       ·
+·                   spans                FULL SCAN                ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (y)        ·
- │              estimated row count  9801 (missing stats)  ·          ·
- └── hash join  ·                    ·                     (x, x, y)  ·
-      │         estimated row count  9801 (missing stats)  ·          ·
-      │         type                 inner                 ·          ·
-      │         equality             (x) = (x)             ·          ·
-      ├── scan  ·                    ·                     (x)        ·
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         table                twocolumn@primary     ·          ·
-      │         spans                FULL SCAN             ·          ·
-      └── scan  ·                    ·                     (x, y)     ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                twocolumn@primary     ·          ·
-·               spans                FULL SCAN             ·          ·
+·                       distribution         local                 ·          ·
+·                       vectorized           true                  ·          ·
+project                 ·                    ·                     (y)        ·
+ │                      estimated row count  9801 (missing stats)  ·          ·
+ └── hash join (inner)  ·                    ·                     (x, x, y)  ·
+      │                 estimated row count  9801 (missing stats)  ·          ·
+      │                 equality             (x) = (x)             ·          ·
+      ├── scan          ·                    ·                     (x)        ·
+      │                 estimated row count  1000 (missing stats)  ·          ·
+      │                 table                twocolumn@primary     ·          ·
+      │                 spans                FULL SCAN             ·          ·
+      └── scan          ·                    ·                     (x, y)     ·
+·                       estimated row count  1000 (missing stats)  ·          ·
+·                       table                twocolumn@primary     ·          ·
+·                       spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (y)        ·
- │              estimated row count  9801 (missing stats)  ·          ·
- └── hash join  ·                    ·                     (x, x, y)  ·
-      │         estimated row count  9801 (missing stats)  ·          ·
-      │         type                 inner                 ·          ·
-      │         equality             (x) = (x)             ·          ·
-      ├── scan  ·                    ·                     (x)        ·
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         table                twocolumn@primary     ·          ·
-      │         spans                FULL SCAN             ·          ·
-      └── scan  ·                    ·                     (x, y)     ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                twocolumn@primary     ·          ·
-·               spans                FULL SCAN             ·          ·
+·                       distribution         local                 ·          ·
+·                       vectorized           true                  ·          ·
+project                 ·                    ·                     (y)        ·
+ │                      estimated row count  9801 (missing stats)  ·          ·
+ └── hash join (inner)  ·                    ·                     (x, x, y)  ·
+      │                 estimated row count  9801 (missing stats)  ·          ·
+      │                 equality             (x) = (x)             ·          ·
+      ├── scan          ·                    ·                     (x)        ·
+      │                 estimated row count  1000 (missing stats)  ·          ·
+      │                 table                twocolumn@primary     ·          ·
+      │                 spans                FULL SCAN             ·          ·
+      └── scan          ·                    ·                     (x, y)     ·
+·                       estimated row count  1000 (missing stats)  ·          ·
+·                       table                twocolumn@primary     ·          ·
+·                       spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-·                distribution         local                   ·       ·
-·                vectorized           true                    ·       ·
-project          ·                    ·                       (x)     ·
- │               estimated row count  326700 (missing stats)  ·       ·
- └── cross join  ·                    ·                       (x, y)  ·
-      │          estimated row count  326700 (missing stats)  ·       ·
-      │          type                 cross                   ·       ·
-      │          pred                 x < y                   ·       ·
-      ├── scan   ·                    ·                       (x)     ·
-      │          estimated row count  1000 (missing stats)    ·       ·
-      │          table                twocolumn@primary       ·       ·
-      │          spans                FULL SCAN               ·       ·
-      └── scan   ·                    ·                       (y)     ·
-·                estimated row count  1000 (missing stats)    ·       ·
-·                table                twocolumn@primary       ·       ·
-·                spans                FULL SCAN               ·       ·
+·                        distribution         local                   ·       ·
+·                        vectorized           true                    ·       ·
+project                  ·                    ·                       (x)     ·
+ │                       estimated row count  326700 (missing stats)  ·       ·
+ └── cross join (inner)  ·                    ·                       (x, y)  ·
+      │                  estimated row count  326700 (missing stats)  ·       ·
+      │                  pred                 x < y                   ·       ·
+      ├── scan           ·                    ·                       (x)     ·
+      │                  estimated row count  1000 (missing stats)    ·       ·
+      │                  table                twocolumn@primary       ·       ·
+      │                  spans                FULL SCAN               ·       ·
+      └── scan           ·                    ·                       (y)     ·
+·                        estimated row count  1000 (missing stats)    ·       ·
+·                        table                twocolumn@primary       ·       ·
+·                        spans                FULL SCAN               ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, 2 two FROM onecolumn) NATURAL FULL JOIN (SELECT x, y+1 plus1 FROM twocolumn)
 ----
-·                    distribution         local                  ·                   ·
-·                    vectorized           true                   ·                   ·
-render               ·                    ·                      (x, two, plus1)     ·
- │                   estimated row count  10000 (missing stats)  ·                   ·
- │                   render 0             COALESCE(x, x)         ·                   ·
- │                   render 1             two                    ·                   ·
- │                   render 2             plus1                  ·                   ·
- └── hash join       ·                    ·                      (two, x, plus1, x)  ·
-      │              estimated row count  10000 (missing stats)  ·                   ·
-      │              type                 full outer             ·                   ·
-      │              equality             (x) = (x)              ·                   ·
-      ├── render     ·                    ·                      (two, x)            ·
-      │    │         estimated row count  1000 (missing stats)   ·                   ·
-      │    │         render 0             2                      ·                   ·
-      │    │         render 1             x                      ·                   ·
-      │    └── scan  ·                    ·                      (x)                 ·
-      │              estimated row count  1000 (missing stats)   ·                   ·
-      │              table                onecolumn@primary      ·                   ·
-      │              spans                FULL SCAN              ·                   ·
-      └── render     ·                    ·                      (plus1, x)          ·
-           │         estimated row count  1000 (missing stats)   ·                   ·
-           │         render 0             y + 1                  ·                   ·
-           │         render 1             x                      ·                   ·
-           └── scan  ·                    ·                      (x, y)              ·
-·                    estimated row count  1000 (missing stats)   ·                   ·
-·                    table                twocolumn@primary      ·                   ·
-·                    spans                FULL SCAN              ·                   ·
+·                            distribution         local                  ·                   ·
+·                            vectorized           true                   ·                   ·
+render                       ·                    ·                      (x, two, plus1)     ·
+ │                           estimated row count  10000 (missing stats)  ·                   ·
+ │                           render 0             COALESCE(x, x)         ·                   ·
+ │                           render 1             two                    ·                   ·
+ │                           render 2             plus1                  ·                   ·
+ └── hash join (full outer)  ·                    ·                      (two, x, plus1, x)  ·
+      │                      estimated row count  10000 (missing stats)  ·                   ·
+      │                      equality             (x) = (x)              ·                   ·
+      ├── render             ·                    ·                      (two, x)            ·
+      │    │                 estimated row count  1000 (missing stats)   ·                   ·
+      │    │                 render 0             2                      ·                   ·
+      │    │                 render 1             x                      ·                   ·
+      │    └── scan          ·                    ·                      (x)                 ·
+      │                      estimated row count  1000 (missing stats)   ·                   ·
+      │                      table                onecolumn@primary      ·                   ·
+      │                      spans                FULL SCAN              ·                   ·
+      └── render             ·                    ·                      (plus1, x)          ·
+           │                 estimated row count  1000 (missing stats)   ·                   ·
+           │                 render 0             y + 1                  ·                   ·
+           │                 render 1             x                      ·                   ·
+           └── scan          ·                    ·                      (x, y)              ·
+·                            estimated row count  1000 (missing stats)   ·                   ·
+·                            table                twocolumn@primary      ·                   ·
+·                            spans                FULL SCAN              ·                   ·
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-·                      distribution         local                  ·                                     ·
-·                      vectorized           false                  ·                                     ·
-sort                   ·                    ·                      (k, u, w)                             +u
- │                     estimated row count  2                      ·                                     ·
- │                     order                +column1               ·                                     ·
- └── project           ·                    ·                      (column1, column2, column2)           ·
-      │                estimated row count  2                      ·                                     ·
-      └── hash join    ·                    ·                      (column1, column2, column1, column2)  ·
-           │           estimated row count  2                      ·                                     ·
-           │           type                 inner                  ·                                     ·
-           │           equality             (column2) = (column1)  ·                                     ·
-           ├── values  ·                    ·                      (column1, column2)                    ·
-           │           size                 2 columns, 2 rows      ·                                     ·
-           │           row 0, expr 0        9                      ·                                     ·
-           │           row 0, expr 1        1                      ·                                     ·
-           │           row 1, expr 0        8                      ·                                     ·
-           │           row 1, expr 1        2                      ·                                     ·
-           └── values  ·                    ·                      (column1, column2)                    ·
-·                      size                 2 columns, 2 rows      ·                                     ·
-·                      row 0, expr 0        1                      ·                                     ·
-·                      row 0, expr 1        1                      ·                                     ·
-·                      row 1, expr 0        2                      ·                                     ·
-·                      row 1, expr 1        2                      ·                                     ·
+·                            distribution         local                  ·                                     ·
+·                            vectorized           false                  ·                                     ·
+sort                         ·                    ·                      (k, u, w)                             +u
+ │                           estimated row count  2                      ·                                     ·
+ │                           order                +column1               ·                                     ·
+ └── project                 ·                    ·                      (column1, column2, column2)           ·
+      │                      estimated row count  2                      ·                                     ·
+      └── hash join (inner)  ·                    ·                      (column1, column2, column1, column2)  ·
+           │                 estimated row count  2                      ·                                     ·
+           │                 equality             (column2) = (column1)  ·                                     ·
+           ├── values        ·                    ·                      (column1, column2)                    ·
+           │                 size                 2 columns, 2 rows      ·                                     ·
+           │                 row 0, expr 0        9                      ·                                     ·
+           │                 row 0, expr 1        1                      ·                                     ·
+           │                 row 1, expr 0        8                      ·                                     ·
+           │                 row 1, expr 1        2                      ·                                     ·
+           └── values        ·                    ·                      (column1, column2)                    ·
+·                            size                 2 columns, 2 rows      ·                                     ·
+·                            row 0, expr 0        1                      ·                                     ·
+·                            row 0, expr 1        1                      ·                                     ·
+·                            row 1, expr 0        2                      ·                                     ·
+·                            row 1, expr 1        2                      ·                                     ·
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
@@ -339,105 +325,92 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
            pos.n
   ] WHERE node_type <> 'values' AND field <> 'size'
 ----
-0   ·                          distribution           local
-0   ·                          vectorized             false
-0   project                    ·                      ·
-1   sort                       ·                      ·
-1   ·                          estimated row count    106 (missing stats)
-1   ·                          order                  +nspname,+relname,+conname,+generate_series
-2   render                     ·                      ·
-2   ·                          estimated row count    106 (missing stats)
-2   ·                          render 0               CAST(NULL AS STRING)
-2   ·                          render 1               CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-2   ·                          render 2               CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
-2   ·                          render 3               CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
-2   ·                          render 4               nspname
-2   ·                          render 5               relname
-2   ·                          render 6               attname
-2   ·                          render 7               nspname
-2   ·                          render 8               relname
-2   ·                          render 9               attname
-2   ·                          render 10              conname
-2   ·                          render 11              generate_series
-2   ·                          render 12              relname
-3   hash join                  ·                      ·
-3   ·                          estimated row count    106 (missing stats)
-3   ·                          type                   inner
-3   ·                          equality               (oid) = (objid)
-4   hash join                  ·                      ·
-4   ·                          estimated row count    109 (missing stats)
-4   ·                          type                   inner
-4   ·                          equality               (oid) = (relnamespace)
-5   virtual table              ·                      ·
-5   ·                          estimated row count    1000 (missing stats)
-5   ·                          table                  pg_namespace@primary
-5   hash join                  ·                      ·
-5   ·                          estimated row count    11 (missing stats)
-5   ·                          type                   inner
-5   ·                          equality               (relnamespace) = (oid)
-6   cross join                 ·                      ·
-6   ·                          estimated row count    11 (missing stats)
-6   ·                          type                   cross
-6   ·                          pred                   (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
-7   project set                ·                      ·
-7   ·                          estimated row count    10
-7   ·                          render 0               generate_series(1, 32)
-8   emptyrow                   ·                      ·
-7   virtual table lookup join  ·                      ·
-7   ·                          estimated row count    10 (missing stats)
-7   ·                          table                  pg_attribute@pg_attribute_attrelid_idx
-7   ·                          type                   inner
-7   ·                          equality               (oid) = (attrelid)
-7   ·                          equality cols are key  ·
-7   ·                          parallel               ·
-8   virtual table lookup join  ·                      ·
-8   ·                          estimated row count    10 (missing stats)
-8   ·                          table                  pg_class@pg_class_oid_idx
-8   ·                          type                   inner
-8   ·                          equality               (attrelid) = (oid)
-8   ·                          equality cols are key  ·
-8   ·                          parallel               ·
-9   virtual table lookup join  ·                      ·
-9   ·                          estimated row count    10 (missing stats)
-9   ·                          table                  pg_attribute@pg_attribute_attrelid_idx
-9   ·                          type                   inner
-9   ·                          equality               (confrelid) = (attrelid)
-9   ·                          equality cols are key  ·
-9   ·                          parallel               ·
-10  virtual table lookup join  ·                      ·
-10  ·                          estimated row count    10 (missing stats)
-10  ·                          table                  pg_constraint@pg_constraint_conrelid_idx
-10  ·                          type                   inner
-10  ·                          equality               (oid) = (conrelid)
-10  ·                          equality cols are key  ·
-10  ·                          parallel               ·
-10  ·                          pred                   contype = 'f'
-11  filter                     ·                      ·
-11  ·                          estimated row count    10 (missing stats)
-11  ·                          filter                 relname = 'orders'
-12  virtual table              ·                      ·
-12  ·                          estimated row count    1000 (missing stats)
-12  ·                          table                  pg_class@primary
-6   filter                     ·                      ·
-6   ·                          estimated row count    10 (missing stats)
-6   ·                          filter                 nspname = 'public'
-7   virtual table              ·                      ·
-7   ·                          estimated row count    1000 (missing stats)
-7   ·                          table                  pg_namespace@primary
-4   hash join                  ·                      ·
-4   ·                          estimated row count    99 (missing stats)
-4   ·                          type                   inner
-4   ·                          equality               (refobjid) = (oid)
-4   ·                          right cols are key     ·
-5   virtual table              ·                      ·
-5   ·                          estimated row count    1000 (missing stats)
-5   ·                          table                  pg_depend@primary
-5   filter                     ·                      ·
-5   ·                          estimated row count    10 (missing stats)
-5   ·                          filter                 relkind = 'i'
-6   virtual table              ·                      ·
-6   ·                          estimated row count    1000 (missing stats)
-6   ·                          table                  pg_class@primary
+0   ·                                  distribution           local
+0   ·                                  vectorized             false
+0   project                            ·                      ·
+1   sort                               ·                      ·
+1   ·                                  estimated row count    106 (missing stats)
+1   ·                                  order                  +nspname,+relname,+conname,+generate_series
+2   render                             ·                      ·
+2   ·                                  estimated row count    106 (missing stats)
+2   ·                                  render 0               CAST(NULL AS STRING)
+2   ·                                  render 1               CASE confupdtype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+2   ·                                  render 2               CASE confdeltype WHEN 'c' THEN 0 WHEN 'n' THEN 2 WHEN 'd' THEN 4 WHEN 'r' THEN 1 WHEN 'a' THEN 3 ELSE CAST(NULL AS INT8) END
+2   ·                                  render 3               CASE WHEN condeferrable AND condeferred THEN 5 WHEN condeferrable THEN 6 ELSE 7 END
+2   ·                                  render 4               nspname
+2   ·                                  render 5               relname
+2   ·                                  render 6               attname
+2   ·                                  render 7               nspname
+2   ·                                  render 8               relname
+2   ·                                  render 9               attname
+2   ·                                  render 10              conname
+2   ·                                  render 11              generate_series
+2   ·                                  render 12              relname
+3   hash join (inner)                  ·                      ·
+3   ·                                  estimated row count    106 (missing stats)
+3   ·                                  equality               (oid) = (objid)
+4   hash join (inner)                  ·                      ·
+4   ·                                  estimated row count    109 (missing stats)
+4   ·                                  equality               (oid) = (relnamespace)
+5   virtual table                      ·                      ·
+5   ·                                  estimated row count    1000 (missing stats)
+5   ·                                  table                  pg_namespace@primary
+5   hash join (inner)                  ·                      ·
+5   ·                                  estimated row count    11 (missing stats)
+5   ·                                  equality               (relnamespace) = (oid)
+6   cross join (inner)                 ·                      ·
+6   ·                                  estimated row count    11 (missing stats)
+6   ·                                  pred                   (attnum = confkey[generate_series]) AND (attnum = conkey[generate_series])
+7   project set                        ·                      ·
+7   ·                                  estimated row count    10
+7   ·                                  render 0               generate_series(1, 32)
+8   emptyrow                           ·                      ·
+7   virtual table lookup join (inner)  ·                      ·
+7   ·                                  estimated row count    10 (missing stats)
+7   ·                                  table                  pg_attribute@pg_attribute_attrelid_idx
+7   ·                                  equality               (oid) = (attrelid)
+7   ·                                  equality cols are key  ·
+8   virtual table lookup join (inner)  ·                      ·
+8   ·                                  estimated row count    10 (missing stats)
+8   ·                                  table                  pg_class@pg_class_oid_idx
+8   ·                                  equality               (attrelid) = (oid)
+8   ·                                  equality cols are key  ·
+9   virtual table lookup join (inner)  ·                      ·
+9   ·                                  estimated row count    10 (missing stats)
+9   ·                                  table                  pg_attribute@pg_attribute_attrelid_idx
+9   ·                                  equality               (confrelid) = (attrelid)
+9   ·                                  equality cols are key  ·
+10  virtual table lookup join (inner)  ·                      ·
+10  ·                                  estimated row count    10 (missing stats)
+10  ·                                  table                  pg_constraint@pg_constraint_conrelid_idx
+10  ·                                  equality               (oid) = (conrelid)
+10  ·                                  equality cols are key  ·
+10  ·                                  pred                   contype = 'f'
+11  filter                             ·                      ·
+11  ·                                  estimated row count    10 (missing stats)
+11  ·                                  filter                 relname = 'orders'
+12  virtual table                      ·                      ·
+12  ·                                  estimated row count    1000 (missing stats)
+12  ·                                  table                  pg_class@primary
+6   filter                             ·                      ·
+6   ·                                  estimated row count    10 (missing stats)
+6   ·                                  filter                 nspname = 'public'
+7   virtual table                      ·                      ·
+7   ·                                  estimated row count    1000 (missing stats)
+7   ·                                  table                  pg_namespace@primary
+4   hash join (inner)                  ·                      ·
+4   ·                                  estimated row count    99 (missing stats)
+4   ·                                  equality               (refobjid) = (oid)
+4   ·                                  right cols are key     ·
+5   virtual table                      ·                      ·
+5   ·                                  estimated row count    1000 (missing stats)
+5   ·                                  table                  pg_depend@primary
+5   filter                             ·                      ·
+5   ·                                  estimated row count    10 (missing stats)
+5   ·                                  filter                 relkind = 'i'
+6   virtual table                      ·                      ·
+6   ·                                  estimated row count    1000 (missing stats)
+6   ·                                  table                  pg_class@primary
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok
@@ -449,10 +422,8 @@ EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cu
 ·           distribution        local
 ·           vectorized          true
 merge join  ·                   ·
- │          type                inner
  │          equality            (cust) = (id)
  │          right cols are key  ·
- │          mergeJoinOrder      +"(cust=id)"
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               cards@cards_cust_idx
@@ -477,7 +448,6 @@ EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ·          distribution        local
 ·          vectorized          true
 hash join  ·                   ·
- │         type                inner
  │         equality            (b) = (n)
  │         right cols are key  ·
  ├── scan  ·                   ·
@@ -493,112 +463,108 @@ hash join  ·                   ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-·                    distribution         local                 ·                       ·
-·                    vectorized           true                  ·                       ·
-project              ·                    ·                     (a, b, n, sq)           ·
- │                   estimated row count  990 (missing stats)   ·                       ·
- └── hash join       ·                    ·                     (column8, a, b, n, sq)  ·
-      │              estimated row count  990 (missing stats)   ·                       ·
-      │              type                 inner                 ·                       ·
-      │              equality             (column8) = (sq)      ·                       ·
-      ├── render     ·                    ·                     (column8, a, b)         ·
-      │    │         estimated row count  1000 (missing stats)  ·                       ·
-      │    │         render 0             a + b                 ·                       ·
-      │    │         render 1             a                     ·                       ·
-      │    │         render 2             b                     ·                       ·
-      │    └── scan  ·                    ·                     (a, b)                  ·
-      │              estimated row count  1000 (missing stats)  ·                       ·
-      │              table                pairs@primary         ·                       ·
-      │              spans                FULL SCAN             ·                       ·
-      └── scan       ·                    ·                     (n, sq)                 ·
-·                    estimated row count  1000 (missing stats)  ·                       ·
-·                    table                square@primary        ·                       ·
-·                    spans                FULL SCAN             ·                       ·
+·                       distribution         local                 ·                       ·
+·                       vectorized           true                  ·                       ·
+project                 ·                    ·                     (a, b, n, sq)           ·
+ │                      estimated row count  990 (missing stats)   ·                       ·
+ └── hash join (inner)  ·                    ·                     (column8, a, b, n, sq)  ·
+      │                 estimated row count  990 (missing stats)   ·                       ·
+      │                 equality             (column8) = (sq)      ·                       ·
+      ├── render        ·                    ·                     (column8, a, b)         ·
+      │    │            estimated row count  1000 (missing stats)  ·                       ·
+      │    │            render 0             a + b                 ·                       ·
+      │    │            render 1             a                     ·                       ·
+      │    │            render 2             b                     ·                       ·
+      │    └── scan     ·                    ·                     (a, b)                  ·
+      │                 estimated row count  1000 (missing stats)  ·                       ·
+      │                 table                pairs@primary         ·                       ·
+      │                 spans                FULL SCAN             ·                       ·
+      └── scan          ·                    ·                     (n, sq)                 ·
+·                       estimated row count  1000 (missing stats)  ·                       ·
+·                       table                square@primary        ·                       ·
+·                       spans                FULL SCAN             ·                       ·
 
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through".
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a * b / 2 AS div, n, sq FROM pairs, square) WHERE div = sq
 ----
-·                          distribution         local                    ·                   ·
-·                          vectorized           true                     ·                   ·
-project                    ·                    ·                        (a, b, n, sq)       ·
- │                         estimated row count  990 (missing stats)      ·                   ·
- └── filter                ·                    ·                        (div, a, b, n, sq)  ·
-      │                    estimated row count  990 (missing stats)      ·                   ·
-      │                    filter               div = sq                 ·                   ·
-      └── render           ·                    ·                        (div, a, b, n, sq)  ·
-           │               estimated row count  1000000 (missing stats)  ·                   ·
-           │               render 0             (a * b) / 2              ·                   ·
-           │               render 1             a                        ·                   ·
-           │               render 2             b                        ·                   ·
-           │               render 3             n                        ·                   ·
-           │               render 4             sq                       ·                   ·
-           └── cross join  ·                    ·                        (a, b, n, sq)       ·
-                │          estimated row count  1000000 (missing stats)  ·                   ·
-                │          type                 cross                    ·                   ·
-                ├── scan   ·                    ·                        (a, b)              ·
-                │          estimated row count  1000 (missing stats)     ·                   ·
-                │          table                pairs@primary            ·                   ·
-                │          spans                FULL SCAN                ·                   ·
-                └── scan   ·                    ·                        (n, sq)             ·
-·                          estimated row count  1000 (missing stats)     ·                   ·
-·                          table                square@primary           ·                   ·
-·                          spans                FULL SCAN                ·                   ·
+·                                  distribution         local                    ·                   ·
+·                                  vectorized           true                     ·                   ·
+project                            ·                    ·                        (a, b, n, sq)       ·
+ │                                 estimated row count  990 (missing stats)      ·                   ·
+ └── filter                        ·                    ·                        (div, a, b, n, sq)  ·
+      │                            estimated row count  990 (missing stats)      ·                   ·
+      │                            filter               div = sq                 ·                   ·
+      └── render                   ·                    ·                        (div, a, b, n, sq)  ·
+           │                       estimated row count  1000000 (missing stats)  ·                   ·
+           │                       render 0             (a * b) / 2              ·                   ·
+           │                       render 1             a                        ·                   ·
+           │                       render 2             b                        ·                   ·
+           │                       render 3             n                        ·                   ·
+           │                       render 4             sq                       ·                   ·
+           └── cross join (inner)  ·                    ·                        (a, b, n, sq)       ·
+                │                  estimated row count  1000000 (missing stats)  ·                   ·
+                ├── scan           ·                    ·                        (a, b)              ·
+                │                  estimated row count  1000 (missing stats)     ·                   ·
+                │                  table                pairs@primary            ·                   ·
+                │                  spans                FULL SCAN                ·                   ·
+                └── scan           ·                    ·                        (n, sq)             ·
+·                                  estimated row count  1000 (missing stats)     ·                   ·
+·                                  table                square@primary           ·                   ·
+·                                  spans                FULL SCAN                ·                   ·
 
 # The filter expression must stay on top of the outer join.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-·                    distribution         local                 ·                       ·
-·                    vectorized           true                  ·                       ·
-project              ·                    ·                     (a, b, n, sq)           ·
- │                   estimated row count  1000 (missing stats)  ·                       ·
- └── hash join       ·                    ·                     (column8, a, b, n, sq)  ·
-      │              estimated row count  1000 (missing stats)  ·                       ·
-      │              type                 full outer            ·                       ·
-      │              equality             (column8) = (sq)      ·                       ·
-      ├── render     ·                    ·                     (column8, a, b)         ·
-      │    │         estimated row count  1000 (missing stats)  ·                       ·
-      │    │         render 0             a + b                 ·                       ·
-      │    │         render 1             a                     ·                       ·
-      │    │         render 2             b                     ·                       ·
-      │    └── scan  ·                    ·                     (a, b)                  ·
-      │              estimated row count  1000 (missing stats)  ·                       ·
-      │              table                pairs@primary         ·                       ·
-      │              spans                FULL SCAN             ·                       ·
-      └── scan       ·                    ·                     (n, sq)                 ·
-·                    estimated row count  1000 (missing stats)  ·                       ·
-·                    table                square@primary        ·                       ·
-·                    spans                FULL SCAN             ·                       ·
+·                            distribution         local                 ·                       ·
+·                            vectorized           true                  ·                       ·
+project                      ·                    ·                     (a, b, n, sq)           ·
+ │                           estimated row count  1000 (missing stats)  ·                       ·
+ └── hash join (full outer)  ·                    ·                     (column8, a, b, n, sq)  ·
+      │                      estimated row count  1000 (missing stats)  ·                       ·
+      │                      equality             (column8) = (sq)      ·                       ·
+      ├── render             ·                    ·                     (column8, a, b)         ·
+      │    │                 estimated row count  1000 (missing stats)  ·                       ·
+      │    │                 render 0             a + b                 ·                       ·
+      │    │                 render 1             a                     ·                       ·
+      │    │                 render 2             b                     ·                       ·
+      │    └── scan          ·                    ·                     (a, b)                  ·
+      │                      estimated row count  1000 (missing stats)  ·                       ·
+      │                      table                pairs@primary         ·                       ·
+      │                      spans                FULL SCAN             ·                       ·
+      └── scan               ·                    ·                     (n, sq)                 ·
+·                            estimated row count  1000 (missing stats)  ·                       ·
+·                            table                square@primary        ·                       ·
+·                            spans                FULL SCAN             ·                       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-·                         distribution         local                 ·                       ·
-·                         vectorized           true                  ·                       ·
-project                   ·                    ·                     (a, b, n, sq)           ·
- │                        estimated row count  333 (missing stats)   ·                       ·
- └── filter               ·                    ·                     (column8, a, b, n, sq)  ·
-      │                   estimated row count  333 (missing stats)   ·                       ·
-      │                   filter               (b % 2) != (sq % 2)   ·                       ·
-      └── hash join       ·                    ·                     (column8, a, b, n, sq)  ·
-           │              estimated row count  1000 (missing stats)  ·                       ·
-           │              type                 full outer            ·                       ·
-           │              equality             (column8) = (sq)      ·                       ·
-           ├── render     ·                    ·                     (column8, a, b)         ·
-           │    │         estimated row count  1000 (missing stats)  ·                       ·
-           │    │         render 0             a + b                 ·                       ·
-           │    │         render 1             a                     ·                       ·
-           │    │         render 2             b                     ·                       ·
-           │    └── scan  ·                    ·                     (a, b)                  ·
-           │              estimated row count  1000 (missing stats)  ·                       ·
-           │              table                pairs@primary         ·                       ·
-           │              spans                FULL SCAN             ·                       ·
-           └── scan       ·                    ·                     (n, sq)                 ·
-·                         estimated row count  1000 (missing stats)  ·                       ·
-·                         table                square@primary        ·                       ·
-·                         spans                FULL SCAN             ·                       ·
+·                                 distribution         local                 ·                       ·
+·                                 vectorized           true                  ·                       ·
+project                           ·                    ·                     (a, b, n, sq)           ·
+ │                                estimated row count  333 (missing stats)   ·                       ·
+ └── filter                       ·                    ·                     (column8, a, b, n, sq)  ·
+      │                           estimated row count  333 (missing stats)   ·                       ·
+      │                           filter               (b % 2) != (sq % 2)   ·                       ·
+      └── hash join (full outer)  ·                    ·                     (column8, a, b, n, sq)  ·
+           │                      estimated row count  1000 (missing stats)  ·                       ·
+           │                      equality             (column8) = (sq)      ·                       ·
+           ├── render             ·                    ·                     (column8, a, b)         ·
+           │    │                 estimated row count  1000 (missing stats)  ·                       ·
+           │    │                 render 0             a + b                 ·                       ·
+           │    │                 render 1             a                     ·                       ·
+           │    │                 render 2             b                     ·                       ·
+           │    └── scan          ·                    ·                     (a, b)                  ·
+           │                      estimated row count  1000 (missing stats)  ·                       ·
+           │                      table                pairs@primary         ·                       ·
+           │                      spans                FULL SCAN             ·                       ·
+           └── scan               ·                    ·                     (n, sq)                 ·
+·                                 estimated row count  1000 (missing stats)  ·                       ·
+·                                 table                square@primary        ·                       ·
+·                                 spans                FULL SCAN             ·                       ·
 
 # Filter propagation through outer joins.
 
@@ -610,30 +576,29 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ]
 ----
-·                    distribution         local
-·                    vectorized           true
-filter               ·                    ·
- │                   estimated row count  115 (missing stats)
- │                   filter               ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
- └── hash join       ·                    ·
-      │              estimated row count  1037 (missing stats)
-      │              type                 left outer
-      │              equality             (b) = (sq)
-      │              pred                 a > 1
-      ├── filter     ·                    ·
-      │    │         estimated row count  333 (missing stats)
-      │    │         filter               b > 1
-      │    └── scan  ·                    ·
-      │              estimated row count  1000 (missing stats)
-      │              table                pairs@primary
-      │              spans                FULL SCAN
-      └── filter     ·                    ·
-           │         estimated row count  311 (missing stats)
-           │         filter               sq > 1
-           └── scan  ·                    ·
-·                    estimated row count  333 (missing stats)
-·                    table                square@primary
-·                    spans                -/5/#
+·                            distribution         local
+·                            vectorized           true
+filter                       ·                    ·
+ │                           estimated row count  115 (missing stats)
+ │                           filter               ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+ └── hash join (left outer)  ·                    ·
+      │                      estimated row count  1037 (missing stats)
+      │                      equality             (b) = (sq)
+      │                      pred                 a > 1
+      ├── filter             ·                    ·
+      │    │                 estimated row count  333 (missing stats)
+      │    │                 filter               b > 1
+      │    └── scan          ·                    ·
+      │                      estimated row count  1000 (missing stats)
+      │                      table                pairs@primary
+      │                      spans                FULL SCAN
+      └── filter             ·                    ·
+           │                 estimated row count  311 (missing stats)
+           │                 filter               sq > 1
+           └── scan          ·                    ·
+·                            estimated row count  333 (missing stats)
+·                            table                square@primary
+·                            spans                -/5/#
 
 query TTT
 SELECT tree, field, description FROM [
@@ -643,27 +608,26 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·                    distribution         local
-·                    vectorized           true
-filter               ·                    ·
- │                   estimated row count  42 (missing stats)
- │                   filter               ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
- └── hash join       ·                    ·
-      │              estimated row count  377 (missing stats)
-      │              type                 left outer
-      │              equality             (sq) = (b)
-      │              pred                 n < 6
-      ├── scan       ·                    ·
-      │              estimated row count  333 (missing stats)
-      │              table                square@primary
-      │              spans                /2-
-      └── filter     ·                    ·
-           │         estimated row count  333 (missing stats)
-           │         filter               a > 1
-           └── scan  ·                    ·
-·                    estimated row count  1000 (missing stats)
-·                    table                pairs@primary
-·                    spans                FULL SCAN
+·                            distribution         local
+·                            vectorized           true
+filter                       ·                    ·
+ │                           estimated row count  42 (missing stats)
+ │                           filter               ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+ └── hash join (left outer)  ·                    ·
+      │                      estimated row count  377 (missing stats)
+      │                      equality             (sq) = (b)
+      │                      pred                 n < 6
+      ├── scan               ·                    ·
+      │                      estimated row count  333 (missing stats)
+      │                      table                square@primary
+      │                      spans                /2-
+      └── filter             ·                    ·
+           │                 estimated row count  333 (missing stats)
+           │                 filter               a > 1
+           └── scan          ·                    ·
+·                            estimated row count  1000 (missing stats)
+·                            table                pairs@primary
+·                            spans                FULL SCAN
 
 # The simpler plan for an inner join, to compare.
 query TTT
@@ -674,24 +638,23 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-·               distribution         local
-·               vectorized           true
-hash join       ·                    ·
- │              estimated row count  6 (missing stats)
- │              type                 inner
- │              equality             (b) = (sq)
- ├── filter     ·                    ·
- │    │         estimated row count  111 (missing stats)
- │    │         filter               ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
- │    └── scan  ·                    ·
- │              estimated row count  1000 (missing stats)
- │              table                pairs@primary
- │              spans                FULL SCAN
- └── scan       ·                    ·
-·               estimated row count  4 (missing stats)
-·               table                square@primary
-·               spans                /2-/5/#
-·               parallel             ·
+·                  distribution         local
+·                  vectorized           true
+hash join (inner)  ·                    ·
+ │                 estimated row count  6 (missing stats)
+ │                 equality             (b) = (sq)
+ ├── filter        ·                    ·
+ │    │            estimated row count  111 (missing stats)
+ │    │            filter               ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+ │    └── scan     ·                    ·
+ │                 estimated row count  1000 (missing stats)
+ │                 table                pairs@primary
+ │                 spans                FULL SCAN
+ └── scan          ·                    ·
+·                  estimated row count  4 (missing stats)
+·                  table                square@primary
+·                  spans                /2-/5/#
+·                  parallel             ·
 
 
 statement ok
@@ -703,22 +666,21 @@ CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
-·               distribution         local                 ·             ·
-·               vectorized           true                  ·             ·
-project         ·                    ·                     (x)           ·
- │              estimated row count  96 (missing stats)    ·             ·
- └── hash join  ·                    ·                     (x, y, y, x)  ·
-      │         estimated row count  96 (missing stats)    ·             ·
-      │         type                 inner                 ·             ·
-      │         equality             (x, y) = (x, y)       ·             ·
-      ├── scan  ·                    ·                     (x, y)        ·
-      │         estimated row count  1000 (missing stats)  ·             ·
-      │         table                t1@primary            ·             ·
-      │         spans                FULL SCAN             ·             ·
-      └── scan  ·                    ·                     (y, x)        ·
-·               estimated row count  1000 (missing stats)  ·             ·
-·               table                t2@primary            ·             ·
-·               spans                FULL SCAN             ·             ·
+·                       distribution         local                 ·             ·
+·                       vectorized           true                  ·             ·
+project                 ·                    ·                     (x)           ·
+ │                      estimated row count  96 (missing stats)    ·             ·
+ └── hash join (inner)  ·                    ·                     (x, y, y, x)  ·
+      │                 estimated row count  96 (missing stats)    ·             ·
+      │                 equality             (x, y) = (x, y)       ·             ·
+      ├── scan          ·                    ·                     (x, y)        ·
+      │                 estimated row count  1000 (missing stats)  ·             ·
+      │                 table                t1@primary            ·             ·
+      │                 spans                FULL SCAN             ·             ·
+      └── scan          ·                    ·                     (y, x)        ·
+·                       estimated row count  1000 (missing stats)  ·             ·
+·                       table                t2@primary            ·             ·
+·                       spans                FULL SCAN             ·             ·
 
 # Tests for merge join ordering information.
 statement ok
@@ -736,88 +698,84 @@ CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-·          distribution         local                  ·                         ·
-·          vectorized           true                   ·                         ·
-hash join  ·                    ·                      (a, b, c, d, a, b, c, d)  ·
- │         estimated row count  1 (missing stats)      ·                         ·
- │         type                 inner                  ·                         ·
- │         equality             (a, b, c) = (a, b, c)  ·                         ·
- │         left cols are key    ·                      ·                         ·
- │         right cols are key   ·                      ·                         ·
- ├── scan  ·                    ·                      (a, b, c, d)              ·
- │         estimated row count  1000 (missing stats)   ·                         ·
- │         table                pkba@primary           ·                         ·
- │         spans                FULL SCAN              ·                         ·
- └── scan  ·                    ·                      (a, b, c, d)              ·
-·          estimated row count  1000 (missing stats)   ·                         ·
-·          table                pkbc@primary           ·                         ·
-·          spans                FULL SCAN              ·                         ·
+·                  distribution         local                  ·                         ·
+·                  vectorized           true                   ·                         ·
+hash join (inner)  ·                    ·                      (a, b, c, d, a, b, c, d)  ·
+ │                 estimated row count  1 (missing stats)      ·                         ·
+ │                 equality             (a, b, c) = (a, b, c)  ·                         ·
+ │                 left cols are key    ·                      ·                         ·
+ │                 right cols are key   ·                      ·                         ·
+ ├── scan          ·                    ·                      (a, b, c, d)              ·
+ │                 estimated row count  1000 (missing stats)   ·                         ·
+ │                 table                pkba@primary           ·                         ·
+ │                 spans                FULL SCAN              ·                         ·
+ └── scan          ·                    ·                      (a, b, c, d)              ·
+·                  estimated row count  1000 (missing stats)   ·                         ·
+·                  table                pkbc@primary           ·                         ·
+·                  spans                FULL SCAN              ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-·               distribution         local                        ·                         ·
-·               vectorized           true                         ·                         ·
-project         ·                    ·                            (a, b, c, d)              ·
- │              estimated row count  0 (missing stats)            ·                         ·
- └── hash join  ·                    ·                            (a, b, c, d, a, b, c, d)  ·
-      │         estimated row count  0 (missing stats)            ·                         ·
-      │         type                 inner                        ·                         ·
-      │         equality             (a, b, c, d) = (a, b, c, d)  ·                         ·
-      │         left cols are key    ·                            ·                         ·
-      │         right cols are key   ·                            ·                         ·
-      ├── scan  ·                    ·                            (a, b, c, d)              ·
-      │         estimated row count  1000 (missing stats)         ·                         ·
-      │         table                pkba@primary                 ·                         ·
-      │         spans                FULL SCAN                    ·                         ·
-      └── scan  ·                    ·                            (a, b, c, d)              ·
-·               estimated row count  1000 (missing stats)         ·                         ·
-·               table                pkbad@primary                ·                         ·
-·               spans                FULL SCAN                    ·                         ·
+·                       distribution         local                        ·                         ·
+·                       vectorized           true                         ·                         ·
+project                 ·                    ·                            (a, b, c, d)              ·
+ │                      estimated row count  0 (missing stats)            ·                         ·
+ └── hash join (inner)  ·                    ·                            (a, b, c, d, a, b, c, d)  ·
+      │                 estimated row count  0 (missing stats)            ·                         ·
+      │                 equality             (a, b, c, d) = (a, b, c, d)  ·                         ·
+      │                 left cols are key    ·                            ·                         ·
+      │                 right cols are key   ·                            ·                         ·
+      ├── scan          ·                    ·                            (a, b, c, d)              ·
+      │                 estimated row count  1000 (missing stats)         ·                         ·
+      │                 table                pkba@primary                 ·                         ·
+      │                 spans                FULL SCAN                    ·                         ·
+      └── scan          ·                    ·                            (a, b, c, d)              ·
+·                       estimated row count  1000 (missing stats)         ·                         ·
+·                       table                pkbad@primary                ·                         ·
+·                       spans                FULL SCAN                    ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
-·                distribution         local                       ·                         ·
-·                vectorized           true                        ·                         ·
-project          ·                    ·                           (a, b, c, d, d)           ·
- │               estimated row count  1 (missing stats)           ·                         ·
- └── merge join  ·                    ·                           (a, b, c, d, a, b, c, d)  ·
-      │          estimated row count  1 (missing stats)           ·                         ·
-      │          type                 inner                       ·                         ·
-      │          equality             (b, a, c) = (b, a, c)       ·                         ·
-      │          left cols are key    ·                           ·                         ·
-      │          right cols are key   ·                           ·                         ·
-      │          mergeJoinOrder       +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
-      ├── scan   ·                    ·                           (a, b, c, d)              +b,+a,+c
-      │          estimated row count  1000 (missing stats)        ·                         ·
-      │          table                pkbac@primary               ·                         ·
-      │          spans                FULL SCAN                   ·                         ·
-      └── scan   ·                    ·                           (a, b, c, d)              +b,+a,+c
-·                estimated row count  1000 (missing stats)        ·                         ·
-·                table                pkbac@primary               ·                         ·
-·                spans                FULL SCAN                   ·                         ·
+·                        distribution         local                       ·                         ·
+·                        vectorized           true                        ·                         ·
+project                  ·                    ·                           (a, b, c, d, d)           ·
+ │                       estimated row count  1 (missing stats)           ·                         ·
+ └── merge join (inner)  ·                    ·                           (a, b, c, d, a, b, c, d)  ·
+      │                  estimated row count  1 (missing stats)           ·                         ·
+      │                  equality             (b, a, c) = (b, a, c)       ·                         ·
+      │                  left cols are key    ·                           ·                         ·
+      │                  right cols are key   ·                           ·                         ·
+      │                  merge ordering       +"(b=b)",+"(a=a)",+"(c=c)"  ·                         ·
+      ├── scan           ·                    ·                           (a, b, c, d)              +b,+a,+c
+      │                  estimated row count  1000 (missing stats)        ·                         ·
+      │                  table                pkbac@primary               ·                         ·
+      │                  spans                FULL SCAN                   ·                         ·
+      └── scan           ·                    ·                           (a, b, c, d)              +b,+a,+c
+·                        estimated row count  1000 (missing stats)        ·                         ·
+·                        table                pkbac@primary               ·                         ·
+·                        spans                FULL SCAN                   ·                         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-·           distribution         local                       ·                         ·
-·           vectorized           true                        ·                         ·
-merge join  ·                    ·                           (a, b, c, d, a, b, c, d)  ·
- │          estimated row count  1 (missing stats)           ·                         ·
- │          type                 inner                       ·                         ·
- │          equality             (b, a, c) = (b, a, d)       ·                         ·
- │          left cols are key    ·                           ·                         ·
- │          right cols are key   ·                           ·                         ·
- │          mergeJoinOrder       +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
- ├── scan   ·                    ·                           (a, b, c, d)              +b,+a,+c
- │          estimated row count  1000 (missing stats)        ·                         ·
- │          table                pkbac@primary               ·                         ·
- │          spans                FULL SCAN                   ·                         ·
- └── scan   ·                    ·                           (a, b, c, d)              +b,+a,+d
-·           estimated row count  1000 (missing stats)        ·                         ·
-·           table                pkbad@primary               ·                         ·
-·           spans                FULL SCAN                   ·                         ·
+·                   distribution         local                       ·                         ·
+·                   vectorized           true                        ·                         ·
+merge join (inner)  ·                    ·                           (a, b, c, d, a, b, c, d)  ·
+ │                  estimated row count  1 (missing stats)           ·                         ·
+ │                  equality             (b, a, c) = (b, a, d)       ·                         ·
+ │                  left cols are key    ·                           ·                         ·
+ │                  right cols are key   ·                           ·                         ·
+ │                  merge ordering       +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
+ ├── scan           ·                    ·                           (a, b, c, d)              +b,+a,+c
+ │                  estimated row count  1000 (missing stats)        ·                         ·
+ │                  table                pkbac@primary               ·                         ·
+ │                  spans                FULL SCAN                   ·                         ·
+ └── scan           ·                    ·                           (a, b, c, d)              +b,+a,+d
+·                   estimated row count  1000 (missing stats)        ·                         ·
+·                   table                pkbad@primary               ·                         ·
+·                   spans                FULL SCAN                   ·                         ·
 
 # Tests with joins with merged columns of collated string type.
 statement ok
@@ -829,112 +787,107 @@ CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
-·               distribution         local                 ·          ·
-·               vectorized           true                  ·          ·
-project         ·                    ·                     (s, s, s)  ·
- └── hash join  ·                    ·                     (s, s)     ·
-      │         estimated row count  9801 (missing stats)  ·          ·
-      │         type                 inner                 ·          ·
-      │         equality             (s) = (s)             ·          ·
-      ├── scan  ·                    ·                     (s)        ·
-      │         estimated row count  1000 (missing stats)  ·          ·
-      │         table                str1@primary          ·          ·
-      │         spans                FULL SCAN             ·          ·
-      └── scan  ·                    ·                     (s)        ·
-·               estimated row count  1000 (missing stats)  ·          ·
-·               table                str2@primary          ·          ·
-·               spans                FULL SCAN             ·          ·
+·                       distribution         local                 ·          ·
+·                       vectorized           true                  ·          ·
+project                 ·                    ·                     (s, s, s)  ·
+ └── hash join (inner)  ·                    ·                     (s, s)     ·
+      │                 estimated row count  9801 (missing stats)  ·          ·
+      │                 equality             (s) = (s)             ·          ·
+      ├── scan          ·                    ·                     (s)        ·
+      │                 estimated row count  1000 (missing stats)  ·          ·
+      │                 table                str1@primary          ·          ·
+      │                 spans                FULL SCAN             ·          ·
+      └── scan          ·                    ·                     (s)        ·
+·                       estimated row count  1000 (missing stats)  ·          ·
+·                       table                str2@primary          ·          ·
+·                       spans                FULL SCAN             ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
-·               distribution         local                  ·          ·
-·               vectorized           true                   ·          ·
-project         ·                    ·                      (s, s, s)  ·
- └── hash join  ·                    ·                      (s, s)     ·
-      │         estimated row count  10000 (missing stats)  ·          ·
-      │         type                 left outer             ·          ·
-      │         equality             (s) = (s)              ·          ·
-      ├── scan  ·                    ·                      (s)        ·
-      │         estimated row count  1000 (missing stats)   ·          ·
-      │         table                str1@primary           ·          ·
-      │         spans                FULL SCAN              ·          ·
-      └── scan  ·                    ·                      (s)        ·
-·               estimated row count  1000 (missing stats)   ·          ·
-·               table                str2@primary           ·          ·
-·               spans                FULL SCAN              ·          ·
+·                            distribution         local                  ·          ·
+·                            vectorized           true                   ·          ·
+project                      ·                    ·                      (s, s, s)  ·
+ └── hash join (left outer)  ·                    ·                      (s, s)     ·
+      │                      estimated row count  10000 (missing stats)  ·          ·
+      │                      equality             (s) = (s)              ·          ·
+      ├── scan               ·                    ·                      (s)        ·
+      │                      estimated row count  1000 (missing stats)   ·          ·
+      │                      table                str1@primary           ·          ·
+      │                      spans                FULL SCAN              ·          ·
+      └── scan               ·                    ·                      (s)        ·
+·                            estimated row count  1000 (missing stats)   ·          ·
+·                            table                str2@primary           ·          ·
+·                            spans                FULL SCAN              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
-·               distribution         local                  ·          ·
-·               vectorized           true                   ·          ·
-render          ·                    ·                      (s, s, s)  ·
- │              estimated row count  10000 (missing stats)  ·          ·
- │              render 0             COALESCE(s, s)         ·          ·
- │              render 1             s                      ·          ·
- │              render 2             s                      ·          ·
- └── hash join  ·                    ·                      (s, s)     ·
-      │         estimated row count  10000 (missing stats)  ·          ·
-      │         type                 left outer             ·          ·
-      │         equality             (s) = (s)              ·          ·
-      ├── scan  ·                    ·                      (s)        ·
-      │         estimated row count  1000 (missing stats)   ·          ·
-      │         table                str2@primary           ·          ·
-      │         spans                FULL SCAN              ·          ·
-      └── scan  ·                    ·                      (s)        ·
-·               estimated row count  1000 (missing stats)   ·          ·
-·               table                str1@primary           ·          ·
-·               spans                FULL SCAN              ·          ·
+·                            distribution         local                  ·          ·
+·                            vectorized           true                   ·          ·
+render                       ·                    ·                      (s, s, s)  ·
+ │                           estimated row count  10000 (missing stats)  ·          ·
+ │                           render 0             COALESCE(s, s)         ·          ·
+ │                           render 1             s                      ·          ·
+ │                           render 2             s                      ·          ·
+ └── hash join (left outer)  ·                    ·                      (s, s)     ·
+      │                      estimated row count  10000 (missing stats)  ·          ·
+      │                      equality             (s) = (s)              ·          ·
+      ├── scan               ·                    ·                      (s)        ·
+      │                      estimated row count  1000 (missing stats)   ·          ·
+      │                      table                str2@primary           ·          ·
+      │                      spans                FULL SCAN              ·          ·
+      └── scan               ·                    ·                      (s)        ·
+·                            estimated row count  1000 (missing stats)   ·          ·
+·                            table                str1@primary           ·          ·
+·                            spans                FULL SCAN              ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
-·               distribution         local                  ·          ·
-·               vectorized           true                   ·          ·
-render          ·                    ·                      (s, s, s)  ·
- │              estimated row count  10000 (missing stats)  ·          ·
- │              render 0             COALESCE(s, s)         ·          ·
- │              render 1             s                      ·          ·
- │              render 2             s                      ·          ·
- └── hash join  ·                    ·                      (s, s)     ·
-      │         estimated row count  10000 (missing stats)  ·          ·
-      │         type                 full outer             ·          ·
-      │         equality             (s) = (s)              ·          ·
-      ├── scan  ·                    ·                      (s)        ·
-      │         estimated row count  1000 (missing stats)   ·          ·
-      │         table                str1@primary           ·          ·
-      │         spans                FULL SCAN              ·          ·
-      └── scan  ·                    ·                      (s)        ·
-·               estimated row count  1000 (missing stats)   ·          ·
-·               table                str2@primary           ·          ·
-·               spans                FULL SCAN              ·          ·
+·                            distribution         local                  ·          ·
+·                            vectorized           true                   ·          ·
+render                       ·                    ·                      (s, s, s)  ·
+ │                           estimated row count  10000 (missing stats)  ·          ·
+ │                           render 0             COALESCE(s, s)         ·          ·
+ │                           render 1             s                      ·          ·
+ │                           render 2             s                      ·          ·
+ └── hash join (full outer)  ·                    ·                      (s, s)     ·
+      │                      estimated row count  10000 (missing stats)  ·          ·
+      │                      equality             (s) = (s)              ·          ·
+      ├── scan               ·                    ·                      (s)        ·
+      │                      estimated row count  1000 (missing stats)   ·          ·
+      │                      table                str1@primary           ·          ·
+      │                      spans                FULL SCAN              ·          ·
+      └── scan               ·                    ·                      (s)        ·
+·                            estimated row count  1000 (missing stats)   ·          ·
+·                            table                str2@primary           ·          ·
+·                            spans                FULL SCAN              ·          ·
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
 # column s which is a collated string.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
-·               distribution         local                 ·             ·
-·               vectorized           true                  ·             ·
-render          ·                    ·                     (a, s)        ·
- │              estimated row count  1000 (missing stats)  ·             ·
- │              render 0             COALESCE(s, s)        ·             ·
- │              render 1             a                     ·             ·
- └── hash join  ·                    ·                     (a, s, a, s)  ·
-      │         estimated row count  1000 (missing stats)  ·             ·
-      │         type                 left outer            ·             ·
-      │         equality             (a, s) = (a, s)       ·             ·
-      │         left cols are key    ·                     ·             ·
-      │         right cols are key   ·                     ·             ·
-      ├── scan  ·                    ·                     (a, s)        ·
-      │         estimated row count  1000 (missing stats)  ·             ·
-      │         table                str2@primary          ·             ·
-      │         spans                FULL SCAN             ·             ·
-      └── scan  ·                    ·                     (a, s)        ·
-·               estimated row count  1000 (missing stats)  ·             ·
-·               table                str1@primary          ·             ·
-·               spans                FULL SCAN             ·             ·
+·                            distribution         local                 ·             ·
+·                            vectorized           true                  ·             ·
+render                       ·                    ·                     (a, s)        ·
+ │                           estimated row count  1000 (missing stats)  ·             ·
+ │                           render 0             COALESCE(s, s)        ·             ·
+ │                           render 1             a                     ·             ·
+ └── hash join (left outer)  ·                    ·                     (a, s, a, s)  ·
+      │                      estimated row count  1000 (missing stats)  ·             ·
+      │                      equality             (a, s) = (a, s)       ·             ·
+      │                      left cols are key    ·                     ·             ·
+      │                      right cols are key   ·                     ·             ·
+      ├── scan               ·                    ·                     (a, s)        ·
+      │                      estimated row count  1000 (missing stats)  ·             ·
+      │                      table                str2@primary          ·             ·
+      │                      spans                FULL SCAN             ·             ·
+      └── scan               ·                    ·                     (a, s)        ·
+·                            estimated row count  1000 (missing stats)  ·             ·
+·                            table                str1@primary          ·             ·
+·                            spans                FULL SCAN             ·             ·
 
 
 statement ok
@@ -946,170 +899,162 @@ CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distribution         local                ·                   ·
-·                vectorized           true                 ·                   ·
-project          ·                    ·                    (x, y, u, v)        ·
- │               estimated row count  34 (missing stats)   ·                   ·
- └── merge join  ·                    ·                    (x, y, u, x, y, v)  ·
-      │          estimated row count  34 (missing stats)   ·                   ·
-      │          type                 inner                ·                   ·
-      │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
-      ├── scan   ·                    ·                    (x, y, u)           +x,+y
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          table                xyu@primary          ·                   ·
-      │          spans                /3-                  ·                   ·
-      └── scan   ·                    ·                    (x, y, v)           +x,+y
-·                estimated row count  333 (missing stats)  ·                   ·
-·                table                xyv@primary          ·                   ·
-·                spans                /3-                  ·                   ·
+·                        distribution         local                ·                   ·
+·                        vectorized           true                 ·                   ·
+project                  ·                    ·                    (x, y, u, v)        ·
+ │                       estimated row count  34 (missing stats)   ·                   ·
+ └── merge join (inner)  ·                    ·                    (x, y, u, x, y, v)  ·
+      │                  estimated row count  34 (missing stats)   ·                   ·
+      │                  equality             (x, y) = (x, y)      ·                   ·
+      │                  merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
+      ├── scan           ·                    ·                    (x, y, u)           +x,+y
+      │                  estimated row count  333 (missing stats)  ·                   ·
+      │                  table                xyu@primary          ·                   ·
+      │                  spans                /3-                  ·                   ·
+      └── scan           ·                    ·                    (x, y, v)           +x,+y
+·                        estimated row count  333 (missing stats)  ·                   ·
+·                        table                xyv@primary          ·                   ·
+·                        spans                /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distribution         local                ·                   ·
-·                vectorized           true                 ·                   ·
-project          ·                    ·                    (x, y, u, v)        ·
- │               estimated row count  333 (missing stats)  ·                   ·
- └── merge join  ·                    ·                    (x, y, u, x, y, v)  ·
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          type                 left outer           ·                   ·
-      │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
-      ├── scan   ·                    ·                    (x, y, u)           +x,+y
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          table                xyu@primary          ·                   ·
-      │          spans                /3-                  ·                   ·
-      └── scan   ·                    ·                    (x, y, v)           +x,+y
-·                estimated row count  333 (missing stats)  ·                   ·
-·                table                xyv@primary          ·                   ·
-·                spans                /3-                  ·                   ·
+·                             distribution         local                ·                   ·
+·                             vectorized           true                 ·                   ·
+project                       ·                    ·                    (x, y, u, v)        ·
+ │                            estimated row count  333 (missing stats)  ·                   ·
+ └── merge join (left outer)  ·                    ·                    (x, y, u, x, y, v)  ·
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       equality             (x, y) = (x, y)      ·                   ·
+      │                       merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
+      ├── scan                ·                    ·                    (x, y, u)           +x,+y
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       table                xyu@primary          ·                   ·
+      │                       spans                /3-                  ·                   ·
+      └── scan                ·                    ·                    (x, y, v)           +x,+y
+·                             estimated row count  333 (missing stats)  ·                   ·
+·                             table                xyv@primary          ·                   ·
+·                             spans                /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                distribution         local                ·                   ·
-·                vectorized           true                 ·                   ·
-project          ·                    ·                    (x, y, u, v)        ·
- │               estimated row count  333 (missing stats)  ·                   ·
- └── merge join  ·                    ·                    (x, y, v, x, y, u)  ·
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          type                 left outer           ·                   ·
-      │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
-      ├── scan   ·                    ·                    (x, y, v)           +x,+y
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          table                xyv@primary          ·                   ·
-      │          spans                /3-                  ·                   ·
-      └── scan   ·                    ·                    (x, y, u)           +x,+y
-·                estimated row count  333 (missing stats)  ·                   ·
-·                table                xyu@primary          ·                   ·
-·                spans                /3-                  ·                   ·
+·                             distribution         local                ·                   ·
+·                             vectorized           true                 ·                   ·
+project                       ·                    ·                    (x, y, u, v)        ·
+ │                            estimated row count  333 (missing stats)  ·                   ·
+ └── merge join (left outer)  ·                    ·                    (x, y, v, x, y, u)  ·
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       equality             (x, y) = (x, y)      ·                   ·
+      │                       merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
+      ├── scan                ·                    ·                    (x, y, v)           +x,+y
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       table                xyv@primary          ·                   ·
+      │                       spans                /3-                  ·                   ·
+      └── scan                ·                    ·                    (x, y, u)           +x,+y
+·                             estimated row count  333 (missing stats)  ·                   ·
+·                             table                xyu@primary          ·                   ·
+·                             spans                /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-·                     distribution         local                 ·                   ·
-·                     vectorized           true                  ·                   ·
-filter                ·                    ·                     (x, y, u, v)        ·
- │                    estimated row count  633 (missing stats)   ·                   ·
- │                    filter               x > 2                 ·                   ·
- └── render           ·                    ·                     (x, y, u, v)        ·
-      │               estimated row count  1900 (missing stats)  ·                   ·
-      │               render 0             COALESCE(x, x)        ·                   ·
-      │               render 1             COALESCE(y, y)        ·                   ·
-      │               render 2             u                     ·                   ·
-      │               render 3             v                     ·                   ·
-      └── merge join  ·                    ·                     (x, y, u, x, y, v)  ·
-           │          estimated row count  1900 (missing stats)  ·                   ·
-           │          type                 full outer            ·                   ·
-           │          equality             (x, y) = (x, y)       ·                   ·
-           │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
-           ├── scan   ·                    ·                     (x, y, u)           +x,+y
-           │          estimated row count  1000 (missing stats)  ·                   ·
-           │          table                xyu@primary           ·                   ·
-           │          spans                FULL SCAN             ·                   ·
-           └── scan   ·                    ·                     (x, y, v)           +x,+y
-·                     estimated row count  1000 (missing stats)  ·                   ·
-·                     table                xyv@primary           ·                   ·
-·                     spans                FULL SCAN             ·                   ·
+·                                  distribution         local                 ·                   ·
+·                                  vectorized           true                  ·                   ·
+filter                             ·                    ·                     (x, y, u, v)        ·
+ │                                 estimated row count  633 (missing stats)   ·                   ·
+ │                                 filter               x > 2                 ·                   ·
+ └── render                        ·                    ·                     (x, y, u, v)        ·
+      │                            estimated row count  1900 (missing stats)  ·                   ·
+      │                            render 0             COALESCE(x, x)        ·                   ·
+      │                            render 1             COALESCE(y, y)        ·                   ·
+      │                            render 2             u                     ·                   ·
+      │                            render 3             v                     ·                   ·
+      └── merge join (full outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+           │                       estimated row count  1900 (missing stats)  ·                   ·
+           │                       equality             (x, y) = (x, y)       ·                   ·
+           │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+           ├── scan                ·                    ·                     (x, y, u)           +x,+y
+           │                       estimated row count  1000 (missing stats)  ·                   ·
+           │                       table                xyu@primary           ·                   ·
+           │                       spans                FULL SCAN             ·                   ·
+           └── scan                ·                    ·                     (x, y, v)           +x,+y
+·                                  estimated row count  1000 (missing stats)  ·                   ·
+·                                  table                xyv@primary           ·                   ·
+·                                  spans                FULL SCAN             ·                   ·
 
 # Verify that we transfer constraints between the two sides.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local              ·                   ·
-·           vectorized           true               ·                   ·
-merge join  ·                    ·                  (x, y, u, x, y, v)  ·
- │          estimated row count  9 (missing stats)  ·                   ·
- │          type                 inner              ·                   ·
- │          equality             (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·                    ·                  (x, y, u)           +y
- │          estimated row count  9 (missing stats)  ·                   ·
- │          table                xyu@primary        ·                   ·
- │          spans                /1-/1/10           ·                   ·
- └── scan   ·                    ·                  (x, y, v)           +y
-·           estimated row count  9 (missing stats)  ·                   ·
-·           table                xyv@primary        ·                   ·
-·           spans                /1-/1/10           ·                   ·
+·                   distribution         local              ·                   ·
+·                   vectorized           true               ·                   ·
+merge join (inner)  ·                    ·                  (x, y, u, x, y, v)  ·
+ │                  estimated row count  9 (missing stats)  ·                   ·
+ │                  equality             (x, y) = (x, y)    ·                   ·
+ │                  merge ordering       +"(x=x)",+"(y=y)"  ·                   ·
+ ├── scan           ·                    ·                  (x, y, u)           +y
+ │                  estimated row count  9 (missing stats)  ·                   ·
+ │                  table                xyu@primary        ·                   ·
+ │                  spans                /1-/1/10           ·                   ·
+ └── scan           ·                    ·                  (x, y, v)           +y
+·                   estimated row count  9 (missing stats)  ·                   ·
+·                   table                xyv@primary        ·                   ·
+·                   spans                /1-/1/10           ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local              ·                   ·
-·           vectorized           true               ·                   ·
-merge join  ·                    ·                  (x, y, u, x, y, v)  ·
- │          estimated row count  9 (missing stats)  ·                   ·
- │          type                 inner              ·                   ·
- │          equality             (x, y) = (x, y)    ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan   ·                    ·                  (x, y, u)           +y
- │          estimated row count  9 (missing stats)  ·                   ·
- │          table                xyu@primary        ·                   ·
- │          spans                /1-/1/10           ·                   ·
- └── scan   ·                    ·                  (x, y, v)           +y
-·           estimated row count  9 (missing stats)  ·                   ·
-·           table                xyv@primary        ·                   ·
-·           spans                /1-/1/10           ·                   ·
+·                   distribution         local              ·                   ·
+·                   vectorized           true               ·                   ·
+merge join (inner)  ·                    ·                  (x, y, u, x, y, v)  ·
+ │                  estimated row count  9 (missing stats)  ·                   ·
+ │                  equality             (x, y) = (x, y)    ·                   ·
+ │                  merge ordering       +"(x=x)",+"(y=y)"  ·                   ·
+ ├── scan           ·                    ·                  (x, y, u)           +y
+ │                  estimated row count  9 (missing stats)  ·                   ·
+ │                  table                xyu@primary        ·                   ·
+ │                  spans                /1-/1/10           ·                   ·
+ └── scan           ·                    ·                  (x, y, v)           +y
+·                   estimated row count  9 (missing stats)  ·                   ·
+·                   table                xyv@primary        ·                   ·
+·                   spans                /1-/1/10           ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local                 ·                   ·
-·           vectorized           true                  ·                   ·
-merge join  ·                    ·                     (x, y, u, x, y, v)  ·
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          type                 left outer            ·                   ·
- │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
- ├── scan   ·                    ·                     (x, y, u)           +x,+y
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          table                xyu@primary           ·                   ·
- │          spans                FULL SCAN             ·                   ·
- └── scan   ·                    ·                     (x, y, v)           +y
-·           estimated row count  9 (missing stats)     ·                   ·
-·           table                xyv@primary           ·                   ·
-·           spans                /1-/1/10              ·                   ·
+·                        distribution         local                 ·                   ·
+·                        vectorized           true                  ·                   ·
+merge join (left outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       equality             (x, y) = (x, y)       ·                   ·
+ │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+ ├── scan                ·                    ·                     (x, y, u)           +x,+y
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       table                xyu@primary           ·                   ·
+ │                       spans                FULL SCAN             ·                   ·
+ └── scan                ·                    ·                     (x, y, v)           +y
+·                        estimated row count  9 (missing stats)     ·                   ·
+·                        table                xyv@primary           ·                   ·
+·                        spans                /1-/1/10              ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local                 ·                   ·
-·           vectorized           true                  ·                   ·
-merge join  ·                    ·                     (x, y, u, x, y, v)  ·
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          type                 left outer            ·                   ·
- │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
- ├── scan   ·                    ·                     (x, y, v)           +x,+y
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          table                xyv@primary           ·                   ·
- │          spans                FULL SCAN             ·                   ·
- └── scan   ·                    ·                     (x, y, u)           +y
-·           estimated row count  9 (missing stats)     ·                   ·
-·           table                xyu@primary           ·                   ·
-·           spans                /1-/1/10              ·                   ·
+·                        distribution         local                 ·                   ·
+·                        vectorized           true                  ·                   ·
+merge join (left outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       equality             (x, y) = (x, y)       ·                   ·
+ │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+ ├── scan                ·                    ·                     (x, y, v)           +x,+y
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       table                xyv@primary           ·                   ·
+ │                       spans                FULL SCAN             ·                   ·
+ └── scan                ·                    ·                     (x, y, u)           +y
+·                        estimated row count  9 (missing stats)     ·                   ·
+·                        table                xyu@primary           ·                   ·
+·                        spans                /1-/1/10              ·                   ·
 
 
 # Test OUTER joins that are run in the distSQL merge joiner
@@ -1117,132 +1062,126 @@ merge join  ·                    ·                     (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                distribution         local                ·                   ·
-·                vectorized           true                 ·                   ·
-project          ·                    ·                    (x, y, u, v)        ·
- │               estimated row count  333 (missing stats)  ·                   ·
- └── merge join  ·                    ·                    (x, y, u, x, y, v)  ·
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          type                 left outer           ·                   ·
-      │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
-      ├── scan   ·                    ·                    (x, y, u)           +x,+y
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          table                xyu@primary          ·                   ·
-      │          spans                /3-                  ·                   ·
-      └── scan   ·                    ·                    (x, y, v)           +x,+y
-·                estimated row count  333 (missing stats)  ·                   ·
-·                table                xyv@primary          ·                   ·
-·                spans                /3-                  ·                   ·
+·                             distribution         local                ·                   ·
+·                             vectorized           true                 ·                   ·
+project                       ·                    ·                    (x, y, u, v)        ·
+ │                            estimated row count  333 (missing stats)  ·                   ·
+ └── merge join (left outer)  ·                    ·                    (x, y, u, x, y, v)  ·
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       equality             (x, y) = (x, y)      ·                   ·
+      │                       merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
+      ├── scan                ·                    ·                    (x, y, u)           +x,+y
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       table                xyu@primary          ·                   ·
+      │                       spans                /3-                  ·                   ·
+      └── scan                ·                    ·                    (x, y, v)           +x,+y
+·                             estimated row count  333 (missing stats)  ·                   ·
+·                             table                xyv@primary          ·                   ·
+·                             spans                /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                distribution         local                ·                   ·
-·                vectorized           true                 ·                   ·
-project          ·                    ·                    (x, y, u, v)        ·
- │               estimated row count  333 (missing stats)  ·                   ·
- └── merge join  ·                    ·                    (x, y, v, x, y, u)  ·
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          type                 left outer           ·                   ·
-      │          equality             (x, y) = (x, y)      ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"    ·                   ·
-      ├── scan   ·                    ·                    (x, y, v)           +x,+y
-      │          estimated row count  333 (missing stats)  ·                   ·
-      │          table                xyv@primary          ·                   ·
-      │          spans                /3-                  ·                   ·
-      └── scan   ·                    ·                    (x, y, u)           +x,+y
-·                estimated row count  333 (missing stats)  ·                   ·
-·                table                xyu@primary          ·                   ·
-·                spans                /3-                  ·                   ·
+·                             distribution         local                ·                   ·
+·                             vectorized           true                 ·                   ·
+project                       ·                    ·                    (x, y, u, v)        ·
+ │                            estimated row count  333 (missing stats)  ·                   ·
+ └── merge join (left outer)  ·                    ·                    (x, y, v, x, y, u)  ·
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       equality             (x, y) = (x, y)      ·                   ·
+      │                       merge ordering       +"(x=x)",+"(y=y)"    ·                   ·
+      ├── scan                ·                    ·                    (x, y, v)           +x,+y
+      │                       estimated row count  333 (missing stats)  ·                   ·
+      │                       table                xyv@primary          ·                   ·
+      │                       spans                /3-                  ·                   ·
+      └── scan                ·                    ·                    (x, y, u)           +x,+y
+·                             estimated row count  333 (missing stats)  ·                   ·
+·                             table                xyu@primary          ·                   ·
+·                             spans                /3-                  ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-·                     distribution         local                 ·                   ·
-·                     vectorized           true                  ·                   ·
-filter                ·                    ·                     (x, y, u, v)        ·
- │                    estimated row count  633 (missing stats)   ·                   ·
- │                    filter               x > 2                 ·                   ·
- └── render           ·                    ·                     (x, y, u, v)        ·
-      │               estimated row count  1900 (missing stats)  ·                   ·
-      │               render 0             COALESCE(x, x)        ·                   ·
-      │               render 1             COALESCE(y, y)        ·                   ·
-      │               render 2             u                     ·                   ·
-      │               render 3             v                     ·                   ·
-      └── merge join  ·                    ·                     (x, y, u, x, y, v)  ·
-           │          estimated row count  1900 (missing stats)  ·                   ·
-           │          type                 full outer            ·                   ·
-           │          equality             (x, y) = (x, y)       ·                   ·
-           │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
-           ├── scan   ·                    ·                     (x, y, u)           +x,+y
-           │          estimated row count  1000 (missing stats)  ·                   ·
-           │          table                xyu@primary           ·                   ·
-           │          spans                FULL SCAN             ·                   ·
-           └── scan   ·                    ·                     (x, y, v)           +x,+y
-·                     estimated row count  1000 (missing stats)  ·                   ·
-·                     table                xyv@primary           ·                   ·
-·                     spans                FULL SCAN             ·                   ·
+·                                  distribution         local                 ·                   ·
+·                                  vectorized           true                  ·                   ·
+filter                             ·                    ·                     (x, y, u, v)        ·
+ │                                 estimated row count  633 (missing stats)   ·                   ·
+ │                                 filter               x > 2                 ·                   ·
+ └── render                        ·                    ·                     (x, y, u, v)        ·
+      │                            estimated row count  1900 (missing stats)  ·                   ·
+      │                            render 0             COALESCE(x, x)        ·                   ·
+      │                            render 1             COALESCE(y, y)        ·                   ·
+      │                            render 2             u                     ·                   ·
+      │                            render 3             v                     ·                   ·
+      └── merge join (full outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+           │                       estimated row count  1900 (missing stats)  ·                   ·
+           │                       equality             (x, y) = (x, y)       ·                   ·
+           │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+           ├── scan                ·                    ·                     (x, y, u)           +x,+y
+           │                       estimated row count  1000 (missing stats)  ·                   ·
+           │                       table                xyu@primary           ·                   ·
+           │                       spans                FULL SCAN             ·                   ·
+           └── scan                ·                    ·                     (x, y, v)           +x,+y
+·                                  estimated row count  1000 (missing stats)  ·                   ·
+·                                  table                xyv@primary           ·                   ·
+·                                  spans                FULL SCAN             ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local                 ·                   ·
-·           vectorized           true                  ·                   ·
-merge join  ·                    ·                     (x, y, u, x, y, v)  ·
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          type                 left outer            ·                   ·
- │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
- ├── scan   ·                    ·                     (x, y, u)           +x,+y
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          table                xyu@primary           ·                   ·
- │          spans                FULL SCAN             ·                   ·
- └── scan   ·                    ·                     (x, y, v)           +y
-·           estimated row count  9 (missing stats)     ·                   ·
-·           table                xyv@primary           ·                   ·
-·           spans                /1-/1/10              ·                   ·
+·                        distribution         local                 ·                   ·
+·                        vectorized           true                  ·                   ·
+merge join (left outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       equality             (x, y) = (x, y)       ·                   ·
+ │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+ ├── scan                ·                    ·                     (x, y, u)           +x,+y
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       table                xyu@primary           ·                   ·
+ │                       spans                FULL SCAN             ·                   ·
+ └── scan                ·                    ·                     (x, y, v)           +y
+·                        estimated row count  9 (missing stats)     ·                   ·
+·                        table                xyv@primary           ·                   ·
+·                        spans                /1-/1/10              ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-·           distribution         local                 ·                   ·
-·           vectorized           true                  ·                   ·
-merge join  ·                    ·                     (x, y, u, x, y, v)  ·
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          type                 left outer            ·                   ·
- │          equality             (x, y) = (x, y)       ·                   ·
- │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
- ├── scan   ·                    ·                     (x, y, v)           +x,+y
- │          estimated row count  1000 (missing stats)  ·                   ·
- │          table                xyv@primary           ·                   ·
- │          spans                FULL SCAN             ·                   ·
- └── scan   ·                    ·                     (x, y, u)           +y
-·           estimated row count  9 (missing stats)     ·                   ·
-·           table                xyu@primary           ·                   ·
-·           spans                /1-/1/10              ·                   ·
+·                        distribution         local                 ·                   ·
+·                        vectorized           true                  ·                   ·
+merge join (left outer)  ·                    ·                     (x, y, u, x, y, v)  ·
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       equality             (x, y) = (x, y)       ·                   ·
+ │                       merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+ ├── scan                ·                    ·                     (x, y, v)           +x,+y
+ │                       estimated row count  1000 (missing stats)  ·                   ·
+ │                       table                xyv@primary           ·                   ·
+ │                       spans                FULL SCAN             ·                   ·
+ └── scan                ·                    ·                     (x, y, u)           +y
+·                        estimated row count  9 (missing stats)     ·                   ·
+·                        table                xyu@primary           ·                   ·
+·                        spans                /1-/1/10              ·                   ·
 
 # Regression test for #20472: break up tuple inequalities.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-·                distribution         local                 ·                   ·
-·                vectorized           true                  ·                   ·
-project          ·                    ·                     (x, y, u, v)        ·
- │               estimated row count  33 (missing stats)    ·                   ·
- └── merge join  ·                    ·                     (x, y, u, x, y, v)  ·
-      │          estimated row count  33 (missing stats)    ·                   ·
-      │          type                 inner                 ·                   ·
-      │          equality             (x, y) = (x, y)       ·                   ·
-      │          mergeJoinOrder       +"(x=x)",+"(y=y)"     ·                   ·
-      ├── scan   ·                    ·                     (x, y, u)           +x,+y
-      │          estimated row count  333 (missing stats)   ·                   ·
-      │          table                xyu@primary           ·                   ·
-      │          spans                /1/2/4-               ·                   ·
-      └── scan   ·                    ·                     (x, y, v)           +x,+y
-·                estimated row count  1000 (missing stats)  ·                   ·
-·                table                xyv@primary           ·                   ·
-·                spans                FULL SCAN             ·                   ·
+·                        distribution         local                 ·                   ·
+·                        vectorized           true                  ·                   ·
+project                  ·                    ·                     (x, y, u, v)        ·
+ │                       estimated row count  33 (missing stats)    ·                   ·
+ └── merge join (inner)  ·                    ·                     (x, y, u, x, y, v)  ·
+      │                  estimated row count  33 (missing stats)    ·                   ·
+      │                  equality             (x, y) = (x, y)       ·                   ·
+      │                  merge ordering       +"(x=x)",+"(y=y)"     ·                   ·
+      ├── scan           ·                    ·                     (x, y, u)           +x,+y
+      │                  estimated row count  333 (missing stats)   ·                   ·
+      │                  table                xyu@primary           ·                   ·
+      │                  spans                /1/2/4-               ·                   ·
+      └── scan           ·                    ·                     (x, y, v)           +x,+y
+·                        estimated row count  1000 (missing stats)  ·                   ·
+·                        table                xyv@primary           ·                   ·
+·                        spans                FULL SCAN             ·                   ·
 
 
 # Regression test for #20765/27431.
@@ -1258,90 +1197,86 @@ CREATE TABLE r (a INT PRIMARY KEY, b2 INT, FAMILY (a))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distribution         local              ·               ·
-·                vectorized           true               ·               ·
-project          ·                    ·                  (a, b1, b2)     ·
- │               estimated row count  1 (missing stats)  ·               ·
- └── merge join  ·                    ·                  (a, b1, a, b2)  ·
-      │          estimated row count  1 (missing stats)  ·               ·
-      │          type                 left outer         ·               ·
-      │          equality             (a) = (a)          ·               ·
-      │          left cols are key    ·                  ·               ·
-      │          right cols are key   ·                  ·               ·
-      │          mergeJoinOrder       +"(a=a)"           ·               ·
-      ├── scan   ·                    ·                  (a, b1)         ·
-      │          estimated row count  1 (missing stats)  ·               ·
-      │          table                l@primary          ·               ·
-      │          spans                /3-/3/#            ·               ·
-      └── scan   ·                    ·                  (a, b2)         ·
-·                estimated row count  1 (missing stats)  ·               ·
-·                table                r@primary          ·               ·
-·                spans                /3-/3/#            ·               ·
+·                             distribution         local              ·               ·
+·                             vectorized           true               ·               ·
+project                       ·                    ·                  (a, b1, b2)     ·
+ │                            estimated row count  1 (missing stats)  ·               ·
+ └── merge join (left outer)  ·                    ·                  (a, b1, a, b2)  ·
+      │                       estimated row count  1 (missing stats)  ·               ·
+      │                       equality             (a) = (a)          ·               ·
+      │                       left cols are key    ·                  ·               ·
+      │                       right cols are key   ·                  ·               ·
+      │                       merge ordering       +"(a=a)"           ·               ·
+      ├── scan                ·                    ·                  (a, b1)         ·
+      │                       estimated row count  1 (missing stats)  ·               ·
+      │                       table                l@primary          ·               ·
+      │                       spans                /3-/3/#            ·               ·
+      └── scan                ·                    ·                  (a, b2)         ·
+·                             estimated row count  1 (missing stats)  ·               ·
+·                             table                r@primary          ·               ·
+·                             spans                /3-/3/#            ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-·           distribution         local              ·               ·
-·           vectorized           true               ·               ·
-merge join  ·                    ·                  (a, b1, a, b2)  ·
- │          estimated row count  1 (missing stats)  ·               ·
- │          type                 left outer         ·               ·
- │          equality             (a) = (a)          ·               ·
- │          left cols are key    ·                  ·               ·
- │          right cols are key   ·                  ·               ·
- │          mergeJoinOrder       +"(a=a)"           ·               ·
- ├── scan   ·                    ·                  (a, b1)         ·
- │          estimated row count  1 (missing stats)  ·               ·
- │          table                l@primary          ·               ·
- │          spans                /3-/3/#            ·               ·
- └── scan   ·                    ·                  (a, b2)         ·
-·           estimated row count  1 (missing stats)  ·               ·
-·           table                r@primary          ·               ·
-·           spans                /3-/3/#            ·               ·
+·                        distribution         local              ·               ·
+·                        vectorized           true               ·               ·
+merge join (left outer)  ·                    ·                  (a, b1, a, b2)  ·
+ │                       estimated row count  1 (missing stats)  ·               ·
+ │                       equality             (a) = (a)          ·               ·
+ │                       left cols are key    ·                  ·               ·
+ │                       right cols are key   ·                  ·               ·
+ │                       merge ordering       +"(a=a)"           ·               ·
+ ├── scan                ·                    ·                  (a, b1)         ·
+ │                       estimated row count  1 (missing stats)  ·               ·
+ │                       table                l@primary          ·               ·
+ │                       spans                /3-/3/#            ·               ·
+ └── scan                ·                    ·                  (a, b2)         ·
+·                        estimated row count  1 (missing stats)  ·               ·
+·                        table                r@primary          ·               ·
+·                        spans                /3-/3/#            ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-·                distribution         local              ·               ·
-·                vectorized           true               ·               ·
-project          ·                    ·                  (a, b1, b2)     ·
- │               estimated row count  1 (missing stats)  ·               ·
- └── merge join  ·                    ·                  (a, b2, a, b1)  ·
-      │          estimated row count  1 (missing stats)  ·               ·
-      │          type                 left outer         ·               ·
-      │          equality             (a) = (a)          ·               ·
-      │          left cols are key    ·                  ·               ·
-      │          right cols are key   ·                  ·               ·
-      │          mergeJoinOrder       +"(a=a)"           ·               ·
-      ├── scan   ·                    ·                  (a, b2)         ·
-      │          estimated row count  1 (missing stats)  ·               ·
-      │          table                r@primary          ·               ·
-      │          spans                /3-/3/#            ·               ·
-      └── scan   ·                    ·                  (a, b1)         ·
-·                estimated row count  1 (missing stats)  ·               ·
-·                table                l@primary          ·               ·
-·                spans                /3-/3/#            ·               ·
+·                             distribution         local              ·               ·
+·                             vectorized           true               ·               ·
+project                       ·                    ·                  (a, b1, b2)     ·
+ │                            estimated row count  1 (missing stats)  ·               ·
+ └── merge join (left outer)  ·                    ·                  (a, b2, a, b1)  ·
+      │                       estimated row count  1 (missing stats)  ·               ·
+      │                       equality             (a) = (a)          ·               ·
+      │                       left cols are key    ·                  ·               ·
+      │                       right cols are key   ·                  ·               ·
+      │                       merge ordering       +"(a=a)"           ·               ·
+      ├── scan                ·                    ·                  (a, b2)         ·
+      │                       estimated row count  1 (missing stats)  ·               ·
+      │                       table                r@primary          ·               ·
+      │                       spans                /3-/3/#            ·               ·
+      └── scan                ·                    ·                  (a, b1)         ·
+·                             estimated row count  1 (missing stats)  ·               ·
+·                             table                l@primary          ·               ·
+·                             spans                /3-/3/#            ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-·           distribution         local              ·               ·
-·           vectorized           true               ·               ·
-merge join  ·                    ·                  (a, b1, a, b2)  ·
- │          estimated row count  1 (missing stats)  ·               ·
- │          type                 left outer         ·               ·
- │          equality             (a) = (a)          ·               ·
- │          left cols are key    ·                  ·               ·
- │          right cols are key   ·                  ·               ·
- │          mergeJoinOrder       +"(a=a)"           ·               ·
- ├── scan   ·                    ·                  (a, b2)         ·
- │          estimated row count  1 (missing stats)  ·               ·
- │          table                r@primary          ·               ·
- │          spans                /3-/3/#            ·               ·
- └── scan   ·                    ·                  (a, b1)         ·
-·           estimated row count  1 (missing stats)  ·               ·
-·           table                l@primary          ·               ·
-·           spans                /3-/3/#            ·               ·
+·                        distribution         local              ·               ·
+·                        vectorized           true               ·               ·
+merge join (left outer)  ·                    ·                  (a, b1, a, b2)  ·
+ │                       estimated row count  1 (missing stats)  ·               ·
+ │                       equality             (a) = (a)          ·               ·
+ │                       left cols are key    ·                  ·               ·
+ │                       right cols are key   ·                  ·               ·
+ │                       merge ordering       +"(a=a)"           ·               ·
+ ├── scan                ·                    ·                  (a, b2)         ·
+ │                       estimated row count  1 (missing stats)  ·               ·
+ │                       table                r@primary          ·               ·
+ │                       spans                /3-/3/#            ·               ·
+ └── scan                ·                    ·                  (a, b1)         ·
+·                        estimated row count  1 (missing stats)  ·               ·
+·                        table                l@primary          ·               ·
+·                        spans                /3-/3/#            ·               ·
 
 # Regression tests for #21243
 statement ok
@@ -1369,10 +1304,8 @@ EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(
 ·           distribution        local
 ·           vectorized          true
 merge join  ·                   ·
- │          type                inner
  │          equality            (a, b) = (a, b)
  │          right cols are key  ·
- │          mergeJoinOrder      +"(a=a)",+"(b=b)"
  ├── scan   ·                   ·
  │          missing stats       ·
  │          table               abcdef@primary
@@ -1405,23 +1338,22 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ]
 ----
-·               distribution         local
-·               vectorized           true
-project         ·                    ·
- │              estimated row count  0 (missing stats)
- └── hash join  ·                    ·
-      │         estimated row count  0 (missing stats)
-      │         type                 inner
-      │         equality             (a, c) = (a, c)
-      │         pred                 (b = b) AND (d = d)
-      ├── scan  ·                    ·
-      │         estimated row count  1000 (missing stats)
-      │         table                foo@primary
-      │         spans                FULL SCAN
-      └── scan  ·                    ·
-·               estimated row count  1000 (missing stats)
-·               table                bar@primary
-·               spans                FULL SCAN
+·                       distribution         local
+·                       vectorized           true
+project                 ·                    ·
+ │                      estimated row count  0 (missing stats)
+ └── hash join (inner)  ·                    ·
+      │                 estimated row count  0 (missing stats)
+      │                 equality             (a, c) = (a, c)
+      │                 pred                 (b = b) AND (d = d)
+      ├── scan          ·                    ·
+      │                 estimated row count  1000 (missing stats)
+      │                 table                foo@primary
+      │                 spans                FULL SCAN
+      └── scan          ·                    ·
+·                       estimated row count  1000 (missing stats)
+·                       table                bar@primary
+·                       spans                FULL SCAN
 
 # b can't be an equality column.
 query TTT
@@ -1429,22 +1361,21 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ]
 ----
-·                distribution         local
-·                vectorized           true
-project          ·                    ·
- │               estimated row count  9801 (missing stats)
- └── cross join  ·                    ·
-      │          estimated row count  9801 (missing stats)
-      │          type                 cross
-      │          pred                 b = b
-      ├── scan   ·                    ·
-      │          estimated row count  1000 (missing stats)
-      │          table                foo@primary
-      │          spans                FULL SCAN
-      └── scan   ·                    ·
-·                estimated row count  1000 (missing stats)
-·                table                bar@primary
-·                spans                FULL SCAN
+·                        distribution         local
+·                        vectorized           true
+project                  ·                    ·
+ │                       estimated row count  9801 (missing stats)
+ └── cross join (inner)  ·                    ·
+      │                  estimated row count  9801 (missing stats)
+      │                  pred                 b = b
+      ├── scan           ·                    ·
+      │                  estimated row count  1000 (missing stats)
+      │                  table                foo@primary
+      │                  spans                FULL SCAN
+      └── scan           ·                    ·
+·                        estimated row count  1000 (missing stats)
+·                        table                bar@primary
+·                        spans                FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1452,23 +1383,22 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ]
 ----
-·               distribution         local
-·               vectorized           true
-project         ·                    ·
- │              estimated row count  96 (missing stats)
- └── hash join  ·                    ·
-      │         estimated row count  96 (missing stats)
-      │         type                 inner
-      │         equality             (a) = (a)
-      │         pred                 b = b
-      ├── scan  ·                    ·
-      │         estimated row count  1000 (missing stats)
-      │         table                foo@primary
-      │         spans                FULL SCAN
-      └── scan  ·                    ·
-·               estimated row count  1000 (missing stats)
-·               table                bar@primary
-·               spans                FULL SCAN
+·                       distribution         local
+·                       vectorized           true
+project                 ·                    ·
+ │                      estimated row count  96 (missing stats)
+ └── hash join (inner)  ·                    ·
+      │                 estimated row count  96 (missing stats)
+      │                 equality             (a) = (a)
+      │                 pred                 b = b
+      ├── scan          ·                    ·
+      │                 estimated row count  1000 (missing stats)
+      │                 table                foo@primary
+      │                 spans                FULL SCAN
+      └── scan          ·                    ·
+·                       estimated row count  1000 (missing stats)
+·                       table                bar@primary
+·                       spans                FULL SCAN
 
 # Only a and c can be equality columns.
 query TTT
@@ -1476,23 +1406,22 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ]
 ----
-·               distribution         local
-·               vectorized           true
-project         ·                    ·
- │              estimated row count  1 (missing stats)
- └── hash join  ·                    ·
-      │         estimated row count  1 (missing stats)
-      │         type                 inner
-      │         equality             (a, c) = (a, c)
-      │         pred                 b = b
-      ├── scan  ·                    ·
-      │         estimated row count  1000 (missing stats)
-      │         table                foo@primary
-      │         spans                FULL SCAN
-      └── scan  ·                    ·
-·               estimated row count  1000 (missing stats)
-·               table                bar@primary
-·               spans                FULL SCAN
+·                       distribution         local
+·                       vectorized           true
+project                 ·                    ·
+ │                      estimated row count  1 (missing stats)
+ └── hash join (inner)  ·                    ·
+      │                 estimated row count  1 (missing stats)
+      │                 equality             (a, c) = (a, c)
+      │                 pred                 b = b
+      ├── scan          ·                    ·
+      │                 estimated row count  1000 (missing stats)
+      │                 table                foo@primary
+      │                 spans                FULL SCAN
+      └── scan          ·                    ·
+·                       estimated row count  1000 (missing stats)
+·                       table                bar@primary
+·                       spans                FULL SCAN
 
 # b can't be an equality column.
 query TTT
@@ -1500,20 +1429,19 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ]
 ----
-·           distribution         local
-·           vectorized           true
-cross join  ·                    ·
- │          estimated row count  9801 (missing stats)
- │          type                 cross
- │          pred                 b = b
- ├── scan   ·                    ·
- │          estimated row count  1000 (missing stats)
- │          table                foo@primary
- │          spans                FULL SCAN
- └── scan   ·                    ·
-·           estimated row count  1000 (missing stats)
-·           table                bar@primary
-·           spans                FULL SCAN
+·                   distribution         local
+·                   vectorized           true
+cross join (inner)  ·                    ·
+ │                  estimated row count  9801 (missing stats)
+ │                  pred                 b = b
+ ├── scan           ·                    ·
+ │                  estimated row count  1000 (missing stats)
+ │                  table                foo@primary
+ │                  spans                FULL SCAN
+ └── scan           ·                    ·
+·                   estimated row count  1000 (missing stats)
+·                   table                bar@primary
+·                   spans                FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1521,41 +1449,39 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ]
 ----
-·          distribution         local
-·          vectorized           true
-hash join  ·                    ·
- │         estimated row count  96 (missing stats)
- │         type                 inner
- │         equality             (a) = (a)
- │         pred                 b = b
- ├── scan  ·                    ·
- │         estimated row count  1000 (missing stats)
- │         table                foo@primary
- │         spans                FULL SCAN
- └── scan  ·                    ·
-·          estimated row count  1000 (missing stats)
-·          table                bar@primary
-·          spans                FULL SCAN
+·                  distribution         local
+·                  vectorized           true
+hash join (inner)  ·                    ·
+ │                 estimated row count  96 (missing stats)
+ │                 equality             (a) = (a)
+ │                 pred                 b = b
+ ├── scan          ·                    ·
+ │                 estimated row count  1000 (missing stats)
+ │                 table                foo@primary
+ │                 spans                FULL SCAN
+ └── scan          ·                    ·
+·                  estimated row count  1000 (missing stats)
+·                  table                bar@primary
+·                  spans                FULL SCAN
 
 query TTT
 SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ]
 ----
-·           distribution         local
-·           vectorized           true
-cross join  ·                    ·
- │          estimated row count  9801 (missing stats)
- │          type                 cross
- │          pred                 b = b
- ├── scan   ·                    ·
- │          estimated row count  1000 (missing stats)
- │          table                foo@primary
- │          spans                FULL SCAN
- └── scan   ·                    ·
-·           estimated row count  1000 (missing stats)
-·           table                bar@primary
-·           spans                FULL SCAN
+·                   distribution         local
+·                   vectorized           true
+cross join (inner)  ·                    ·
+ │                  estimated row count  9801 (missing stats)
+ │                  pred                 b = b
+ ├── scan           ·                    ·
+ │                  estimated row count  1000 (missing stats)
+ │                  table                foo@primary
+ │                  spans                FULL SCAN
+ └── scan           ·                    ·
+·                   estimated row count  1000 (missing stats)
+·                   table                bar@primary
+·                   spans                FULL SCAN
 
 # Only a can be an equality column.
 query TTT
@@ -1563,21 +1489,20 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ]
 ----
-·          distribution         local
-·          vectorized           true
-hash join  ·                    ·
- │         estimated row count  96 (missing stats)
- │         type                 inner
- │         equality             (a) = (a)
- │         pred                 b = b
- ├── scan  ·                    ·
- │         estimated row count  1000 (missing stats)
- │         table                foo@primary
- │         spans                FULL SCAN
- └── scan  ·                    ·
-·          estimated row count  1000 (missing stats)
-·          table                bar@primary
-·          spans                FULL SCAN
+·                  distribution         local
+·                  vectorized           true
+hash join (inner)  ·                    ·
+ │                 estimated row count  96 (missing stats)
+ │                 equality             (a) = (a)
+ │                 pred                 b = b
+ ├── scan          ·                    ·
+ │                 estimated row count  1000 (missing stats)
+ │                 table                foo@primary
+ │                 spans                FULL SCAN
+ └── scan          ·                    ·
+·                  estimated row count  1000 (missing stats)
+·                  table                bar@primary
+·                  spans                FULL SCAN
 
 # Only a and c can be equality columns.
 query TTT
@@ -1586,7 +1511,6 @@ EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = b
 ·          distribution   local
 ·          vectorized     true
 hash join  ·              ·
- │         type           inner
  │         equality       (a, c) = (a, c)
  │         pred           (b = b) AND (d = d)
  ├── scan  ·              ·
@@ -1622,7 +1546,6 @@ filter           ·              ·
  │               filter         c = 6.0
  └── index join  ·              ·
       │          table          zigzag@primary
-      │          key columns    a
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag@b_idx
@@ -1639,7 +1562,6 @@ EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ·            distribution        local
 ·            vectorized          true
 zigzag join  ·                   ·
-·            type                inner
 ·            pred                (b = 5) AND (c = 6.0)
 ·            left table          zigzag@b_idx
 ·            left columns        (a, b)
@@ -1657,12 +1579,9 @@ EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ·                 vectorized             true
 lookup join       ·                      ·
  │                table                  zigzag@primary
- │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
- │                parallel               ·
  └── zigzag join  ·                      ·
-·                 type                   inner
 ·                 pred                   (b = 5) AND (c = 6.0)
 ·                 left table             zigzag@b_idx
 ·                 left columns           (a, b)
@@ -1679,13 +1598,10 @@ EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ·                 vectorized             true
 lookup join       ·                      ·
  │                table                  zigzag@primary
- │                type                   inner
  │                equality               (a) = (a)
  │                equality cols are key  ·
- │                parallel               ·
  │                pred                   d > 4.0
  └── zigzag join  ·                      ·
-·                 type                   inner
 ·                 pred                   (b = 5) AND (c = 6.0)
 ·                 left table             zigzag@b_idx
 ·                 left columns           (a, b)
@@ -1717,7 +1633,6 @@ filter           ·              ·
  │               filter         c IS NULL
  └── index join  ·              ·
       │          table          zigzag2@primary
-      │          key columns    rowid
       └── scan   ·              ·
 ·                missing stats  ·
 ·                table          zigzag2@a_b_idx
@@ -1727,70 +1642,64 @@ filter           ·              ·
 query TTT
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 # Test that we can force a merge join using the NATURAL syntax.
 query TTT
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 # Test that we can force a merge join using the CROSS syntax.
 query TTT
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
-·               distribution    local
-·               vectorized      true
-merge join      ·               ·
- │              type            inner
- │              equality        (x) = (x)
- │              mergeJoinOrder  +"(x=x)"
- ├── sort       ·               ·
- │    │         order           +x
- │    └── scan  ·               ·
- │              missing stats   ·
- │              table           onecolumn@primary
- │              spans           FULL SCAN
- └── sort       ·               ·
-      │         order           +x
-      └── scan  ·               ·
-·               missing stats   ·
-·               table           twocolumn@primary
-·               spans           FULL SCAN
+·               distribution   local
+·               vectorized     true
+merge join      ·              ·
+ │              equality       (x) = (x)
+ ├── sort       ·              ·
+ │    │         order          +x
+ │    └── scan  ·              ·
+ │              missing stats  ·
+ │              table          onecolumn@primary
+ │              spans          FULL SCAN
+ └── sort       ·              ·
+      │         order          +x
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          twocolumn@primary
+·               spans          FULL SCAN
 
 statement error LOOKUP can only be used with INNER or LEFT joins
 EXPLAIN SELECT * FROM onecolumn RIGHT LOOKUP JOIN twocolumn USING(x)
@@ -1808,7 +1717,6 @@ EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = car
 ·          distribution        local
 ·          vectorized          true
 hash join  ·                   ·
- │         type                inner
  │         equality            (cust) = (id)
  │         right cols are key  ·
  ├── scan  ·                   ·

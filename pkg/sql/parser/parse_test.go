@@ -1533,6 +1533,11 @@ func TestParse(t *testing.T) {
 		{`SHOW BACKUP FILES 'bar'`},
 		{`SHOW BACKUP FILES 'bar' WITH foo = 'bar'`},
 
+		{`SHOW BACKUPS IN 'bar'`},
+		{`SHOW BACKUPS IN $1`},
+		{`SHOW BACKUP 'foo' IN 'bar'`},
+		{`SHOW BACKUP $1 IN $2 WITH foo = 'bar'`},
+
 		{`BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 		{`BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
 
@@ -2270,10 +2275,10 @@ $function$`,
 		{`BACKUP foo TO 'bar' WITH OPTIONS (detached, KMS = ('foo', 'bar'), revision_history)`,
 			`BACKUP TABLE foo TO 'bar' WITH revision_history, detached, kms=('foo', 'bar')`},
 
-		{`RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz', 
+		{`RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz',
 skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached)`,
 			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached`},
-		{`RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, 
+		{`RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz,
 SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS`,
 			`RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase='secret', into_db='baz', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views`},
 

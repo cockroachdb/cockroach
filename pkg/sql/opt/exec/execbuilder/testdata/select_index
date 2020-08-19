@@ -195,31 +195,30 @@ output row: [2]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-·                     distribution         local                ·                         ·
-·                     vectorized           true                 ·                         ·
-project               ·                    ·                    (b, a, c, d, a, c, d)     ·
- │                    estimated row count  100 (missing stats)  ·                         ·
- └── merge join       ·                    ·                    (a, b, c, d, a, b, c, d)  ·
-      │               estimated row count  100 (missing stats)  ·                         ·
-      │               type                 inner                ·                         ·
-      │               equality             (b) = (b)            ·                         ·
-      │               mergeJoinOrder       +"(b=b)"             ·                         ·
-      ├── index join  ·                    ·                    (a, b, c, d)              ·
-      │    │          estimated row count  10 (missing stats)   ·                         ·
-      │    │          table                t@primary            ·                         ·
-      │    │          key columns          a, b                 ·                         ·
-      │    └── scan   ·                    ·                    (a, b, c)                 ·
-      │               estimated row count  10 (missing stats)   ·                         ·
-      │               table                t@bc                 ·                         ·
-      │               spans                /"3"-/"3"/PrefixEnd  ·                         ·
-      └── index join  ·                    ·                    (a, b, c, d)              ·
-           │          estimated row count  10 (missing stats)   ·                         ·
-           │          table                t@primary            ·                         ·
-           │          key columns          a, b                 ·                         ·
-           └── scan   ·                    ·                    (a, b, c)                 ·
-·                     estimated row count  10 (missing stats)   ·                         ·
-·                     table                t@bc                 ·                         ·
-·                     spans                /"3"-/"3"/PrefixEnd  ·                         ·
+·                        distribution         local                ·                         ·
+·                        vectorized           true                 ·                         ·
+project                  ·                    ·                    (b, a, c, d, a, c, d)     ·
+ │                       estimated row count  100 (missing stats)  ·                         ·
+ └── merge join (inner)  ·                    ·                    (a, b, c, d, a, b, c, d)  ·
+      │                  estimated row count  100 (missing stats)  ·                         ·
+      │                  equality             (b) = (b)            ·                         ·
+      │                  merge ordering       +"(b=b)"             ·                         ·
+      ├── index join     ·                    ·                    (a, b, c, d)              ·
+      │    │             estimated row count  10 (missing stats)   ·                         ·
+      │    │             table                t@primary            ·                         ·
+      │    │             key columns          a, b                 ·                         ·
+      │    └── scan      ·                    ·                    (a, b, c)                 ·
+      │                  estimated row count  10 (missing stats)   ·                         ·
+      │                  table                t@bc                 ·                         ·
+      │                  spans                /"3"-/"3"/PrefixEnd  ·                         ·
+      └── index join     ·                    ·                    (a, b, c, d)              ·
+           │             estimated row count  10 (missing stats)   ·                         ·
+           │             table                t@primary            ·                         ·
+           │             key columns          a, b                 ·                         ·
+           └── scan      ·                    ·                    (a, b, c)                 ·
+·                        estimated row count  10 (missing stats)   ·                         ·
+·                        table                t@bc                 ·                         ·
+·                        spans                /"3"-/"3"/PrefixEnd  ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -818,7 +817,6 @@ ORDER BY total DESC
 sort            ·              ·
  │              order          -count_rows
  └── group      ·              ·
-      │         aggregate 0    count_rows()
       │         group by       resource_key
       └── scan  ·              ·
 ·               missing stats  ·
@@ -1122,7 +1120,6 @@ EXPLAIN SELECT * FROM noncover WHERE b = 2
 ·           vectorized     true
 index join  ·              ·
  │          table          noncover@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          noncover@b
@@ -1150,7 +1147,6 @@ EXPLAIN SELECT * FROM noncover WHERE c = 6
 ·           vectorized     true
 index join  ·              ·
  │          table          noncover@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          noncover@c
@@ -1238,7 +1234,6 @@ EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ·           vectorized     true
 index join  ·              ·
  │          table          noncover@primary
- │          key columns    a
  └── scan   ·              ·
 ·           missing stats  ·
 ·           table          noncover@c
@@ -1610,18 +1605,17 @@ scan  ·              ·
 query TTT
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-·               distribution      local
-·               vectorized        false
-update          ·                 ·
- │              table             t4
- │              set               c
- │              auto commit       ·
- └── render     ·                 ·
-      └── scan  ·                 ·
-·               missing stats     ·
-·               table             t4@primary
-·               spans             [/10/20 - /10/20]
-·               locking strength  for update
+·               distribution   local
+·               vectorized     false
+update          ·              ·
+ │              table          t4
+ │              set            c
+ │              auto commit    ·
+ └── render     ·              ·
+      └── scan  ·              ·
+·               missing stats  ·
+·               table          t4@primary
+·               spans          [/10/20 - /10/20]
 
 # Optimization should not be applied for deletes.
 query TTT
@@ -1644,7 +1638,6 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t4@primary
 ·     spans          [/10/20 - /10/21]
-·     parallel       ·
 
 # Optimization should not be applied for partial primary key filter.
 query TTT
@@ -1668,4 +1661,3 @@ scan  ·              ·
 ·     missing stats  ·
 ·     table          t4@primary
 ·     spans          [/1/1 - /1/1] [/1/5 - /1/5] [/5/1 - /5/1] [/5/5 - /5/5]
-·     parallel       ·

@@ -67,26 +67,22 @@ EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_cl
 ·                          vectorized             false
 virtual table lookup join  ·                      ·
  │                         table                  pg_class@pg_class_oid_idx
- │                         type                   inner
  │                         equality               (conrelid) = (oid)
  │                         equality cols are key  ·
- │                         parallel               ·
  └── virtual table         ·                      ·
 ·                          table                  pg_constraint@primary
 
 query TTT
 EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
-·                          distribution           local
-·                          vectorized             false
-virtual table lookup join  ·                      ·
- │                         table                  pg_class@pg_class_oid_idx
- │                         type                   left outer
- │                         equality               (conrelid) = (oid)
- │                         equality cols are key  ·
- │                         parallel               ·
- └── virtual table         ·                      ·
-·                          table                  pg_constraint@primary
+·                                       distribution           local
+·                                       vectorized             false
+virtual table lookup join (left outer)  ·                      ·
+ │                                      table                  pg_class@pg_class_oid_idx
+ │                                      equality               (conrelid) = (oid)
+ │                                      equality cols are key  ·
+ └── virtual table                      ·                      ·
+·                                       table                  pg_constraint@primary
 
 # Can't lookup into a vtable with no index.
 query error could not produce
@@ -124,7 +120,6 @@ sort                                                               ·           
  │                                                                 order                  +conname
  └── render                                                        ·                      ·
       └── hash join                                                ·                      ·
-           │                                                       type                   inner
            │                                                       equality               (oid) = (connamespace)
            ├── filter                                              ·                      ·
            │    │                                                  filter                 nspname IN ('public',)
@@ -132,33 +127,25 @@ sort                                                               ·           
            │                                                       table                  pg_namespace@primary
            └── virtual table lookup join                           ·                      ·
                 │                                                  table                  pg_attribute@pg_attribute_attrelid_idx
-                │                                                  type                   inner
                 │                                                  equality               (oid) = (attrelid)
                 │                                                  equality cols are key  ·
-                │                                                  parallel               ·
                 │                                                  pred                   column135 = attnum
                 └── render                                         ·                      ·
                      └── virtual table lookup join                 ·                      ·
                           │                                        table                  pg_attribute@pg_attribute_attrelid_idx
-                          │                                        type                   inner
                           │                                        equality               (oid) = (attrelid)
                           │                                        equality cols are key  ·
-                          │                                        parallel               ·
                           │                                        pred                   (column110 = attnum) AND (attrelid = 'b'::REGCLASS)
                           └── render                               ·                      ·
                                └── virtual table lookup join       ·                      ·
                                     │                              table                  pg_class@pg_class_oid_idx
-                                    │                              type                   inner
                                     │                              equality               (conrelid) = (oid)
                                     │                              equality cols are key  ·
-                                    │                              parallel               ·
                                     │                              pred                   oid = 'b'::REGCLASS
                                     └── virtual table lookup join  ·                      ·
                                          │                         table                  pg_class@pg_class_oid_idx
-                                         │                         type                   inner
                                          │                         equality               (confrelid) = (oid)
                                          │                         equality cols are key  ·
-                                         │                         parallel               ·
                                          └── filter                ·                      ·
                                               │                    filter                 (conrelid = 'b'::REGCLASS) AND (contype = 'f')
                                               └── virtual table    ·                      ·

@@ -89,8 +89,6 @@ children:
   children:
   - name: group
     attrs:
-    - key: aggregate 0
-      value: sum(value)
     - key: group by
       value: cid
     children:
@@ -135,34 +133,31 @@ children: []
 plan-string
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
-                     distribution         local
-                     vectorized           false
-project                                                         (cid int, date date, value decimal)
- │                   estimated row count  1000 (missing stats)
- └── hash join                                                  (cid int, value decimal, date date, date date)
-      │              estimated row count  980 (missing stats)
-      │              type                 inner
-      │              equality             (date) = (date)
-      │              right cols are key
-      ├── scan                                                  (cid int, value decimal, date date)
-      │              estimated row count  1000 (missing stats)
-      │              table                orders@primary
-      │              spans                FULL SCAN
-      └── distinct                                              (date date)
-           │         estimated row count  100 (missing stats)
-           │         distinct on          date
-           └── scan                                             (date date)
-                     estimated row count  1000 (missing stats)
-                     table                orders@primary
-                     spans                FULL SCAN
+                        distribution         local
+                        vectorized           false
+project                                                            (cid int, date date, value decimal)
+ │                      estimated row count  1000 (missing stats)
+ └── hash join (inner)                                             (cid int, value decimal, date date, date date)
+      │                 estimated row count  980 (missing stats)
+      │                 equality             (date) = (date)
+      │                 right cols are key
+      ├── scan                                                     (cid int, value decimal, date date)
+      │                 estimated row count  1000 (missing stats)
+      │                 table                orders@primary
+      │                 spans                FULL SCAN
+      └── distinct                                                 (date date)
+           │            estimated row count  100 (missing stats)
+           │            distinct on          date
+           └── scan                                                (date date)
+                        estimated row count  1000 (missing stats)
+                        table                orders@primary
+                        spans                FULL SCAN
 
 plan-tree
 SELECT cid, date, value FROM t.orders WHERE date IN (SELECT date FROM t.orders)
 ----
 name: hash join
 attrs:
-- key: type
-  value: inner
 - key: equality
   value: (date) = (date)
 - key: right cols are key

@@ -100,6 +100,14 @@ func (ob *OutputBuilder) Attr(key string, value interface{}) {
 	ob.AddField(key, fmt.Sprint(value))
 }
 
+// VAttr adds an information field under the current node, if the Verbose flag
+// is set.
+func (ob *OutputBuilder) VAttr(key string, value interface{}) {
+	if ob.flags.Verbose {
+		ob.AddField(key, fmt.Sprint(value))
+	}
+}
+
 // Attrf is a formatter version of Attr.
 func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
 	ob.AddField(key, fmt.Sprintf(format, args...))
@@ -127,6 +135,13 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbas
 	})
 	f.FormatNode(expr)
 	ob.AddField(key, f.CloseAndGetString())
+}
+
+// VExpr is a verbose-only variant of Expr.
+func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+	if ob.flags.Verbose {
+		ob.Expr(key, expr, varColumns)
+	}
 }
 
 // buildTreeRows creates the treeprinter structure; returns one string for each

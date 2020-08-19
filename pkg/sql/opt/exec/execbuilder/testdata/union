@@ -26,7 +26,7 @@ EXPLAIN SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
 ----
 ·          distribution   local
 ·          vectorized     true
-append     ·              ·
+union all  ·              ·
  ├── scan  ·              ·
  │         missing stats  ·
  │         table          uniontest@primary
@@ -59,7 +59,7 @@ EXPLAIN (VERBOSE) (SELECT a FROM abc ORDER BY b) INTERSECT (SELECT a FROM abc OR
 sort                 ·                    ·                     (a)     +a
  │                   estimated row count  100 (missing stats)   ·       ·
  │                   order                +a                    ·       ·
- └── union           ·                    ·                     (a)     ·
+ └── intersect       ·                    ·                     (a)     ·
       │              estimated row count  100 (missing stats)   ·       ·
       ├── project    ·                    ·                     (a)     ·
       │    └── scan  ·                    ·                     (a, b)  ·
@@ -79,7 +79,7 @@ EXPLAIN (VERBOSE) SELECT a FROM ((SELECT '' AS a , '') EXCEPT ALL (SELECT '', ''
 ·                      distribution         local            ·                         ·
 ·                      vectorized           false            ·                         ·
 project                ·                    ·                (a)                       ·
- └── union             ·                    ·                (a, a)                    ·
+ └── except all        ·                    ·                (a, a)                    ·
       │                estimated row count  1                ·                         ·
       ├── project      ·                    ·                (a, a)                    ·
       │    └── values  ·                    ·                (a)                       ·
@@ -101,7 +101,7 @@ render                 ·                    ·                 ("?column?", "?c
  │                     render 0             "?column?"        ·                                     ·
  │                     render 1             "?column?"        ·                                     ·
  │                     render 2             "?column?"        ·                                     ·
- └── union             ·                    ·                 ("?column?", "?column?", "?column?")  ·
+ └── except            ·                    ·                 ("?column?", "?column?", "?column?")  ·
       │                estimated row count  1                 ·                                     ·
       ├── project      ·                    ·                 ("?column?", "?column?", "?column?")  ·
       │    └── values  ·                    ·                 ("?column?", "?column?")              ·
@@ -123,7 +123,7 @@ SELECT 1 FROM (SELECT k FROM uniontest WHERE k > 3 UNION ALL SELECT k FROM union
 render                    ·                    ·                     ("?column?")  ·
  │                        estimated row count  1333 (missing stats)  ·             ·
  │                        render 0             1                     ·             ·
- └── append               ·                    ·                     ()            ·
+ └── union all            ·                    ·                     ()            ·
       │                   estimated row count  1333 (missing stats)  ·             ·
       ├── project         ·                    ·                     ()            ·
       │    │              estimated row count  333 (missing stats)   ·             ·

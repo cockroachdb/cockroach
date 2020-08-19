@@ -383,7 +383,6 @@ root                             ·                   ·
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
-                │                type                inner
                 │                equality            (id) = (pid)
                 │                left cols are key   ·
                 │                right cols are key  ·
@@ -432,7 +431,6 @@ root                             ·                   ·
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join         ·                   ·
-                │                type                inner
                 │                equality            (id) = (pid)
                 │                left cols are key   ·
                 │                right cols are key  ·

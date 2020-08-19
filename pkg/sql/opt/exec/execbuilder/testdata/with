@@ -10,28 +10,27 @@ query TTTTT
 EXPLAIN (VERBOSE)
   WITH t AS (SELECT a FROM y) SELECT * FROM t JOIN t AS q ON true
 ----
-·                      distribution         local                    ·       ·
-·                      vectorized           false                    ·       ·
-root                   ·                    ·                        (a, a)  ·
- ├── cross join        ·                    ·                        (a, a)  ·
- │    │                estimated row count  1000000 (missing stats)  ·       ·
- │    │                type                 cross                    ·       ·
- │    ├── scan buffer  ·                    ·                        (a)     ·
- │    │                estimated row count  1000 (missing stats)     ·       ·
- │    │                label                buffer 1 (t)             ·       ·
- │    └── scan buffer  ·                    ·                        (a)     ·
- │                     estimated row count  1000 (missing stats)     ·       ·
- │                     label                buffer 1 (t)             ·       ·
- └── subquery          ·                    ·                        ·       ·
-      │                id                   @S1                      ·       ·
-      │                original sql         SELECT a FROM y          ·       ·
-      │                exec mode            all rows                 ·       ·
-      └── buffer       ·                    ·                        (a)     ·
-           │           label                buffer 1 (t)             ·       ·
-           └── scan    ·                    ·                        (a)     ·
-·                      estimated row count  1000 (missing stats)     ·       ·
-·                      table                y@primary                ·       ·
-·                      spans                FULL SCAN                ·       ·
+·                        distribution         local                    ·       ·
+·                        vectorized           false                    ·       ·
+root                     ·                    ·                        (a, a)  ·
+ ├── cross join (inner)  ·                    ·                        (a, a)  ·
+ │    │                  estimated row count  1000000 (missing stats)  ·       ·
+ │    ├── scan buffer    ·                    ·                        (a)     ·
+ │    │                  estimated row count  1000 (missing stats)     ·       ·
+ │    │                  label                buffer 1 (t)             ·       ·
+ │    └── scan buffer    ·                    ·                        (a)     ·
+ │                       estimated row count  1000 (missing stats)     ·       ·
+ │                       label                buffer 1 (t)             ·       ·
+ └── subquery            ·                    ·                        ·       ·
+      │                  id                   @S1                      ·       ·
+      │                  original sql         SELECT a FROM y          ·       ·
+      │                  exec mode            all rows                 ·       ·
+      └── buffer         ·                    ·                        (a)     ·
+           │             label                buffer 1 (t)             ·       ·
+           └── scan      ·                    ·                        (a)     ·
+·                        estimated row count  1000 (missing stats)     ·       ·
+·                        table                y@primary                ·       ·
+·                        spans                FULL SCAN                ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -87,19 +86,18 @@ EXPLAIN (VERBOSE)
   FROM
     w, table39010
 ----
-·           distribution         local                    ·      ·
-·           vectorized           true                     ·      ·
-cross join  ·                    ·                        (col)  ·
- │          estimated row count  1000000 (missing stats)  ·      ·
- │          type                 cross                    ·      ·
- ├── scan   ·                    ·                        ()     ·
- │          estimated row count  1000 (missing stats)     ·      ·
- │          table                table39010@primary       ·      ·
- │          spans                FULL SCAN                ·      ·
- └── scan   ·                    ·                        (col)  ·
-·           estimated row count  1000 (missing stats)     ·      ·
-·           table                table39010@primary       ·      ·
-·           spans                FULL SCAN                ·      ·
+·                   distribution         local                    ·      ·
+·                   vectorized           true                     ·      ·
+cross join (inner)  ·                    ·                        (col)  ·
+ │                  estimated row count  1000000 (missing stats)  ·      ·
+ ├── scan           ·                    ·                        ()     ·
+ │                  estimated row count  1000 (missing stats)     ·      ·
+ │                  table                table39010@primary       ·      ·
+ │                  spans                FULL SCAN                ·      ·
+ └── scan           ·                    ·                        (col)  ·
+·                   estimated row count  1000 (missing stats)     ·      ·
+·                   table                table39010@primary       ·      ·
+·                   spans                FULL SCAN                ·      ·
 
 query TTTTT
 EXPLAIN (VERBOSE)
@@ -112,10 +110,9 @@ EXPLAIN (VERBOSE)
 ----
 ·                        distribution         local               ·          ·
 ·                        vectorized           false               ·          ·
-group                    ·                    ·                   (sum)      ·
+group (scalar)           ·                    ·                   (sum)      ·
  │                       estimated row count  1 (missing stats)   ·          ·
  │                       aggregate 0          sum(n)              ·          ·
- │                       scalar               ·                   ·          ·
  └── render              ·                    ·                   (n)        ·
       │                  estimated row count  10 (missing stats)  ·          ·
       │                  render 0             column1             ·          ·

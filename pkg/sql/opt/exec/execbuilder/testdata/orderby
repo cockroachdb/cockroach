@@ -293,7 +293,6 @@ sort             ·                ·
  │               already ordered  +b,+a
  └── index join  ·                ·
       │          table            abc@primary
-      │          key columns      a, b, c
       └── scan   ·                ·
 ·                missing stats    ·
 ·                table            abc@ba
@@ -894,49 +893,46 @@ query TTTTT
 EXPLAIN (VERBOSE)
 SELECT k FROM kv JOIN (VALUES (1,2), (3,4)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
-·                           distribution           local              ·                ·
-·                           vectorized             false              ·                ·
-project                     ·                      ·                  (k)              ·
- └── sort                   ·                      ·                  (k, v)           -v,+k
-      │                     estimated row count    2 (missing stats)  ·                ·
-      │                     order                  -v,+k              ·                ·
-      └── project           ·                      ·                  (k, v)           ·
-           │                estimated row count    2 (missing stats)  ·                ·
-           └── lookup join  ·                      ·                  (column1, k, v)  ·
-                │           estimated row count    2 (missing stats)  ·                ·
-                │           table                  kv@primary         ·                ·
-                │           type                   inner              ·                ·
-                │           equality               (column1) = (k)    ·                ·
-                │           equality cols are key  ·                  ·                ·
-                │           parallel               ·                  ·                ·
-                └── values  ·                      ·                  (column1)        ·
-·                           size                   1 column, 2 rows   ·                ·
-·                           row 0, expr 0          1                  ·                ·
-·                           row 1, expr 0          3                  ·                ·
+·                                   distribution           local              ·                ·
+·                                   vectorized             false              ·                ·
+project                             ·                      ·                  (k)              ·
+ └── sort                           ·                      ·                  (k, v)           -v,+k
+      │                             estimated row count    2 (missing stats)  ·                ·
+      │                             order                  -v,+k              ·                ·
+      └── project                   ·                      ·                  (k, v)           ·
+           │                        estimated row count    2 (missing stats)  ·                ·
+           └── lookup join (inner)  ·                      ·                  (column1, k, v)  ·
+                │                   estimated row count    2 (missing stats)  ·                ·
+                │                   table                  kv@primary         ·                ·
+                │                   equality               (column1) = (k)    ·                ·
+                │                   equality cols are key  ·                  ·                ·
+                └── values          ·                      ·                  (column1)        ·
+·                                   size                   1 column, 2 rows   ·                ·
+·                                   row 0, expr 0          1                  ·                ·
+·                                   row 1, expr 0          3                  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-·                     distribution         local                 ·             ·
-·                     vectorized           true                  ·             ·
-project               ·                    ·                     (k)           ·
- └── project          ·                    ·                     (k, k, v)     -v,+k
-      │               estimated row count  10 (missing stats)    ·             ·
-      └── merge join  ·                    ·                     (k, v, k, v)  -v,+k
-           │          estimated row count  10 (missing stats)    ·             ·
-           │          type                 inner                 ·             ·
-           │          equality             (v, k) = (v, k)       ·             ·
-           │          left cols are key    ·                     ·             ·
-           │          right cols are key   ·                     ·             ·
-           │          mergeJoinOrder       -"(v=v)",+"(k=k)"     ·             ·
-           ├── scan   ·                    ·                     (k, v)        -v,+k
-           │          estimated row count  1000 (missing stats)  ·             ·
-           │          table                kv@foo                ·             ·
-           │          spans                FULL SCAN             ·             ·
-           └── scan   ·                    ·                     (k, v)        -v,+k
-·                     estimated row count  1000 (missing stats)  ·             ·
-·                     table                kv@foo                ·             ·
-·                     spans                FULL SCAN             ·             ·
+·                             distribution         local                 ·             ·
+·                             vectorized           true                  ·             ·
+project                       ·                    ·                     (k)           ·
+ └── project                  ·                    ·                     (k, k, v)     -v,+k
+      │                       estimated row count  10 (missing stats)    ·             ·
+      └── merge join (inner)  ·                    ·                     (k, v, k, v)  -v,+k
+           │                  estimated row count  10 (missing stats)    ·             ·
+           │                  equality             (v, k) = (v, k)       ·             ·
+           │                  left cols are key    ·                     ·             ·
+           │                  right cols are key   ·                     ·             ·
+           │                  merge ordering       -"(v=v)",+"(k=k)"     ·             ·
+           ├── scan           ·                    ·                     (k, v)        -v,+k
+           │                  estimated row count  1000 (missing stats)  ·             ·
+           │                  table                kv@foo                ·             ·
+           │                  spans                FULL SCAN             ·             ·
+           └── scan           ·                    ·                     (k, v)        -v,+k
+·                             estimated row count  1000 (missing stats)  ·             ·
+·                             table                kv@foo                ·             ·
+·                             spans                FULL SCAN             ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

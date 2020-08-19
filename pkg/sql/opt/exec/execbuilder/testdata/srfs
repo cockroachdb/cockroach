@@ -16,7 +16,6 @@ EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ·                   distribution  local
 ·                   vectorized    true
 cross join          ·             ·
- │                  type          cross
  ├── project set    ·             ·
  │    └── emptyrow  ·             ·
  └── project set    ·             ·
@@ -58,27 +57,25 @@ CREATE TABLE u (b string)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 ----
-·                   distribution         local                     ·                                         ·
-·                   vectorized           true                      ·                                         ·
-cross join          ·                    ·                         (a, b, generate_series, generate_series)  ·
- │                  estimated row count  10000000 (missing stats)  ·                                         ·
- │                  type                 cross                     ·                                         ·
- ├── cross join     ·                    ·                         (a, b)                                    ·
- │    │             estimated row count  1000000 (missing stats)   ·                                         ·
- │    │             type                 cross                     ·                                         ·
- │    ├── scan      ·                    ·                         (a)                                       ·
- │    │             estimated row count  1000 (missing stats)      ·                                         ·
- │    │             table                t@primary                 ·                                         ·
- │    │             spans                FULL SCAN                 ·                                         ·
- │    └── scan      ·                    ·                         (b)                                       ·
- │                  estimated row count  1000 (missing stats)      ·                                         ·
- │                  table                u@primary                 ·                                         ·
- │                  spans                FULL SCAN                 ·                                         ·
- └── project set    ·                    ·                         (generate_series, generate_series)        ·
-      │             estimated row count  10                        ·                                         ·
-      │             render 0             generate_series(1, 2)     ·                                         ·
-      │             render 1             generate_series(3, 4)     ·                                         ·
-      └── emptyrow  ·                    ·                         ()                                        ·
+·                        distribution         local                     ·                                         ·
+·                        vectorized           true                      ·                                         ·
+cross join (inner)       ·                    ·                         (a, b, generate_series, generate_series)  ·
+ │                       estimated row count  10000000 (missing stats)  ·                                         ·
+ ├── cross join (inner)  ·                    ·                         (a, b)                                    ·
+ │    │                  estimated row count  1000000 (missing stats)   ·                                         ·
+ │    ├── scan           ·                    ·                         (a)                                       ·
+ │    │                  estimated row count  1000 (missing stats)      ·                                         ·
+ │    │                  table                t@primary                 ·                                         ·
+ │    │                  spans                FULL SCAN                 ·                                         ·
+ │    └── scan           ·                    ·                         (b)                                       ·
+ │                       estimated row count  1000 (missing stats)      ·                                         ·
+ │                       table                u@primary                 ·                                         ·
+ │                       spans                FULL SCAN                 ·                                         ·
+ └── project set         ·                    ·                         (generate_series, generate_series)        ·
+      │                  estimated row count  10                        ·                                         ·
+      │                  render 0             generate_series(1, 2)     ·                                         ·
+      │                  render 1             generate_series(3, 4)     ·                                         ·
+      └── emptyrow       ·                    ·                         ()                                        ·
 
 subtest correlated_SRFs
 
@@ -111,122 +108,118 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT x, y, z, information_schema._pg_expandarray(ARRAY[x, y, z])
   FROM xy NATURAL JOIN xz WHERE y < z ORDER BY 1, 2, 3
 ----
-·                          distribution         local                                               ·                                                ·
-·                          vectorized           true                                                ·                                                ·
-sort                       ·                    ·                                                   (x, y, z, "information_schema._pg_expandarray")  +x
- │                         estimated row count  3267 (missing stats)                                ·                                                ·
- │                         order                +x                                                  ·                                                ·
- └── render                ·                    ·                                                   ("information_schema._pg_expandarray", x, y, z)  ·
-      │                    estimated row count  3267 (missing stats)                                ·                                                ·
-      │                    render 0             ((x, n) AS x, n)                                    ·                                                ·
-      │                    render 1             x                                                   ·                                                ·
-      │                    render 2             y                                                   ·                                                ·
-      │                    render 3             z                                                   ·                                                ·
-      └── project set      ·                    ·                                                   (x, y, x, z, x, n)                               ·
-           │               estimated row count  3267 (missing stats)                                ·                                                ·
-           │               render 0             information_schema._pg_expandarray(ARRAY[x, y, z])  ·                                                ·
-           └── merge join  ·                    ·                                                   (x, y, x, z)                                     ·
-                │          estimated row count  327 (missing stats)                                 ·                                                ·
-                │          type                 inner                                               ·                                                ·
-                │          equality             (x) = (x)                                           ·                                                ·
-                │          left cols are key    ·                                                   ·                                                ·
-                │          right cols are key   ·                                                   ·                                                ·
-                │          pred                 y < z                                               ·                                                ·
-                │          mergeJoinOrder       +"(x=x)"                                            ·                                                ·
-                ├── scan   ·                    ·                                                   (x, y)                                           +x
-                │          estimated row count  1000 (missing stats)                                ·                                                ·
-                │          table                xy@primary                                          ·                                                ·
-                │          spans                FULL SCAN                                           ·                                                ·
-                └── scan   ·                    ·                                                   (x, z)                                           +x
-·                          estimated row count  1000 (missing stats)                                ·                                                ·
-·                          table                xz@primary                                          ·                                                ·
-·                          spans                FULL SCAN                                           ·                                                ·
+·                                  distribution         local                                               ·                                                ·
+·                                  vectorized           true                                                ·                                                ·
+sort                               ·                    ·                                                   (x, y, z, "information_schema._pg_expandarray")  +x
+ │                                 estimated row count  3267 (missing stats)                                ·                                                ·
+ │                                 order                +x                                                  ·                                                ·
+ └── render                        ·                    ·                                                   ("information_schema._pg_expandarray", x, y, z)  ·
+      │                            estimated row count  3267 (missing stats)                                ·                                                ·
+      │                            render 0             ((x, n) AS x, n)                                    ·                                                ·
+      │                            render 1             x                                                   ·                                                ·
+      │                            render 2             y                                                   ·                                                ·
+      │                            render 3             z                                                   ·                                                ·
+      └── project set              ·                    ·                                                   (x, y, x, z, x, n)                               ·
+           │                       estimated row count  3267 (missing stats)                                ·                                                ·
+           │                       render 0             information_schema._pg_expandarray(ARRAY[x, y, z])  ·                                                ·
+           └── merge join (inner)  ·                    ·                                                   (x, y, x, z)                                     ·
+                │                  estimated row count  327 (missing stats)                                 ·                                                ·
+                │                  equality             (x) = (x)                                           ·                                                ·
+                │                  left cols are key    ·                                                   ·                                                ·
+                │                  right cols are key   ·                                                   ·                                                ·
+                │                  pred                 y < z                                               ·                                                ·
+                │                  merge ordering       +"(x=x)"                                            ·                                                ·
+                ├── scan           ·                    ·                                                   (x, y)                                           +x
+                │                  estimated row count  1000 (missing stats)                                ·                                                ·
+                │                  table                xy@primary                                          ·                                                ·
+                │                  spans                FULL SCAN                                           ·                                                ·
+                └── scan           ·                    ·                                                   (x, z)                                           +x
+·                                  estimated row count  1000 (missing stats)                                ·                                                ·
+·                                  table                xz@primary                                          ·                                                ·
+·                                  spans                FULL SCAN                                           ·                                                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series(x, z) FROM xz WHERE z < ANY(SELECT generate_series(x, y) FROM xy)
 ----
-·                           distribution         local                  ·                        ·
-·                           vectorized           true                   ·                        ·
-project                     ·                    ·                      (generate_series)        ·
- │                          estimated row count  3333 (missing stats)   ·                        ·
- └── project set            ·                    ·                      (x, z, generate_series)  ·
-      │                     estimated row count  3333 (missing stats)   ·                        ·
-      │                     render 0             generate_series(x, z)  ·                        ·
-      └── cross join        ·                    ·                      (x, z)                   ·
-           │                estimated row count  333 (missing stats)    ·                        ·
-           │                type                 semi                   ·                        ·
-           │                pred                 z < generate_series    ·                        ·
-           ├── scan         ·                    ·                      (x, z)                   ·
-           │                estimated row count  1000 (missing stats)   ·                        ·
-           │                table                xz@primary             ·                        ·
-           │                spans                FULL SCAN              ·                        ·
-           └── project set  ·                    ·                      (x, y, generate_series)  ·
-                │           estimated row count  10000 (missing stats)  ·                        ·
-                │           render 0             generate_series(x, y)  ·                        ·
-                └── scan    ·                    ·                      (x, y)                   ·
-·                           estimated row count  1000 (missing stats)   ·                        ·
-·                           table                xy@primary             ·                        ·
-·                           spans                FULL SCAN              ·                        ·
+·                            distribution         local                  ·                        ·
+·                            vectorized           true                   ·                        ·
+project                      ·                    ·                      (generate_series)        ·
+ │                           estimated row count  3333 (missing stats)   ·                        ·
+ └── project set             ·                    ·                      (x, z, generate_series)  ·
+      │                      estimated row count  3333 (missing stats)   ·                        ·
+      │                      render 0             generate_series(x, z)  ·                        ·
+      └── cross join (semi)  ·                    ·                      (x, z)                   ·
+           │                 estimated row count  333 (missing stats)    ·                        ·
+           │                 pred                 z < generate_series    ·                        ·
+           ├── scan          ·                    ·                      (x, z)                   ·
+           │                 estimated row count  1000 (missing stats)   ·                        ·
+           │                 table                xz@primary             ·                        ·
+           │                 spans                FULL SCAN              ·                        ·
+           └── project set   ·                    ·                      (x, y, generate_series)  ·
+                │            estimated row count  10000 (missing stats)  ·                        ·
+                │            render 0             generate_series(x, y)  ·                        ·
+                └── scan     ·                    ·                      (x, y)                   ·
+·                            estimated row count  1000 (missing stats)   ·                        ·
+·                            table                xy@primary             ·                        ·
+·                            spans                FULL SCAN              ·                        ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_subscripts(ARRAY[0, x, 1, 2]), generate_series(x, y), unnest(ARRAY[0, x, y, z]), y, z
   FROM xy NATURAL LEFT OUTER JOIN xz
 ----
-·                     distribution         local                                   ·                                                           ·
-·                     vectorized           true                                    ·                                                           ·
-project               ·                    ·                                       (generate_subscripts, generate_series, unnest, y, z)        ·
- │                    estimated row count  10000 (missing stats)                   ·                                                           ·
- └── project set      ·                    ·                                       (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
-      │               estimated row count  10000 (missing stats)                   ·                                                           ·
-      │               render 0             generate_subscripts(ARRAY[0, x, 1, 2])  ·                                                           ·
-      │               render 1             generate_series(x, y)                   ·                                                           ·
-      │               render 2             unnest(ARRAY[0, x, y, z])               ·                                                           ·
-      └── merge join  ·                    ·                                       (x, y, x, z)                                                ·
-           │          estimated row count  1000 (missing stats)                    ·                                                           ·
-           │          type                 left outer                              ·                                                           ·
-           │          equality             (x) = (x)                               ·                                                           ·
-           │          left cols are key    ·                                       ·                                                           ·
-           │          right cols are key   ·                                       ·                                                           ·
-           │          mergeJoinOrder       +"(x=x)"                                ·                                                           ·
-           ├── scan   ·                    ·                                       (x, y)                                                      +x
-           │          estimated row count  1000 (missing stats)                    ·                                                           ·
-           │          table                xy@primary                              ·                                                           ·
-           │          spans                FULL SCAN                               ·                                                           ·
-           └── scan   ·                    ·                                       (x, z)                                                      +x
-·                     estimated row count  1000 (missing stats)                    ·                                                           ·
-·                     table                xz@primary                              ·                                                           ·
-·                     spans                FULL SCAN                               ·                                                           ·
+·                                  distribution         local                                   ·                                                           ·
+·                                  vectorized           true                                    ·                                                           ·
+project                            ·                    ·                                       (generate_subscripts, generate_series, unnest, y, z)        ·
+ │                                 estimated row count  10000 (missing stats)                   ·                                                           ·
+ └── project set                   ·                    ·                                       (x, y, x, z, generate_subscripts, generate_series, unnest)  ·
+      │                            estimated row count  10000 (missing stats)                   ·                                                           ·
+      │                            render 0             generate_subscripts(ARRAY[0, x, 1, 2])  ·                                                           ·
+      │                            render 1             generate_series(x, y)                   ·                                                           ·
+      │                            render 2             unnest(ARRAY[0, x, y, z])               ·                                                           ·
+      └── merge join (left outer)  ·                    ·                                       (x, y, x, z)                                                ·
+           │                       estimated row count  1000 (missing stats)                    ·                                                           ·
+           │                       equality             (x) = (x)                               ·                                                           ·
+           │                       left cols are key    ·                                       ·                                                           ·
+           │                       right cols are key   ·                                       ·                                                           ·
+           │                       merge ordering       +"(x=x)"                                ·                                                           ·
+           ├── scan                ·                    ·                                       (x, y)                                                      +x
+           │                       estimated row count  1000 (missing stats)                    ·                                                           ·
+           │                       table                xy@primary                              ·                                                           ·
+           │                       spans                FULL SCAN                               ·                                                           ·
+           └── scan                ·                    ·                                       (x, z)                                                      +x
+·                                  estimated row count  1000 (missing stats)                    ·                                                           ·
+·                                  table                xz@primary                              ·                                                           ·
+·                                  spans                FULL SCAN                               ·                                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-·                               distribution         local                                 ·                     ·
-·                               vectorized           true                                  ·                     ·
-root                            ·                    ·                                     (generate_series)     ·
- ├── project                    ·                    ·                                     (generate_series)     ·
- │    │                         estimated row count  10000 (missing stats)                 ·                     ·
- │    └── project set           ·                    ·                                     (z, generate_series)  ·
- │         │                    estimated row count  10000 (missing stats)                 ·                     ·
- │         │                    render 0             generate_series(@S1, z)               ·                     ·
- │         └── scan             ·                    ·                                     (z)                   ·
- │                              estimated row count  1000 (missing stats)                  ·                     ·
- │                              table                xz@primary                            ·                     ·
- │                              spans                FULL SCAN                             ·                     ·
- └── subquery                   ·                    ·                                     ·                     ·
-      │                         id                   @S1                                   ·                     ·
-      │                         original sql         (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
-      │                         exec mode            one row                               ·                     ·
-      └── max1row               ·                    ·                                     (unnest)              ·
-           │                    estimated row count  1                                     ·                     ·
-           └── project          ·                    ·                                     (unnest)              ·
-                │               estimated row count  2000 (missing stats)                  ·                     ·
-                └── apply join  ·                    ·                                     (x, y, unnest)        ·
-                     │          estimated row count  2000 (missing stats)                  ·                     ·
-                     │          type                 cross                                 ·                     ·
-                     └── scan   ·                    ·                                     (x, y)                ·
-·                               estimated row count  1000 (missing stats)                  ·                     ·
-·                               table                xy@primary                            ·                     ·
-·                               spans                FULL SCAN                             ·                     ·
+·                                       distribution         local                                 ·                     ·
+·                                       vectorized           true                                  ·                     ·
+root                                    ·                    ·                                     (generate_series)     ·
+ ├── project                            ·                    ·                                     (generate_series)     ·
+ │    │                                 estimated row count  10000 (missing stats)                 ·                     ·
+ │    └── project set                   ·                    ·                                     (z, generate_series)  ·
+ │         │                            estimated row count  10000 (missing stats)                 ·                     ·
+ │         │                            render 0             generate_series(@S1, z)               ·                     ·
+ │         └── scan                     ·                    ·                                     (z)                   ·
+ │                                      estimated row count  1000 (missing stats)                  ·                     ·
+ │                                      table                xz@primary                            ·                     ·
+ │                                      spans                FULL SCAN                             ·                     ·
+ └── subquery                           ·                    ·                                     ·                     ·
+      │                                 id                   @S1                                   ·                     ·
+      │                                 original sql         (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
+      │                                 exec mode            one row                               ·                     ·
+      └── max1row                       ·                    ·                                     (unnest)              ·
+           │                            estimated row count  1                                     ·                     ·
+           └── project                  ·                    ·                                     (unnest)              ·
+                │                       estimated row count  2000 (missing stats)                  ·                     ·
+                └── apply join (inner)  ·                    ·                                     (x, y, unnest)        ·
+                     │                  estimated row count  2000 (missing stats)                  ·                     ·
+                     └── scan           ·                    ·                                     (x, y)                ·
+·                                       estimated row count  1000 (missing stats)                  ·                     ·
+·                                       table                xy@primary                            ·                     ·
+·                                       spans                FULL SCAN                             ·                     ·
 
 # Regression test for #24676.
 statement ok
@@ -243,41 +236,40 @@ EXPLAIN (VERBOSE) SELECT
 FROM
   groups g
 ----
-·                                   distribution         local                             ·                                             ·
-·                                   vectorized           true                              ·                                             ·
-render                              ·                    ·                                 (group_name, jsonb_array_elements)            ·
- │                                  estimated row count  100000 (missing stats)            ·                                             ·
- │                                  render 0             data->>'name'                     ·                                             ·
- │                                  render 1             jsonb_array_elements              ·                                             ·
- └── project set                    ·                    ·                                 (id, data, "?column?", jsonb_array_elements)  ·
-      │                             estimated row count  100000 (missing stats)            ·                                             ·
-      │                             render 0             jsonb_array_elements("?column?")  ·                                             ·
-      └── distinct                  ·                    ·                                 (id, data, "?column?")                        ·
-           │                        estimated row count  10000 (missing stats)             ·                                             ·
-           │                        distinct on          id                                ·                                             ·
-           │                        error on duplicate   ·                                 ·                                             ·
-           └── project              ·                    ·                                 (id, data, "?column?")                        ·
-                └── hash join       ·                    ·                                 (column10, id, data, column11, "?column?")    ·
-                     │              estimated row count  10000 (missing stats)             ·                                             ·
-                     │              type                 left outer                        ·                                             ·
-                     │              equality             (column10) = (column11)           ·                                             ·
-                     ├── render     ·                    ·                                 (column10, id, data)                          ·
-                     │    │         estimated row count  1000 (missing stats)              ·                                             ·
-                     │    │         render 0             data->>'name'                     ·                                             ·
-                     │    │         render 1             id                                ·                                             ·
-                     │    │         render 2             data                              ·                                             ·
-                     │    └── scan  ·                    ·                                 (id, data)                                    ·
-                     │              estimated row count  1000 (missing stats)              ·                                             ·
-                     │              table                groups@primary                    ·                                             ·
-                     │              spans                FULL SCAN                         ·                                             ·
-                     └── render     ·                    ·                                 (column11, "?column?")                        ·
-                          │         estimated row count  1000 (missing stats)              ·                                             ·
-                          │         render 0             data->>'name'                     ·                                             ·
-                          │         render 1             data->'members'                   ·                                             ·
-                          └── scan  ·                    ·                                 (data)                                        ·
-·                                   estimated row count  1000 (missing stats)              ·                                             ·
-·                                   table                groups@primary                    ·                                             ·
-·                                   spans                FULL SCAN                         ·                                             ·
+·                                           distribution         local                             ·                                             ·
+·                                           vectorized           true                              ·                                             ·
+render                                      ·                    ·                                 (group_name, jsonb_array_elements)            ·
+ │                                          estimated row count  100000 (missing stats)            ·                                             ·
+ │                                          render 0             data->>'name'                     ·                                             ·
+ │                                          render 1             jsonb_array_elements              ·                                             ·
+ └── project set                            ·                    ·                                 (id, data, "?column?", jsonb_array_elements)  ·
+      │                                     estimated row count  100000 (missing stats)            ·                                             ·
+      │                                     render 0             jsonb_array_elements("?column?")  ·                                             ·
+      └── distinct                          ·                    ·                                 (id, data, "?column?")                        ·
+           │                                estimated row count  10000 (missing stats)             ·                                             ·
+           │                                distinct on          id                                ·                                             ·
+           │                                error on duplicate   ·                                 ·                                             ·
+           └── project                      ·                    ·                                 (id, data, "?column?")                        ·
+                └── hash join (left outer)  ·                    ·                                 (column10, id, data, column11, "?column?")    ·
+                     │                      estimated row count  10000 (missing stats)             ·                                             ·
+                     │                      equality             (column10) = (column11)           ·                                             ·
+                     ├── render             ·                    ·                                 (column10, id, data)                          ·
+                     │    │                 estimated row count  1000 (missing stats)              ·                                             ·
+                     │    │                 render 0             data->>'name'                     ·                                             ·
+                     │    │                 render 1             id                                ·                                             ·
+                     │    │                 render 2             data                              ·                                             ·
+                     │    └── scan          ·                    ·                                 (id, data)                                    ·
+                     │                      estimated row count  1000 (missing stats)              ·                                             ·
+                     │                      table                groups@primary                    ·                                             ·
+                     │                      spans                FULL SCAN                         ·                                             ·
+                     └── render             ·                    ·                                 (column11, "?column?")                        ·
+                          │                 estimated row count  1000 (missing stats)              ·                                             ·
+                          │                 render 0             data->>'name'                     ·                                             ·
+                          │                 render 1             data->'members'                   ·                                             ·
+                          └── scan          ·                    ·                                 (data)                                        ·
+·                                           estimated row count  1000 (missing stats)              ·                                             ·
+·                                           table                groups@primary                    ·                                             ·
+·                                           spans                FULL SCAN                         ·                                             ·
 
 # Regression test for #32162.
 query TTTTT
@@ -358,7 +350,7 @@ project                     ·                    ·                            
  └── project set            ·                    ·                              (a, a, generate_series)   ·
       │                     estimated row count  10                             ·                         ·
       │                     render 0             generate_series(a + 1, a + 1)  ·                         ·
-      └── union             ·                    ·                              (a, a)                    ·
+      └── except all        ·                    ·                              (a, a)                    ·
            │                estimated row count  1                              ·                         ·
            ├── project      ·                    ·                              (a, a)                    ·
            │    └── values  ·                    ·                              (a)                       ·
