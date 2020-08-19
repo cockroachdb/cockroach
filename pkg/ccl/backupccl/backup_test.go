@@ -4433,6 +4433,10 @@ func TestDetachedBackup(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	sqlDB.CheckQueryResults(t, allJobsQuery, allJobs)
+
+	// Ensure that we can backup again to the same location as the backup that was
+	// rolledback.
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, LocalFoo+"/2")
 }
 
 func TestDetachedRestore(t *testing.T) {

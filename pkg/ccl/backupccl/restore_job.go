@@ -684,7 +684,7 @@ type restoreResumer struct {
 	execCfg            *sql.ExecutorConfig
 
 	testingKnobs struct {
-		// duringSystemTableResotration is called once for every system table we
+		// duringSystemTableRestoration is called once for every system table we
 		// restore. It is used to simulate any errors that we may face at this point
 		// of the restore.
 		duringSystemTableRestoration func() error
