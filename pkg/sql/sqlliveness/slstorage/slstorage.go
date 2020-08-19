@@ -220,43 +220,36 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			t.Read = true
-			now := s.clock.Now()
-			s.deleteExpiredSessions(ctx, now)
+			s.deleteExpiredSessions(ctx)
 		}
 	}
 }
 
-func (s *Storage) deleteExpiredSessions(ctx context.Context, now hlc.Timestamp) {
-	var n int64
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		row, err := s.ex.QueryRow(
-			ctx, "delete-sessions", txn,
-			`
+func (s *Storage) deleteExpiredSessions(ctx context.Context) {
+	now := s.clock.Now()
+	row, err := s.ex.QueryRow(ctx, "delete-sessions", nil, /* txn */
+		`
   WITH deleted_sessions AS (
                             DELETE FROM system.sqlliveness
                                   WHERE expiration < $1
                               RETURNING session_id
                         )
-SELECT count(*)
+	SELECT count(*)
   FROM deleted_sessions;`,
-			tree.TimestampToDecimalDatum(now),
-		)
-		if err != nil {
-			return err
-		}
-		n = int64(*row[0].(*tree.DInt))
-		return nil
-	})
+		tree.TimestampToDecimalDatum(now),
+	)
 	if err != nil {
-		if ctx.Err() != nil {
-			log.Errorf(ctx, "Could not delete expired sessions: %+v", err)
+		if ctx.Err() == nil {
+			log.Errorf(ctx, "could not delete expired sessions: %+v", err)
 		}
 		return
 	}
+	deleted := int64(*row[0].(*tree.DInt))
+
 	s.metrics.SessionDeletionsRuns.Inc(1)
-	s.metrics.SessionsDeleted.Inc(n)
-	if log.V(2) || n > 0 {
-		log.Infof(ctx, "Deleted %d expired SQL liveness sessions", n)
+	s.metrics.SessionsDeleted.Inc(deleted)
+	if log.V(2) || deleted > 0 {
+		log.Infof(ctx, "deleted %d expired SQL liveness sessions", deleted)
 	}
 }
 
