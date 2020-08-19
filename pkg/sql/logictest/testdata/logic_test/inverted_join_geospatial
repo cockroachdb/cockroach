@@ -198,3 +198,71 @@ ORDER BY rk
 12
 14
 15
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
+ORDER BY lk, rk
+----
+1  13
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
+ORDER BY lk, rk
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
+ORDER BY lk, rk
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1::box2d ~ rtable.geom
+ORDER BY lk, rk
+----
+1  13
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1::box2d
+ORDER BY lk, rk
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16
+
+query II
+SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1::box2d && rtable.geom
+ORDER BY lk, rk
+----
+1  13
+1  16
+2  14
+2  16
+3  12
+3  16
+5  12
+5  16

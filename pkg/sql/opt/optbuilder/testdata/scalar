@@ -1303,3 +1303,97 @@ NOT NULL
 not [type=bool]
  └── cast: BOOL [type=bool]
       └── null [type=unknown]
+
+build-scalar vars=(geometry, geometry)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(geometry, box2d)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(box2d, geometry)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(box2d, box2d)
+@1 ~ @2
+----
+b-box-covers [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(geometry, geometry)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(geometry, box2d)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=geometry]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(box2d, geometry)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=geometry]
+
+build-scalar vars=(box2d, box2d)
+@1 && @2
+----
+b-box-intersects [type=bool]
+ ├── variable: "@1":1 [type=box2d]
+ └── variable: "@2":2 [type=box2d]
+
+build-scalar vars=(string, string)
+@1 ~ @2
+----
+reg-match [type=bool]
+ ├── variable: "@1":1 [type=string]
+ └── variable: "@2":2 [type=string]
+
+build-scalar vars=(inet, inet)
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=inet]
+ └── variable: "@2":2 [type=inet]
+
+build-scalar vars=(int[], int[])
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=int[]]
+ └── variable: "@2":2 [type=int[]]
+
+build-scalar vars=(geometry[], geometry[])
+@1 && @2
+----
+overlaps [type=bool]
+ ├── variable: "@1":1 [type=geometry[]]
+ └── variable: "@2":2 [type=geometry[]]
+
+build-scalar vars=(string, geometry)
+@1 ~ @2
+----
+error: unsupported comparison operator: <string> ~ <geometry>
+
+build-scalar vars=(geometry[], geometry)
+@1 && @2
+----
+error: unsupported comparison operator: <geometry[]> && <geometry>
