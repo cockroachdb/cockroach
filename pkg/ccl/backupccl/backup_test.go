@@ -77,6 +77,46 @@ const (
 	localFoo                    = "nodelocal://0/foo"
 )
 
+// getStatsQuery returns a SQL query that will return the properties of the
+// statistics on a table that are expected to remain the same after being
+// restored on a new cluster.
+func getStatsQuery(tableName string) string {
+	return fmt.Sprintf(`SELECT
+	  statistics_name,
+	  column_names,
+	  row_count,
+	  distinct_count,
+	  null_count
+	FROM [SHOW STATISTICS FOR TABLE %s]`, tableName)
+}
+
+// injectStats directly injects some arbitrary statistic into a given table for
+// a specified column.
+// See injectStatsWithRowCount.
+func injectStats(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableName string, columnName string,
+) [][]string {
+	return injectStatsWithRowCount(t, sqlDB, tableName, columnName, 100 /* rowCount */)
+}
+
+// injectStatsWithRowCount directly injects some statistics specifying some row
+// count for a column in the given table.
+// N.B. This should be used in backup testing over CREATE STATISTICS since it
+// ensures that the stats cache will be up to date during a subsequent BACKUP.
+func injectStatsWithRowCount(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableName string, columnName string, rowCount int,
+) [][]string {
+	sqlDB.Exec(t, fmt.Sprintf(`ALTER TABLE %s INJECT STATISTICS '[
+	{
+		"columns": ["%s"],
+		"created_at": "2018-01-01 1:00:00.00000+00:00",
+		"row_count": %d,
+		"distinct_count": %d
+	}
+	]'`, tableName, columnName, rowCount, rowCount))
+	return sqlDB.QueryStr(t, getStatsQuery(tableName))
+}
+
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
 	clusterSize int,
@@ -3761,27 +3801,17 @@ func TestBackupCreatedStats(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
-	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	injectStats(t, sqlDB, "data.bank", "id")
+	injectStats(t, sqlDB, "data.foo", "a")
 	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
 	sqlDB.Exec(t, `RESTORE data.bank, data.foo FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
 		localFoo, "data 2")
 
-	sqlDB.CheckQueryResults(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
-		[][]string{
-			{"bank_stats", "{id}", "1", "1", "0"},
-			{"bank_stats", "{balance}", "1", "1", "0"},
-			{"bank_stats", "{payload}", "1", "1", "0"},
-		})
-	sqlDB.CheckQueryResults(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	FROM [SHOW STATISTICS FOR TABLE "data 2".foo] WHERE statistics_name='foo_stats'`,
-		[][]string{
-			{"foo_stats", "{a}", "0", "0", "0"},
-		})
+	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`),
+		sqlDB.QueryStr(t, getStatsQuery("data.bank")))
+	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`),
+		sqlDB.QueryStr(t, getStatsQuery("data.foo")))
 }
 
 // Ensure that backing up and restoring an empty database succeeds.
@@ -3809,23 +3839,20 @@ func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
 	sqlDB.Exec(t, `CREATE TABLE data.foo (a INT)`)
-	sqlDB.Exec(t, `CREATE STATISTICS foo_stats FROM data.foo`)
-	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	bankStats := injectStats(t, sqlDB, "data.bank", "id")
+	injectStats(t, sqlDB, "data.foo", "a")
 
 	sqlDB.Exec(t, `BACKUP data.bank, data.foo TO $1 WITH revision_history`, localFoo)
-	sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE name = 'foo_stats' OR name = 'bank_stats'`)
+	// Clear the stats.
+	sqlDB.Exec(t, `DELETE FROM system.table_statistics WHERE true`)
 	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, `CREATE TABLE "data 2".foo (a INT)`)
 	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`,
 		localFoo, "data 2")
 
-	// Ensure that the bank_stats have been restored, but foo_stats have not.
-	sqlDB.CheckQueryResults(t,
-		`SELECT name, "columnIDs", "rowCount", "distinctCount", "nullCount" FROM system.table_statistics`,
-		[][]string{
-			{"bank_stats", "{1}", "1", "1", "0"}, // id column
-			{"bank_stats", "{2}", "1", "1", "0"}, // balance column
-			{"bank_stats", "{3}", "1", "1", "0"}, // payload column
-		})
+	// Ensure that bank's stats have been restored, but foo's have not.
+	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), bankStats)
+	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`), [][]string{})
 }
 
 // Ensure that statistics are restored from correct backup.
@@ -3841,19 +3868,18 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
-	// Create the 1st backup, where data.bank has 1 account.
-	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	// Create the 1st backup, with stats estimating 50 rows.
+	injectStatsWithRowCount(t, sqlDB, "data.bank", "id", 50 /* rowCount */)
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, localFoo)
 
-	// Create the 2nd backup, where data.bank has 3 accounts.
-	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (2, 2), (4, 4)`)
-	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	// Create the 2nd backup, with stats estimating 100 rows.
+	injectStatsWithRowCount(t, sqlDB, "data.bank", "id", 100 /* rowCount */)
+	statsBackup2 := sqlDB.QueryStr(t, getStatsQuery("data.bank"))
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs) // Save time to restore to this point.
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH revision_history`, incremental1Foo, localFoo)
 
-	// Create the 3rd backup, where data.bank has 5 accounts.
-	sqlDB.Exec(t, `INSERT INTO data.bank VALUES (3, 3), (5, 2)`)
-	sqlDB.Exec(t, `CREATE STATISTICS bank_stats FROM data.bank`)
+	// Create the 3rd backup, with stats estimating 500 rows.
+	injectStatsWithRowCount(t, sqlDB, "data.bank", "id", 500 /* rowCount */)
 	sqlDB.Exec(t, `BACKUP data.bank TO $1 INCREMENTAL FROM $2, $3 WITH revision_history`, incremental2Foo, localFoo, incremental1Foo)
 
 	// Restore the 2nd backup.
@@ -3861,17 +3887,8 @@ func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s", "%s", "%s" AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys, into_db = "%s"`,
 		localFoo, incremental1Foo, incremental2Foo, beforeTs, "data 2"))
 
-	// Expect the values in row_count and distinct_count to be 3. The values
-	// would be 1 if the stats from the full backup were restored and 5 if
-	// the stats from the latest incremental backup were restored.
-	sqlDB.CheckQueryResults(t,
-		`SELECT statistics_name, column_names, row_count, distinct_count, null_count
-	FROM [SHOW STATISTICS FOR TABLE "data 2".bank] WHERE statistics_name='bank_stats'`,
-		[][]string{
-			{"bank_stats", "{id}", "3", "3", "0"},
-			{"bank_stats", "{balance}", "3", "3", "0"},
-			{"bank_stats", "{payload}", "3", "2", "2"},
-		})
+	// Expect the stats look as they did in the second backup.
+	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".bank`), statsBackup2)
 }
 
 // TestProtectedTimestampsDuringBackup ensures that the timestamp at which a
