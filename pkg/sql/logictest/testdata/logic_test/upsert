@@ -120,9 +120,6 @@ INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
 statement count 1
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = kv.v + 20
 
-statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
-INSERT INTO kv VALUES (4, 10) ON CONFLICT DO UPDATE SET v = kv.v + 20
-
 statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
