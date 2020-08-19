@@ -3056,24 +3056,21 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m descpb.DescriptorMuta
 		case *descpb.DescriptorMutation_Constraint:
 			switch t.Constraint.ConstraintType {
 			case descpb.ConstraintToUpdate_CHECK:
-				if t.Constraint.Check.Validity == descpb.ConstraintValidity_Dropping {
-					break
-				}
-				var found bool
-				for _, c := range desc.Checks {
-					if c.Name == t.Constraint.Name {
-						if t.Constraint.Check.Validity != descpb.ConstraintValidity_Unvalidated {
+				switch t.Constraint.Check.Validity {
+				case descpb.ConstraintValidity_Validating:
+					// Constraint already added, just mark it as Validated
+					for _, c := range desc.Checks {
+						if c.Name == t.Constraint.Name {
 							c.Validity = descpb.ConstraintValidity_Validated
+							break
 						}
-						found = true
-						break
 					}
-				}
-				if !found {
-					if t.Constraint.Check.Validity != descpb.ConstraintValidity_Unvalidated {
-						t.Constraint.Check.Validity = descpb.ConstraintValidity_Validated
-					}
+				case descpb.ConstraintValidity_Unvalidated:
+					// add the constraint to the list of check constraints on the table
+					// descriptor
 					desc.Checks = append(desc.Checks, &t.Constraint.Check)
+				default:
+					return errors.AssertionFailedf("invalid constraint validity state: %d", t.Constraint.Check.Validity)
 				}
 			case descpb.ConstraintToUpdate_FOREIGN_KEY:
 				switch t.Constraint.ForeignKey.Validity {
