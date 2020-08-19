@@ -1247,30 +1247,6 @@ func (tc *Collection) ResetSchemaCache() {
 	tc.schemaCache = sync.Map{}
 }
 
-// MigrationSchemaChangeRequiredContext flags a schema change as necessary to
-// run even in a mixed-version 19.2/20.1 state where schema changes are normally
-// banned, because the schema change is being run in a startup migration. It's
-// the caller's responsibility to ensure that the schema change job is safe to
-// run in a mixed-version state.
-//
-// TODO (lucy): Remove this in 20.2.
-func MigrationSchemaChangeRequiredContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, migrationSchemaChangeRequiredHint{}, migrationSchemaChangeRequiredHint{})
-}
-
-// MigrationSchemaChangeRequiredFromContext returns true if the context
-// indicates that a schema change should be run despite a mixed 19.2/20.1
-// cluster version.
-func MigrationSchemaChangeRequiredFromContext(ctx context.Context) bool {
-	return ctx.Value(migrationSchemaChangeRequiredHint{}) == nil
-}
-
-type migrationSchemaChangeRequiredHint struct{}
-
-// ErrSchemaChangeDisallowedInMixedState signifies that an attempted schema
-// change was disallowed from running in a mixed-version
-var ErrSchemaChangeDisallowedInMixedState = errors.New("schema change cannot be initiated in this version until the version upgrade is finalized")
-
 // DatabaseCacheSubscriber allows the connExecutor to wait for a callback.
 type DatabaseCacheSubscriber interface {
 	// WaitForCacheState takes a callback depending on the cache state and blocks

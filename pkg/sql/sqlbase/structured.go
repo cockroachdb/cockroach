@@ -3565,11 +3565,6 @@ func (desc *MutableTableDescriptor) IsNew() bool {
 	return desc.ClusterVersion.ID == descpb.InvalidID
 }
 
-// HasDrainingNames returns true if a draining name exists.
-func (desc *ImmutableTableDescriptor) HasDrainingNames() bool {
-	return len(desc.DrainingNames) > 0
-}
-
 // VisibleColumns returns all non hidden columns.
 func (desc *ImmutableTableDescriptor) VisibleColumns() []descpb.ColumnDescriptor {
 	var cols []descpb.ColumnDescriptor
