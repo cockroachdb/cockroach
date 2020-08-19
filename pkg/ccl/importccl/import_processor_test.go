@@ -558,10 +558,10 @@ func (r *cancellableImportResumer) Resume(
 }
 
 func (r *cancellableImportResumer) OnFailOrCancel(ctx context.Context, phs interface{}) error {
-	// This callback is invoked when an error or cancellation occurs
-	// during the import. Since our Resume handler returned an
-	// error (after pausing the job), we need to short-circuits
-	// jobs machinery so that this job is not marked as failed.
+	// This callback is invoked when an error or cancellation occurs during the
+	// import. Since our Resume handler returned an error (after pausing the job),
+	// we need to short-circuits jobs machinery so that this job is not marked as
+	// failed.
 	return errors.New("bail out")
 }
 
@@ -634,7 +634,7 @@ func queryJobUntil(
 	return
 }
 
-func TestCSVImportCanBeResumed(t *testing.T) {
+func TestCSVImportCanBeResumedAndCancelled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer setImportReaderParallelism(1)()
@@ -658,88 +658,146 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
-	defer sqlDB.Exec(t, `DROP TABLE t`)
 
-	jobCtx, cancelImport := context.WithCancel(ctx)
-	jobIDCh := make(chan int64)
-	var jobID int64 = -1
+	var cancelImport context.CancelFunc
+	var testBarrier syncBarrier
+	var jobID int64
 	var importSummary backupccl.RowCount
+	var storage *generatedStorage
+	var jobIDCh chan int64
+	var csv1 *csvGenerator
+	setupJobControlTest := func() {
+		var jobCtx context.Context
+		jobCtx, cancelImport = context.WithCancel(ctx)
+		jobIDCh = make(chan int64)
 
-	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
-		// Arrange for our special job resumer to be
-		// returned the very first time we start the import.
-		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+		jobID = -1
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			// Arrange for our special job resumer to be
+			// returned the very first time we start the import.
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 
-			resumer := raw.(*importResumer)
-			resumer.testingKnobs.ignoreProtectedTimestamps = true
-			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
-				importSummary = summary
-				return nil
-			}
-			if jobID == -1 {
-				return &cancellableImportResumer{
-					ctx:     jobCtx,
-					jobIDCh: jobIDCh,
-					wrapped: resumer,
+				resumer := raw.(*importResumer)
+				resumer.testingKnobs.ignoreProtectedTimestamps = true
+				resumer.testingKnobs.alwaysFlushJobProgress = true
+				resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					importSummary = summary
+					return nil
 				}
-			}
-			return resumer
-		},
+				if jobID == -1 {
+					return &cancellableImportResumer{
+						ctx:     jobCtx,
+						jobIDCh: jobIDCh,
+						wrapped: resumer,
+					}
+				}
+				return resumer
+			},
+		}
+
+		var csvBarrier syncBarrier
+		testBarrier, csvBarrier = newSyncBarrier()
+		csv1 = newCsvGenerator(0, 10*batchSize+1, &intGenerator{}, &strGenerator{})
+		csv1.addBreakpoint(7*batchSize, func() (bool, error) {
+			defer csvBarrier.Enter()()
+			return false, nil
+		})
+
+		// Convince distsql to use our "external" storage implementation.
+		storage = newGeneratedStorage(csv1)
+		s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage =
+			storage.externalStorageFactory()
 	}
 
-	testBarrier, csvBarrier := newSyncBarrier()
-	csv1 := newCsvGenerator(0, 10*batchSize+1, &intGenerator{}, &strGenerator{})
-	csv1.addBreakpoint(7*batchSize, func() (bool, error) {
-		defer csvBarrier.Enter()()
-		return false, nil
+	t.Run("pause-import", func(t *testing.T) {
+		setupJobControlTest()
+
+		sqlDB.Exec(t, "CREATE TABLE pauseimport (id INT, data STRING)")
+		defer sqlDB.Exec(t, `DROP TABLE pauseimport`)
+
+		// Execute import; ignore any errors returned
+		// (since we're aborting the first import run.).
+		go func() {
+			_, _ = sqlDB.DB.ExecContext(ctx,
+				`IMPORT INTO pauseimport (id, data) CSV DATA ($1)`, storage.getGeneratorURIs()[0])
+		}()
+
+		// Wait for the job to start running
+		jobID = <-jobIDCh
+
+		// Wait until we are blocked handling breakpoint.
+		unblockImport := testBarrier.Enter()
+		// Wait until we have recorded some job progress.
+		js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
+
+		// Pause the job;
+		if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
+			t.Fatal(err)
+		}
+		// Send cancellation and unblock breakpoint.
+		cancelImport()
+		unblockImport()
+
+		// Get updated resume position counter.
+		js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
+		resumePos := js.prog.ResumePos[0]
+		t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
+
+		// Unpause the job and wait for it to complete.
+		if err := registry.Unpause(ctx, nil, jobID); err != nil {
+			t.Fatal(err)
+		}
+		js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+
+		// Verify that the import proceeded from the resumeRow position.
+		assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
+
+		sqlDB.CheckQueryResults(t, `SELECT id FROM pauseimport ORDER BY id`,
+			sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
+		)
 	})
 
-	// Convince distsql to use our "external" storage implementation.
-	storage := newGeneratedStorage(csv1)
-	s.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ExternalStorage = storage.externalStorageFactory()
+	t.Run("cancel-import", func(t *testing.T) {
+		setupJobControlTest()
 
-	// Execute import; ignore any errors returned
-	// (since we're aborting the first import run.).
-	go func() {
-		_, _ = sqlDB.DB.ExecContext(ctx,
-			`IMPORT INTO t (id, data) CSV DATA ($1)`, storage.getGeneratorURIs()[0])
-	}()
+		// Execute import; ignore any errors returned
+		// (since we're aborting the first import run.).
+		go func() {
+			_, _ = sqlDB.DB.ExecContext(ctx,
+				`IMPORT TABLE cancelimport (id INT, data STRING) CSV DATA ($1)`,
+				storage.getGeneratorURIs()[0])
+		}()
 
-	// Wait for the job to start running
-	jobID = <-jobIDCh
+		// Wait for the job to start running
+		jobID = <-jobIDCh
 
-	// Wait until we are blocked handling breakpoint.
-	unblockImport := testBarrier.Enter()
-	// Wait until we have recorded some job progress.
-	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
+		// Wait until we are blocked handling breakpoint.
+		unblockImport := testBarrier.Enter()
+		// Wait until we have recorded some job progress.
+		_ = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+			return js.prog.ResumePos[0] > 0
+		})
 
-	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID); err != nil {
-		t.Fatal(err)
-	}
-	// Send cancellation and unblock breakpoint.
-	cancelImport()
-	unblockImport()
+		// Cancel the job;
+		if err := registry.CancelRequested(ctx, nil, jobID); err != nil {
+			t.Fatal(err)
+		}
 
-	// Get updated resume position counter.
-	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusPaused == js.status })
-	resumePos := js.prog.ResumePos[0]
-	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
+		// Unblock breakpoint.
+		unblockImport()
 
-	// Unpause the job and wait for it to complete.
-	if err := registry.Unpause(ctx, nil, jobID); err != nil {
-		t.Fatal(err)
-	}
-	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
+		_ = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool {
+			return jobs.StatusCanceled == js.status
+		})
 
-	// Verify that the import proceeded from the resumeRow position.
-	assert.Equal(t, importSummary.Rows, int64(csv1.numRows)-resumePos)
-
-	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
-		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
-	)
+		// Ensure that the IMPORT job has been reverted by attempting a second
+		// IMPORT to the same table.
+		sqlDB.Exec(t, `IMPORT TABLE cancelimport (id INT, data STRING) CSV DATA ($1)`,
+			storage.getGeneratorURIs()[0])
+		sqlDB.CheckQueryResults(t, `SELECT id FROM cancelimport ORDER BY id`,
+			sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
+		)
+	})
 }
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {

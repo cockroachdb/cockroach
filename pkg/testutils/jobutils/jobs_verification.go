@@ -59,6 +59,25 @@ func WaitForJob(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
 	}
 }
 
+// WaitForJobFailed waits for the specified job ID to be set to a failed
+// state.
+func WaitForJobFailed(t testing.TB, db *sqlutils.SQLRunner, jobID int64) {
+	t.Helper()
+	if err := retry.ForDuration(time.Minute*2, func() error {
+		var status string
+		var payloadBytes []byte
+		db.QueryRow(
+			t, `SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes)
+		if e, a := jobs.StatusFailed, jobs.Status(status); e != a {
+			return errors.Errorf("expected job status %s, but got %s", e, a)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // RunJob runs the provided job control statement, intializing, notifying and
 // closing the chan at the passed pointer (see below for why) and returning the
 // jobID and error result. PAUSE JOB and CANCEL JOB are racy in that it's hard
