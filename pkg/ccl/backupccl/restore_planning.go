@@ -1030,6 +1030,7 @@ func restoreJobDescription(
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
+	subdir string,
 	opts tree.RestoreOptions,
 	intoDB string,
 	kmsURIs []string,
@@ -1056,6 +1057,10 @@ func restoreJobDescription(
 			}
 			r.From[i][j] = tree.NewDString(sf)
 		}
+	}
+
+	if subdir != "" {
+		r.Subdir = tree.NewDString(subdir)
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
@@ -1188,7 +1193,8 @@ func restorePlanHook(
 			}
 		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, passphrase, kms, intoDB, endTime, resultsCh)
+		return doRestorePlan(ctx, restoreStmt, p, from, subdir, passphrase, kms, intoDB, endTime,
+			resultsCh)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1202,6 +1208,7 @@ func doRestorePlan(
 	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
 	from [][]string,
+	subdir string,
 	passphrase string,
 	kms []string,
 	intoDB string,
@@ -1341,7 +1348,8 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, restoreStmt.Options, intoDB, kms)
+	description, err := restoreJobDescription(p, restoreStmt, from, subdir, restoreStmt.Options,
+		intoDB, kms)
 	if err != nil {
 		return err
 	}

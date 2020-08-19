@@ -307,8 +307,10 @@ func backupJobDescription(
 	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string, kmsURIs []string,
 ) (string, error) {
 	b := &tree.Backup{
-		AsOf:    backup.AsOf,
-		Targets: backup.Targets,
+		AsOf:           backup.AsOf,
+		Targets:        backup.Targets,
+		Nested:         backup.Nested,
+		AppendToLatest: backup.AppendToLatest,
 	}
 
 	for _, t := range to {
