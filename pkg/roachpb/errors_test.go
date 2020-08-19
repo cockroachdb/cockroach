@@ -19,8 +19,7 @@ import (
 
 type testError struct{}
 
-func (t *testError) Error() string              { return "test" }
-func (t *testError) message(pErr *Error) string { return "test" }
+func (t *testError) Error() string { return "test" }
 
 // TestNewError verifies that a test error that
 // implements retryable or indexed is converted properly into a generic error.

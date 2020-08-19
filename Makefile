@@ -1718,6 +1718,7 @@ bins = \
   bin/teamcity-trigger \
   bin/uptodate \
   bin/urlcheck \
+	bin/whoownsit \
   bin/workload \
   bin/zerosum
 

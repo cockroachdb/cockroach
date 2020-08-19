@@ -137,9 +137,8 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	}
 
 	var db storage.Engine
-	storageEngine := resolveStorageEngineType(context.Background(), storage.DefaultStorageEngine, storageConfig)
 
-	switch storageEngine {
+	switch storage.DefaultStorageEngine {
 	case enginepb.EngineTypePebble:
 		cfg := storage.PebbleConfig{
 			StorageConfig: storageConfig,
@@ -896,7 +895,7 @@ Must only be used when the dead stores are lost and unrecoverable. If
 the dead stores were to rejoin the cluster after this command was
 used, data may be corrupted.
 
-This comand will prompt for confirmation before committing its changes.
+This command will prompt for confirmation before committing its changes.
 
 After this command is used, the node should not be restarted until at
 least 10 seconds have passed since it was stopped. Restarting it too

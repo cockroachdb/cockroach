@@ -444,6 +444,7 @@ func TestLint(t *testing.T) {
 					":!ccl/backupccl/backup_test.go",
 					":!storage/cloudimpl",
 					":!ccl/workloadccl/fixture_test.go",
+					":!internal/gopath/gopath.go",
 					":!cmd",
 					":!nightly",
 					":!testutils/lint",

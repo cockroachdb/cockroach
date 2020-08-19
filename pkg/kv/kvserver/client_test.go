@@ -545,7 +545,7 @@ func (m *multiTestContext) initGossipNetwork() {
 type multiTestContextKVTransport struct {
 	mtc      *multiTestContext
 	idx      int
-	replicas kvcoord.ReplicaSlice
+	replicas []roachpb.ReplicaDescriptor
 	mu       struct {
 		syncutil.Mutex
 		pending map[roachpb.ReplicaID]struct{}
@@ -553,7 +553,7 @@ type multiTestContextKVTransport struct {
 }
 
 func (m *multiTestContext) kvTransportFactory(
-	_ kvcoord.SendOptions, _ *nodedialer.Dialer, replicas kvcoord.ReplicaSlice,
+	_ kvcoord.SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 ) (kvcoord.Transport, error) {
 	t := &multiTestContextKVTransport{
 		mtc:      m,
@@ -611,7 +611,7 @@ func (t *multiTestContextKVTransport) SendNext(
 	}
 
 	// Clone txn of ba args for sending.
-	ba.Replica = rep.ReplicaDescriptor
+	ba.Replica = rep
 	if txn := ba.Txn; txn != nil {
 		ba.Txn = ba.Txn.Clone()
 	}
@@ -673,7 +673,7 @@ func (t *multiTestContextKVTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if t.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return t.replicas[t.idx].ReplicaDescriptor
+	return t.replicas[t.idx]
 }
 
 func (t *multiTestContextKVTransport) SkipReplica() {
@@ -690,7 +690,7 @@ func (t *multiTestContextKVTransport) MoveToFront(replica roachpb.ReplicaDescrip
 		return
 	}
 	for i := range t.replicas {
-		if t.replicas[i].ReplicaDescriptor == replica {
+		if t.replicas[i] == replica {
 			if i < t.idx {
 				t.idx--
 			}

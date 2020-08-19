@@ -94,7 +94,7 @@ func (tr raceTransport) SendNext(
 // a) the server doesn't hold on to any memory, and
 // b) the server doesn't mutate the request
 func GRPCTransportFactory(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		// NB: We can't use Stopper.RunWorker because doing so would race with

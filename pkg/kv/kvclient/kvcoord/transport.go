@@ -38,16 +38,10 @@ type SendOptions struct {
 // function returns a Transport object which is used to send requests
 // to one or more replicas in the slice.
 //
-// In addition to actually sending RPCs, the transport is responsible
-// for ordering replicas in accordance with SendOptions.Ordering and
-// transport-specific knowledge such as connection health or latency.
-//
-// TODO(bdarnell): clean up this crufty interface; it was extracted
-// verbatim from the non-abstracted code.
-// TODO(andrei): This should take just []roachpb.ReplicaDescriptor; ReplicaSlice
-// has unneeded data in it.
+// The caller is responsible for ordering the replicas in the slice according to
+// the order in which the should be tried.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, ReplicaSlice,
+	SendOptions, *nodedialer.Dialer, []roachpb.ReplicaDescriptor,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -92,12 +86,11 @@ type Transport interface {
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs []roachpb.ReplicaDescriptor,
 ) (Transport, error) {
 	health := make(map[roachpb.ReplicaDescriptor]bool)
 	replicas := make([]roachpb.ReplicaDescriptor, len(rs))
-	for i, rinfo := range rs {
-		r := rinfo.ReplicaDescriptor
+	for i, r := range rs {
 		replicas[i] = r
 		health[r] = nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
 	}
@@ -115,16 +108,19 @@ func grpcTransportFactoryImpl(
 }
 
 type grpcTransport struct {
-	opts        SendOptions
-	nodeDialer  *nodedialer.Dialer
-	class       rpc.ConnectionClass
-	clientIndex int
-	replicas    []roachpb.ReplicaDescriptor
+	opts       SendOptions
+	nodeDialer *nodedialer.Dialer
+	class      rpc.ConnectionClass
+
+	replicas []roachpb.ReplicaDescriptor
+	// nextReplicaIdx represents the index into replicas of the next replica to be
+	// tried.
+	nextReplicaIdx int
 }
 
 // IsExhausted returns false if there are any untried replicas remaining.
 func (gt *grpcTransport) IsExhausted() bool {
-	return gt.clientIndex >= len(gt.replicas)
+	return gt.nextReplicaIdx >= len(gt.replicas)
 }
 
 // SendNext invokes the specified RPC on the supplied client when the
@@ -133,7 +129,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
-	r := gt.replicas[gt.clientIndex]
+	r := gt.replicas[gt.nextReplicaIdx]
 	ctx, iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
@@ -187,8 +183,8 @@ func (gt *grpcTransport) sendBatch(
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
 ) (context.Context, roachpb.InternalClient, error) {
-	r := gt.replicas[gt.clientIndex]
-	gt.clientIndex++
+	r := gt.replicas[gt.nextReplicaIdx]
+	gt.nextReplicaIdx++
 	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
 }
 
@@ -196,7 +192,7 @@ func (gt *grpcTransport) NextReplica() roachpb.ReplicaDescriptor {
 	if gt.IsExhausted() {
 		return roachpb.ReplicaDescriptor{}
 	}
-	return gt.replicas[gt.clientIndex]
+	return gt.replicas[gt.nextReplicaIdx]
 }
 
 // SkipReplica is part of the Transport interface.
@@ -204,23 +200,19 @@ func (gt *grpcTransport) SkipReplica() {
 	if gt.IsExhausted() {
 		return
 	}
-	gt.clientIndex++
+	gt.nextReplicaIdx++
 }
 
 func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) {
-	gt.moveToFront(replica)
-}
-
-func (gt *grpcTransport) moveToFront(replica roachpb.ReplicaDescriptor) {
 	for i := range gt.replicas {
 		if gt.replicas[i] == replica {
 			// If we've already processed the replica, decrement the current
 			// index before we swap.
-			if i < gt.clientIndex {
-				gt.clientIndex--
+			if i < gt.nextReplicaIdx {
+				gt.nextReplicaIdx--
 			}
 			// Swap the client representing this replica to the front.
-			gt.replicas[i], gt.replicas[gt.clientIndex] = gt.replicas[gt.clientIndex], gt.replicas[i]
+			gt.replicas[i], gt.replicas[gt.nextReplicaIdx] = gt.replicas[gt.nextReplicaIdx], gt.replicas[i]
 			return
 		}
 	}
@@ -262,10 +254,10 @@ func (h byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
+		_ SendOptions, _ *nodedialer.Dialer, replicas []roachpb.ReplicaDescriptor,
 	) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0].ReplicaDescriptor
+		replica := replicas[0]
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }
