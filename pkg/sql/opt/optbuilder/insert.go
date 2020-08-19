@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -290,7 +290,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// rows that have conflicts. See the buildInputForDoNothing comment for
 		// more details.
 		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForDoNothing(inScope, conflictOrds)
+		mb.buildInputForDoNothing(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate)
 
 		// Since buildInputForDoNothing filters out rows with conflicts, always
 		// insert rows that are not filtered.
@@ -664,15 +664,17 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 // filter that discards rows that have a conflict (by checking a not-null table
 // column to see if it was null-extended by the left join). See the comment
 // header for Builder.buildInsert for an example.
-func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds util.FastIntSet) {
-	// DO NOTHING clause does not require ON CONFLICT columns.
-	var conflictIndex cat.Index
+func (mb *mutationBuilder) buildInputForDoNothing(
+	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
+) {
+	// DO NOTHING clause does not require ON CONFLICT columns. If conflict
+	// columns are not provided, all UNIQUE indexes are used to check for
+	// conflicts.
+	var arbiterIndexes util.FastIntSet
 	if !conflictOrds.Empty() {
-		// Check that the ON CONFLICT columns reference at most one target row by
-		// ensuring they match columns of a UNIQUE index. Using LEFT OUTER JOIN
-		// to detect conflicts relies upon this being true (otherwise result
-		// cardinality could increase). This is also a Postgres requirement.
-		conflictIndex = mb.ensureUniqueConflictCols(conflictOrds)
+		// Determine the set of arbiter indexes to use if ON CONFLICT columns
+		// were provided.
+		arbiterIndexes = mb.arbiterIndexes(conflictOrds, arbiterPredicate)
 	}
 
 	insertColSet := mb.outScope.expr.Relational().OutputCols
@@ -691,20 +693,16 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, conflictOrds u
 			continue
 		}
 
-		// If conflict columns were explicitly specified, then only check for a
-		// conflict on a single index. Otherwise, check on all indexes.
-		if conflictIndex != nil && conflictIndex != index {
+		// If conflict columns were explicitly specified, then only check for
+		// conflicts on arbiter indexes.
+		if !conflictOrds.Empty() && !arbiterIndexes.Contains(idx) {
 			continue
 		}
 
-		pred, isPartial := index.Predicate()
+		_, isPartial := index.Predicate()
 		var predExpr tree.Expr
 		if isPartial {
-			var err error
-			predExpr, err = parser.ParseExpr(pred)
-			if err != nil {
-				panic(err)
-			}
+			predExpr = mb.parsePartialIndexPredicateExpr(idx)
 		}
 
 		// Build the right side of the left outer join. Use a new metadata instance
@@ -1163,6 +1161,101 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
+}
+
+// arbiterIndexes returns the set of index ordinals to be used as arbiter
+// indexes for an INSERT ON CONFLICT statement. This function panics if no
+// arbiter indexes are found.
+//
+// Arbiter indexes ensure that the columns designated by conflictOrds reference
+// at most one target row of a UNIQUE index. Using LEFT OUTER JOINs to detect
+// conflicts relies upon this being true (otherwise result cardinality could
+// increase). This is also a Postgres requirement.
+//
+// An arbiter index:
+//
+//   1. Must have lax key columns that match the columns in conflictOrds.
+//   2. If it is a partial index, its predicate must be implied by the
+//      arbiterPredicate supplied by the user.
+//
+// If a non-partial or pseudo-partial arbiter index is found, the return set
+// contains only that index. No other arbiter is necessary because a non-partial
+// or pseudo-partial index guarantee uniqueness of their columns across all
+// rows.
+func (mb *mutationBuilder) arbiterIndexes(
+	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
+) (arbiters util.FastIntSet) {
+	tabMeta := mb.md.TableMeta(mb.tabID)
+
+	var tableScope *scope
+	var im *partialidx.Implicator
+	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
+		index := mb.tab.Index(idx)
+
+		// Skip non-unique indexes. Use lax key columns, which always contain
+		// the minimum columns that ensure uniqueness. Null values are
+		// considered to be *not* equal, but that's OK because the join
+		// condition rejects nulls anyway.
+		if !index.IsUnique() || index.LaxKeyColumnCount() != conflictOrds.Len() {
+			continue
+		}
+
+		// Determine whether the conflict columns match the columns in the lax
+		// key. If not, the index cannot be an arbiter index.
+		indexOrds := getIndexLaxKeyOrdinals(index)
+		if !indexOrds.Equals(conflictOrds) {
+			continue
+		}
+
+		_, isPartial := index.Predicate()
+
+		// If the index is not a partial index, it can always be an arbiter.
+		// Furthermore, it is the only arbiter needed because it guarantees
+		// uniqueness of its columns across all rows.
+		if !isPartial {
+			arbiters = util.FastIntSet{}
+			arbiters.Add(idx)
+			return arbiters
+		}
+
+		// Initialize tableScope once and only if needed.
+		if arbiterPredicate != nil || isPartial {
+			tableScope = mb.b.allocScope()
+			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+		}
+
+		// If the index is a pseudo-partial index, it can always be an arbiter.
+		// Furthermore, it is the only arbiter needed because it guarantees
+		// uniqueness of its columns across all rows.
+		predFilter := mb.b.buildPartialIndexPredicate(tableScope, mb.parsePartialIndexPredicateExpr(idx))
+		if predFilter.IsTrue() {
+			arbiters.Add(idx)
+			continue
+		}
+
+		// If the index is a partial index, then it can only be an arbiter if
+		// the arbiterPredicate implies it.
+		if arbiterPredicate != nil {
+
+			// Initialize the Implicator once.
+			if im == nil {
+				im = &partialidx.Implicator{}
+				im.Init(mb.b.factory, mb.md, mb.b.evalCtx)
+			}
+
+			arbiterFilter := mb.b.buildPartialIndexPredicate(tableScope, arbiterPredicate)
+			if _, ok := im.FiltersImplyPredicate(arbiterFilter, predFilter); ok {
+				arbiters.Add(idx)
+			}
+		}
+	}
+
+	if arbiters.Empty() {
+		panic(pgerror.Newf(pgcode.InvalidColumnReference,
+			"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
+	}
+
+	return arbiters
 }
 
 // ensureUniqueConflictCols tries to prove that the given set of column ordinals
