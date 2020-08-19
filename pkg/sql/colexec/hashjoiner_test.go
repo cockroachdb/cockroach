@@ -1075,7 +1075,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										)
 										require.NoError(b, err)
 										hj := NewHashJoiner(
-											testAllocator, hjSpec,
+											testAllocator, testAllocator, hjSpec,
 											leftSource, rightSource,
 										)
 										hj.Init()
