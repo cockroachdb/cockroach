@@ -769,10 +769,9 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		})
 }
 
-// ResolveOptions is used during intent resolution. It specifies whether the
-// caller wants the call to block, and whether the ranges containing the intents
-// are to be poisoned.
+// ResolveOptions is used during intent resolution.
 type ResolveOptions struct {
+	// If set, the ranges containing the intents are to be poisoned.
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.
