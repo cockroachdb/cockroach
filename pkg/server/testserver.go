@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -689,6 +690,8 @@ func StartTenant(
 
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
 		mux := http.NewServeMux()
+		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn())
+		mux.Handle("/", debugServer)
 		f := varsHandler{metricSource: args.recorder}.handleVars
 		mux.Handle(statusVars, http.HandlerFunc(f))
 		_ = http.Serve(httpL, mux)
