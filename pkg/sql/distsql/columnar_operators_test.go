@@ -164,7 +164,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						for j := range aggFnInputTypes {
 							aggFnInputTypes[j] = sqlbase.RandType(rng)
 						}
-						// There is a special case for concat_agg, string_agg,
+						// There is a special case for concat_agg, string_agg, st_extent
 						// and st_makeline when at least one argument is a
 						// tuple. Such cases pass GetAggregateInfo check below,
 						// but they are actually invalid, and during normal
@@ -175,7 +175,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						switch aggFn {
 						case execinfrapb.AggregatorSpec_CONCAT_AGG,
 							execinfrapb.AggregatorSpec_STRING_AGG,
-							execinfrapb.AggregatorSpec_ST_MAKELINE:
+							execinfrapb.AggregatorSpec_ST_MAKELINE,
+							execinfrapb.AggregatorSpec_ST_EXTENT:
 							for _, typ := range aggFnInputTypes {
 								if typ.Family() == types.TupleFamily {
 									invalid = true
