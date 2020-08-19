@@ -329,6 +329,86 @@ func TestBackupRestoreAppend(t *testing.T) {
 	// TODO(dt): test restoring to other backups via AOST.
 }
 
+// TestBackupAndRestoreJobDescription ensures that the job description written
+// to system.jobs table for the various flavors of BACKUP and RESTORE reflects
+// the flavor being used by the user.
+func TestBackupAndRestoreJobDescription(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, _, sqlDB, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitNone)
+	defer cleanupFn()
+
+	const c1, c2, c3 = `nodelocal://0/`, `nodelocal://1/`, `nodelocal://2/`
+
+	const localFoo1, localFoo2, localFoo3 = LocalFoo + "/1", LocalFoo + "/2", LocalFoo + "/3"
+	backups := []interface{}{
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo1, url.QueryEscape("default")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo2, url.QueryEscape("dc=dc1")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", localFoo3, url.QueryEscape("dc=dc2")),
+	}
+
+	collections := []interface{}{
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c1, url.QueryEscape("default")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c2, url.QueryEscape("dc=dc1")),
+		fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c3, url.QueryEscape("dc=dc2")),
+	}
+
+	sqlDB.Exec(t, "BACKUP TO ($1, $2, $3)", backups...)
+	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
+
+	// Find the subdirectory created by the full BACKUP INTO statement.
+	matches, err := filepath.Glob(path.Join(tmpDir, "[0-9]*", "[0-9]*", "BACKUP"))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(matches))
+	for i := range matches {
+		matches[i] = strings.TrimPrefix(filepath.Dir(matches[i]), tmpDir)
+	}
+	full1 := matches[0]
+
+	// The flavors of BACKUP and RESTORE which automatically resolve the right
+	// directory to read/write data to, have URIs with the resolved path written
+	// to the job description.
+	resolvedCollectionURIs := make([]string, len(collections))
+	for i, collection := range collections {
+		parsed, err := url.Parse(collection.(string))
+		require.NoError(t, err)
+		parsed.Path = path.Join(parsed.Path, full1)
+		resolvedCollectionURIs[i] = parsed.String()
+	}
+
+	sqlDB.CheckQueryResults(
+		t, "SELECT description FROM [SHOW JOBS]",
+		[][]string{
+			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
+				backups[2].(string))},
+			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", resolvedCollectionURIs[0],
+				resolvedCollectionURIs[1], resolvedCollectionURIs[2])},
+			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", resolvedCollectionURIs[0],
+				resolvedCollectionURIs[1], resolvedCollectionURIs[2])},
+		},
+	)
+
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM ($1, $2, $3)", backups...)
+
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, "RESTORE DATABASE data FROM $4 IN ($1, $2, $3)", append(collections, full1)...)
+
+	sqlDB.CheckQueryResults(
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type='RESTORE'",
+		[][]string{
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
+				backups[0].(string), backups[1].(string), backups[2].(string))},
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
+				resolvedCollectionURIs[0], resolvedCollectionURIs[1],
+				resolvedCollectionURIs[2])},
+		},
+	)
+}
+
 func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

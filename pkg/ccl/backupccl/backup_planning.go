@@ -304,7 +304,12 @@ func resolveOptionsForBackupJobDescription(
 }
 
 func backupJobDescription(
-	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string, kmsURIs []string,
+	p sql.PlanHookState,
+	backup *tree.Backup,
+	to []string,
+	chosenSuffix string,
+	incrementalFrom []string,
+	kmsURIs []string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
@@ -312,7 +317,19 @@ func backupJobDescription(
 	}
 
 	for _, t := range to {
-		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(t, nil /* extraParams */)
+		toURI := t
+		// BACKUP INTO and BACKUP INTO LATEST IN must write the resolved URIs to the
+		// job description, to indicate the sub-directory where the data is being
+		// written during job execution.
+		if backup.AppendToLatest || backup.Nested {
+			url, err := url.Parse(t)
+			if err != nil {
+				return "", err
+			}
+			url.Path = chosenSuffix
+			toURI = url.String()
+		}
+		sanitizedTo, err := cloudimpl.SanitizeExternalStorageURI(toURI, nil /* extraParams */)
 		if err != nil {
 			return "", err
 		}
@@ -575,9 +592,9 @@ func backupPlanHook(
 		}
 
 		// TODO(dt): pull this block and the block below into a `resolveDest` helper
-		// that does all the rewites of `to`/`defaultURI`/etc.
+		// that does all the rewrites of `to`/`defaultURI`/etc.
 
-		// chosenSuffix is the automaically chosen suffix within the collection path
+		// chosenSuffix is the automatically chosen suffix within the collection path
 		// if we're backing up INTO a collection.
 		var chosenSuffix string
 		var collectionURI string
@@ -943,7 +960,8 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, kmsURIs)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, chosenSuffix,
+			incrementalFrom, kmsURIs)
 		if err != nil {
 			return err
 		}
