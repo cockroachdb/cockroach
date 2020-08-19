@@ -275,7 +275,6 @@ message RemoteProducerMetadata {
     map<int32, int64> resume_pos = 3;
     // Used to stream back progress to the coordinator of a bulk job.
     optional google.protobuf.Any progress_details = 4 [(gogoproto.nullable) = false];
-    map<int32, cockroach.sql.jobs.jobspb.DefaultExprMetaData> defaultExprMetaData = 5;
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {

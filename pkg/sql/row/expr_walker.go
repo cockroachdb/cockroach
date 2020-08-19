@@ -127,10 +127,11 @@ func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
 	return t.Get(cellInfoAddr).(*cellInfoAnnotation)
 }
 
-func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
+func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64, job *jobs.Job) {
 	c.sourceID = sourceID
 	c.rowID = rowID
 	c.uniqueRowIDInstance = 0
+	c.job = job
 	for _, rowSeq := range c.sequenceMap {
 		rowSeq.instancePos = 0
 	}

@@ -665,7 +665,7 @@ func (p *parallelImporter) importWorker(
 			}
 
 			rowIndex := int64(timestamp) + rowNum
-			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex); err != nil {
+			if err := conv.Row(ctx, conv.KvBatch.Source, rowIndex, importCtx.job); err != nil {
 				return newImportRowError(err, fmt.Sprintf("%v", record), rowNum)
 			}
 		}

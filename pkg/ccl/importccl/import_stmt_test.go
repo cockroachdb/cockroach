@@ -3765,8 +3765,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx, nil)
-		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), &evalCtx, nil)
+		tableDesc.Immutable().(*sqlbase.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx, nil, nil)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

@@ -237,7 +237,6 @@ func NewDatumRowConverter(
 	evalCtx *tree.EvalContext,
 	defaultValueMetaData *jobspb.DefaultExprMetaData,
 	kvCh chan<- KVBatch,
-	job *jobs.Job,
 ) (*DatumRowConverter, error) {
 	c := &DatumRowConverter{
 		tableDesc: tableDesc,
@@ -345,7 +344,6 @@ func NewDatumRowConverter(
 	annot.Set(cellInfoAddr, &cellInfoAnnotation{
 		uniqueRowIDInstance: 0,
 		sequenceMap:         rowSeqForAnnot,
-		job:                 job,
 	})
 	c.EvalCtx.Annotations = &annot
 	for i := range cols {
@@ -398,12 +396,14 @@ const rowIDBits = 64 - builtins.NodeIDBits
 
 // Row inserts kv operations into the current kv batch, and triggers a SendBatch
 // if necessary.
-func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex int64) error {
+func (c *DatumRowConverter) Row(
+	ctx context.Context, sourceID int32, rowIndex int64, job *jobs.Job,
+) error {
 	isTargetCol := func(i int) bool {
 		_, ok := c.IsTargetCol[i]
 		return ok
 	}
-	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex)
+	getCellInfoAnnotation(c.EvalCtx.Annotations).Reset(sourceID, rowIndex, job)
 	for i := range c.cols {
 		col := &c.cols[i]
 		if col.DefaultExpr != nil {
