@@ -125,10 +125,10 @@ type IntentResolver interface {
 	) (*roachpb.Transaction, *Error)
 
 	// ResolveIntent synchronously resolves the provided intent.
-	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+	ResolveIntent(context.Context, roachpb.LockUpdate, intentresolver.ResolveOptions) error
 
 	// ResolveIntents synchronously resolves the provided batch of intents.
-	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) *Error
+	ResolveIntents(context.Context, []roachpb.LockUpdate, intentresolver.ResolveOptions) error
 }
 
 // WaitOn implements the lockTableWaiter interface.
@@ -514,7 +514,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// on whether we need to poison.
 	resolve := roachpb.MakeLockUpdate(pusheeTxn, roachpb.Span{Key: ws.key})
 	opts := intentresolver.ResolveOptions{Poison: true}
-	return w.ir.ResolveIntent(ctx, resolve, opts)
+	return roachpb.NewError(w.ir.ResolveIntent(ctx, resolve, opts))
 }
 
 // pushRequestTxn pushes the owner of the provided request.
@@ -628,7 +628,8 @@ func (w *lockTableWaiterImpl) resolveDeferredIntents(
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true}
-	*err = w.ir.ResolveIntents(ctx, *deferredResolution, opts)
+	*err = roachpb.NewError(w.ir.ResolveIntents(ctx, *deferredResolution, opts))
+
 }
 
 // watchForNotifications selects on the provided channel and watches for any

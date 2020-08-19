@@ -529,8 +529,8 @@ func (ir *IntentResolver) CleanupIntents(
 		//
 		// Thus, we must poison.
 		opts := ResolveOptions{Poison: true}
-		if pErr := ir.ResolveIntents(ctx, resolveIntents, opts); pErr != nil {
-			return 0, errors.Wrapf(pErr.GoError(), "failed to resolve intents")
+		if err := ir.ResolveIntents(ctx, resolveIntents, opts); err != nil {
+			return 0, errors.Wrapf(err, "failed to resolve intents")
 		}
 		resolved += len(resolveIntents)
 		unpushed = unpushed[i:]
@@ -749,8 +749,8 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	}()
 	// Resolve intents.
 	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
-	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
-		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
+	if err := ir.ResolveIntents(ctx, intents, opts); err != nil {
+		return errors.Wrapf(err, "failed to resolve intents")
 	}
 	// Run transaction record GC outside of ir.sem.
 	return ir.stopper.RunAsyncTask(
@@ -802,21 +802,21 @@ func (ir *IntentResolver) lookupRangeID(ctx context.Context, key roachpb.Key) ro
 // ResolveIntent synchronously resolves an intent according to opts.
 func (ir *IntentResolver) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, opts ResolveOptions,
-) *roachpb.Error {
+) error {
 	return ir.ResolveIntents(ctx, []roachpb.LockUpdate{intent}, opts)
 }
 
 // ResolveIntents synchronously resolves intents according to opts.
 func (ir *IntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts ResolveOptions,
-) *roachpb.Error {
+) error {
 	if len(intents) == 0 {
 		return nil
 	}
 	// Avoid doing any work on behalf of expired contexts. See
 	// https://github.com/cockroachdb/cockroach/issues/15997.
 	if err := ctx.Err(); err != nil {
-		return roachpb.NewError(err)
+		return err
 	}
 	log.Eventf(ctx, "resolving intents")
 	ctx, cancel := context.WithCancel(ctx)
@@ -848,18 +848,18 @@ func (ir *IntentResolver) ResolveIntents(
 			batcher = ir.irRangeBatcher
 		}
 		if err := batcher.SendWithChan(ctx, respChan, rangeID, req); err != nil {
-			return roachpb.NewError(err)
+			return err
 		}
 	}
 	for seen := 0; seen < len(intents); seen++ {
 		select {
 		case resp := <-respChan:
 			if resp.Err != nil {
-				return roachpb.NewError(resp.Err)
+				return resp.Err
 			}
 			_ = resp.Resp // ignore the response
 		case <-ctx.Done():
-			return roachpb.NewError(ctx.Err())
+			return ctx.Err()
 		}
 	}
 	return nil

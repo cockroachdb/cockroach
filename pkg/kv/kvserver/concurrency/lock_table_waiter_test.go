@@ -28,13 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 type mockIntentResolver struct {
 	pushTxn        func(context.Context, *enginepb.TxnMeta, roachpb.Header, roachpb.PushTxnType) (*roachpb.Transaction, *Error)
-	resolveIntent  func(context.Context, roachpb.LockUpdate) *Error
-	resolveIntents func(context.Context, []roachpb.LockUpdate) *Error
+	resolveIntent  func(context.Context, roachpb.LockUpdate) error
+	resolveIntents func(context.Context, []roachpb.LockUpdate) error
 }
 
 // mockIntentResolver implements the IntentResolver interface.
@@ -46,13 +47,13 @@ func (m *mockIntentResolver) PushTransaction(
 
 func (m *mockIntentResolver) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
-) *Error {
+) error {
 	return m.resolveIntent(ctx, intent)
 }
 
 func (m *mockIntentResolver) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
-) *Error {
+) error {
 	return m.resolveIntents(ctx, intents)
 }
 
@@ -309,7 +310,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				// we know the holder is ABORTED. Otherwide, immediately
 				// tell the request to stop waiting.
 				if lockHeld {
-					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 						require.Equal(t, roachpb.ABORTED, intent.Status)
@@ -452,7 +453,7 @@ func testErrorWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPush
 
 			// Next, we'll try to resolve the lock now that we know the
 			// holder is ABORTED.
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) error {
 				require.Equal(t, keyA, intent.Key)
 				require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
 				require.Equal(t, roachpb.ABORTED, intent.Status)
@@ -479,7 +480,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	defer w.stopper.Stop(ctx)
 
 	err1 := roachpb.NewErrorf("error1")
-	err2 := roachpb.NewErrorf("error2")
+	err2Msg := "error2"
 
 	txn := makeTxnProto("request")
 	req := Request{
@@ -519,11 +520,11 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 			) (*roachpb.Transaction, *Error) {
 				return &pusheeTxn, nil
 			}
-			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) *Error {
-				return err2
+			ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate) error {
+				return errors.New(err2Msg)
 			}
 			err = w.WaitOn(ctx, req, g)
-			require.Equal(t, err2, err)
+			require.Regexp(t, err2Msg, err)
 		}
 	})
 }
@@ -560,16 +561,16 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	g.notify()
 
 	// Errors are propagated when observed while resolving batches of intents.
-	err1 := roachpb.NewErrorf("error1")
-	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) *Error {
+	err1Msg := "err1"
+	ir.resolveIntents = func(_ context.Context, intents []roachpb.LockUpdate) error {
 		require.Len(t, intents, 1)
 		require.Equal(t, keyA, intents[0].Key)
 		require.Equal(t, pusheeTxn.ID, intents[0].Txn.ID)
 		require.Equal(t, roachpb.ABORTED, intents[0].Status)
-		return err1
+		return errors.New(err1Msg)
 	}
 	err := w.WaitOn(ctx, req, g)
-	require.Equal(t, err1, err)
+	require.Regexp(t, err1Msg, err)
 }
 
 func TestTxnCache(t *testing.T) {

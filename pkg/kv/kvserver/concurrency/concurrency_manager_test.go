@@ -604,7 +604,7 @@ func (c *cluster) PushTransaction(
 // ResolveIntent implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntent(
 	ctx context.Context, intent roachpb.LockUpdate, _ intentresolver.ResolveOptions,
-) *roachpb.Error {
+) error {
 	log.Eventf(ctx, "resolving intent %s for txn %s with %s status", intent.Key, intent.Txn.ID.Short(), intent.Status)
 	c.m.OnLockUpdated(ctx, &intent)
 	return nil
@@ -613,7 +613,7 @@ func (c *cluster) ResolveIntent(
 // ResolveIntents implements the concurrency.IntentResolver interface.
 func (c *cluster) ResolveIntents(
 	ctx context.Context, intents []roachpb.LockUpdate, opts intentresolver.ResolveOptions,
-) *roachpb.Error {
+) error {
 	log.Eventf(ctx, "resolving a batch of %d intent(s)", len(intents))
 	for _, intent := range intents {
 		if err := c.ResolveIntent(ctx, intent, opts); err != nil {

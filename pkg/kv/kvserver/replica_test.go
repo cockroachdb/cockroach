@@ -4419,11 +4419,11 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 				t.Fatalf("unexpected txn record %v", txnRecord)
 			}
 
-			if pErr := tc.store.intentResolver.ResolveIntents(context.Background(),
+			if err := tc.store.intentResolver.ResolveIntents(context.Background(),
 				[]roachpb.LockUpdate{
 					roachpb.MakeLockUpdate(&txnRecord, roachpb.Span{Key: key}),
-				}, intentresolver.ResolveOptions{Poison: true}); pErr != nil {
-				t.Fatal(pErr)
+				}, intentresolver.ResolveOptions{Poison: true}); err != nil {
+				t.Fatal(err)
 			}
 		}
 
