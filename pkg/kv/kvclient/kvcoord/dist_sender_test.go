@@ -4175,7 +4175,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 
 	// We'll send a request that first gets a NLHE, and then a ConditionFailedError.
 	call := 0
-	var transportFn = func(_ context.Context, _ SendOptions, _ ReplicaSlice, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+	var transportFn = func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 		br := &roachpb.BatchResponse{}
 		if call == 0 {
 			br.Error = roachpb.NewError(&roachpb.NotLeaseHolderError{
