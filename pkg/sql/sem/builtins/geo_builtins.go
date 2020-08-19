@@ -1479,7 +1479,24 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 			},
 			types.Int,
 			infoBuilder{
-				info: "Returns the number of dimensions of a given Geometry.",
+				info: "Returns the number of coordinate dimensions of a given Geometry.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_dimension": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				dim, err := geomfn.Dimension(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(dim)), nil
+			},
+			types.Int,
+			infoBuilder{
+				info: "Returns the number of topological dimensions of a given Geometry.",
 			},
 			tree.VolatilityImmutable,
 		),

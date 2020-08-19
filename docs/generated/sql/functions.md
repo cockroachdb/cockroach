@@ -1119,6 +1119,8 @@ from the given Geometry.</p>
 <tr><td><a name="st_dfullywithin"></a><code>st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
+<tr><td><a name="st_dimension"></a><code>st_dimension(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of topological dimensions of a given Geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_disjoint"></a><code>st_disjoint(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a does not overlap, touch or is within geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
@@ -1415,7 +1417,7 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_multipolygonfromwkb"></a><code>st_multipolygonfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
-<tr><td><a name="st_ndims"></a><code>st_ndims(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of dimensions of a given Geometry.</p>
+<tr><td><a name="st_ndims"></a><code>st_ndims(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of coordinate dimensions of a given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_npoints"></a><code>st_npoints(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of points in a given Geometry. Works for any shape type.</p>
 </span></td></tr>
