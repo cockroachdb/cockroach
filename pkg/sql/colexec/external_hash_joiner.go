@@ -372,7 +372,7 @@ func NewExternalHashJoiner(
 		leftJoinerInput:                leftJoinerInput,
 		rightJoinerInput:               rightJoinerInput,
 		inMemHashJoiner: NewHashJoiner(
-			unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
+			unlimitedAllocator, unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
 	}
