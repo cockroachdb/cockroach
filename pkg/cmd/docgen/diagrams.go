@@ -857,7 +857,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "on_conflict",
-		inline: []string{"opt_conf_expr", "name_list", "set_clause_list", "insert_column_list",
+		inline: []string{"name_list", "set_clause_list", "insert_column_list",
 			"insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list",
 			"expr_tuple1_ambiguous", "tuple1_ambiguous_values"},
 		replace: map[string]string{

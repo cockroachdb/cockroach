@@ -57,6 +57,10 @@ func (node *Insert) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.OnConflict.Columns)
 			ctx.WriteString(")")
 		}
+		if node.OnConflict.ArbiterPredicate != nil {
+			ctx.WriteString(" WHERE ")
+			ctx.FormatNode(node.OnConflict.ArbiterPredicate)
+		}
 		if node.OnConflict.DoNothing {
 			ctx.WriteString(" DO NOTHING")
 		} else {
@@ -79,20 +83,21 @@ func (node *Insert) DefaultValues() bool {
 	return node.Rows.Select == nil
 }
 
-// OnConflict represents an `ON CONFLICT (columns) DO UPDATE SET exprs WHERE
-// where` clause.
+// OnConflict represents an `ON CONFLICT (columns) WHERE arbiter DO UPDATE SET
+// exprs WHERE where` clause.
 //
 // The zero value for OnConflict is used to signal the UPSERT short form, which
 // uses the primary key for as the conflict index and the values being inserted
 // for Exprs.
 type OnConflict struct {
-	Columns   NameList
-	Exprs     UpdateExprs
-	Where     *Where
-	DoNothing bool
+	Columns          NameList
+	ArbiterPredicate Expr
+	Exprs            UpdateExprs
+	Where            *Where
+	DoNothing        bool
 }
 
 // IsUpsertAlias returns true if the UPSERT syntactic sugar was used.
 func (oc *OnConflict) IsUpsertAlias() bool {
-	return oc != nil && oc.Columns == nil && oc.Exprs == nil && oc.Where == nil && !oc.DoNothing
+	return oc != nil && oc.Columns == nil && oc.ArbiterPredicate == nil && oc.Exprs == nil && oc.Where == nil && !oc.DoNothing
 }
