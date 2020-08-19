@@ -110,7 +110,6 @@ func (tu *optTableUpserter) init(
 		tu.rowsUpserted = rowcontainer.NewRowContainer(
 			evalCtx.Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromColDescs(tu.returnCols),
-			0, /* rowCapacity */
 		)
 
 		// Create the map from colIds to the expected columns.

@@ -202,10 +202,10 @@ func newHashJoiner(
 	}
 
 	h.rows[leftSide].InitWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.EvalCtx, h.MemMonitor, 0, /* rowCapacity */
+		nil /* ordering */, h.leftSource.OutputTypes(), h.EvalCtx, h.MemMonitor,
 	)
 	h.rows[rightSide].InitWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor, 0, /* rowCapacity */
+		nil /* ordering */, h.rightSource.OutputTypes(), h.EvalCtx, h.MemMonitor,
 	)
 
 	if h.joinType == descpb.IntersectAllJoin || h.joinType == descpb.ExceptAllJoin {

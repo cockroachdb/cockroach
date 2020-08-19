@@ -116,8 +116,10 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 	return &valuesNode{
 		columns: columns,
 		valuesRun: valuesRun{
-			rows: rowcontainer.NewRowContainer(
-				p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+			rows: rowcontainer.NewRowContainerWithCapacity(
+				p.EvalContext().Mon.MakeBoundAccount(),
+				sqlbase.ColTypeInfoFromResCols(columns),
+				capacity,
 			),
 		},
 	}
@@ -140,7 +142,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// others that create a valuesNode internally for storing results
 	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
-	n.rows = rowcontainer.NewRowContainer(
+	n.rows = rowcontainer.NewRowContainerWithCapacity(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),

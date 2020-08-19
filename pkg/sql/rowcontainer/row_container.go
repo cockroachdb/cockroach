@@ -156,7 +156,7 @@ var _ IndexedRowContainer = &MemRowContainer{}
 func (mc *MemRowContainer) Init(
 	ordering sqlbase.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
 ) {
-	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
+	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
 }
 
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only
@@ -166,10 +166,9 @@ func (mc *MemRowContainer) InitWithMon(
 	types []*types.T,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
-	rowCapacity int,
 ) {
 	acc := mon.MakeBoundAccount()
-	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), rowCapacity)
+	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0 /* rowCapacity */)
 	mc.types = types
 	mc.ordering = ordering
 	mc.scratchRow = make(tree.Datums, len(types))
@@ -397,8 +396,6 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 //    spill to disk.
 //  - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //    and when it spills to disk.
-//  - rowCapacity (if not 0) indicates the number of rows that the underlying
-//    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
 	types []*types.T,
@@ -406,10 +403,9 @@ func (f *DiskBackedRowContainer) Init(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
-	rowCapacity int,
 ) {
 	mrc := MemRowContainer{}
-	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor, rowCapacity)
+	mrc.InitWithMon(ordering, types, evalCtx, memoryMonitor)
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
@@ -677,8 +673,6 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 //    spills to disk.
 //  - memoryMonitor is used to monitor this container's memory usage.
 //  - diskMonitor is used to monitor this container's disk usage.
-//  - rowCapacity (if not 0) specifies the number of rows in-memory container
-//    should be preallocated for.
 func NewDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
 	typs []*types.T,
@@ -686,7 +680,6 @@ func NewDiskBackedIndexedRowContainer(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
-	rowCapacity int,
 ) *DiskBackedIndexedRowContainer {
 	d := DiskBackedIndexedRowContainer{}
 
@@ -696,7 +689,7 @@ func NewDiskBackedIndexedRowContainer(
 	d.storedTypes[len(d.storedTypes)-1] = types.Int
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
-	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
+	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
 	d.maxCacheSize = maxIndexedRowsCacheSize
 	d.cacheMemAcc = memoryMonitor.MakeBoundAccount()
 	return &d
