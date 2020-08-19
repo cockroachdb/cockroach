@@ -290,7 +290,6 @@ func newInvertedJoiner(
 		ij.FlowCtx.Cfg.TempStorage,
 		ij.MemMonitor,
 		ij.diskMonitor,
-		0, /* rowCapacity */
 	)
 
 	return ij, nil
