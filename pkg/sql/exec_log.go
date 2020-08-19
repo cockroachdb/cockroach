@@ -96,6 +96,14 @@ var slowQueryLogThreshold = settings.RegisterPublicNonNegativeDurationSettingWit
 	0,
 )
 
+var slowInternalQueryLogEnabled = settings.RegisterPublicBoolSetting(
+	"sql.log.slow_query.internal_queries.enabled",
+	"when set to true, internal queries which exceed the slow query log threshold "+
+		"are logged to a separate log. Must have the slow query log enabled for this "+
+		"setting to have any effect.",
+	false,
+)
+
 type executorType int
 
 const (
@@ -136,6 +144,7 @@ func (p *planner) maybeLogStatementInternal(
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
 	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
 	slowQueryLogEnabled := slowLogThreshold != 0
+	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
 	if !logV && !logExecuteEnabled && !auditEventsDetected && !slowQueryLogEnabled {
@@ -190,9 +199,21 @@ func (p *planner) maybeLogStatementInternal(
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
 	if slowQueryLogEnabled && queryDuration > slowLogThreshold {
-		logger := p.execCfg.SlowQueryLogger
-		logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
-			age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
+		var logger *log.SecondaryLogger
+		// Non-internal queries are always logged to the slow query log.
+		if execType == executorTypeExec {
+			logger = p.execCfg.SlowQueryLogger
+		}
+		// Internal queries that surpass the slow query log threshold should only
+		// be logged to the slow-internal-only log if the cluster setting dictates.
+		if execType == executorTypeInternal && slowInternalQueryLogEnabled {
+			logger = p.execCfg.SlowInternalQueryLogger
+		}
+
+		if logger != nil {
+			logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
+				age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
+		}
 	}
 	if logExecuteEnabled {
 		logger := p.execCfg.ExecLogger

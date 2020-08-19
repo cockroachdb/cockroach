@@ -465,7 +465,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 
 		ExecLogger: log.NewSecondaryLogger(
 			loggerCtx, nil /* dirName */, "sql-exec",
-			true /* enableGc */, false /*forceSyncWrites*/, true, /* enableMsgCount */
+			true /* enableGc */, false /* forceSyncWrites */, true, /* enableMsgCount */
 		),
 
 		// Note: the auth logger uses sync writes because we don't want an
@@ -479,19 +479,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 		// would be a good reason to invest into a syslog sink for logs.
 		AuthLogger: log.NewSecondaryLogger(
 			loggerCtx, nil /* dirName */, "auth",
-			true /* enableGc */, true /*forceSyncWrites*/, true, /* enableMsgCount */
+			true /* enableGc */, true /* forceSyncWrites */, true, /* enableMsgCount */
 		),
 
 		// AuditLogger syncs to disk for the same reason as AuthLogger.
 		AuditLogger: log.NewSecondaryLogger(
 			loggerCtx, cfg.AuditLogDirName, "sql-audit",
-			true /*enableGc*/, true /*forceSyncWrites*/, true, /* enableMsgCount */
+			true /* enableGc */, true /* forceSyncWrites */, true, /* enableMsgCount */
 		),
 
 		SlowQueryLogger: log.NewSecondaryLogger(
 			loggerCtx, nil, "sql-slow",
-			true /*enableGc*/, false /*forceSyncWrites*/, true, /* enableMsgCount */
+			true /* enableGc */, false /* forceSyncWrites */, true, /* enableMsgCount */
 		),
+
+		SlowInternalQueryLogger: log.NewSecondaryLogger(loggerCtx, nil, "sql-slow-internal-only",
+			true /* enableGc */, false /* forceSyncWrites */, true /* enableMsgCount */),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
 		ProtectedTimestampProvider: cfg.protectedtsProvider,
@@ -501,6 +504,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*sqlServer, error) {
 	cfg.stopper.AddCloser(execCfg.ExecLogger)
 	cfg.stopper.AddCloser(execCfg.AuditLogger)
 	cfg.stopper.AddCloser(execCfg.SlowQueryLogger)
+	cfg.stopper.AddCloser(execCfg.SlowInternalQueryLogger)
 	cfg.stopper.AddCloser(execCfg.AuthLogger)
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
