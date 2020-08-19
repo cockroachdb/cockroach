@@ -595,7 +595,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL FUNCTION
 
-%token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYCOLLECTION
+%token <str> GENERATED GEOGRAPHY GEOMETRY
+%token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GRANT GRANTS GREATEST GROUP GROUPING GROUPS
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
@@ -612,11 +613,14 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> KEY KEYS KMS KV
 
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
-%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT LINESTRING LIST LOCAL
-%token <str> LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
+%token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
+%token <str> LIST LOCAL LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
-%token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
+%token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
+%token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
+%token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLJOB NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
@@ -625,7 +629,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
-%token <str> PLAN PLANS POINT POLYGON POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
+%token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
+%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY
 %token <str> PROCEDURAL PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY
@@ -8572,12 +8577,33 @@ simple_typename:
 
 geo_shape_type:
   POINT { $$.val = geopb.ShapeType_Point }
+| POINTM { $$.val = geopb.ShapeType_PointM }
+| POINTZ { $$.val = geopb.ShapeType_PointZ }
+| POINTZM { $$.val = geopb.ShapeType_PointZM }
 | LINESTRING { $$.val = geopb.ShapeType_LineString }
+| LINESTRINGM { $$.val = geopb.ShapeType_LineStringM }
+| LINESTRINGZ { $$.val = geopb.ShapeType_LineStringZ }
+| LINESTRINGZM { $$.val = geopb.ShapeType_LineStringZM }
 | POLYGON { $$.val = geopb.ShapeType_Polygon }
-| GEOMETRYCOLLECTION { $$.val = geopb.ShapeType_GeometryCollection }
-| MULTIPOLYGON { $$.val = geopb.ShapeType_MultiPolygon }
-| MULTILINESTRING { $$.val = geopb.ShapeType_MultiLineString }
+| POLYGONM { $$.val = geopb.ShapeType_PolygonM }
+| POLYGONZ { $$.val = geopb.ShapeType_PolygonZ }
+| POLYGONZM { $$.val = geopb.ShapeType_PolygonZM }
 | MULTIPOINT { $$.val = geopb.ShapeType_MultiPoint }
+| MULTIPOINTM { $$.val = geopb.ShapeType_MultiPointM }
+| MULTIPOINTZ { $$.val = geopb.ShapeType_MultiPointZ }
+| MULTIPOINTZM { $$.val = geopb.ShapeType_MultiPointZM }
+| MULTILINESTRING { $$.val = geopb.ShapeType_MultiLineString }
+| MULTILINESTRINGM { $$.val = geopb.ShapeType_MultiLineStringM }
+| MULTILINESTRINGZ { $$.val = geopb.ShapeType_MultiLineStringZ }
+| MULTILINESTRINGZM { $$.val = geopb.ShapeType_MultiLineStringZM }
+| MULTIPOLYGON { $$.val = geopb.ShapeType_MultiPolygon }
+| MULTIPOLYGONM { $$.val = geopb.ShapeType_MultiPolygonM }
+| MULTIPOLYGONZ { $$.val = geopb.ShapeType_MultiPolygonZ }
+| MULTIPOLYGONZM { $$.val = geopb.ShapeType_MultiPolygonZM }
+| GEOMETRYCOLLECTION { $$.val = geopb.ShapeType_GeometryCollection }
+| GEOMETRYCOLLECTIONM { $$.val = geopb.ShapeType_GeometryCollectionM }
+| GEOMETRYCOLLECTIONZ { $$.val = geopb.ShapeType_GeometryCollectionZ }
+| GEOMETRYCOLLECTIONZM { $$.val = geopb.ShapeType_GeometryCollectionZM }
 | GEOMETRY { $$.val = geopb.ShapeType_Geometry }
 
 const_geo:
@@ -11211,6 +11237,9 @@ unreserved_keyword:
 | FUNCTION
 | GENERATED
 | GEOMETRYCOLLECTION
+| GEOMETRYCOLLECTIONM
+| GEOMETRYCOLLECTIONZ
+| GEOMETRYCOLLECTIONZM
 | GLOBAL
 | GRANTS
 | GROUPS
@@ -11261,8 +11290,17 @@ unreserved_keyword:
 | MINUTE
 | MINVALUE
 | MULTILINESTRING
+| MULTILINESTRINGM
+| MULTILINESTRINGZ
+| MULTILINESTRINGZM
 | MULTIPOINT
+| MULTIPOINTM
+| MULTIPOINTZ
+| MULTIPOINTZM
 | MULTIPOLYGON
+| MULTIPOLYGONM
+| MULTIPOLYGONZ
+| MULTIPOLYGONZM
 | MONTH
 | NAMES
 | NAN
@@ -11299,6 +11337,12 @@ unreserved_keyword:
 | PHYSICAL
 | PLAN
 | PLANS
+| POINTM
+| POINTZ
+| POINTZM
+| POLYGONM
+| POLYGONZ
+| POLYGONZM
 | PRECEDING
 | PREPARE
 | PRESERVE

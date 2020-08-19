@@ -391,7 +391,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if g.Geometry.Empty() {
 					return tree.DBoolFalse, nil
 				}
-				if g.Geometry.ShapeType() == geopb.ShapeType_Point {
+				if g.Geometry.ShapeType().To2D() == geopb.ShapeType_Point {
 					return tree.DBoolFalse, nil
 				}
 				return tree.DBoolTrue, nil
@@ -2093,7 +2093,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(g.ShapeType().String()), nil
+				return tree.NewDString(g.ShapeType().To2D().String()), nil
 			},
 			types.String,
 			infoBuilder{
@@ -2107,7 +2107,7 @@ Flags shown square brackets after the geometry type have the following meaning:
 		defProps(),
 		geometryOverload1(
 			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType().String())), nil
+				return tree.NewDString(fmt.Sprintf("ST_%s", g.ShapeType().To2D().String())), nil
 			},
 			types.String,
 			infoBuilder{

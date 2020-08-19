@@ -1,0 +1,11 @@
+statement ok
+CREATE TABLE geom_z(geomz geometryz)
+
+statement error sdsd
+INSERT INTO geom3d VALUES ('point(1 2)')
+
+statement error sdsd
+INSERT INTO geom3d VALUES ('pointm(1 2 3)')
+
+statement error sdsd
+INSERT INTO geom3d VALUES ('pointzm(1 2 3)')
