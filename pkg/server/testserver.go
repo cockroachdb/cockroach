@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
@@ -449,8 +450,6 @@ func makeSQLServerArgs(
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Duration(baseCfg.MaxOffset))
 
-	// TODO(tbg): expose this registry via prometheus. See:
-	// https://github.com/cockroachdb/cockroach/issues/47905
 	registry := metric.NewRegistry()
 
 	var rpcTestingKnobs rpc.ContextTestingKnobs
@@ -537,7 +536,7 @@ func makeSQLServerArgs(
 		protectedTSProvider = dummyProtectedTSProvider{pp}
 	}
 
-	dummyRecorder := &status.MetricsRecorder{}
+	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
 	var c base.NodeIDContainer
 	c.Set(context.Background(), fakeNodeID)
@@ -554,7 +553,7 @@ func makeSQLServerArgs(
 			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
 			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
-			recorder:     dummyRecorder,
+			recorder:     recorder,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
@@ -590,14 +589,16 @@ func makeSQLServerArgs(
 }
 
 // StartTenant starts a SQL tenant communicating with this TestServer.
-func (ts *TestServer) StartTenant(params base.TestTenantArgs) (pgAddr string, _ error) {
+func (ts *TestServer) StartTenant(
+	params base.TestTenantArgs,
+) (pgAddr string, httpAddr string, _ error) {
 	ctx := context.Background()
 
 	if !params.Existing {
 		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
 			ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)", params.TenantID.ToUint64(), params.TenantInfo,
 		); err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 
@@ -627,14 +628,14 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (pgAddr string, _ error) {
+) (pgAddr string, httpAddr string, _ error) {
 	args, err := makeSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// NB: this should no longer be necessary after #47902. Right now it keeps
@@ -653,8 +654,9 @@ func StartTenant(
 
 	pgL, err := net.Listen("tcp", args.Config.SQLAddr)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
+
 	args.stopper.RunWorker(ctx, func(ctx context.Context) {
 		<-args.stopper.ShouldQuiesce()
 		// NB: we can't do this as a Closer because (*Server).ServeWith is
@@ -662,6 +664,34 @@ func StartTenant(
 		// only when pgL closes. In other words, pgL needs to close when
 		// quiescing starts to allow that worker to shut down.
 		_ = pgL.Close()
+	})
+
+	httpL, err := net.Listen("tcp", args.Config.HTTPAddr)
+	if err != nil {
+		return "", "", err
+	}
+
+	args.stopper.RunWorker(ctx, func(ctx context.Context) {
+		<-args.stopper.ShouldQuiesce()
+		_ = httpL.Close()
+	})
+
+	pgLAddr := pgL.Addr().String()
+	httpLAddr := httpL.Addr().String()
+	args.recorder.AddNode(
+		args.registry,
+		roachpb.NodeDescriptor{},
+		timeutil.Now().UnixNano(),
+		pgLAddr,   // advertised addr
+		httpLAddr, // http addr
+		pgLAddr,   // sql addr
+	)
+
+	args.stopper.RunWorker(ctx, func(ctx context.Context) {
+		mux := http.NewServeMux()
+		f := varsHandler{metricSource: args.recorder}.handleVars
+		mux.Handle(statusVars, http.HandlerFunc(f))
+		_ = http.Serve(httpL, mux)
 	})
 
 	const (
@@ -677,9 +707,10 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return pgL.Addr().String(), nil
+
+	return pgLAddr, httpLAddr, nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
