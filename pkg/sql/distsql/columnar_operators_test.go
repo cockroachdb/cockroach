@@ -235,11 +235,6 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 					// possibly include DISTINCT and/or FILTER clauses.
 					for _, aggFn := range aggregations {
 						distinctProb := 0.5
-						if !hashAgg {
-							// We currently support distinct aggregation only
-							// for hash aggregator.
-							distinctProb = 0
-						}
 						if hasJSONColumn {
 							// We currently cannot encode json columns, so we
 							// don't support distinct aggregation in both

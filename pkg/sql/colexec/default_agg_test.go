@@ -137,7 +137,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 	for _, agg := range aggTypes {
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%s/%s", agg.name, tc.name), func(t *testing.T) {
-				if err := tc.init(); err != nil {
+				if err := tc.init(agg); err != nil {
 					t.Fatal(err)
 				}
 				constructors, constArguments, outputTypes, err := ProcessAggregations(
@@ -147,7 +147,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return agg.new(
-							testAllocator, input[0], tc.typs, tc.spec, &evalCtx,
+							testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
 							constructors, constArguments, outputTypes, false, /* isScalar */
 						)
 					})

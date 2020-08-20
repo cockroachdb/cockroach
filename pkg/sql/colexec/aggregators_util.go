@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
+	"github.com/cockroachdb/errors"
 )
 
-// hashAggregatorHelper is a helper for the hash aggregator that facilitates
-// the selection of tuples on which to perform the aggregation.
-type hashAggregatorHelper interface {
+// aggregatorHelper is a helper for the aggregators that facilitates the
+// selection of tuples on which to perform the aggregation.
+type aggregatorHelper interface {
 	// makeSeenMaps returns a slice of maps used to handle distinct aggregation
 	// of a single aggregation bucket. A corresponding entry in the slice is
 	// nil if the function doesn't have a DISTINCT clause. The slice itself
@@ -37,20 +38,20 @@ type hashAggregatorHelper interface {
 	// tuples in vecs that are relevant for each function (meaning that only
 	// tuples that pass the criteria - like DISTINCT and/or FILTER will be
 	// aggregated).
-	performAggregation(ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *hashAggBucket)
+	performAggregation(ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, groups []bool)
 }
 
-// newHashAggregatorHelper creates a new hashAggregatorHelper based on the
-// provided aggregator specification. If there are no functions that perform
-// either DISTINCT or FILTER aggregation, then the defaultHashAggregatorHelper
+// newAggregatorHelper creates a new aggregatorHelper based on the provided
+// aggregator specification. If there are no functions that perform either
+// DISTINCT or FILTER aggregation, then the defaultAggregatorHelper
 // is returned which has negligible performance overhead.
-func newHashAggregatorHelper(
+func newAggregatorHelper(
 	allocator *colmem.Allocator,
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
 	datumAlloc *sqlbase.DatumAlloc,
-) hashAggregatorHelper {
+) aggregatorHelper {
 	hasDistinct, hasFilterAgg := false, false
 	aggFilter := make([]int, len(spec.Aggregations))
 	for i, aggFn := range spec.Aggregations {
@@ -64,11 +65,18 @@ func newHashAggregatorHelper(
 			aggFilter[i] = tree.NoColumnIdx
 		}
 	}
-
 	if !hasDistinct && !hasFilterAgg {
-		return newDefaultHashAggregatorHelper(spec)
+		return newDefaultAggregatorHelper(spec)
 	}
-	filters := make([]*filteringSingleFunctionHelper, len(spec.Aggregations))
+	if len(spec.OrderedGroupCols) > 0 {
+		if hasFilterAgg {
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"filtering ordered aggregation is not supported",
+			))
+		}
+		return newDistinctOrderedAggregatorHelper(memAccount, inputTypes, spec, datumAlloc)
+	}
+	filters := make([]*filteringSingleFunctionHashHelper, len(spec.Aggregations))
 	for i, filterIdx := range aggFilter {
 		filters[i] = newFilteringHashAggHelper(allocator, inputTypes, filterIdx)
 	}
@@ -78,34 +86,34 @@ func newHashAggregatorHelper(
 	return newFilteringDistinctHashAggregatorHelper(memAccount, inputTypes, spec, filters, datumAlloc)
 }
 
-// defaultHashAggregatorHelper is the default hashAggregatorHelper for the case
+// defaultAggregatorHelper is the default aggregatorHelper for the case
 // when no aggregate function is performing DISTINCT or FILTERing aggregation.
-type defaultHashAggregatorHelper struct {
+type defaultAggregatorHelper struct {
 	spec *execinfrapb.AggregatorSpec
 }
 
-var _ hashAggregatorHelper = &defaultHashAggregatorHelper{}
+var _ aggregatorHelper = &defaultAggregatorHelper{}
 
-func newDefaultHashAggregatorHelper(spec *execinfrapb.AggregatorSpec) hashAggregatorHelper {
-	return &defaultHashAggregatorHelper{spec: spec}
+func newDefaultAggregatorHelper(spec *execinfrapb.AggregatorSpec) aggregatorHelper {
+	return &defaultAggregatorHelper{spec: spec}
 }
 
-func (h *defaultHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
+func (h *defaultAggregatorHelper) makeSeenMaps() []map[string]struct{} {
 	return nil
 }
 
-func (h *defaultHashAggregatorHelper) performAggregation(
-	_ context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *hashAggBucket,
+func (h *defaultAggregatorHelper) performAggregation(
+	_ context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	for fnIdx, fn := range bucket.fns {
 		fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, inputLen, sel)
 	}
 }
 
-// hashAggregatorHelperBase is a utility struct that provides non-default
-// hashAggregatorHelpers with the logic necessary for saving/restoring the
+// aggregatorHelperBase is a utility struct that provides non-default
+// aggregatorHelpers with the logic necessary for saving/restoring the
 // input state.
-type hashAggregatorHelperBase struct {
+type aggregatorHelperBase struct {
 	spec *execinfrapb.AggregatorSpec
 
 	vecs    []coldata.Vec
@@ -114,49 +122,50 @@ type hashAggregatorHelperBase struct {
 	origLen int
 }
 
-func newAggregatorHelperBase(spec *execinfrapb.AggregatorSpec) *hashAggregatorHelperBase {
-	b := &hashAggregatorHelperBase{spec: spec}
+func newAggregatorHelperBase(spec *execinfrapb.AggregatorSpec) *aggregatorHelperBase {
+	b := &aggregatorHelperBase{spec: spec}
 	b.origSel = make([]int, coldata.BatchSize())
 	return b
 }
 
-func (h *hashAggregatorHelperBase) saveState(vecs []coldata.Vec, origLen int, origSel []int) {
-	h.vecs = vecs
-	h.origLen = origLen
-	h.usesSel = origSel != nil
-	if h.usesSel {
-		copy(h.origSel[:h.origLen], origSel[:h.origLen])
+func (b *aggregatorHelperBase) saveState(vecs []coldata.Vec, origLen int, origSel []int) {
+	b.vecs = vecs
+	b.origLen = origLen
+	b.usesSel = origSel != nil
+	if b.usesSel {
+		copy(b.origSel[:b.origLen], origSel[:b.origLen])
 	}
 }
 
-func (h *hashAggregatorHelperBase) restoreState() ([]coldata.Vec, int, []int) {
-	sel := h.origSel
-	if !h.usesSel {
+func (b *aggregatorHelperBase) restoreState() ([]coldata.Vec, int, []int) {
+	sel := b.origSel
+	if !b.usesSel {
 		sel = nil
 	}
-	return h.vecs, h.origLen, sel
+	return b.vecs, b.origLen, sel
 }
 
-// filteringSingleFunctionHelper is a utility struct that helps with handling
-// of a FILTER clause of a single aggregate function.
-type filteringSingleFunctionHelper struct {
+// filteringSingleFunctionHashHelper is a utility struct that helps with
+// handling of a FILTER clause of a single aggregate function for the hash
+// aggregation.
+type filteringSingleFunctionHashHelper struct {
 	filter      colexecbase.Operator
 	filterInput *singleBatchOperator
 }
 
-var noFilterHashAggHelper = &filteringSingleFunctionHelper{}
+var noFilterHashAggHelper = &filteringSingleFunctionHashHelper{}
 
-// newFilteringHashAggHelper returns a new filteringSingleFunctionHelper.
+// newFilteringHashAggHelper returns a new filteringSingleFunctionHashHelper.
 // tree.NoColumnIdx index can be used to indicate that there is no FILTER
 // clause for the aggregate function.
 func newFilteringHashAggHelper(
 	allocator *colmem.Allocator, typs []*types.T, filterIdx int,
-) *filteringSingleFunctionHelper {
+) *filteringSingleFunctionHashHelper {
 	if filterIdx == tree.NoColumnIdx {
 		return noFilterHashAggHelper
 	}
 	filterInput := newSingleBatchOperator(allocator, typs)
-	h := &filteringSingleFunctionHelper{
+	h := &filteringSingleFunctionHashHelper{
 		filter:      newBoolVecToSelOp(filterInput, filterIdx),
 		filterInput: filterInput,
 	}
@@ -166,7 +175,7 @@ func newFilteringHashAggHelper(
 // applyFilter returns the updated selection vector that includes only tuples
 // for which filtering column has 'true' value set. It also returns whether
 // state might have been modified.
-func (h *filteringSingleFunctionHelper) applyFilter(
+func (h *filteringSingleFunctionHashHelper) applyFilter(
 	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int,
 ) (_ []coldata.Vec, _ int, _ []int, maybeModified bool) {
 	if h.filter == nil {
@@ -177,23 +186,23 @@ func (h *filteringSingleFunctionHelper) applyFilter(
 	return newBatch.ColVecs(), newBatch.Length(), newBatch.Selection(), true
 }
 
-// filteringHashAggregatorHelper is a hashAggregatorHelper that handles the
+// filteringHashAggregatorHelper is an aggregatorHelper that handles the
 // aggregate functions which have at least one FILTER clause but no DISTINCT
-// clauses.
+// clauses for the hash aggregation.
 type filteringHashAggregatorHelper struct {
-	*hashAggregatorHelperBase
+	*aggregatorHelperBase
 
-	filters []*filteringSingleFunctionHelper
+	filters []*filteringSingleFunctionHashHelper
 }
 
-var _ hashAggregatorHelper = &filteringHashAggregatorHelper{}
+var _ aggregatorHelper = &filteringHashAggregatorHelper{}
 
 func newFilteringHashAggregatorHelper(
-	spec *execinfrapb.AggregatorSpec, filters []*filteringSingleFunctionHelper,
-) hashAggregatorHelper {
+	spec *execinfrapb.AggregatorSpec, filters []*filteringSingleFunctionHashHelper,
+) aggregatorHelper {
 	h := &filteringHashAggregatorHelper{
-		hashAggregatorHelperBase: newAggregatorHelperBase(spec),
-		filters:                  filters,
+		aggregatorHelperBase: newAggregatorHelperBase(spec),
+		filters:              filters,
 	}
 	return h
 }
@@ -203,7 +212,7 @@ func (h *filteringHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
 }
 
 func (h *filteringHashAggregatorHelper) performAggregation(
-	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *hashAggBucket,
+	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
 	for fnIdx, fn := range bucket.fns {
@@ -222,15 +231,11 @@ func (h *filteringHashAggregatorHelper) performAggregation(
 	}
 }
 
-// filteringDistinctHashAggregatorHelper is a hashAggregatorHelper that handles
-// the aggregate functions with any number of DISTINCT and/or FILTER clauses.
-// The helper should be shared among all groups for aggregation. The filtering
-// is delegated to filteringHashAggHelpers, and this struct handles the
-// "distinctness" of aggregation.
-// Note that the "distinctness" of tuples is handled by encoding aggregation
-// columns of a tuple (one tuple at a time) and storing it in a seen map that
-// is separate for each aggregation group and for each aggregate function with
-// DISTINCT clause.
+// distinctAggregatorHelperBase is a utility struct that facilitates handling
+// of DISTINCT clause for aggregatorHelpers. Note that the "distinctness" of
+// tuples is handled by encoding aggregation columns of a tuple (one tuple at a
+// time) and storing it in a seen map that is separate for each aggregation
+// group and for each aggregate function with DISTINCT clause.
 // Other approaches have been prototyped but showed worse performance:
 // - using the vectorized hash table - the benefit of such approach is that we
 // don't reduce ourselves to one tuple at a time (because we would be hashing
@@ -242,11 +247,10 @@ func (h *filteringHashAggregatorHelper) performAggregation(
 // shared among all aggregation groups - the benefit of such approach is that
 // we only have a handful of map, but it turned out that such global map grows
 // a lot bigger and has worse performance.
-type filteringDistinctHashAggregatorHelper struct {
-	*hashAggregatorHelperBase
+type distinctAggregatorHelperBase struct {
+	*aggregatorHelperBase
 
 	inputTypes       []*types.T
-	filters          []*filteringSingleFunctionHelper
 	aggColsConverter *vecToDatumConverter
 	arena            stringarena.Arena
 	datumAlloc       *sqlbase.DatumAlloc
@@ -259,21 +263,17 @@ type filteringDistinctHashAggregatorHelper struct {
 	}
 }
 
-var _ hashAggregatorHelper = &filteringDistinctHashAggregatorHelper{}
-
-func newFilteringDistinctHashAggregatorHelper(
+func newDistinctAggregatorHelperBase(
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
-	filters []*filteringSingleFunctionHelper,
 	datumAlloc *sqlbase.DatumAlloc,
-) hashAggregatorHelper {
-	h := &filteringDistinctHashAggregatorHelper{
-		hashAggregatorHelperBase: newAggregatorHelperBase(spec),
-		inputTypes:               inputTypes,
-		arena:                    stringarena.Make(memAccount),
-		datumAlloc:               datumAlloc,
-		filters:                  filters,
+) *distinctAggregatorHelperBase {
+	b := &distinctAggregatorHelperBase{
+		aggregatorHelperBase: newAggregatorHelperBase(spec),
+		inputTypes:           inputTypes,
+		arena:                stringarena.Make(memAccount),
+		datumAlloc:           datumAlloc,
 	}
 	var vecIdxsToConvert []int
 	for _, aggFn := range spec.Aggregations {
@@ -292,19 +292,19 @@ func newFilteringDistinctHashAggregatorHelper(
 			}
 		}
 	}
-	h.aggColsConverter = newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
-	h.scratch.converted = []tree.Datum{nil}
-	h.scratch.sel = make([]int, coldata.BatchSize())
-	return h
+	b.aggColsConverter = newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
+	b.scratch.converted = []tree.Datum{nil}
+	b.scratch.sel = make([]int, coldata.BatchSize())
+	return b
 }
 
-func (h *filteringDistinctHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
+func (b *distinctAggregatorHelperBase) makeSeenMaps() []map[string]struct{} {
 	// Note that we consciously don't account for the memory used under seen
 	// maps because that memory is likely noticeably smaller than the memory
 	// used (and accounted for) in other parts of the hash aggregation (the
 	// vectorized hash table and the aggregate functions).
-	seen := make([]map[string]struct{}, len(h.spec.Aggregations))
-	for i, aggFn := range h.spec.Aggregations {
+	seen := make([]map[string]struct{}, len(b.spec.Aggregations))
+	for i, aggFn := range b.spec.Aggregations {
 		if aggFn.Distinct {
 			seen[i] = make(map[string]struct{})
 		}
@@ -318,32 +318,45 @@ func (h *filteringDistinctHashAggregatorHelper) makeSeenMaps() []map[string]stru
 // conversion of the relevant aggregate columns *without* deselection. This
 // function assumes that seen map is non-nil and is the same that is used for
 // all batches from the same aggregation group.
-func (h *filteringDistinctHashAggregatorHelper) selectDistinctTuples(
-	ctx context.Context, inputLen int, sel []int, inputIdxs []uint32, seen map[string]struct{},
+func (b *distinctAggregatorHelperBase) selectDistinctTuples(
+	ctx context.Context,
+	inputLen int,
+	sel []int,
+	inputIdxs []uint32,
+	seen map[string]struct{},
+	groups []bool,
 ) (newLen int, newSel []int) {
-	newSel = h.scratch.sel
+	newSel = b.scratch.sel
 	var (
 		tupleIdx int
 		err      error
 		s        string
 	)
 	for idx := 0; idx < inputLen; idx++ {
-		h.scratch.encoded = h.scratch.encoded[:0]
+		b.scratch.encoded = b.scratch.encoded[:0]
 		tupleIdx = idx
 		if sel != nil {
 			tupleIdx = sel[idx]
 		}
+		if groups != nil && groups[tupleIdx] {
+			// We have encountered a new group, so we need to clear the seen
+			// map. It turns out that it is faster to delete entries from the
+			// old map rather than allocating a new one.
+			for s := range seen {
+				delete(seen, s)
+			}
+		}
 		for _, colIdx := range inputIdxs {
-			h.scratch.ed.Datum = h.aggColsConverter.getDatumColumn(int(colIdx))[tupleIdx]
-			h.scratch.encoded, err = h.scratch.ed.Fingerprint(
-				h.inputTypes[colIdx], h.datumAlloc, h.scratch.encoded,
+			b.scratch.ed.Datum = b.aggColsConverter.getDatumColumn(int(colIdx))[tupleIdx]
+			b.scratch.encoded, err = b.scratch.ed.Fingerprint(
+				b.inputTypes[colIdx], b.datumAlloc, b.scratch.encoded,
 			)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
 		}
-		if _, seenPreviously := seen[string(h.scratch.encoded)]; !seenPreviously {
-			s, err = h.arena.AllocBytes(ctx, h.scratch.encoded)
+		if _, seenPreviously := seen[string(b.scratch.encoded)]; !seenPreviously {
+			s, err = b.arena.AllocBytes(ctx, b.scratch.encoded)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -355,10 +368,41 @@ func (h *filteringDistinctHashAggregatorHelper) selectDistinctTuples(
 	return
 }
 
-// performAggregation executes Compute on all fns paying attention to distinct
-// tuples if the corresponding function performs DISTINCT aggregation (as well
-// as to any present FILTER clauses). For such functions the approach is as
-// follows:
+// filteringDistinctHashAggregatorHelper is an aggregatorHelper that handles
+// the aggregate functions with any number of DISTINCT and/or FILTER clauses
+// for the hash aggregation. The helper should be shared among all groups for
+// aggregation. The filtering is delegated to filteringSingleFunctionHashHelper
+// whereas the "distinctness" is delegated to distinctAggregatorHelperBase.
+type filteringDistinctHashAggregatorHelper struct {
+	*distinctAggregatorHelperBase
+
+	filters []*filteringSingleFunctionHashHelper
+}
+
+var _ aggregatorHelper = &filteringDistinctHashAggregatorHelper{}
+
+func newFilteringDistinctHashAggregatorHelper(
+	memAccount *mon.BoundAccount,
+	inputTypes []*types.T,
+	spec *execinfrapb.AggregatorSpec,
+	filters []*filteringSingleFunctionHashHelper,
+	datumAlloc *sqlbase.DatumAlloc,
+) aggregatorHelper {
+	return &filteringDistinctHashAggregatorHelper{
+		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(
+			memAccount,
+			inputTypes,
+			spec,
+			datumAlloc,
+		),
+		filters: filters,
+	}
+}
+
+// performAggregation executes Compute on all aggregate functions in bucket
+// paying attention to distinct tuples if the corresponding function performs
+// DISTINCT aggregation (as well as to any present FILTER clauses).
+// For such functions the approach is as follows:
 // 1. Store the input state because we will be modifying some of it.
 // 2. Convert all aggregate columns of functions that perform DISTINCT
 //    aggregation.
@@ -371,15 +415,69 @@ func (h *filteringDistinctHashAggregatorHelper) selectDistinctTuples(
 //    4) Restore the state to the original state (if it might have been
 //       modified).
 func (h *filteringDistinctHashAggregatorHelper) performAggregation(
-	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *hashAggBucket,
+	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
 	h.aggColsConverter.convertVecs(vecs, inputLen, sel)
-	var maybeModified bool
 	for aggFnIdx, aggFn := range h.spec.Aggregations {
+		var maybeModified bool
 		vecs, inputLen, sel, maybeModified = h.filters[aggFnIdx].applyFilter(ctx, vecs, inputLen, sel)
 		if inputLen > 0 && aggFn.Distinct {
-			inputLen, sel = h.selectDistinctTuples(ctx, inputLen, sel, aggFn.ColIdx, bucket.seen[aggFnIdx])
+			inputLen, sel = h.selectDistinctTuples(
+				ctx, inputLen, sel, aggFn.ColIdx, bucket.seen[aggFnIdx], nil, /* groups */
+			)
+			maybeModified = true
+		}
+		if inputLen > 0 {
+			bucket.fns[aggFnIdx].Compute(vecs, aggFn.ColIdx, inputLen, sel)
+		}
+		if maybeModified {
+			vecs, inputLen, sel = h.restoreState()
+		}
+	}
+}
+
+type distinctOrderedAggregatorHelper struct {
+	*distinctAggregatorHelperBase
+}
+
+var _ aggregatorHelper = &distinctOrderedAggregatorHelper{}
+
+func newDistinctOrderedAggregatorHelper(
+	memAccount *mon.BoundAccount,
+	inputTypes []*types.T,
+	spec *execinfrapb.AggregatorSpec,
+	datumAlloc *sqlbase.DatumAlloc,
+) aggregatorHelper {
+	return &distinctOrderedAggregatorHelper{
+		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(
+			memAccount,
+			inputTypes,
+			spec,
+			datumAlloc,
+		),
+	}
+}
+
+// performAggregation executes Compute on all aggregate function in bucket
+// paying attention to distinct tuples if the corresponding function performs
+// DISTINCT aggregation
+func (h *distinctOrderedAggregatorHelper) performAggregation(
+	ctx context.Context,
+	vecs []coldata.Vec,
+	inputLen int,
+	sel []int,
+	bucket *aggBucket,
+	groups []bool,
+) {
+	h.saveState(vecs, inputLen, sel)
+	h.aggColsConverter.convertVecs(vecs, inputLen, sel)
+	for aggFnIdx, aggFn := range h.spec.Aggregations {
+		var maybeModified bool
+		if aggFn.Distinct {
+			inputLen, sel = h.selectDistinctTuples(
+				ctx, inputLen, sel, aggFn.ColIdx, bucket.seen[aggFnIdx], groups,
+			)
 			maybeModified = true
 		}
 		if inputLen > 0 {
