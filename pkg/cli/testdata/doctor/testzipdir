@@ -1,0 +1,11 @@
+doctor zipdir
+----
+debug doctor zipdir testdata/doctor/debugzip
+Examining 38 descriptors...
+Table  53: parentID 52  does not exist
+Table  54: parentID 52  does not exist
+Table  55: parentID 52  does not exist
+Table  56: parentID 52  does not exist
+Table  57: parentID 52  does not exist
+Table  58: parentID 52  does not exist
+ERROR: validation failed
