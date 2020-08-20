@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -356,7 +355,6 @@ func getTableID(db *gosql.DB, dbName, tableName string) (tableID descpb.ID, err 
 func TestClosedTimestampCantServeBasedOnMaxTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	// Limiting how long transactions can run does not work
 	// well with race unless we're extremely lenient, which
 	// drives up the test duration.
@@ -510,9 +508,18 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 		ctx := context.Background()
 		st := mergeFilterState{
 			blockMergeTrigger: make(chan hlc.Timestamp),
-			finishMergeTxn:    make(chan struct{}),
+			// Range merges can be internally retried by the coordinating node (the
+			// leaseholder of the left hand side range). If this happens, the right
+			// hand side can get re-subsumed. However, in the current implementation,
+			// even if the merge txn gets retried, the follower replicas should not be
+			// able to activate any closed timestamp updates succeeding the timestamp
+			// the RHS was subsumed _for the first time_. We use a buffered channel
+			// here because we want to avoid blocking the merge txn if it retries for
+			// any reason.
+			finishMergeTxn: make(chan struct{}, 10),
 		}
 		var leaseAcquisitionTrap atomic.Value
+		var mergeFilter atomic.Value
 		clusterArgs := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				RaftConfig: base.RaftConfig{
@@ -530,7 +537,13 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 						// being pushed due to resolved timestamps.
 						RangeFeedPushTxnsInterval: 5 * time.Second,
 						RangeFeedPushTxnsAge:      60 * time.Second,
-						TestingRequestFilter:      st.suspendMergeTrigger,
+						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+							fn := mergeFilter.Load()
+							if fn == nil {
+								return nil
+							}
+							return fn.(func(context.Context, roachpb.BatchRequest) *roachpb.Error)(ctx, ba)
+						},
 						LeaseRequestEvent: func(ts hlc.Timestamp, storeID roachpb.StoreID, rangeID roachpb.RangeID) *roachpb.Error {
 							val := leaseAcquisitionTrap.Load()
 							if val == nil {
@@ -577,8 +590,10 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 		g, ctx := errgroup.WithContext(ctx)
 		// Merge the ranges back together. The LHS rightLeaseholder should block right
 		// before the merge trigger request is sent.
+		leftLeaseholderStore := getTargetStoreOrFatal(t, tc, leftLeaseholder)
+		mergeFilter.Store(st.suspendMergeTrigger)
 		g.Go(func() error {
-			return mergeTxn(tc, leftDesc)
+			return mergeTxn(ctx, leftLeaseholderStore, leftDesc)
 		})
 		defer func() {
 			// Unblock the rightLeaseholder so it can finally commit the merge.
@@ -588,8 +603,15 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 			}
 		}()
 
+		var freezeStartTimestamp hlc.Timestamp
 		// We now have the RHS in its subsumed state.
-		freezeStartTimestamp := <-st.blockMergeTrigger
+		select {
+		case ts := <-st.blockMergeTrigger:
+			freezeStartTimestamp = ts
+		case <-time.After(45 * time.Second):
+			t.Fatal("did not receive merge commit trigger as expected")
+
+		}
 		// Reduce the closed timestamp target duration in order to make the rest of
 		// the test faster.
 		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';`,
@@ -748,14 +770,9 @@ func (state *mergeFilterState) suspendMergeTrigger(
 ) *roachpb.Error {
 	for _, req := range ba.Requests {
 		if et := req.GetEndTxn(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
-			if state.retries >= 1 {
-				// TODO(aayush): make these tests resilient to merge txn retries.
-				return roachpb.NewError(errors.AssertionFailedf("merge txn retried"))
-			}
 			freezeStart := et.InternalCommitTrigger.MergeTrigger.FreezeStart
 			log.Infof(ctx, "suspending the merge txn with FreezeStart: %s",
 				freezeStart)
-			state.retries++
 			// We block the LHS leaseholder from applying the merge trigger. Note
 			// that RHS followers will have already caught up to the leaseholder
 			// well before this point.
@@ -767,15 +784,10 @@ func (state *mergeFilterState) suspendMergeTrigger(
 	return nil
 }
 
-func mergeTxn(tc serverutils.TestClusterInterface, leftDesc roachpb.RangeDescriptor) error {
-	ctx := context.Background()
-	ctx, record, cancel := tracing.ContextWithRecordingSpan(ctx, "merge txn")
-	defer cancel()
-	if _, err := tc.Server(0).MergeRanges(leftDesc.StartKey.AsRawKey()); err != nil {
-		log.Infof(ctx, "trace: %s", record().String())
-		return err
-	}
-	return nil
+func mergeTxn(ctx context.Context, store *kvserver.Store, leftDesc roachpb.RangeDescriptor) error {
+	mergeArgs := adminMergeArgs(leftDesc.StartKey.AsRawKey())
+	_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
+	return err.GoError()
 }
 
 func initClusterWithSplitRanges(
