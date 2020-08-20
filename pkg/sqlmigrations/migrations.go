@@ -352,6 +352,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
+	{
+		// Introduced in v20.2.
+		name:                "alter scheduled jobs",
+		workFn:              alterSystemScheduledJobsFixTableSchema,
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionUpdateScheduledJobsSchema),
+	},
 }
 
 func staticIDs(
@@ -1357,4 +1363,24 @@ ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 
 func createTenantsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.TenantsTable)
+}
+
+func alterSystemScheduledJobsFixTableSchema(ctx context.Context, r runner) error {
+	setOwner := "UPDATE system.scheduled_jobs SET owner='root' WHERE owner IS NULL"
+	asNode := sqlbase.InternalExecutorSessionDataOverride{
+		User: security.NodeUser,
+	}
+
+	if _, err := r.sqlExecutor.ExecEx(ctx, "set-schedule-owner", nil, asNode, setOwner); err != nil {
+		return err
+	}
+
+	alterSchedules := `
+ALTER TABLE system.scheduled_jobs
+ADD COLUMN IF NOT EXISTS schedule_state BYTES FAMILY sched,
+ALTER COLUMN owner SET NOT NULL,
+DROP COLUMN IF EXISTS schedule_changes
+`
+	_, err := r.sqlExecutor.ExecEx(ctx, "alter-scheduled-jobs", nil, asNode, alterSchedules)
+	return err
 }

@@ -122,7 +122,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 
 		switch n.command {
 		case tree.PauseSchedule:
-			schedule.Pause("operator paused")
+			schedule.Pause()
 			err = updateSchedule(params, schedule)
 		case tree.ResumeSchedule:
 			err = schedule.ScheduleNextRun()

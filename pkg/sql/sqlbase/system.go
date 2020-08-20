@@ -319,20 +319,20 @@ CREATE TABLE system.scheduled_jobs (
     schedule_id      INT DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
     schedule_name    STRING NOT NULL,
     created          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    owner            STRING,
+    owner            STRING NOT NULL,
     next_run         TIMESTAMPTZ,
+    schedule_state   BYTES,
     schedule_expr    STRING,
     schedule_details BYTES,
     executor_type    STRING NOT NULL,
     execution_args   BYTES NOT NULL,
-    schedule_changes BYTES,
 
     INDEX "next_run_idx" (next_run),
 
-    FAMILY sched (schedule_id, next_run),
+    FAMILY sched (schedule_id, next_run, schedule_state),
     FAMILY other (
        schedule_name, created, owner, schedule_expr, 
-       schedule_details, executor_type, execution_args, schedule_changes 
+       schedule_details, executor_type, execution_args 
     )
 )`
 
@@ -1608,29 +1608,30 @@ var (
 			{Name: "schedule_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
 			{Name: "schedule_name", ID: 2, Type: types.String, Nullable: false},
 			{Name: "created", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
-			{Name: "owner", ID: 4, Type: types.String, Nullable: true},
+			{Name: "owner", ID: 4, Type: types.String, Nullable: false},
 			{Name: "next_run", ID: 5, Type: types.TimestampTZ, Nullable: true},
-			{Name: "schedule_expr", ID: 6, Type: types.String, Nullable: true},
-			{Name: "schedule_details", ID: 7, Type: types.Bytes, Nullable: true},
-			{Name: "executor_type", ID: 8, Type: types.String, Nullable: false},
-			{Name: "execution_args", ID: 9, Type: types.Bytes, Nullable: false},
-			{Name: "schedule_changes", ID: 10, Type: types.Bytes, Nullable: true},
+			{Name: "schedule_state", ID: 6, Type: types.Bytes, Nullable: true},
+			{Name: "schedule_expr", ID: 7, Type: types.String, Nullable: true},
+			{Name: "schedule_details", ID: 8, Type: types.Bytes, Nullable: true},
+			{Name: "executor_type", ID: 9, Type: types.String, Nullable: false},
+			{Name: "execution_args", ID: 10, Type: types.Bytes, Nullable: false},
 		},
 		NextColumnID: 11,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
-				Name:            "sched",
-				ID:              0,
-				ColumnNames:     []string{"schedule_id", "next_run"},
-				ColumnIDs:       []descpb.ColumnID{1, 5},
-				DefaultColumnID: 5,
+				Name:        "sched",
+				ID:          0,
+				ColumnNames: []string{"schedule_id", "next_run", "schedule_state"},
+				ColumnIDs:   []descpb.ColumnID{1, 5, 6},
 			},
 			{
 				Name: "other",
 				ID:   1,
-				ColumnNames: []string{"schedule_name", "created", "owner", "schedule_expr", "schedule_details",
-					"executor_type", "execution_args", "schedule_changes"},
-				ColumnIDs: []descpb.ColumnID{2, 3, 4, 6, 7, 8, 9, 10},
+				ColumnNames: []string{
+					"schedule_name", "created", "owner", "schedule_expr",
+					"schedule_details", "executor_type", "execution_args",
+				},
+				ColumnIDs: []descpb.ColumnID{2, 3, 4, 7, 8, 9, 10},
 			},
 		},
 		NextFamilyID: 2,

@@ -301,7 +301,8 @@ func doCreateBackupSchedules(
 				return err
 			}
 			// Incremental is paused until FULL completes.
-			inc.Pause("Waiting for initial backup to complete")
+			inc.Pause()
+			inc.SetScheduleStatus("Waiting for initial backup to complete")
 
 			if err := inc.Create(ctx, ex, txn); err != nil {
 				return err
@@ -389,8 +390,8 @@ func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tre
 	if sj.IsPaused() {
 		nextRun = tree.DNull
 		status = "PAUSED"
-		if reason := sj.LastChangeReason(); reason != "" {
-			status += ": " + reason
+		if s := sj.ScheduleStatus(); s != "" {
+			status += ": " + s
 		}
 	} else {
 		next, err := tree.MakeDTimestampTZ(sj.NextRun(), time.Microsecond)

@@ -96,6 +96,7 @@ func newTestHelperForTables(
 func (h *testHelper) newScheduledJob(t *testing.T, scheduleLabel, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
+	j.SetOwner("test")
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
@@ -109,6 +110,7 @@ func (h *testHelper) newScheduledJobForExecutor(
 ) *ScheduledJob {
 	j := NewScheduledJob(h.env)
 	j.SetScheduleLabel(scheduleLabel)
+	j.SetOwner("test")
 	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
