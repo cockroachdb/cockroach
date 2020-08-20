@@ -117,9 +117,8 @@ type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
 	// timestamp. It returns the resulting transaction protos.
 	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
-	// CleanupTxnIntentsAsync asynchronously cleans up intents owned
-	// by the specified transactions.
-	CleanupTxnIntentsAsync(context.Context, []*roachpb.Transaction) error
+	// ResolveIntents resolves the specified intents.
+	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
 }
 
 // txnPushAttempt pushes all old transactions that have unresolved intents on
@@ -173,10 +172,16 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(pushedTxns) != len(a.txns) {
+		// We expect results for all txns. In particular, if no txns have been pushed, we'd
+		// crash later cause we'd be creating an invalid empty event.
+		return errors.AssertionFailedf("tried to push %d transactions, got response for %d",
+			len(a.txns), len(pushedTxns))
+	}
 
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
-	var toCleanup []*roachpb.Transaction
+	var intentsToCleanup []roachpb.LockUpdate
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
@@ -198,13 +203,12 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 				Timestamp: txn.WriteTimestamp,
 			})
 
-			// Asynchronously clean up the transaction's intents, which should
-			// eventually cause all unresolved intents for this transaction on the
-			// rangefeed's range to be resolved. We'll have to wait until the
-			// intents are resolved before the resolved timestamp can advance past
-			// the transaction's commit timestamp, so the best we can do is help
-			// speed up the resolution.
-			toCleanup = append(toCleanup, txn)
+			// Clean up the transaction's intents, which should eventually cause all
+			// unresolved intents for this transaction on the rangefeed's range to be
+			// resolved. We'll have to wait until the intents are resolved before the
+			// resolved timestamp can advance past the transaction's commit timestamp,
+			// so the best we can do is help speed up the resolution.
+			intentsToCleanup = append(intentsToCleanup, txn.LocksAsLockUpdates()...)
 		case roachpb.ABORTED:
 			// The transaction is aborted, so it doesn't need to be tracked
 			// anymore nor does it need to prevent the resolved timestamp from
@@ -219,19 +223,20 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 				TxnID: txn.ID,
 			})
 
-			// While we're here, we might as well also clean up the transaction's
-			// intents so that no-one else needs to deal with them. However, it's
-			// likely that if our push caused the abort then the transaction's
-			// intents will be unknown and we won't be doing much good here.
-			toCleanup = append(toCleanup, txn)
+			// If the txn happens to have its LockSpans populated, then lets clean up
+			// the intents as an optimization helping others. If we aborted the txn,
+			// then it won't have this field populated. If, however, we ran into a
+			// transaction that its coordinator tried to rollback but didn't follow up
+			// with garbage collection, then LockSpans will be populated.
+			intentsToCleanup = append(intentsToCleanup, txn.LocksAsLockUpdates()...)
 		}
 	}
 
 	// Inform the processor of all logical ops.
 	a.p.sendEvent(event{ops: ops}, 0 /* timeout */)
 
-	// Clean up txns, if necessary,
-	return a.p.TxnPusher.CleanupTxnIntentsAsync(ctx, toCleanup)
+	// Resolve intents, if necessary.
+	return a.p.TxnPusher.ResolveIntents(ctx, intentsToCleanup)
 }
 
 func (a *txnPushAttempt) Cancel() {
