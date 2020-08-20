@@ -52,15 +52,6 @@ message ExecutionArguments {
   google.protobuf.Any args = 1;
 }
 
-// ScheduleChangeInfo describes the reasons for schedule changes.
-message ScheduleChangeInfo {
-  message Change {
-    int64 time = 1;
-    string reason = 2;
-  }
-  repeated Change changes = 1  [(gogoproto.nullable) = false];
-}
-
 // Message representing sql statement to execute.
 message SqlStatementExecutionArg {
   string statement = 1;

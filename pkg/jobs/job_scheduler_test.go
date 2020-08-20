@@ -524,6 +524,7 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 
 	// Create a one off job which writes some values into 'foo' table.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
+	schedule.SetOwner("test")
 	schedule.SetScheduleName("test schedule")
 	schedule.SetNextRun(timeutil.Now())
 	any, err := types.MarshalAny(

@@ -30,6 +30,7 @@ func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement
 		"schedule_name as name",
 		"(CASE WHEN next_run IS NULL THEN 'PAUSED' ELSE 'ACTIVE' END) AS status",
 		"next_run",
+		"schedule_status",
 		"(CASE WHEN schedule_expr IS NULL THEN 'NEVER' ELSE schedule_expr END) as recurrence",
 		fmt.Sprintf(`(
 SELECT count(*) FROM system.jobs
@@ -53,7 +54,7 @@ WHERE status='%s' AND created_by_type='%s' AND created_by_id=schedule_id
 		whereExprs = append(whereExprs, fmt.Sprintf(
 			"executor_type = '%s'", tree.ScheduledBackupExecutor.InternalName()))
 		columnExprs = append(columnExprs, fmt.Sprintf(
-			"%s->>'backupStatement' AS command", commandColumn))
+			"%s->>'backup_statement' AS command", commandColumn))
 	default:
 		// Strip out '@type' tag from the ExecutionArgs.args, and display what's left.
 		columnExprs = append(columnExprs, fmt.Sprintf("%s #-'{@type}' AS command", commandColumn))
