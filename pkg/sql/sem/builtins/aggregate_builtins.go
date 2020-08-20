@@ -672,7 +672,7 @@ func (agg *stExtentAgg) Result() (tree.Datum, error) {
 	if agg.bbox == nil {
 		return tree.DNull, nil
 	}
-	return tree.NewDBox2D(agg.bbox), nil
+	return tree.NewDBox2D(*agg.bbox), nil
 }
 
 // Reset implements the AggregateFunc interface.

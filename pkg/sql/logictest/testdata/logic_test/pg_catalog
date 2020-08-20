@@ -1045,7 +1045,7 @@ oid     typname        typnamespace  typowner  typlen  typbyval  typtype
 90001   _geometry      1307062959    NULL      -1      false     b
 90002   geography      1307062959    NULL      -1      false     b
 90003   _geography     1307062959    NULL      -1      false     b
-90004   box2d          1307062959    NULL      8       true      b
+90004   box2d          1307062959    NULL      32      true      b
 90005   _box2d         1307062959    NULL      -1      false     b
 100064  newtype1       2332901747    NULL      -1      false     e
 100065  _newtype1      2332901747    NULL      -1      false     b

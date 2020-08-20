@@ -13,7 +13,6 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/errors"
 )
 
 // Centroid returns the Centroid of a given Geometry.
@@ -26,12 +25,9 @@ func Centroid(g *geo.Geometry) (*geo.Geometry, error) {
 }
 
 // ClipByRect clips a given Geometry by the given BoundingBox.
-func ClipByRect(g *geo.Geometry, b *geo.CartesianBoundingBox) (*geo.Geometry, error) {
+func ClipByRect(g *geo.Geometry, b geo.CartesianBoundingBox) (*geo.Geometry, error) {
 	if g.Empty() {
 		return g, nil
-	}
-	if b == nil {
-		return nil, errors.Newf("expected not null bounding box")
 	}
 	clipByRectEWKB, err := geos.ClipByRect(g.EWKB(), b.LoX, b.LoY, b.HiX, b.HiY)
 	if err != nil {

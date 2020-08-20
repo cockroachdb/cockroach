@@ -292,7 +292,7 @@ func DecodeTableKey(
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
 	case types.Box2DFamily:
-		var r *geo.CartesianBoundingBox
+		var r geo.CartesianBoundingBox
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBox2DAscending(key)
 		} else {

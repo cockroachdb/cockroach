@@ -407,10 +407,11 @@ var geoBuiltins = map[string]builtinDefinition{
 		defProps(),
 		geometryOverload1(
 			func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
-				if g.Geometry.Empty() {
+				bbox := g.CartesianBoundingBox()
+				if bbox == nil {
 					return tree.DNull, nil
 				}
-				return tree.NewDBox2D(g.CartesianBoundingBox()), nil
+				return tree.NewDBox2D(*bbox), nil
 			},
 			types.Box2D,
 			infoBuilder{
@@ -3681,9 +3682,8 @@ Bottom Left.`,
 						if aGeomT.Empty() || bGeomT.Empty() {
 							return nil, errors.Newf("cannot use POINT EMPTY")
 						}
-						return tree.NewDBox2D(
-							a.CartesianBoundingBox().Combine(b.CartesianBoundingBox()),
-						), nil
+						bbox := a.CartesianBoundingBox().Combine(b.CartesianBoundingBox())
+						return tree.NewDBox2D(*bbox), nil
 					default:
 						return nil, errors.Newf("second argument is not a POINT")
 					}
@@ -3704,18 +3704,23 @@ Bottom Left.`,
 			Types:      tree.ArgTypes{{"box2d", types.Box2D}, {"geometry", types.Geometry}},
 			ReturnType: tree.FixedReturnType(types.Box2D),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull && args[1] == tree.DNull {
-					return tree.DNull, nil
-				}
-				if args[0] == tree.DNull {
-					return tree.NewDBox2D(tree.MustBeDGeometry(args[1]).CartesianBoundingBox()), nil
-				}
 				if args[1] == tree.DNull {
 					return args[0], nil
 				}
-				bbox := tree.MustBeDBox2D(args[0])
+				if args[0] == tree.DNull {
+					bbox := tree.MustBeDGeometry(args[1]).CartesianBoundingBox()
+					if bbox == nil {
+						return tree.DNull, nil
+					}
+					return tree.NewDBox2D(*bbox), nil
+				}
+				bbox := &tree.MustBeDBox2D(args[0]).CartesianBoundingBox
 				g := tree.MustBeDGeometry(args[1])
-				return tree.NewDBox2D(bbox.Combine(g.CartesianBoundingBox())), nil
+				bbox = bbox.Combine(g.CartesianBoundingBox())
+				if bbox == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDBox2D(*bbox), nil
 			},
 			Info: infoBuilder{
 				info: "Combines the current bounding box with the bounding box of the Geometry.",
@@ -3731,7 +3736,11 @@ Bottom Left.`,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				bbox := tree.MustBeDBox2D(args[0])
 				delta := float64(tree.MustBeDFloat(args[1]))
-				return tree.NewDBox2D(bbox.Buffer(delta, delta)), nil
+				bboxBuffered := bbox.Buffer(delta, delta)
+				if bboxBuffered == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDBox2D(*bboxBuffered), nil
 			},
 			Info: infoBuilder{
 				info: "Extends the box2d by delta units across all dimensions.",
@@ -3749,7 +3758,11 @@ Bottom Left.`,
 				bbox := tree.MustBeDBox2D(args[0])
 				deltaX := float64(tree.MustBeDFloat(args[1]))
 				deltaY := float64(tree.MustBeDFloat(args[2]))
-				return tree.NewDBox2D(bbox.Buffer(deltaX, deltaY)), nil
+				bboxBuffered := bbox.Buffer(deltaX, deltaY)
+				if bboxBuffered == nil {
+					return tree.DNull, nil
+				}
+				return tree.NewDBox2D(*bboxBuffered), nil
 			},
 			Info: infoBuilder{
 				info: "Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.",

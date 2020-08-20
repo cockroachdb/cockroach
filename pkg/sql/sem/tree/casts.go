@@ -715,10 +715,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DBox2D:
 			return d, nil
 		case *DGeometry:
-			if d.Geometry.Empty() {
+			bbox := d.CartesianBoundingBox()
+			if bbox == nil {
 				return DNull, nil
 			}
-			return NewDBox2D(d.CartesianBoundingBox()), nil
+			return NewDBox2D(*bbox), nil
 		}
 
 	case types.GeographyFamily:
