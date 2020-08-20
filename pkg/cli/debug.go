@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -595,22 +596,25 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	var descs []roachpb.RangeDescriptor
 
 	if _, err := storage.MVCCIterate(context.Background(), db, start, end, hlc.MaxTimestamp,
-		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
+		storage.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) error {
 			var desc roachpb.RangeDescriptor
 			_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 			if err != nil {
-				return false, err
+				return err
 			}
 			if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-				return false, nil
+				return nil
 			}
 			if err := kv.Value.GetProto(&desc); err != nil {
-				return false, err
+				return err
 			}
 			if desc.RangeID == rangeID || rangeID == 0 {
 				descs = append(descs, desc)
 			}
-			return desc.RangeID == rangeID, nil
+			if desc.RangeID == rangeID {
+				return iterutil.StopIteration()
+			}
+			return nil
 		}); err != nil {
 		return err
 	}
@@ -983,7 +987,7 @@ func removeDeadReplicas(
 
 	var newDescs []roachpb.RangeDescriptor
 
-	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) (bool, error) {
+	err = kvserver.IterateRangeDescriptors(ctx, db, func(desc roachpb.RangeDescriptor) error {
 		hasSelf := false
 		numDeadPeers := 0
 		allReplicas := desc.Replicas().All()
@@ -1006,7 +1010,7 @@ func removeDeadReplicas(
 				return !ok
 			})
 			if canMakeProgress {
-				return false, nil
+				return nil
 			}
 
 			// Rewrite the range as having a single replica. The winning
@@ -1034,7 +1038,7 @@ func removeDeadReplicas(
 			fmt.Printf("Replica %s -> %s\n", &desc, &newDesc)
 			newDescs = append(newDescs, newDesc)
 		}
-		return false, nil
+		return nil
 	})
 	if err != nil {
 		return nil, err

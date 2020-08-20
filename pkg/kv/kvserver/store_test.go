@@ -394,9 +394,9 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	var seen []seenT
 	var tombstone roachpb.RangeTombstone
 
-	handleTombstone := func(rangeID roachpb.RangeID) (more bool, _ error) {
+	handleTombstone := func(rangeID roachpb.RangeID) error {
 		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-		return true, nil
+		return nil
 	}
 
 	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
