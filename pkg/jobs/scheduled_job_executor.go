@@ -12,7 +12,6 @@ package jobs
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -78,10 +77,11 @@ func NewScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
 func DefaultHandleFailedRun(schedule *ScheduledJob, jobID int64, err error) {
 	switch schedule.ScheduleDetails().OnError {
 	case jobspb.ScheduleDetails_RETRY_SOON:
-		schedule.AddScheduleChangeReason("retrying job %d due to failure: %v", jobID, err)
+		schedule.SetScheduleStatus("retrying job %d due to failure: %v", jobID, err)
 		schedule.SetNextRun(schedule.env.Now().Add(retryFailedJobAfter)) // TODO(yevgeniy): backoff
 	case jobspb.ScheduleDetails_PAUSE_SCHED:
-		schedule.Pause(fmt.Sprintf("schedule paused due job %d failure: %v", jobID, err))
+		schedule.Pause()
+		schedule.SetScheduleStatus("schedule paused due job %d failure: %v", jobID, err)
 	default:
 		// Nothing: ScheduleDetails_RETRY_SCHED already handled since
 		// the next run was set when we started running scheduled job.

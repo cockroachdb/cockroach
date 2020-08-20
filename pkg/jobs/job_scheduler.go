@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -136,18 +137,20 @@ func (s *jobScheduler) processSchedule(
 			// In particular, it'd be nice to add more time when repeatedly rescheduling
 			// a job.  It would also be nice not to log each event.
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
-			schedule.AddScheduleChangeReason("reschedule: %d running", numRunning)
+			schedule.SetScheduleStatus("delayed due to %d already running", numRunning)
 			stats.rescheduleWait++
 			return schedule.Update(ctx, s.InternalExecutor, txn)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
-			schedule.AddScheduleChangeReason("rescheduled: %d running", numRunning)
+			schedule.SetScheduleStatus("rescheduled due to %d already running", numRunning)
 			stats.rescheduleSkip++
 			return schedule.Update(ctx, s.InternalExecutor, txn)
 		}
 	}
+
+	schedule.ClearScheduleStatus()
 
 	// Schedule the next job run.
 	// We do this step early, before the actual execution, to grab a lock on
@@ -201,7 +204,7 @@ func (s *jobScheduler) lookupExecutor(name string) (ScheduledJobExecutor, error)
 
 // TODO(yevgeniy): Re-evaluate if we need to have per-loop execution statistics.
 func newLoopStats(
-	ctx context.Context, env scheduledjobs.JobSchedulerEnv, ex sqlutil.InternalExecutor,
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, ex sqlutil.InternalExecutor, txn *kv.Txn,
 ) (*loopStats, error) {
 	numRunningJobsStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND status NOT IN ('%s', '%s', '%s')",
@@ -214,8 +217,8 @@ func newLoopStats(
 		"SELECT (%s) numReadySchedules, (%s) numRunningJobs",
 		readyToRunStmt, numRunningJobsStmt)
 
-	datums, err := ex.QueryRowEx(ctx, "scheduler-stats", nil,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+	datums, err := ex.QueryRowEx(ctx, "scheduler-stats", txn,
+		sessiondata.InternalExecutorOverride{User: security.NodeUser},
 		statsStmt)
 	if err != nil {
 		return nil, err
@@ -226,10 +229,51 @@ func newLoopStats(
 	return stats, nil
 }
 
+type savePointError struct {
+	err error
+}
+
+func (e savePointError) Error() string {
+	return e.err.Error()
+}
+
+// withSavePoint executes function fn() wrapped with savepoint.
+// The savepoint is either released (upon successful completion of fn())
+// or it is rolled back.
+// If an error occurs while performing savepoint operations, an instance
+// of savePointError is returned.  If fn() returns an error, then that
+// error is returned.
+func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
+	sp, err := txn.CreateSavepoint(ctx)
+	if err != nil {
+		return &savePointError{err}
+	}
+	execErr := fn()
+
+	if execErr == nil {
+		if err := txn.ReleaseSavepoint(ctx, sp); err != nil {
+			return &savePointError{err}
+		}
+		return nil
+	}
+
+	if errors.HasType(execErr, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
+		// If function execution failed because transaction was restarted,
+		// treat this error as a savePointError so that the execution code bails out
+		// and retries scheduling loop.
+		return &savePointError{execErr}
+	}
+
+	if err := txn.RollbackToSavepoint(ctx, sp); err != nil {
+		return &savePointError{errors.WithDetail(err, execErr.Error())}
+	}
+	return execErr
+}
+
 func (s *jobScheduler) executeSchedules(
 	ctx context.Context, maxSchedules int64, txn *kv.Txn,
 ) error {
-	stats, err := newLoopStats(ctx, s.env, s.InternalExecutor)
+	stats, err := newLoopStats(ctx, s.env, s.InternalExecutor, txn)
 	if err != nil {
 		return err
 	}
@@ -255,23 +299,34 @@ func (s *jobScheduler) executeSchedules(
 			continue
 		}
 
-		sp, err := txn.CreateSavepoint(ctx)
-		if err != nil {
-			return err
-		}
+		if processErr := withSavePoint(ctx, txn, func() error {
+			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
+		}); processErr != nil {
+			if errors.HasType(err, (*savePointError)(nil)) {
+				return errors.Wrapf(err, "savepoint error for schedule %d", schedule.ScheduleID())
+			}
 
-		if err := s.processSchedule(ctx, schedule, numRunning, stats, txn); err != nil {
-			log.Errorf(ctx, "error processing schedule %d: %+v", schedule.ScheduleID(), err)
+			// Failed to process schedule.
+			s.metrics.NumBadSchedules.Inc(1)
+			log.Errorf(ctx,
+				"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
 
-			if err := txn.RollbackToSavepoint(ctx, sp); err != nil {
-				return errors.Wrapf(err, "failed to rollback savepoint for schedule %d", schedule.ScheduleID())
+			// Try updating schedule record to indicate schedule execution error.
+			if err := withSavePoint(ctx, txn, func() error {
+				schedule.ClearDirty() // Make sure we only update status field.
+				schedule.SetScheduleStatus("failed to create job: %s", processErr)
+				return schedule.Update(ctx, s.InternalExecutor, txn)
+			}); err != nil {
+				if errors.HasType(err, (*savePointError)(nil)) {
+					return errors.Wrapf(err,
+						"savepoint error for schedule %d", schedule.ScheduleID())
+				}
+				log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
+					schedule.ScheduleID(), err)
 			}
 		}
-
-		if err := txn.ReleaseSavepoint(ctx, sp); err != nil {
-			return err
-		}
 	}
+
 	return nil
 }
 
@@ -296,7 +351,6 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 					return s.executeSchedules(ctx, maxSchedules, txn)
 				})
 				if err != nil {
-					s.metrics.NumBadSchedules.Inc(1)
 					log.Errorf(ctx, "error executing schedules: %+v", err)
 				}
 
