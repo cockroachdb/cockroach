@@ -16422,6 +16422,7 @@ void QueryTxnResponse::clear_queried_txn() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int QueryTxnResponse::kHeaderFieldNumber;
 const int QueryTxnResponse::kQueriedTxnFieldNumber;
+const int QueryTxnResponse::kTxnRecordExistsFieldNumber;
 const int QueryTxnResponse::kWaitingTxnsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -16447,13 +16448,14 @@ QueryTxnResponse::QueryTxnResponse(const QueryTxnResponse& from)
   } else {
     queried_txn_ = NULL;
   }
+  txn_record_exists_ = from.txn_record_exists_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.QueryTxnResponse)
 }
 
 void QueryTxnResponse::SharedCtor() {
   ::memset(&header_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&queried_txn_) -
-      reinterpret_cast<char*>(&header_)) + sizeof(queried_txn_));
+      reinterpret_cast<char*>(&txn_record_exists_) -
+      reinterpret_cast<char*>(&header_)) + sizeof(txn_record_exists_));
 }
 
 QueryTxnResponse::~QueryTxnResponse() {
@@ -16490,6 +16492,7 @@ void QueryTxnResponse::Clear() {
     delete queried_txn_;
   }
   queried_txn_ = NULL;
+  txn_record_exists_ = false;
   _internal_metadata_.Clear();
 }
 
@@ -16542,6 +16545,20 @@ bool QueryTxnResponse::MergePartialFromCodedStream(
         break;
       }
 
+      // bool txn_record_exists = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &txn_record_exists_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -16583,6 +16600,11 @@ void QueryTxnResponse::SerializeWithCachedSizes(
       3, this->waiting_txns(i), output);
   }
 
+  // bool txn_record_exists = 4;
+  if (this->txn_record_exists() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->txn_record_exists(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.QueryTxnResponse)
@@ -16613,6 +16635,11 @@ size_t QueryTxnResponse::ByteSizeLong() const {
         *queried_txn_);
   }
 
+  // bool txn_record_exists = 4;
+  if (this->txn_record_exists() != 0) {
+    total_size += 1 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -16637,6 +16664,9 @@ void QueryTxnResponse::MergeFrom(const QueryTxnResponse& from) {
   if (from.has_queried_txn()) {
     mutable_queried_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.queried_txn());
   }
+  if (from.txn_record_exists() != 0) {
+    set_txn_record_exists(from.txn_record_exists());
+  }
 }
 
 void QueryTxnResponse::CopyFrom(const QueryTxnResponse& from) {
@@ -16659,6 +16689,7 @@ void QueryTxnResponse::InternalSwap(QueryTxnResponse* other) {
   waiting_txns_.InternalSwap(CastToBase(&other->waiting_txns_));
   swap(header_, other->header_);
   swap(queried_txn_, other->queried_txn_);
+  swap(txn_record_exists_, other->txn_record_exists_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
 
