@@ -182,7 +182,7 @@ func parseAndSummarizeJavaORMTestsResults(
 	expectedFailures blocklist,
 	ignorelist blocklist,
 	version string,
-	latestTag string,
+	tag string,
 ) {
 	results := newORMTestsResults()
 	filesRaw := strings.Split(string(testOutput), "\n")
@@ -214,6 +214,6 @@ func parseAndSummarizeJavaORMTestsResults(
 	}
 
 	results.summarizeAll(
-		t, ormName, blocklistName, expectedFailures, version, latestTag,
+		t, ormName, blocklistName, expectedFailures, version, tag,
 	)
 }
