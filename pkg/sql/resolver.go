@@ -105,6 +105,9 @@ func (p *planner) ResolveUncachedDatabase(
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
 	})
+	if err != nil {
+		return nil, namePrefix, err
+	}
 	return prefix.Database, namePrefix, err
 }
 

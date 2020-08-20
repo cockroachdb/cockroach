@@ -484,7 +484,7 @@ func getRelevantDescChanges(
 			return nil, err
 		}
 		for _, i := range starting {
-			// TODO(ajwerner): Determine whether types and schemas need any special
+			// TODO(ajwerner,pbardea): Determine whether schemas need any special
 			// treatment here.
 			if table, isTable := i.(sqlbase.TableDescriptor); isTable {
 				// We need to add to interestingIDs so that if we later see a delete for
@@ -492,6 +492,10 @@ func getRelevantDescChanges(
 				// have a parentID at that point (since the delete is a nil desc).
 				if _, ok := interestingParents[table.GetParentID()]; ok {
 					interestingIDs[table.GetID()] = struct{}{}
+				}
+			} else if tpe, isType := i.(sqlbase.TypeDescriptor); isType {
+				if _, ok := interestingParents[tpe.GetParentID()]; ok {
+					interestingIDs[tpe.GetID()] = struct{}{}
 				}
 			}
 			if _, ok := interestingIDs[i.GetID()]; ok {
@@ -517,9 +521,15 @@ func getRelevantDescChanges(
 		if _, ok := interestingIDs[change.ID]; ok {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			if table := sqlbase.TableFromDescriptor(change.Desc, hlc.Timestamp{}); table != nil {
+			desc := change.Desc
+			if table := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{}); table != nil {
 				if _, ok := interestingParents[table.ParentID]; ok {
 					interestingIDs[table.ID] = struct{}{}
+					interestingChanges = append(interestingChanges, change)
+				}
+			} else if typ := desc.GetType(); typ != nil {
+				if _, ok := interestingParents[typ.GetParentID()]; ok {
+					interestingIDs[typ.GetID()] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
 				}
 			}
@@ -569,8 +579,9 @@ func getAllDescChanges(
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
-				// TODO (rohany): Once we track modification time on type descriptors,
-				//  they need to be checked for updates here.
+				// TODO(pbardea): Consider if the modification time should be updated
+				// for database descriptors.
+				sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
 			}
 			res = append(res, r)
 		}
