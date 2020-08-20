@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -791,6 +792,104 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test a scenario where a lease indicates a replica that, when contacted,
+// claims to not have the lease and instead returns an older lease. In this
+// scenario, the DistSender detects the fact that the node returned an old lease
+// (which means that it's not aware of the new lease that it has acquired - for
+// example because it hasn't applied it yet whereas other replicas have) and
+// retries the same replica (with a backoff). We don't want the DistSender to do
+// this ad infinitum, in case the respective replica never becomes aware of its
+// new lease. Eventually that lease will expire and someone else can get it, but
+// if the DistSender would just spin forever on this replica it will never find
+// out about it. This could happen if the a replica acquires a lease but gets
+// partitioned from all the other replicas before applying it.
+// The DistSender is supposed to spin a few times and then move on to other
+// replicas.
+func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// This test does many retries in the DistSender for contacting a replica,
+	// which run into DistSender's backoff policy.
+	skip.UnderShort(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().Voters() {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:    1,
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+	staleLease := roachpb.Lease{
+		Replica:  desc.InternalReplicas[0],
+		Sequence: 1,
+	}
+	cachedLease := roachpb.Lease{
+		Replica:  desc.InternalReplicas[1],
+		Sequence: 2,
+	}
+
+	// The cache starts with a lease on node 2, so the first request will be
+	// routed there. That replica will reply with an older lease, prompting the
+	// DistSender to try it again. Eventually the DistSender will try the other
+	// replica, which will return a success.
+
+	var callsToNode2 int
+	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		if ba.Replica.NodeID == 2 {
+			callsToNode2++
+			reply := &roachpb.BatchResponse{}
+			err := &roachpb.NotLeaseHolderError{Lease: &staleLease}
+			reply.Error = roachpb.NewError(err)
+			return reply, nil
+		}
+		require.Equal(t, ba.Replica.NodeID, roachpb.NodeID(1))
+		return ba.CreateReply(), nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(sendFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  desc,
+		Lease: cachedLease,
+	})
+
+	get := roachpb.NewGet(roachpb.Key("a"))
+	_, pErr := kv.SendWrapped(ctx, ds, get)
+	require.Nil(t, pErr)
+
+	require.Greater(t, callsToNode2, 0)
+	require.LessOrEqual(t, callsToNode2, 11)
 }
 
 // This test verifies that when we have a cached leaseholder that is down
