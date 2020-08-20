@@ -175,9 +175,6 @@ func isSupported(mode sessiondata.VectorizeExecMode, spec *execinfrapb.Processor
 			return err
 		}
 		for _, agg := range aggSpec.Aggregations {
-			if agg.Distinct && !needHash {
-				return errors.Newf("distinct ordered aggregation not supported")
-			}
 			if agg.FilterColIdx != nil && !needHash {
 				return errors.Newf("filtering ordered aggregation not supported")
 			}
@@ -708,8 +705,8 @@ func NewColOperator(
 			} else {
 				evalCtx.SingleDatumAggMemAccount = streamingMemAccount
 				result.Op, err = colexec.NewOrderedAggregator(
-					streamingAllocator, inputs[0], inputTypes, aggSpec, evalCtx,
-					constructors, constArguments, result.ColumnTypes, aggSpec.IsScalar(),
+					streamingAllocator, streamingMemAccount, inputs[0], inputTypes, aggSpec,
+					evalCtx, constructors, constArguments, result.ColumnTypes, aggSpec.IsScalar(),
 				)
 				result.IsStreaming = true
 			}

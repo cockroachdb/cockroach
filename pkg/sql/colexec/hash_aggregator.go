@@ -12,7 +12,6 @@ package colexec
 
 import (
 	"context"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
@@ -59,7 +58,7 @@ type hashAggregator struct {
 	allocator *colmem.Allocator
 	spec      *execinfrapb.AggregatorSpec
 
-	aggHelper          hashAggregatorHelper
+	aggHelper          aggregatorHelper
 	inputTypes         []*types.T
 	outputTypes        []*types.T
 	inputArgsConverter *vecToDatumConverter
@@ -67,7 +66,7 @@ type hashAggregator struct {
 	// buckets contains all aggregation groups that we have so far. There is
 	// 1-to-1 mapping between buckets[i] and ht.vals[i]. Once the output from
 	// the buckets has been flushed, buckets will be sliced up accordingly.
-	buckets []*hashAggBucket
+	buckets []*aggBucket
 	// ht stores tuples that are "heads" of the corresponding aggregation
 	// groups ("head" here means the tuple that was first seen from the group).
 	ht *hashTable
@@ -92,7 +91,7 @@ type hashAggregator struct {
 	output coldata.Batch
 
 	aggFnsAlloc *aggregateFuncsAlloc
-	hashAlloc   hashAggBucketAlloc
+	hashAlloc   aggBucketAlloc
 	datumAlloc  sqlbase.DatumAlloc
 	toClose     Closers
 }
@@ -109,7 +108,7 @@ const hashAggregatorAllocSize = 128
 // The input specifications to this function are the same as that of the
 // NewOrderedAggregator function.
 // memAccount should be the same as the one used by allocator and will be used
-// by hashAggregatorHelper to handle DISTINCT clause.
+// by aggregatorHelper to handle DISTINCT clause.
 func NewHashAggregator(
 	allocator *colmem.Allocator,
 	memAccount *mon.BoundAccount,
@@ -135,10 +134,10 @@ func NewHashAggregator(
 		inputArgsConverter: inputArgsConverter,
 		toClose:            toClose,
 		aggFnsAlloc:        aggFnsAlloc,
-		hashAlloc:          hashAggBucketAlloc{allocator: allocator},
+		hashAlloc:          aggBucketAlloc{allocator: allocator},
 	}
 	hashAgg.datumAlloc.AllocSize = hashAggregatorAllocSize
-	hashAgg.aggHelper = newHashAggregatorHelper(allocator, memAccount, inputTypes, spec, &hashAgg.datumAlloc)
+	hashAgg.aggHelper = newAggregatorHelper(allocator, memAccount, inputTypes, spec, &hashAgg.datumAlloc, true /* isHashAgg */)
 	return hashAgg, err
 }
 
@@ -315,7 +314,9 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				// group.
 				eqChain := op.scratch.eqChains[eqChainsSlot]
 				bucket := op.buckets[headID-1]
-				op.aggHelper.performAggregation(ctx, inputVecs, len(eqChain), eqChain, bucket)
+				op.aggHelper.performAggregation(
+					ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+				)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
@@ -336,10 +337,17 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 			// so we'll create a new bucket and make sure that the head of this
 			// equality chain is appended to the hash table in the
 			// corresponding position.
-			bucket := op.hashAlloc.newHashAggBucket()
+			bucket := op.hashAlloc.newAggBucket()
 			op.buckets = append(op.buckets, bucket)
-			bucket.init(op.output, op.aggFnsAlloc.makeAggregateFuncs(), op.aggHelper.makeSeenMaps())
-			op.aggHelper.performAggregation(ctx, inputVecs, len(eqChain), eqChain, bucket)
+			// We know that all selected tuples belong to the same single
+			// group, so we can pass 'nil' for the 'groups' argument.
+			bucket.init(
+				op.output, op.aggFnsAlloc.makeAggregateFuncs(),
+				op.aggHelper.makeSeenMaps(), nil, /* groups */
+			)
+			op.aggHelper.performAggregation(
+				ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+			)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
 			// head tuples selection vector we're building.
@@ -373,44 +381,4 @@ func (op *hashAggregator) reset(ctx context.Context) {
 
 func (op *hashAggregator) Close(ctx context.Context) error {
 	return op.toClose.Close(ctx)
-}
-
-// hashAggBucket stores the aggregation functions for the corresponding
-// aggregation group as well as other utility information.
-type hashAggBucket struct {
-	fns []aggregateFunc
-	// seen is a slice of maps used to handle distinct aggregation. A
-	// corresponding entry in the slice is nil if the function doesn't have a
-	// DISTINCT clause. The slice itself will be nil whenever no aggregate
-	// function has a DISTINCT clause.
-	seen []map[string]struct{}
-}
-
-const sizeOfHashAggBucket = unsafe.Sizeof(hashAggBucket{})
-
-func (v *hashAggBucket) init(b coldata.Batch, fns []aggregateFunc, seen []map[string]struct{}) {
-	v.fns = fns
-	for fnIdx, fn := range v.fns {
-		// We know that all selected tuples in b belong to the same single
-		// group, so we can pass 'nil' for the first argument.
-		fn.Init(nil /* groups */, b.ColVec(fnIdx))
-	}
-	v.seen = seen
-}
-
-// hashAggBucketAlloc is a utility struct that batches allocations of
-// hashAggBuckets.
-type hashAggBucketAlloc struct {
-	allocator *colmem.Allocator
-	buf       []hashAggBucket
-}
-
-func (a *hashAggBucketAlloc) newHashAggBucket() *hashAggBucket {
-	if len(a.buf) == 0 {
-		a.allocator.AdjustMemoryUsage(int64(hashAggregatorAllocSize * sizeOfHashAggBucket))
-		a.buf = make([]hashAggBucket, hashAggregatorAllocSize)
-	}
-	ret := &a.buf[0]
-	a.buf = a.buf[1:]
-	return ret
 }
