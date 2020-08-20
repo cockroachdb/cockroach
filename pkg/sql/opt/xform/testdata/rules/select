@@ -1850,6 +1850,69 @@ project
       └── filters
            └── st_dwithin('0101000020E61000009279E40F069E45C0BEE36FD63B1D5240', geog:4, 2000.0, false) [outer=(4), immutable]
 
+# Test for ST_DWithinExclusive
+opt
+SELECT k FROM g WHERE ST_DWithinExclusive('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, geom, 2)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans: ["\x89", "\xfd ")
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans: ["\x89", "\xfd ")
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
+
+# Commuted version of previous test.
+opt
+SELECT k FROM g WHERE ST_DWithinExclusive(geom, 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, 2)
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null geom:3
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── index-join g
+      │    ├── columns: k:1!null geom:3
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /6
+      │         │    ├── tight: false
+      │         │    └── union spans: ["\x89", "\xfd ")
+      │         ├── key: (1)
+      │         └── scan g@geom_idx
+      │              ├── columns: k:1!null geom_inverted_key:6!null
+      │              ├── inverted constraint: /6/1
+      │              │    └── spans: ["\x89", "\xfd ")
+      │              ├── key: (1)
+      │              └── fd: (1)-->(6)
+      └── filters
+           └── st_dwithinexclusive(geom:3, '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', 2.0) [outer=(3), immutable]
 
 # Multiple geospatial functions.
 opt

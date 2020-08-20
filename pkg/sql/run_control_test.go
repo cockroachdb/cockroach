@@ -426,3 +426,194 @@ func TestIdleInSessionTimeout(t *testing.T) {
 			"but the connection is still alive")
 	}
 }
+
+func TestIdleInTransactionSessionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	var err error
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx,
+		`SET idle_in_transaction_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(3 * time.Second)
+	// idle_in_transaction_session_timeout should only timeout if a transaction
+	// is active
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}
+
+func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	var err error
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx,
+		`SET idle_in_transaction_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Go into state aborted.
+	_, err = conn.ExecContext(ctx, `SELECT crdb_internal.force_error('', 'error')`)
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: error" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	// Statement should execute in aborted state.
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: current transaction is aborted, commands ignored until end of transaction block" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}
+
+func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	var err error
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx,
+		`SET idle_in_transaction_session_timeout = '2s'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Go into commit wait state.
+	_, err = conn.ExecContext(ctx, `SAVEPOINT cockroach_restart`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `RELEASE SAVEPOINT cockroach_restart`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// Make sure executing a statement resets the idle timer.
+	// This statement errors but should still reset the timer.
+	_, err = conn.ExecContext(ctx, `SELECT 1`)
+	// Statement should execute in aborted state.
+	if err == nil {
+		t.Fatal("unexpected success")
+	}
+	if err.Error() != "pq: current transaction is committed, commands ignored until end of transaction block" {
+		t.Fatal(err)
+	}
+
+	time.Sleep(time.Second)
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	time.Sleep(3 * time.Second)
+	err = conn.PingContext(ctx)
+	if err == nil {
+		t.Fatal("expected the connection to be killed " +
+			"but the connection is still alive")
+	}
+}

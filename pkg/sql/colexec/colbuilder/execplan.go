@@ -766,11 +766,16 @@ func NewColOperator(
 
 			hashJoinerMemMonitorName := fmt.Sprintf("hash-joiner-%d", spec.ProcessorID)
 			var hashJoinerMemAccount *mon.BoundAccount
+			var hashJoinerUnlimitedAllocator *colmem.Allocator
 			if useStreamingMemAccountForBuffering {
 				hashJoinerMemAccount = streamingMemAccount
+				hashJoinerUnlimitedAllocator = streamingAllocator
 			} else {
 				hashJoinerMemAccount = result.createMemAccountForSpillStrategy(
 					ctx, flowCtx, hashJoinerMemMonitorName,
+				)
+				hashJoinerUnlimitedAllocator = colmem.NewAllocator(
+					ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, hashJoinerMemMonitorName), factory,
 				)
 			}
 			// It is valid for empty set of equality columns to be considered as
@@ -789,8 +794,10 @@ func NewColOperator(
 			if err != nil {
 				return r, err
 			}
+
 			inMemoryHashJoiner := colexec.NewHashJoiner(
-				colmem.NewAllocator(ctx, hashJoinerMemAccount, factory), hjSpec, inputs[0], inputs[1],
+				colmem.NewAllocator(ctx, hashJoinerMemAccount, factory),
+				hashJoinerUnlimitedAllocator, hjSpec, inputs[0], inputs[1],
 			)
 			if args.TestingKnobs.DiskSpillingDisabled {
 				// We will not be creating a disk-backed hash joiner because we're
@@ -805,9 +812,8 @@ func NewColOperator(
 					func(inputOne, inputTwo colexecbase.Operator) colexecbase.Operator {
 						monitorNamePrefix := "external-hash-joiner"
 						unlimitedAllocator := colmem.NewAllocator(
-							ctx, result.createBufferingUnlimitedMemAccount(
-								ctx, flowCtx, monitorNamePrefix,
-							), factory)
+							ctx, result.createBufferingUnlimitedMemAccount(ctx, flowCtx, monitorNamePrefix), factory,
+						)
 						// Make a copy of the DiskQueueCfg and set defaults for the hash
 						// joiner. The cache mode is chosen to automatically close the cache
 						// belonging to partitions at a parent level when repartitioning.

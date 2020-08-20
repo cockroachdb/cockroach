@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
 	"math"
@@ -40,7 +41,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -191,6 +195,32 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if debugCtx.decodeAsTableDesc != "" {
+		bytes, err := base64.StdEncoding.DecodeString(debugCtx.decodeAsTableDesc)
+		if err != nil {
+			return err
+		}
+		var desc descpb.Descriptor
+		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
+			return err
+		}
+		table := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}))
+
+		fn := func(kv storage.MVCCKeyValue) (string, error) {
+			var v roachpb.Value
+			v.RawBytes = kv.Value
+			_, names, values, err := row.DecodeRowInfo(context.Background(), table, kv.Key.Key, &v, true)
+			if err != nil {
+				return "", err
+			}
+			pairs := make([]string, len(names))
+			for i := range pairs {
+				pairs[i] = fmt.Sprintf("%s=%s", names[i], values[i])
+			}
+			return strings.Join(pairs, ", "), nil
+		}
+		kvserver.DebugSprintKeyValueDecoders = append(kvserver.DebugSprintKeyValueDecoders, fn)
+	}
 	printer := printKey
 	if debugCtx.values {
 		printer = func(kv storage.MVCCKeyValue) (bool, error) {

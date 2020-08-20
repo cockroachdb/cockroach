@@ -1,0 +1,258 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package backupccl
+
+import (
+	"context"
+	"io/ioutil"
+	"path"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
+	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
+)
+
+// fetchPreviousBackup takes a list of URIs of previous backups and returns
+// their manifest as well as the encryption options of the first backup in the
+// chain.
+func fetchPreviousBackups(
+	ctx context.Context,
+	p sql.PlanHookState,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	prevBackupURIs []string,
+	encryptionParams backupEncryptionParams,
+) ([]BackupManifest, *jobspb.BackupEncryptionOptions, error) {
+	if len(prevBackupURIs) == 0 {
+		return nil, nil, nil
+	}
+
+	var encryption *jobspb.BackupEncryptionOptions
+	baseBackup := prevBackupURIs[0]
+	encryption, err := getEncryptionFromBase(ctx, p, makeCloudStorage, baseBackup, encryptionParams)
+	if err != nil {
+		return nil, nil, err
+	}
+	prevBackups, err := getBackupManifests(ctx, p.User(), makeCloudStorage, prevBackupURIs, encryption)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return prevBackups, encryption, nil
+}
+
+// resolveDest resolves the true destination of a backup. The backup command
+// provided by the user may point to a backup collection, or a backup location
+// which auto-appends incremental backups to it. This method checks for these
+// cases and finds the actual directory where we'll write this new backup.
+//
+// In addition, in this case that this backup is an incremental backup (either
+// explicitly, or due to the auto-append feature), it will resolve the
+// encryption options based on the base backup, as well as find all previous
+// backup manifests in the backup chain.
+func resolveDest(
+	ctx context.Context,
+	p sql.PlanHookState,
+	backupStmt *annotatedBackupStatement,
+	defaultURI string,
+	urisByLocalityKV map[string]string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	endTime hlc.Timestamp,
+	to []string,
+	incrementalFrom []string,
+) (
+	string, /* collectionURI */
+	string, /* defaultURI */
+	map[string]string, /* urisByLocalityKV */
+	[]string, /* prevBackupURIs */
+	error,
+) {
+	// chosenSuffix is the automatically chosen suffix within the collection path
+	// if we're backing up INTO a collection.
+	var collectionURI string
+	var prevBackupURIs []string
+	var chosenSuffix string
+	var err error
+
+	if backupStmt.Nested {
+		collectionURI, chosenSuffix, err = resolveBackupCollection(ctx, p, defaultURI, backupStmt,
+			makeCloudStorage, endTime)
+		if err != nil {
+			return "", "", nil, nil, err
+		}
+
+		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, chosenSuffix)
+		if err != nil {
+			return "", "", nil, nil, err
+		}
+	}
+
+	if len(incrementalFrom) != 0 {
+		prevBackupURIs = incrementalFrom
+	} else {
+		defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+		if err != nil {
+			return "", "", nil, nil, err
+		}
+		defer defaultStore.Close()
+		exists, err := containsManifest(ctx, defaultStore)
+		if err != nil {
+			return "", "", nil, nil, err
+		}
+		if exists {
+			// The backup in the auto-append directory is the full backup.
+			prevBackupURIs = append(prevBackupURIs, defaultURI)
+			priors, err := findPriorBackupLocations(ctx, defaultStore)
+			for _, prior := range priors {
+				prevBackupURIs = append(prevBackupURIs, defaultURI+"/"+prior)
+			}
+			if err != nil {
+				return "", "", nil, nil, errors.Wrap(err, "finding previous backups")
+			}
+
+			// Pick a piece-specific suffix and update the destination path(s).
+			partName := endTime.GoTime().Format(dateBasedFolderName)
+			partName = path.Join(chosenSuffix, partName)
+			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
+			if err != nil {
+				return "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
+			}
+		}
+	}
+
+	return collectionURI, defaultURI, urisByLocalityKV, prevBackupURIs, nil
+}
+
+// getBackupManifests fetches the backup manifest from a list of backup URIs.
+func getBackupManifests(
+	ctx context.Context,
+	user string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	backupURIs []string,
+	encryption *jobspb.BackupEncryptionOptions,
+) ([]BackupManifest, error) {
+	manifests := make([]BackupManifest, len(backupURIs))
+	if len(backupURIs) == 0 {
+		return manifests, nil
+	}
+
+	g := ctxgroup.WithContext(ctx)
+	for i := range backupURIs {
+		i := i
+		g.GoCtx(func(ctx context.Context) error {
+			// TODO(lucy): We may want to upgrade the table descs to the newer
+			// foreign key representation here, in case there are backups from an
+			// older cluster. Keeping the descriptors as they are works for now
+			// since all we need to do is get the past backups' table/index spans,
+			// but it will be safer for future code to avoid having older-style
+			// descriptors around.
+			uri := backupURIs[i]
+			desc, err := ReadBackupManifestFromURI(
+				ctx, uri, user, makeCloudStorage, encryption,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read backup from %q", uri)
+			}
+			manifests[i] = desc
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return manifests, nil
+}
+
+// getEncryptionFromBase retrieves the encryption options of a base backup. It
+// is expected that incremental backups use the same encryption options as the
+// base backups.
+func getEncryptionFromBase(
+	ctx context.Context,
+	p sql.PlanHookState,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	baseBackupURI string,
+	encryptionParams backupEncryptionParams,
+) (*jobspb.BackupEncryptionOptions, error) {
+	var encryption *jobspb.BackupEncryptionOptions
+	if encryptionParams.encryptMode != noEncryption {
+		exportStore, err := makeCloudStorage(ctx, baseBackupURI, p.User())
+		if err != nil {
+			return nil, err
+		}
+		defer exportStore.Close()
+		opts, err := readEncryptionOptions(ctx, exportStore)
+		if err != nil {
+			return nil, err
+		}
+
+		switch encryptionParams.encryptMode {
+		case passphrase:
+			encryption = &jobspb.BackupEncryptionOptions{
+				Mode: jobspb.EncryptionMode_Passphrase,
+				Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, opts.Salt),
+			}
+		case kms:
+			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(encryptionParams.kmsURIs,
+				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), encryptionParams.kmsEnv)
+			if err != nil {
+				return nil, err
+			}
+			encryption = &jobspb.BackupEncryptionOptions{
+				Mode:    jobspb.EncryptionMode_KMS,
+				KMSInfo: defaultKMSInfo}
+		}
+	}
+	return encryption, nil
+}
+
+// resolveBackupCollection returns the collectionURI and chosenSuffix that we
+// should use for a backup that is pointing to a collection.
+func resolveBackupCollection(
+	ctx context.Context,
+	p sql.PlanHookState,
+	defaultURI string,
+	backupStmt *annotatedBackupStatement,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	endTime hlc.Timestamp,
+) (string, string, error) {
+	var chosenSuffix string
+	collectionURI := defaultURI
+	if backupStmt.AppendToLatest {
+		collection, err := makeCloudStorage(ctx, collectionURI, p.User())
+		if err != nil {
+			return "", "", err
+		}
+		defer collection.Close()
+		latestFile, err := collection.ReadFile(ctx, latestFileName)
+		if err != nil {
+			if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+				return "", "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
+			}
+			return "", "", pgerror.WithCandidateCode(err, pgcode.Io)
+		}
+		latest, err := ioutil.ReadAll(latestFile)
+		if err != nil {
+			return "", "", err
+		}
+		if len(latest) == 0 {
+			return "", "", errors.Errorf("malformed LATEST file")
+		}
+		chosenSuffix = string(latest)
+	} else {
+		chosenSuffix = endTime.GoTime().Format(dateBasedFolderName)
+	}
+	return collectionURI, chosenSuffix, nil
+}

@@ -778,6 +778,7 @@ func init() {
 		intFlag(f, &debugCtx.maxResults, cliflags.Limit)
 		boolFlag(f, &debugCtx.values, cliflags.Values)
 		boolFlag(f, &debugCtx.sizes, cliflags.Sizes)
+		stringFlag(f, &debugCtx.decodeAsTableDesc, cliflags.DecodeAsTable)
 	}
 	{
 		f := debugRangeDataCmd.Flags()

@@ -538,8 +538,16 @@ func (ir *IntentResolver) CleanupIntents(
 	return resolved, nil
 }
 
-// CleanupTxnIntentsAsync asynchronously cleans up intents owned by
-// a transaction on completion.
+// CleanupTxnIntentsAsync asynchronously cleans up intents owned by a
+// transaction on completion. When all intents have been successfully resolved,
+// the txn record is GC'ed.
+//
+// WARNING: Since this GCs the txn record, it should only be called in response
+// to requests coming from the coordinator or the GC Queue. We don't want other
+// actors to GC a txn record, since that can cause ambiguities for the
+// coordinator: if it had STAGED the txn, it won't be able to tell the
+// difference between a txn that had been implicitly committed, recovered, and
+// GC'ed, and one that someone else aborted and GC'ed.
 func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
@@ -773,6 +781,10 @@ type ResolveOptions struct {
 	// ranges trying to read one of its old intents, the access will be trapped
 	// and the read will return an error, thus avoiding the read missing to see
 	// its own write.
+	//
+	// This field is ignored for intents that aren't resolved for an ABORTED txn;
+	// in other words, only intents from ABORTED transactions ever poison the
+	// abort spans.
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.

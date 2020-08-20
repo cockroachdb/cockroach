@@ -44,6 +44,7 @@ var RelationshipMap = map[string]RelationshipType{
 	"st_overlaps":         Intersects,
 	"st_touches":          Intersects,
 	"st_within":           CoveredBy,
+	"st_dwithinexclusive": DWithin,
 }
 
 // RelationshipReverseMap contains a default function for each of the

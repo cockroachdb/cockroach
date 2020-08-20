@@ -884,6 +884,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// Stop idle timer if the connExecutor is closed to ensure cancel session
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
+	ex.mu.IdleInTransactionSessionTimeout.Stop()
 
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
@@ -1077,6 +1078,11 @@ type connExecutor struct {
 		// IdleInSessionTimeout is returned by the AfterFunc call that cancels the
 		// session if the idle time exceeds the idle_in_session_timeout.
 		IdleInSessionTimeout timeout
+
+		// IdleInTransactionSessionTimeout is returned by the AfterFunc call that
+		// cancels the session if the idle time in a transaction exceeds the
+		// idle_in_transaction_session_timeout.
+		IdleInTransactionSessionTimeout timeout
 	}
 
 	// curStmt is the statement that's currently being prepared or executed, if

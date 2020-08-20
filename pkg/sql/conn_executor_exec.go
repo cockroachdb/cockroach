@@ -71,6 +71,7 @@ func (ex *connExecutor) execStmt(
 
 	// Stop the session idle timeout when a new statement is executed.
 	ex.mu.IdleInSessionTimeout.Stop()
+	ex.mu.IdleInTransactionSessionTimeout.Stop()
 
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
@@ -129,6 +130,31 @@ func (ex *connExecutor) execStmt(
 			ex.sessionData.IdleInSessionTimeout,
 			ex.cancelSession,
 		)}
+	}
+
+	if ex.sessionData.IdleInTransactionSessionTimeout > 0 {
+		startIdleInTransactionSessionTimeout := func() {
+			switch stmt.AST.(type) {
+			case *tree.CommitTransaction, *tree.RollbackTransaction:
+				// Do nothing, the transaction is completed, we do not want to start
+				// an idle timer.
+			default:
+				ex.mu.IdleInTransactionSessionTimeout = timeout{time.AfterFunc(
+					ex.sessionData.IdleInTransactionSessionTimeout,
+					ex.cancelSession,
+				)}
+			}
+		}
+		switch ex.machine.CurState().(type) {
+		case stateAborted, stateCommitWait:
+			startIdleInTransactionSessionTimeout()
+		case stateOpen:
+			// Only start timeout if the statement is executed in an
+			// explicit transaction.
+			if !ex.implicitTxn() {
+				startIdleInTransactionSessionTimeout()
+			}
+		}
 	}
 
 	return ev, payload, err

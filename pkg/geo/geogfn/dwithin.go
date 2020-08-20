@@ -16,10 +16,16 @@ import (
 	"github.com/golang/geo/s1"
 )
 
-// DWithin returns whether a is within distance d of b, i.e. Distance(a, b) <= d.
-// If A or B contains empty Geography objects, this will return false.
+// DWithin returns whether a is within distance d of b. If A or B contains empty
+// Geography objects, this will return false. If inclusive, DWithin is
+// equivalent to Distance(a, b) <= d. Otherwise, DWithin is instead equivalent
+// to Distance(a, b) < d.
 func DWithin(
-	a *geo.Geography, b *geo.Geography, distance float64, useSphereOrSpheroid UseSphereOrSpheroid,
+	a *geo.Geography,
+	b *geo.Geography,
+	distance float64,
+	useSphereOrSpheroid UseSphereOrSpheroid,
+	exclusive geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
@@ -61,9 +67,13 @@ func DWithin(
 		bRegions,
 		a.BoundingRect().Intersects(b.BoundingRect()),
 		distance,
+		exclusive,
 	)
 	if err != nil {
 		return false, err
+	}
+	if exclusive {
+		return maybeClosestDistance < distance, nil
 	}
 	return maybeClosestDistance <= distance, nil
 }

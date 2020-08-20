@@ -3280,6 +3280,58 @@ project
       └── filters
            └── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
 
+# Case for ST_DWithinExclusive.
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DWithinExclusive(c.geom, n.geom, 50)
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dwithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+
+# Commuted version of previous test.
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DWithinExclusive(n.geom, c.geom, 50)
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_dwithin(c.geom:10, n.geom:16, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dwithinexclusive(n.geom:16, c.geom:10, 50.0) [outer=(10,16), immutable]
+
 # Complex join filter.
 opt expect=GenerateInvertedJoins
 SELECT
