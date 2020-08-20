@@ -160,10 +160,9 @@ type hashTable struct {
 	// by the prober.
 	visited []bool
 
-	// vals stores the union of the equality and output columns of the build
-	// table. A key tuple is defined as the elements in each row of vals that
-	// makes up the equality columns. The ID of a key at any index of vals is
-	// index + 1.
+	// vals stores columns of the build source that are specified in
+	// colsToStore in the constructor. The ID of a tuple at any index of vals
+	// is index + 1.
 	vals *appendOnlyBufferedBatch
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
@@ -196,11 +195,16 @@ var _ resetter = &hashTable{}
 // choose the number that works well for the corresponding use case. 1.0 could
 // be used as the initial default value, and most likely the best value will be
 // in [0.1, 10.0] range.
+// - colsToStore indicates the positions of columns to actually store in this
+// batch. All columns are stored if colsToStore is nil, but when it is non-nil,
+// then columns with positions not present in colsToStore will remain
+// zero-capacity vectors in vals.
 func newHashTable(
 	allocator *colmem.Allocator,
 	loadFactor float64,
 	sourceTypes []*types.T,
 	eqCols []uint32,
+	colsToStore []int,
 	allowNullEquality bool,
 	buildMode hashTableBuildMode,
 	probeMode hashTableProbeMode,
@@ -243,7 +247,7 @@ func newHashTable(
 			differs: make([]bool, coldata.BatchSize()),
 		},
 
-		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes),
+		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
 		keyCols:           eqCols,
 		numBuckets:        initialNumHashBuckets,
 		loadFactor:        loadFactor,

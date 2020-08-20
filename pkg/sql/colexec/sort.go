@@ -127,7 +127,7 @@ func newAllSpooler(
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes)
+	p.bufferedTuples = newAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
 	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
 
