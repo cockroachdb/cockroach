@@ -1,0 +1,6 @@
+doctor cluster
+----
+debug doctor cluster
+Examining 32 descriptors...
+Table  52: parentID 50  does not exist
+ERROR: validation failed

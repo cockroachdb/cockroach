@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1579,7 +1578,7 @@ func (desc *MutableTableDescriptor) OriginalVersion() descpb.DescriptorVersion {
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *ImmutableTableDescriptor) Validate(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec,
 ) error {
 	err := desc.ValidateTable()
 	if err != nil {
@@ -1588,7 +1587,7 @@ func (desc *ImmutableTableDescriptor) Validate(
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(ctx, txn, codec)
+	return desc.validateCrossReferences(ctx, protoGetter, codec)
 }
 
 // validateCrossReferences validates that each reference to another table is
@@ -1597,16 +1596,18 @@ func (desc *ImmutableTableDescriptor) Validate(
 // TODO(ajwerner): pass in a higher-level interface for retrieving descriptors
 // by ID and stop using the raw transaction to look up descriptors.
 func (desc *ImmutableTableDescriptor) validateCrossReferences(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec,
 ) error {
 	// Check that parent DB exists.
 	{
-		res, err := txn.Get(ctx, MakeDescMetadataKey(codec, desc.ParentID))
+		parent := &descpb.Descriptor{}
+		_, err := protoGetter.GetProtoTs(ctx, MakeDescMetadataKey(codec, desc.ParentID), parent)
 		if err != nil {
 			return err
 		}
-		if !res.Exists() {
-			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
+		db := parent.GetDatabase()
+		if db == nil {
+			return errors.AssertionFailedf("parentID %d  does not exist", errors.Safe(desc.ParentID))
 		}
 	}
 
@@ -1615,7 +1616,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 		if table, ok := tablesByID[id]; ok {
 			return table, nil
 		}
-		raw, err := getTableDescFromID(ctx, txn, codec, id)
+		raw, err := getTableDescFromID(ctx, protoGetter, codec, id)
 		if err != nil {
 			return nil, err
 		}
@@ -1746,7 +1747,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 		}
 		// TODO(ajwerner): stop looking this up here and instead delegate to a
 		// higher level interface being passed in to look up descriptors by ID.
-		typeDesc, err := getTypeDescFromID(ctx, txn, codec, id)
+		typeDesc, err := getTypeDescFromID(ctx, protoGetter, codec, id)
 		if err != nil {
 			return nil, errors.Wrapf(err, "type ID %d in descriptor not found", id)
 		}
