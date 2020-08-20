@@ -208,3 +208,11 @@ SELECT * FROM t44797_2 NATURAL JOIN t44797_3
 1  1.0
 2  2.0
 2  1.0
+
+# Check that non-inner join with mixed-type equality considers the "same"
+# values of different types as equal.
+query R rowsort
+SELECT * FROM t44797_2 WHERE EXISTS (SELECT * FROM t44797_2 AS l, t44797_3 AS r WHERE l.a = r.b)
+----
+1
+2
