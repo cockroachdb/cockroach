@@ -627,7 +627,7 @@ func TestHashJoinerAgainstProcessor(t *testing.T) {
 										rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
 										rEqCols[i], rEqCols[j] = rEqCols[j], rEqCols[i]
 									})
-									rInputTypes = generateRandomComparableTypes(rng, rInputTypes)
+									rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
 									lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
 									rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 									usingRandomTypes = true
@@ -826,7 +826,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 									rInputTypes[iColIdx], rInputTypes[jColIdx] = rInputTypes[jColIdx], rInputTypes[iColIdx]
 									rOrderingCols[i], rOrderingCols[j] = rOrderingCols[j], rOrderingCols[i]
 								})
-								rInputTypes = generateRandomComparableTypes(rng, rInputTypes)
+								rInputTypes = randomizeJoinRightTypes(rng, rInputTypes)
 								lRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, lInputTypes)
 								rRows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, rInputTypes)
 								usingRandomTypes = true
@@ -1116,38 +1116,28 @@ func generateRandomSupportedTypes(rng *rand.Rand, nCols int) []*types.T {
 	return typs
 }
 
-// generateRandomComparableTypes generates random types that are supported by
-// the vectorized engine and are such that they are comparable to the
-// corresponding types in inputTypes.
-func generateRandomComparableTypes(rng *rand.Rand, inputTypes []*types.T) []*types.T {
-	typs := make([]*types.T, len(inputTypes))
-	for i, inputType := range inputTypes {
-		for {
-			typ := sqlbase.RandType(rng)
-			if typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) == typeconv.DatumVecCanonicalTypeFamily {
-				// At the moment, we disallow datum-backed types.
-				// TODO(yuzefovich): remove this.
-				continue
+// randomizeJoinRightTypes returns somewhat random types to be used for the
+// right side of the join such that they would have produced equality
+// conditions in the non-test environment (currently, due to #43060, we don't
+// support joins of different types without pushing the mixed-type equality
+// checks into the ON condition).
+func randomizeJoinRightTypes(rng *rand.Rand, leftTypes []*types.T) []*types.T {
+	typs := make([]*types.T, len(leftTypes))
+	for i, inputType := range leftTypes {
+		switch inputType.Family() {
+		case types.IntFamily:
+			// We want to randomize integer types because they have different
+			// physical representations.
+			switch rng.Intn(3) {
+			case 0:
+				typs[i] = types.Int2
+			case 1:
+				typs[i] = types.Int4
+			default:
+				typs[i] = types.Int
 			}
-			comparable := false
-			for _, cmpOverloads := range tree.CmpOps[tree.LT] {
-				o := cmpOverloads.(*tree.CmpOp)
-				if inputType.Equivalent(o.LeftType) && typ.Equivalent(o.RightType) {
-					if (typ.Family() == types.DateFamily && inputType.Family() != types.DateFamily) ||
-						(typ.Family() != types.DateFamily && inputType.Family() == types.DateFamily) {
-						// We map Dates to int64 and don't have casts from int64 to
-						// timestamps (and there is a comparison between dates and
-						// timestamps).
-						continue
-					}
-					comparable = true
-					break
-				}
-			}
-			if comparable {
-				typs[i] = typ
-				break
-			}
+		default:
+			typs[i] = inputType
 		}
 	}
 	return typs

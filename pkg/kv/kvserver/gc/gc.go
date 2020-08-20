@@ -146,7 +146,7 @@ type CleanupIntentsFunc func(context.Context, []roachpb.Intent) error
 // transaction record, pushing the transaction first if it is
 // PENDING. Once all intents are resolved successfully, removes the
 // transaction record.
-type CleanupTxnIntentsAsyncFunc func(context.Context, *roachpb.Transaction, []roachpb.LockUpdate) error
+type CleanupTxnIntentsAsyncFunc func(context.Context, *roachpb.Transaction) error
 
 // Run runs garbage collection for the specified descriptor on the
 // provided Engine (which is not mutated). It uses the provided gcFn
@@ -423,7 +423,7 @@ func processLocalKeyRange(
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
 		if !txn.Status.IsFinalized() || len(txn.LockSpans) > 0 {
-			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsLockUpdates(txn, txn.LockSpans))
+			return cleanupTxnIntentsAsyncFn(ctx, txn)
 		}
 		b.FlushingAdd(ctx, key)
 		return nil

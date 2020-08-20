@@ -138,7 +138,7 @@ func BenchmarkRun(b *testing.B) {
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
 			},
-			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+			func(ctx context.Context, txn *roachpb.Transaction) error {
 				return nil
 			})
 	}
@@ -207,10 +207,8 @@ func (f *fakeGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error
 	return nil
 }
 
-func (f *fakeGCer) resolveIntentsAsync(
-	_ context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate,
-) error {
-	f.txnIntents = append(f.txnIntents, txnIntents{txn: txn, intents: intents})
+func (f *fakeGCer) resolveIntentsAsync(_ context.Context, txn *roachpb.Transaction) error {
+	f.txnIntents = append(f.txnIntents, txnIntents{txn: txn, intents: txn.LocksAsLockUpdates()})
 	return nil
 }
 
