@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,6 +70,9 @@ type limiter struct {
 	tenantID roachpb.TenantID
 	qp       *quotapool.QuotaPool
 	metrics  tenantMetrics
+
+	// slowLogEvery is used to limit logging for slow acquisitions.
+	slowLogEvery log.EveryN
 }
 
 // init initializes a new limiter.
@@ -79,9 +84,10 @@ func (rl *limiter) init(
 	options ...quotapool.Option,
 ) {
 	*rl = limiter{
-		parent:   parent,
-		tenantID: tenantID,
-		metrics:  metrics,
+		parent:       parent,
+		tenantID:     tenantID,
+		metrics:      metrics,
+		slowLogEvery: log.Every(time.Second),
 	}
 	buckets := tokenBuckets{
 		requests:   makeTokenBucket(conf.Requests),
@@ -92,10 +98,28 @@ func (rl *limiter) init(
 		ctx context.Context, poolName string, r quotapool.Request, start time.Time,
 	) {
 		req := r.(*waitRequest)
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			log.Infof(ctx, "tenantrate.Limiter acquire took %v for %v write bytes",
+				timeutil.Since(start), req.writeBytes)
+		}
 		if req.writeBytes > 0 {
 			rl.metrics.writeBytesAdmitted.Inc(req.writeBytes)
 		}
 		rl.metrics.requestsAdmitted.Inc(1)
+	}))
+	options = append(options, quotapool.OnSlowAcquisition(time.Second, func(
+		ctx context.Context, poolName string, r quotapool.Request, start time.Time,
+	) (onAcquire func()) {
+		return func() {
+			now := timeutil.Now()
+			shouldLog := log.ExpensiveLogEnabled(ctx, 1) ||
+				rl.slowLogEvery.ShouldProcess(now)
+			if shouldLog {
+				req := r.(*waitRequest)
+				log.Infof(ctx, "slow tenantrate.Limiter acquire took %v for %v write bytes",
+					now.Sub(start), req.writeBytes)
+			}
+		}
 	}))
 	rl.qp = quotapool.New(tenantID.String(), &buckets, options...)
 	buckets.clock = rl.qp.TimeSource()
