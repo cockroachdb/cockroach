@@ -198,17 +198,24 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 	// {{$probingAgainstItself := .ProbingAgainstItself}}
 	// {{$deletingProbeMode := .DeletingProbeMode}}
 	// {{with .Global}}
-	// In order to inline the templated code of overloads, we need to have a
-	// `_overloadHelper` local variable of type `overloadHelper`.
-	_overloadHelper := ht.overloadHelper
 	switch probeVec.CanonicalTypeFamily() {
 	// {{range .LeftFamilies}}
+	// {{$leftFamily := .LeftCanonicalFamilyStr}}
 	case _LEFT_CANONICAL_TYPE_FAMILY:
 		switch probeVec.Type().Width() {
 		// {{range .LeftWidths}}
 		case _LEFT_TYPE_WIDTH:
 			switch buildVec.CanonicalTypeFamily() {
 			// {{range .RightFamilies}}
+			// {{$rightFamily := .RightCanonicalFamilyStr}}
+			// {{/*
+			//     We currently only support the cases of same-type as well as
+			//     integers of mixed widths in the equality conditions (all
+			//     other allowed mixed-type comparisons are pushed into the ON
+			//     condition, see #43060), so we will generate the code only
+			//     for same-type comparisons and for integer ones.
+			//  */}}
+			// {{if or (eq $leftFamily $rightFamily) (and (eq $leftFamily "types.IntFamily") (eq $rightFamily "types.IntFamily"))}}
 			case _RIGHT_CANONICAL_TYPE_FAMILY:
 				switch buildVec.Type().Width() {
 				// {{range .RightWidths}}
@@ -222,6 +229,7 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 					}
 					// {{end}}
 				}
+				// {{end}}
 				// {{end}}
 			}
 			// {{end}}
