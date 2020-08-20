@@ -951,12 +951,6 @@ func prepareNewTableDescsForIngestion(
 ) ([]*descpb.TableDescriptor, error) {
 	newMutableTableDescriptors := make([]*sqlbase.MutableTableDescriptor, len(importTables))
 	for i := range importTables {
-		// TODO (rohany): Use keys.PublicSchemaID for now, revisit this once we
-		//  support user defined schemas.
-		if err := backupccl.CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID,
-			keys.PublicSchemaID, importTables[i].Desc.Name); err != nil {
-			return nil, err
-		}
 		newMutableTableDescriptors[i] = sqlbase.NewMutableExistingTableDescriptor(*importTables[i].Desc)
 	}
 
@@ -980,6 +974,22 @@ func prepareNewTableDescsForIngestion(
 
 	if err := backupccl.RewriteTableDescs(newMutableTableDescriptors, tableRewrites, ""); err != nil {
 		return nil, err
+	}
+
+	// After all of the ID's have been remapped, ensure that there aren't any name
+	// collisions with any importing tables.
+	for i := range newMutableTableDescriptors {
+		tbl := newMutableTableDescriptors[i]
+		if err := backupccl.CheckObjectExists(
+			ctx,
+			txn,
+			p.ExecCfg().Codec,
+			tbl.GetParentID(),
+			tbl.GetParentSchemaID(),
+			tbl.GetName(),
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	// tableDescs contains the same slice as newMutableTableDescriptors but
