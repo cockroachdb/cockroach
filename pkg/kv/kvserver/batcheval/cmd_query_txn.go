@@ -65,11 +65,15 @@ func QueryTxn(
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
-	if ok, err := storage.MVCCGetProto(
+	ok, err := storage.MVCCGetProto(
 		ctx, reader, key, hlc.Timestamp{}, &reply.QueriedTxn, storage.MVCCGetOptions{},
-	); err != nil {
+	)
+	if err != nil {
 		return result.Result{}, err
-	} else if !ok {
+	}
+	if ok {
+		reply.TxnRecordExists = true
+	} else {
 		// The transaction hasn't written a transaction record yet.
 		// Attempt to synthesize it from the provided TxnMeta.
 		reply.QueriedTxn = SynthesizeTxnFromMeta(cArgs.EvalCtx, args.Txn)

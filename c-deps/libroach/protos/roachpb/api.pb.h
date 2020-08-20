@@ -7427,6 +7427,12 @@ class QueryTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::cockroach::roachpb::Transaction* mutable_queried_txn();
   void set_allocated_queried_txn(::cockroach::roachpb::Transaction* queried_txn);
 
+  // bool txn_record_exists = 4;
+  void clear_txn_record_exists();
+  static const int kTxnRecordExistsFieldNumber = 4;
+  bool txn_record_exists() const;
+  void set_txn_record_exists(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.QueryTxnResponse)
  private:
 
@@ -7434,6 +7440,7 @@ class QueryTxnResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::google::protobuf::RepeatedPtrField< ::std::string> waiting_txns_;
   ::cockroach::roachpb::ResponseHeader* header_;
   ::cockroach::roachpb::Transaction* queried_txn_;
+  bool txn_record_exists_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
 };
@@ -23289,6 +23296,20 @@ inline void QueryTxnResponse::set_allocated_queried_txn(::cockroach::roachpb::Tr
   }
   queried_txn_ = queried_txn;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.QueryTxnResponse.queried_txn)
+}
+
+// bool txn_record_exists = 4;
+inline void QueryTxnResponse::clear_txn_record_exists() {
+  txn_record_exists_ = false;
+}
+inline bool QueryTxnResponse::txn_record_exists() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.QueryTxnResponse.txn_record_exists)
+  return txn_record_exists_;
+}
+inline void QueryTxnResponse::set_txn_record_exists(bool value) {
+  
+  txn_record_exists_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.QueryTxnResponse.txn_record_exists)
 }
 
 inline int QueryTxnResponse::waiting_txns_size() const {

@@ -2791,42 +2791,51 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 		clock.Now(), clock.MaxOffset().Nanoseconds(),
 	)
 
+	txnRecordPresent := true
+	txnRecordSynthesized := false
 	testCases := []struct {
 		name       string
-		queryTxnFn func() (roachpb.TransactionStatus, error)
+		queryTxnFn func() (roachpb.TransactionStatus, bool, error)
 		expErr     string
 	}{
 		{
 			name: "transaction record PENDING, real intent missing error",
-			queryTxnFn: func() (roachpb.TransactionStatus, error) {
-				return roachpb.PENDING, nil
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return roachpb.PENDING, txnRecordPresent, nil
 			},
 			expErr: "intent missing",
 		},
 		{
 			name: "transaction record STAGING, real intent missing error",
-			queryTxnFn: func() (roachpb.TransactionStatus, error) {
-				return roachpb.STAGING, nil
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return roachpb.STAGING, txnRecordPresent, nil
 			},
 			expErr: "intent missing",
 		},
 		{
 			name: "transaction record COMMITTED, intent missing error caused by intent resolution",
-			queryTxnFn: func() (roachpb.TransactionStatus, error) {
-				return roachpb.COMMITTED, nil
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return roachpb.COMMITTED, txnRecordPresent, nil
 			},
 		},
 		{
-			name: "transaction record ABORTED, ambiguous intent missing error",
-			queryTxnFn: func() (roachpb.TransactionStatus, error) {
-				return roachpb.ABORTED, nil
+			name: "transaction record ABORTED, real intent missing error",
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return roachpb.ABORTED, txnRecordPresent, nil
+			},
+			expErr: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
+			name: "transaction record missing, ambiguous intent missing error",
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return roachpb.ABORTED, txnRecordSynthesized, nil
 			},
 			expErr: "result is ambiguous (intent missing and record aborted)",
 		},
 		{
 			name: "QueryTxn error, unresolved ambiguity",
-			queryTxnFn: func() (roachpb.TransactionStatus, error) {
-				return 0, errors.New("unable to query txn")
+			queryTxnFn: func() (roachpb.TransactionStatus, bool, error) {
+				return 0, false, errors.New("unable to query txn")
 			},
 			expErr: "result is ambiguous (error=unable to query txn [intent missing])",
 		},
@@ -2839,13 +2848,19 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 				case roachpb.QueryIntent:
 					br.Error = roachpb.NewError(roachpb.NewIntentMissingError(key, nil))
 				case roachpb.QueryTxn:
-					status, err := test.queryTxnFn()
+					status, txnRecordPresent, err := test.queryTxnFn()
 					if err != nil {
 						br.Error = roachpb.NewError(err)
 					} else {
+						if !txnRecordPresent {
+							// A missing txn record doesn't make sense for some statuses.
+							require.True(t, status == roachpb.ABORTED || status == roachpb.PENDING)
+						}
 						respTxn := txn
 						respTxn.Status = status
-						br.Responses[0].GetQueryTxn().QueriedTxn = respTxn
+						resp := br.Responses[0].GetQueryTxn()
+						resp.QueriedTxn = respTxn
+						resp.TxnRecordExists = txnRecordPresent
 					}
 				case roachpb.EndTxn:
 					br.Txn = ba.Txn.Clone()
