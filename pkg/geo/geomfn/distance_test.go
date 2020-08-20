@@ -457,13 +457,26 @@ func TestDWithin(t *testing.T) {
 				tc.expectedMinDistance * 2,
 			} {
 				t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-					dwithin, err := DWithin(a, b, val)
+					dwithin, err := DWithin(a, b, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dwithin)
 
-					dwithin, err = DWithin(a, b, val)
+					dwithin, err = DWithin(b, a, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dwithin)
+				})
+				t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+					exclusiveExpected := expected
+					if val == tc.expectedMinDistance {
+						exclusiveExpected = false
+					}
+					dwithin, err := DWithin(a, b, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dwithin)
+
+					dwithin, err = DWithin(b, a, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dwithin)
 				})
 			}
 
@@ -474,11 +487,20 @@ func TestDWithin(t *testing.T) {
 			} {
 				if val > 0 {
 					t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-						dwithin, err := DWithin(a, b, val)
+						dwithin, err := DWithin(a, b, val, geo.FnInclusive)
 						require.NoError(t, err)
 						require.False(t, dwithin)
 
-						dwithin, err = DWithin(a, b, val)
+						dwithin, err = DWithin(b, a, val, geo.FnInclusive)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+					})
+					t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+						dwithin, err := DWithin(a, b, val, geo.FnExclusive)
+						require.NoError(t, err)
+						require.False(t, dwithin)
+
+						dwithin, err = DWithin(b, a, val, geo.FnExclusive)
 						require.NoError(t, err)
 						require.False(t, dwithin)
 					})
@@ -494,7 +516,7 @@ func TestDWithin(t *testing.T) {
 				require.NoError(t, err)
 				b, err := geo.ParseGeometry(tc.b)
 				require.NoError(t, err)
-				dwithin, err := DWithin(a, b, 0)
+				dwithin, err := DWithin(a, b, 0, geo.FnInclusive)
 				require.NoError(t, err)
 				require.False(t, dwithin)
 			})
@@ -507,7 +529,7 @@ func TestDWithin(t *testing.T) {
 	})
 
 	t.Run("errors if distance < 0", func(t *testing.T) {
-		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01)
+		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01, geo.FnInclusive)
 		require.Error(t, err)
 	})
 }
@@ -569,7 +591,7 @@ func TestDFullyWithin(t *testing.T) {
 	})
 
 	t.Run("errors if distance < 0", func(t *testing.T) {
-		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01)
+		_, err := DWithin(geo.MustParseGeometry("POINT(1.0 2.0)"), geo.MustParseGeometry("POINT(3.0 4.0)"), -0.01, geo.FnInclusive)
 		require.Error(t, err)
 	})
 }

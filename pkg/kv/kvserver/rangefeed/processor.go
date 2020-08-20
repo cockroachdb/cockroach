@@ -532,7 +532,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e event) {
 		}
 		close(e.syncC)
 	default:
-		panic("missing event variant")
+		panic(fmt.Sprintf("missing event variant: %+v", e))
 	}
 }
 

@@ -377,6 +377,19 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s st
 	return nil
 }
 
+func idleInTransactionSessionTimeoutVarSet(
+	ctx context.Context, m *sessionDataMutator, s string,
+) error {
+	timeout, err := validateTimeoutVar(s,
+		"idle_in_transaction_session_timeout")
+	if err != nil {
+		return err
+	}
+
+	m.SetIdleInTransactionSessionTimeout(timeout)
+	return nil
+}
+
 func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
 	nanos, _, _, err := interval.Encode()
 	if err != nil {

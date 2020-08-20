@@ -48,13 +48,26 @@ func TestDWithin(t *testing.T) {
 						}
 						for _, val := range []float64{zeroValue, 1, 10, 10000} {
 							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
 								require.NoError(t, err)
 								require.True(t, dwithin)
 
-								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
 								require.NoError(t, err)
 								require.True(t, dwithin)
+							})
+							t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+								exclusiveExpected := true
+								if val == subTC.expected {
+									exclusiveExpected = false
+								}
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
+								require.NoError(t, err)
+								require.Equal(t, exclusiveExpected, dwithin)
+
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
+								require.NoError(t, err)
+								require.Equal(t, exclusiveExpected, dwithin)
 							})
 						}
 					} else {
@@ -65,11 +78,20 @@ func TestDWithin(t *testing.T) {
 							subTC.expected * 2,
 						} {
 							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
 								require.NoError(t, err)
 								require.True(t, dwithin)
 
-								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
+								require.NoError(t, err)
+								require.True(t, dwithin)
+							})
+							t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
+								require.NoError(t, err)
+								require.True(t, dwithin)
+
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
 								require.NoError(t, err)
 								require.True(t, dwithin)
 							})
@@ -82,11 +104,20 @@ func TestDWithin(t *testing.T) {
 							subTC.expected / 2,
 						} {
 							t.Run(fmt.Sprintf("dwithin:%f", val), func(t *testing.T) {
-								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid)
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
 								require.NoError(t, err)
 								require.False(t, dwithin)
 
-								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid)
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnInclusive)
+								require.NoError(t, err)
+								require.False(t, dwithin)
+							})
+							t.Run(fmt.Sprintf("dwithinexclusive:%f", val), func(t *testing.T) {
+								dwithin, err := DWithin(a, b, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
+								require.NoError(t, err)
+								require.False(t, dwithin)
+
+								dwithin, err = DWithin(b, a, val, subTC.useSphereOrSpheroid, geo.FnExclusive)
 								require.NoError(t, err)
 								require.False(t, dwithin)
 							})
@@ -98,12 +129,12 @@ func TestDWithin(t *testing.T) {
 	}
 
 	t.Run("errors if SRIDs mismatch", func(t *testing.T) {
-		_, err := DWithin(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, 0, UseSpheroid)
+		_, err := DWithin(mismatchingSRIDGeographyA, mismatchingSRIDGeographyB, 0, UseSpheroid, geo.FnInclusive)
 		requireMismatchingSRIDError(t, err)
 	})
 
 	t.Run("errors if distance < 0", func(t *testing.T) {
-		_, err := DWithin(geo.MustParseGeography("POINT(1.0 2.0)"), geo.MustParseGeography("POINT(3.0 4.0)"), -0.01, UseSpheroid)
+		_, err := DWithin(geo.MustParseGeography("POINT(1.0 2.0)"), geo.MustParseGeography("POINT(3.0 4.0)"), -0.01, UseSpheroid, geo.FnInclusive)
 		require.Error(t, err)
 	})
 
@@ -125,7 +156,7 @@ func TestDWithin(t *testing.T) {
 					require.NoError(t, err)
 					b, err := geo.ParseGeography(tc.b)
 					require.NoError(t, err)
-					dwithin, err := DWithin(a, b, 0, useSphereOrSpheroid)
+					dwithin, err := DWithin(a, b, 0, useSphereOrSpheroid, geo.FnInclusive)
 					require.NoError(t, err)
 					require.False(t, dwithin)
 				})

@@ -1743,7 +1743,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	}
 	mj.Init()
 	hj := NewHashJoiner(
-		testAllocator, HashJoinerSpec{
+		testAllocator, testAllocator, HashJoinerSpec{
 			joinType: descpb.InnerJoin,
 			left: hashJoinerSourceSpec{
 				eqCols: []uint32{0}, sourceTypes: typs,

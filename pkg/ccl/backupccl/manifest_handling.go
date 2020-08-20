@@ -508,12 +508,25 @@ func getLocalityInfo(
 	return info, nil
 }
 
-// findPriorBackups finds "appended" incremental backups by searching for the
-// subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss). Using
-// file-system searching rather than keeping an explicit list allows layers to
-// be manually moved/removed/etc without needing to update/maintain said list.
-func findPriorBackups(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+// findPriorBackupNames finds "appended" incremental backups, as done by
+// findPriorBackupLocations and appends the backup manifest file name to
+// the URI.
+func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
 	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+BackupManifestName)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading previous backup layers")
+	}
+	sort.Strings(prev)
+	return prev, nil
+}
+
+// findPriorBackupLocations finds "appended" incremental backups by searching
+// for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
+// Using file-system searching rather than keeping an explicit list allows
+// layers to be manually moved/removed/etc without needing to update/maintain
+// said list.
+func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+	prev, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/")
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
@@ -585,7 +598,7 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-		prev, err := findPriorBackups(ctx, baseStores[0])
+		prev, err := findPriorBackupNames(ctx, baseStores[0])
 		if err != nil {
 			if errors.Is(err, cloudimpl.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", baseStores[0])

@@ -371,8 +371,12 @@ func NewExternalHashJoiner(
 		partitionsToJoinUsingSortMerge: make([]int, 0),
 		leftJoinerInput:                leftJoinerInput,
 		rightJoinerInput:               rightJoinerInput,
+		// Note that the external hash joiner is responsible for making sure
+		// that partitions to join using in-memory hash joiner fit under the
+		// limit, so we use the same unlimited allocator for both
+		// buildSideAllocator and outputUnlimitedAllocator arguments.
 		inMemHashJoiner: NewHashJoiner(
-			unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
+			unlimitedAllocator, unlimitedAllocator, spec, leftJoinerInput, rightJoinerInput,
 		).(*hashJoiner),
 		diskBackedSortMerge: diskBackedSortMerge,
 	}

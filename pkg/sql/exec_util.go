@@ -2173,6 +2173,10 @@ func (m *sessionDataMutator) SetIdleInSessionTimeout(timeout time.Duration) {
 	m.data.IdleInSessionTimeout = timeout
 }
 
+func (m *sessionDataMutator) SetIdleInTransactionSessionTimeout(timeout time.Duration) {
+	m.data.IdleInTransactionSessionTimeout = timeout
+}
+
 func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }

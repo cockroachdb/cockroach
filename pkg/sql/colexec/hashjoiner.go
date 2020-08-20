@@ -162,7 +162,16 @@ type hashJoinerSourceSpec struct {
 type hashJoiner struct {
 	twoInputNode
 
-	allocator *colmem.Allocator
+	// buildSideAllocator should be used when building the hash table from the
+	// right input.
+	buildSideAllocator *colmem.Allocator
+	// outputUnlimitedAllocator should *only* be used when populating the
+	// output when we have already fully built the hash table from the right
+	// input and are only populating output one batch at a time. If we were to
+	// use a limited allocator, we could hit the memory limit during output
+	// population, and it would have been very hard to fall back to disk backed
+	// hash joiner because we might have already emitted partial output.
+	outputUnlimitedAllocator *colmem.Allocator
 	// spec holds the specification for the current hash join process.
 	spec HashJoinerSpec
 	// state stores the current state of the hash joiner.
@@ -230,7 +239,7 @@ func (hj *hashJoiner) Init() {
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 8.0
 	hj.ht = newHashTable(
-		hj.allocator,
+		hj.buildSideAllocator,
 		hashTableLoadFactor,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
@@ -239,7 +248,7 @@ func (hj *hashJoiner) Init() {
 		probeMode,
 	)
 
-	hj.exportBufferedState.rightWindowedBatch = hj.allocator.NewMemBatchWithFixedCapacity(
+	hj.exportBufferedState.rightWindowedBatch = hj.buildSideAllocator.NewMemBatchWithFixedCapacity(
 		hj.spec.right.sourceTypes, 0, /* size */
 	)
 	hj.state = hjBuilding
@@ -260,16 +269,6 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 					hj.spec.joinType == descpb.IntersectAllJoin {
 					hj.state = hjDone
 				}
-				// The code that performs fall-over to disk-backed
-				// infrastructure (ExportBuffered) assumes that we haven't
-				// received any batches from the left side. We don't want to
-				// modify that assumption because it is non-trivial to track
-				// which tuples have been processed and which haven't. So in
-				// order to satisfy the assumption, when the right side is
-				// empty, we force an allocation of an output batch early (this
-				// is only necessary to appease "*-disk" logic tests
-				// configurations).
-				hj.resetOutput(0 /* nResults */)
 			}
 			continue
 		case hjProbing:
@@ -334,37 +333,35 @@ func (hj *hashJoiner) emitUnmatched() {
 	}
 	hj.resetOutput(nResults)
 
-	// Set all elements in the probe columns of the output batch to null.
-	for i := range hj.spec.left.sourceTypes {
-		outCol := hj.output.ColVec(i)
-		outCol.Nulls().SetNullRange(0 /* startIdx */, nResults)
-	}
+	// We have already fully built the hash table from the right input and now
+	// are only populating output one batch at a time. If we were to use a
+	// limited allocator, we could hit the limit here, and it would have been
+	// very hard to fall back to disk backed hash joiner because we might have
+	// already emitted partial output.
+	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
+		// Set all elements in the probe columns of the output batch to null.
+		for i := range hj.spec.left.sourceTypes {
+			outCol := hj.output.ColVec(i)
+			outCol.Nulls().SetNullRange(0 /* startIdx */, nResults)
+		}
 
-	outCols := hj.output.ColVecs()[len(hj.spec.left.sourceTypes) : len(hj.spec.left.sourceTypes)+len(hj.spec.right.sourceTypes)]
-	for i := range hj.spec.right.sourceTypes {
-		outCol := outCols[i]
-		valCol := hj.ht.vals.ColVec(i)
-		// NOTE: this Copy is not accounted for because we don't want for memory
-		// limit error to occur at this point - we have already built the hash
-		// table and now are only consuming the left source one batch at a time,
-		// so such behavior should be a minor deviation from the limit. If we were
-		// to hit the limit here, it would have been very hard to fall back to disk
-		// backed hash joiner because we might have already emitted partial output.
-		// This behavior is acceptable - we allocated hj.output batch already, so
-		// the concern here is only for the variable-sized types that exceed our
-		// estimations.
-		outCol.Copy(
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					Src:       valCol,
-					SrcEndIdx: nResults,
-					Sel:       hj.probeState.buildIdx,
+		outCols := hj.output.ColVecs()[len(hj.spec.left.sourceTypes) : len(hj.spec.left.sourceTypes)+len(hj.spec.right.sourceTypes)]
+		for i := range hj.spec.right.sourceTypes {
+			outCol := outCols[i]
+			valCol := hj.ht.vals.ColVec(i)
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						Src:       valCol,
+						SrcEndIdx: nResults,
+						Sel:       hj.probeState.buildIdx,
+					},
 				},
-			},
-		)
-	}
+			)
+		}
 
-	hj.output.SetLength(nResults)
+		hj.output.SetLength(nResults)
+	})
 }
 
 // exec is a general prober that works with non-distinct build table equality
@@ -475,86 +472,83 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
 func (hj *hashJoiner) congregate(nResults int, batch coldata.Batch) {
-	// NOTE: Copy() calls are not accounted for because we don't want for memory
-	// limit error to occur at this point - we have already built the hash
-	// table and now are only consuming the left source one batch at a time,
-	// so such behavior should be a minor deviation from the limit. If we were
-	// to hit the limit here, it would have been very hard to fall back to disk
-	// backed hash joiner because we might have already emitted partial output.
-	// This behavior is acceptable - we allocated hj.output batch already, so the
-	// concern here is only for the variable-sized types that exceed our
-	// estimations.
 	hj.resetOutput(nResults)
-
-	if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
-		rightColOffset := len(hj.spec.left.sourceTypes)
-		// If the hash table is empty, then there is nothing to copy. The nulls
-		// will be set below.
-		if hj.ht.vals.Length() > 0 {
-			outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
-			for i := range hj.spec.right.sourceTypes {
-				outCol := outCols[i]
-				valCol := hj.ht.vals.ColVec(i)
-				// Note that if for some index i, probeRowUnmatched[i] is true, then
-				// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
-				// hash table, but we will set the NULL value below.
-				outCol.Copy(
-					coldata.CopySliceArgs{
-						SliceArgs: coldata.SliceArgs{
-							Src:       valCol,
-							SrcEndIdx: nResults,
-							Sel:       hj.probeState.buildIdx,
+	// We have already fully built the hash table from the right input and now
+	// are only populating output one batch at a time. If we were to use a
+	// limited allocator, we could hit the limit here, and it would have been
+	// very hard to fall back to disk backed hash joiner because we might have
+	// already emitted partial output.
+	hj.outputUnlimitedAllocator.PerformOperation(hj.output.ColVecs(), func() {
+		if hj.spec.joinType.ShouldIncludeRightColsInOutput() {
+			rightColOffset := len(hj.spec.left.sourceTypes)
+			// If the hash table is empty, then there is nothing to copy. The nulls
+			// will be set below.
+			if hj.ht.vals.Length() > 0 {
+				outCols := hj.output.ColVecs()[rightColOffset : rightColOffset+len(hj.spec.right.sourceTypes)]
+				for i := range hj.spec.right.sourceTypes {
+					outCol := outCols[i]
+					valCol := hj.ht.vals.ColVec(i)
+					// Note that if for some index i, probeRowUnmatched[i] is true, then
+					// hj.buildIdx[i] == 0 which will copy the garbage zeroth row of the
+					// hash table, but we will set the NULL value below.
+					outCol.Copy(
+						coldata.CopySliceArgs{
+							SliceArgs: coldata.SliceArgs{
+								Src:       valCol,
+								SrcEndIdx: nResults,
+								Sel:       hj.probeState.buildIdx,
+							},
 						},
-					},
-				)
+					)
+				}
 			}
-		}
-		if hj.spec.left.outer {
-			// Add in the nulls we needed to set for the outer join.
-			for i := range hj.spec.right.sourceTypes {
-				outCol := hj.output.ColVec(i + rightColOffset)
-				nulls := outCol.Nulls()
-				for i, isNull := range hj.probeState.probeRowUnmatched[:nResults] {
-					if isNull {
-						nulls.SetNull(i)
+			if hj.spec.left.outer {
+				// Add in the nulls we needed to set for the outer join.
+				for i := range hj.spec.right.sourceTypes {
+					outCol := hj.output.ColVec(i + rightColOffset)
+					nulls := outCol.Nulls()
+					for i, isNull := range hj.probeState.probeRowUnmatched[:nResults] {
+						if isNull {
+							nulls.SetNull(i)
+						}
 					}
 				}
 			}
 		}
-	}
 
-	outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
-	for i := range hj.spec.left.sourceTypes {
-		outCol := outCols[i]
-		valCol := batch.ColVec(i)
-		outCol.Copy(
-			coldata.CopySliceArgs{
-				SliceArgs: coldata.SliceArgs{
-					Src:       valCol,
-					Sel:       hj.probeState.probeIdx,
-					SrcEndIdx: nResults,
+		outCols := hj.output.ColVecs()[:len(hj.spec.left.sourceTypes)]
+		for i := range hj.spec.left.sourceTypes {
+			outCol := outCols[i]
+			valCol := batch.ColVec(i)
+			outCol.Copy(
+				coldata.CopySliceArgs{
+					SliceArgs: coldata.SliceArgs{
+						Src:       valCol,
+						Sel:       hj.probeState.probeIdx,
+						SrcEndIdx: nResults,
+					},
 				},
-			},
-		)
-	}
+			)
+		}
 
-	if hj.spec.right.outer {
-		// In order to determine which rows to emit for the outer join on the build
-		// table in the end, we need to mark the matched build table rows.
-		if hj.spec.left.outer {
-			for i := 0; i < nResults; i++ {
-				if !hj.probeState.probeRowUnmatched[i] {
+		if hj.spec.right.outer {
+			// In order to determine which rows to emit for the outer join on the build
+			// table in the end, we need to mark the matched build table rows.
+			if hj.spec.left.outer {
+				for i := 0; i < nResults; i++ {
+					if !hj.probeState.probeRowUnmatched[i] {
+						hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
+					}
+				}
+			} else {
+				for i := 0; i < nResults; i++ {
 					hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
 				}
 			}
-		} else {
-			for i := 0; i < nResults; i++ {
-				hj.probeState.buildRowMatched[hj.probeState.buildIdx[i]] = true
-			}
 		}
-	}
 
-	hj.output.SetLength(nResults)
+		hj.output.SetLength(nResults)
+	})
 }
 
 func (hj *hashJoiner) ExportBuffered(input colexecbase.Operator) coldata.Batch {
@@ -596,7 +590,12 @@ func (hj *hashJoiner) resetOutput(nResults int) {
 	if minCapacity < 1 {
 		minCapacity = 1
 	}
-	hj.output, _ = hj.allocator.ResetMaybeReallocate(hj.outputTypes, hj.output, minCapacity)
+	// We're resetting the output meaning that we have already fully built the
+	// hash table from the right input and now are only populating output one
+	// batch at a time. If we were to use a limited allocator, we could hit the
+	// limit here, and it would have been very hard to fall back to disk backed
+	// hash joiner because we might have already emitted partial output.
+	hj.output, _ = hj.outputUnlimitedAllocator.ResetMaybeReallocate(hj.outputTypes, hj.output, minCapacity)
 }
 
 func (hj *hashJoiner) reset(ctx context.Context) {
@@ -681,18 +680,24 @@ func MakeHashJoinerSpec(
 
 // NewHashJoiner creates a new equality hash join operator on the left and
 // right input tables.
+// buildSideAllocator should use a limited memory account and will be used for
+// the build side whereas outputUnlimitedAllocator should use an unlimited
+// memory account and will only be used when populating the output.
 func NewHashJoiner(
-	allocator *colmem.Allocator, spec HashJoinerSpec, leftSource, rightSource colexecbase.Operator,
+	buildSideAllocator, outputUnlimitedAllocator *colmem.Allocator,
+	spec HashJoinerSpec,
+	leftSource, rightSource colexecbase.Operator,
 ) colexecbase.Operator {
 	outputTypes := append([]*types.T{}, spec.left.sourceTypes...)
 	if spec.joinType.ShouldIncludeRightColsInOutput() {
 		outputTypes = append(outputTypes, spec.right.sourceTypes...)
 	}
 	hj := &hashJoiner{
-		twoInputNode: newTwoInputNode(leftSource, rightSource),
-		allocator:    allocator,
-		spec:         spec,
-		outputTypes:  outputTypes,
+		twoInputNode:             newTwoInputNode(leftSource, rightSource),
+		buildSideAllocator:       buildSideAllocator,
+		outputUnlimitedAllocator: outputUnlimitedAllocator,
+		spec:                     spec,
+		outputTypes:              outputTypes,
 	}
 	hj.probeState.buildIdx = make([]int, coldata.BatchSize())
 	hj.probeState.probeIdx = make([]int, coldata.BatchSize())

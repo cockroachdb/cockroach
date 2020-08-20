@@ -2531,82 +2531,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
-	"st_dwithin": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geometry_a", types.Geometry},
-				{"geometry_b", types.Geometry},
-				{"distance", types.Float},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := args[0].(*tree.DGeometry)
-				b := args[1].(*tree.DGeometry)
-				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist))
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(tree.DBool(ret)), nil
-			},
-			Info: infoBuilder{
-				info: "Returns true if any of geometry_a is within distance units of geometry_b.",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geography_a", types.Geography},
-				{"geography_b", types.Geography},
-				{"distance", types.Float},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := args[0].(*tree.DGeography)
-				b := args[1].(*tree.DGeography)
-				dist := args[2].(*tree.DFloat)
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid)
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(tree.DBool(ret)), nil
-			},
-			Info: infoBuilder{
-				info:         "Returns true if any of geography_a is within distance meters of geography_b." + usesSpheroidMessage + spheroidDistanceMessage,
-				libraryUsage: usesGeographicLib,
-				precision:    "1cm",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geography_a", types.Geography},
-				{"geography_b", types.Geography},
-				{"distance", types.Float},
-				{"use_spheroid", types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				a := args[0].(*tree.DGeography)
-				b := args[1].(*tree.DGeography)
-				dist := args[2].(*tree.DFloat)
-				useSpheroid := args[3].(*tree.DBool)
-
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid))
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(tree.DBool(ret)), nil
-			},
-			Info: infoBuilder{
-				info:         "Returns true if any of geography_a is within distance meters of geography_b." + spheroidDistanceMessage,
-				libraryUsage: usesGeographicLib | usesS2,
-				precision:    "1cm",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
+	"st_dwithin": makeSTDWithinBuiltin(geo.FnInclusive),
 	"st_equals": makeBuiltin(
 		defProps(),
 		geometryOverload2BinaryPredicate(
@@ -4029,6 +3954,7 @@ Bottom Left.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	"st_dwithinexclusive": makeSTDWithinBuiltin(geo.FnExclusive),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -4300,6 +4226,7 @@ func initGeoBuiltins() {
 		"st_intersects",
 		"st_intersection",
 		"st_length",
+		"st_dwithinexclusive",
 	} {
 		builtin, exists := geoBuiltins[builtinName]
 		if !exists {
@@ -4576,4 +4503,90 @@ func stAsGeoJSONFromTuple(
 		return nil, err
 	}
 	return tree.NewDString(string(marshalledIndent)), nil
+}
+
+func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
+	exclusivityStr := ", inclusive."
+	if exclusive {
+		exclusivityStr = ", exclusive."
+	}
+	return makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeometry)
+				b := args[1].(*tree.DGeometry)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusive)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b" +
+					exclusivityStr,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid, exclusive)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geography_a is within distance meters of geography_b" +
+					exclusivityStr + usesSpheroidMessage + spheroidDistanceMessage,
+				libraryUsage: usesGeographicLib,
+				precision:    "1cm",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geography_a", types.Geography},
+				{"geography_b", types.Geography},
+				{"distance", types.Float},
+				{"use_spheroid", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeography)
+				b := args[1].(*tree.DGeography)
+				dist := args[2].(*tree.DFloat)
+				useSpheroid := args[3].(*tree.DBool)
+
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid), exclusive)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geography_a is within distance meters of geography_b" +
+					exclusivityStr + spheroidDistanceMessage,
+				libraryUsage: usesGeographicLib | usesS2,
+				precision:    "1cm",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	)
 }

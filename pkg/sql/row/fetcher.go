@@ -237,6 +237,10 @@ type Fetcher struct {
 	// correctness. It is set only during SCRUB commands.
 	isCheck bool
 
+	// IgnoreUnexpectedNulls allows Fetcher to return null values for non-nullable
+	// columns and is only used for decoding for error messages or debugging.
+	IgnoreUnexpectedNulls bool
+
 	// Buffered allocation of decoded datums.
 	alloc *sqlbase.DatumAlloc
 }
@@ -1471,7 +1475,7 @@ func (rf *Fetcher) finalizeRow() error {
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			// If the row was deleted, we'll be missing any non-primary key
 			// columns, including nullable ones, but this is expected.
-			if !table.cols[i].Nullable && !table.rowIsDeleted {
+			if !table.cols[i].Nullable && !table.rowIsDeleted && !rf.IgnoreUnexpectedNulls {
 				var indexColValues []string
 				for _, idx := range table.indexColIdx {
 					if idx != -1 {

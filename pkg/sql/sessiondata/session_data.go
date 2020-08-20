@@ -81,6 +81,10 @@ type SessionData struct {
 	// IdleInSessionTimeout is the duration a session is permitted to idle before
 	// the session is canceled. If set to 0, there is no timeout.
 	IdleInSessionTimeout time.Duration
+	// IdleInTransactionSessionTimeout is the duration a session is permitted to
+	// idle in a transaction before the session is canceled.
+	// If set to 0, there is no timeout.
+	IdleInTransactionSessionTimeout time.Duration
 	// User is the name of the user logged into the session.
 	User string
 	// SafeUpdates causes errors when the client

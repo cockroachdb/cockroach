@@ -13,9 +13,7 @@ import (
 	"crypto"
 	cryptorand "crypto/rand"
 	"fmt"
-	"io/ioutil"
 	"net/url"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -39,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -392,6 +389,16 @@ type annotatedBackupStatement struct {
 	*jobs.CreatedByInfo
 }
 
+// backupEncryptionParams is a structured representation of the encryption
+// options that the user provided in the backup statement.
+type backupEncryptionParams struct {
+	encryptMode          encryptionMode
+	kmsURIs              []string
+	encryptionPassphrase []byte
+
+	kmsEnv *backupKMSEnv
+}
+
 func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	switch backup := stmt.(type) {
 	case *annotatedBackupStatement:
@@ -421,20 +428,22 @@ func backupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	encryptionParams := backupEncryptionParams{}
+
 	var pwFn func() (string, error)
-	encryptMode := noEncryption
+	encryptionParams.encryptMode = noEncryption
 	if backupStmt.Options.EncryptionPassphrase != nil {
 		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 		pwFn = fn
-		encryptMode = passphrase
+		encryptionParams.encryptMode = passphrase
 	}
 
 	var kmsFn func() ([]string, *backupKMSEnv, error)
 	if backupStmt.Options.EncryptionKMSURI != nil {
-		if encryptMode != noEncryption {
+		if encryptionParams.encryptMode != noEncryption {
 			return nil, nil, nil, false,
 				errors.New("cannot have both encryption_passphrase and kms option set")
 		}
@@ -453,7 +462,7 @@ func backupPlanHook(
 			}
 			return nil, nil, err
 		}
-		encryptMode = kms
+		encryptionParams.encryptMode = kms
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -546,10 +555,7 @@ func backupPlanHook(
 
 		makeCloudStorage := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
 
-		var encryptionPassphrase []byte
-		var kmsURIs []string
-		var kmsEnv cloud.KMSEnv
-		switch encryptMode {
+		switch encryptionParams.encryptMode {
 		case passphrase:
 			pw, err := pwFn()
 			if err != nil {
@@ -558,9 +564,9 @@ func backupPlanHook(
 			if err := requireEnterprise("encryption"); err != nil {
 				return err
 			}
-			encryptionPassphrase = []byte(pw)
+			encryptionParams.encryptionPassphrase = []byte(pw)
 		case kms:
-			kmsURIs, kmsEnv, err = kmsFn()
+			encryptionParams.kmsURIs, encryptionParams.kmsEnv, err = kmsFn()
 			if err != nil {
 				return err
 			}
@@ -574,180 +580,22 @@ func backupPlanHook(
 			return err
 		}
 
-		// TODO(dt): pull this block and the block below into a `resolveDest` helper
-		// that does all the rewites of `to`/`defaultURI`/etc.
-
-		// chosenSuffix is the automaically chosen suffix within the collection path
-		// if we're backing up INTO a collection.
-		var chosenSuffix string
-		var collectionURI string
-		if backupStmt.Nested {
-			collectionURI = defaultURI
-			if backupStmt.AppendToLatest {
-				collection, err := makeCloudStorage(ctx, collectionURI, p.User())
-				if err != nil {
-					return err
-				}
-				defer collection.Close()
-				latestFile, err := collection.ReadFile(ctx, latestFileName)
-				if err != nil {
-					if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-						return pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
-					}
-					return pgerror.WithCandidateCode(err, pgcode.Io)
-				}
-				latest, err := ioutil.ReadAll(latestFile)
-				if err != nil {
-					return err
-				}
-				if len(latest) == 0 {
-					return errors.Errorf("malformed LATEST file")
-				}
-				chosenSuffix = string(latest)
-			} else {
-				chosenSuffix = endTime.GoTime().Format(dateBasedFolderName)
-			}
-			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, chosenSuffix)
-			if err != nil {
-				return err
-			}
+		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
+		// backupDestination struct.
+		collectionURI, defaultURI, urisByLocalityKV, prevs, err := resolveDest(ctx, p, backupStmt,
+			defaultURI, urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom)
+		if err != nil {
+			return err
 		}
-
-		var encryption *jobspb.BackupEncryptionOptions
-		var prevBackups []BackupManifest
-		g := ctxgroup.WithContext(ctx)
-		if len(incrementalFrom) > 0 {
-			if encryptMode != noEncryption {
-				exportStore, err := makeCloudStorage(ctx, incrementalFrom[0], p.User())
-				if err != nil {
-					return err
-				}
-				defer exportStore.Close()
-				opts, err := readEncryptionOptions(ctx, exportStore)
-				if err != nil {
-					return err
-				}
-
-				switch encryptMode {
-				case passphrase:
-					encryption = &jobspb.BackupEncryptionOptions{
-						Mode: jobspb.EncryptionMode_Passphrase,
-						Key:  storageccl.GenerateKey(encryptionPassphrase, opts.Salt),
-					}
-				case kms:
-					defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kmsURIs,
-						newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
-					if err != nil {
-						return err
-					}
-					encryption = &jobspb.BackupEncryptionOptions{
-						Mode:    jobspb.EncryptionMode_KMS,
-						KMSInfo: defaultKMSInfo}
-				}
-			}
-			prevBackups = make([]BackupManifest, len(incrementalFrom))
-			for i := range incrementalFrom {
-				i := i
-				g.GoCtx(func(ctx context.Context) error {
-					// TODO(lucy): We may want to upgrade the table descs to the newer
-					// foreign key representation here, in case there are backups from an
-					// older cluster. Keeping the descriptors as they are works for now
-					// since all we need to do is get the past backups' table/index spans,
-					// but it will be safer for future code to avoid having older-style
-					// descriptors around.
-					uri := incrementalFrom[i]
-					desc, err := ReadBackupManifestFromURI(
-						ctx, uri, p.User(), makeCloudStorage, encryption,
-					)
-					if err != nil {
-						return errors.Wrapf(err, "failed to read backup from %q", uri)
-					}
-					prevBackups[i] = desc
-					return nil
-				})
-			}
-			if err := g.Wait(); err != nil {
-				return err
-			}
-		} else {
-			defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
-			if err != nil {
-				return err
-			}
-			defer defaultStore.Close()
-			exists, err := containsManifest(ctx, defaultStore)
-			if err != nil {
-				return err
-			}
-			if exists {
-				if encryptMode != noEncryption {
-					encOpts, err := readEncryptionOptions(ctx, defaultStore)
-					if err != nil {
-						return err
-					}
-
-					switch encryptMode {
-					case passphrase:
-						encryption = &jobspb.BackupEncryptionOptions{
-							Mode: jobspb.EncryptionMode_Passphrase,
-							Key:  storageccl.GenerateKey(encryptionPassphrase, encOpts.Salt),
-						}
-					case kms:
-						defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kmsURIs,
-							newEncryptedDataKeyMapFromProtoMap(encOpts.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
-						if err != nil {
-							return err
-						}
-						encryption = &jobspb.BackupEncryptionOptions{
-							Mode:    jobspb.EncryptionMode_KMS,
-							KMSInfo: defaultKMSInfo}
-					}
-				}
-
-				prev, err := findPriorBackups(ctx, defaultStore)
-				if err != nil {
-					return errors.Wrapf(err, "determining base for incremental backup")
-				}
-				prevBackups = make([]BackupManifest, len(prev)+1)
-
-				m, err := readBackupManifestFromStore(ctx, defaultStore, encryption)
-				if err != nil {
-					return errors.Wrap(err, "loading base backup manifest")
-				}
-				prevBackups[0] = m
-
-				if m.DescriptorCoverage == tree.AllDescriptors &&
-					backupStmt.Coverage() != tree.AllDescriptors {
-					return errors.Errorf("cannot append a backup of specific tables or databases to a full-cluster backup")
-				}
-
-				for i := range prev {
-					i := i
-					g.GoCtx(func(ctx context.Context) error {
-						inc := prev[i]
-						m, err := readBackupManifest(ctx, defaultStore, inc, encryption)
-						if err != nil {
-							return errors.Wrapf(err, "loading prior backup part manifest %q", inc)
-						}
-						prevBackups[i+1] = m
-						return nil
-					})
-				}
-				if err := g.Wait(); err != nil {
-					return err
-				}
-
-				// Pick a piece-specific suffix and update the destination path(s).
-				partName := endTime.GoTime().Format(dateBasedFolderName)
-				partName = path.Join(chosenSuffix, partName)
-				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
-				if err != nil {
-					return errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
-				}
-			} else if backupStmt.AppendToLatest {
-				// If we came here because the LATEST file told us to but didn't find an
-				// existing backup here we should raise an error.
-				return pgerror.Newf(pgcode.UndefinedFile, "backup not found in location recorded latest file: %q", chosenSuffix)
+		prevBackups, encryption, err := fetchPreviousBackups(ctx, p, makeCloudStorage, prevs, encryptionParams)
+		if err != nil {
+			return err
+		}
+		if len(prevBackups) > 0 {
+			baseManifest := prevBackups[0]
+			if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+				backupStmt.Coverage() != tree.AllDescriptors {
+				return errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 			}
 		}
 
@@ -943,7 +791,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, kmsURIs)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs)
 		if err != nil {
 			return err
 		}
@@ -951,55 +799,9 @@ func backupPlanHook(
 		// If we didn't load any prior backups from which get encryption info, we
 		// need to generate encryption specific data.
 		if encryption == nil {
-			exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+			encryption, err = makeNewEncryptionOptions(ctx, p, encryptionParams, makeCloudStorage, defaultURI)
 			if err != nil {
 				return err
-			}
-			defer exportStore.Close()
-
-			switch encryptMode {
-			case passphrase:
-				salt, err := storageccl.GenerateSalt()
-				if err != nil {
-					return err
-				}
-
-				if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt},
-					exportStore); err != nil {
-					return err
-				}
-				encryption = &jobspb.BackupEncryptionOptions{
-					Mode: jobspb.EncryptionMode_Passphrase,
-					Key:  storageccl.GenerateKey(encryptionPassphrase, salt)}
-			case kms:
-				// Generate a 32 byte/256-bit crypto-random number which will serve as
-				// the data key for encrypting the BACKUP data and manifest files.
-				plaintextDataKey := make([]byte, 32)
-				_, err := cryptorand.Read(plaintextDataKey)
-				if err != nil {
-					return errors.Wrap(err, "failed to generate DataKey")
-				}
-
-				encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
-					getEncryptedDataKeyByKMSMasterKeyID(ctx, kmsURIs, plaintextDataKey, kmsEnv)
-				if err != nil {
-					return err
-				}
-
-				encryptedDataKeyMapForProto := make(map[string][]byte)
-				encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
-					func(masterKeyID hashedMasterKeyID, dataKey []byte) {
-						encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
-					})
-				if err := writeEncryptionOptions(ctx, &EncryptionInfo{
-					EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto,
-				}, exportStore); err != nil {
-					return err
-				}
-
-				encryption = &jobspb.BackupEncryptionOptions{
-					Mode:    jobspb.EncryptionMode_KMS,
-					KMSInfo: defaultKMSInfo}
 			}
 		}
 
@@ -1133,6 +935,67 @@ func backupPlanHook(
 		return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func makeNewEncryptionOptions(
+	ctx context.Context,
+	p sql.PlanHookState,
+	encryptionParams backupEncryptionParams,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	defaultURI string,
+) (*jobspb.BackupEncryptionOptions, error) {
+	var encryption *jobspb.BackupEncryptionOptions
+	exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
+	if err != nil {
+		return nil, err
+	}
+	defer exportStore.Close()
+
+	switch encryptionParams.encryptMode {
+	case passphrase:
+		salt, err := storageccl.GenerateSalt()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt},
+			exportStore); err != nil {
+			return nil, err
+		}
+		encryption = &jobspb.BackupEncryptionOptions{
+			Mode: jobspb.EncryptionMode_Passphrase,
+			Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, salt)}
+	case kms:
+		// Generate a 32 byte/256-bit crypto-random number which will serve as
+		// the data key for encrypting the BACKUP data and manifest files.
+		plaintextDataKey := make([]byte, 32)
+		_, err := cryptorand.Read(plaintextDataKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to generate DataKey")
+		}
+
+		encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
+			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.kmsURIs, plaintextDataKey, encryptionParams.kmsEnv)
+		if err != nil {
+			return nil, err
+		}
+
+		encryptedDataKeyMapForProto := make(map[string][]byte)
+		encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
+			func(masterKeyID hashedMasterKeyID, dataKey []byte) {
+				encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
+			})
+		if err := writeEncryptionOptions(ctx, &EncryptionInfo{
+			EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto,
+		}, exportStore); err != nil {
+			return nil, err
+		}
+
+		encryption = &jobspb.BackupEncryptionOptions{
+			Mode:    jobspb.EncryptionMode_KMS,
+			KMSInfo: defaultKMSInfo}
+	}
+	return encryption, nil
 }
 
 func protectTimestampForBackup(

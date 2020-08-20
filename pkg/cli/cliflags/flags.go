@@ -926,6 +926,12 @@ If specified, print the system config contents. Beware that the output will be
 long and not particularly human-readable.`,
 	}
 
+	DecodeAsTable = FlagInfo{
+		Name: "decode-as-table",
+		Description: `
+Base64-encoded Descriptor to use as the table when decoding KVs.`,
+	}
+
 	DrainWait = FlagInfo{
 		Name: "drain-wait",
 		Description: `

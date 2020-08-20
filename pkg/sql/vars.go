@@ -828,10 +828,6 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-LOC-TIMEOUT
 	`lock_timeout`: makeCompatIntVar(`lock_timeout`, 0),
 
-	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT
-	// See also issue #5924.
-	`idle_in_transaction_session_timeout`: makeCompatIntVar(`idle_in_transaction_session_timeout`, 0),
-
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
 	`max_identifier_length`: {
@@ -1002,6 +998,16 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(sv *settings.Values) string {
 			return clusterIdleInSessionTimeout.String(sv)
 		},
+	},
+
+	`idle_in_transaction_session_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`idle_in_transaction_session_timeout`),
+		Set:          idleInTransactionSessionTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext) string {
+			ms := evalCtx.SessionData.StmtTimeout.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10)
+		},
+		GlobalDefault: func(sv *settings.Values) string { return "0" },
 	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
