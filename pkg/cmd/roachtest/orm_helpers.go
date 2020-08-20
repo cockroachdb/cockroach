@@ -116,7 +116,7 @@ func newORMTestsResults() *ormTestsResults {
 // against a cockroach node. If an unexpected result is observed (for example,
 // a test unexpectedly failed or passed), a new blocklist is populated.
 func (r *ormTestsResults) summarizeAll(
-	t *test, ormName, blocklistName string, expectedFailures blocklist, version, latestTag string,
+	t *test, ormName, blocklistName string, expectedFailures blocklist, version, tag string,
 ) {
 	// Collect all the tests that were not run.
 	notRunCount := 0
@@ -142,7 +142,7 @@ func (r *ormTestsResults) summarizeAll(
 	t.l.Printf("------------------------\n")
 
 	r.summarizeFailed(
-		t, ormName, blocklistName, expectedFailures, version, latestTag, notRunCount,
+		t, ormName, blocklistName, expectedFailures, version, tag, notRunCount,
 	)
 }
 

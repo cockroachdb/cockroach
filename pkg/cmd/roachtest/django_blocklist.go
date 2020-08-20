@@ -217,6 +217,7 @@ var djangoIgnoreList20_1 = djangoIgnoreList19_2
 
 var djangoIgnoreList19_2 = blocklist{
 	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
+	"inspectdb.tests.InspectDBTestCase.test_attribute_name_not_python_keyword":   "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_digits_column_name_introspection":    "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_field_types":                         "unknown",
 	"inspectdb.tests.InspectDBTestCase.test_managed_models":                      "unknown",
