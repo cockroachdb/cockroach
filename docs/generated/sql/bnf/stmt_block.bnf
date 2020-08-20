@@ -110,7 +110,8 @@ alter_stmt ::=
 	| alter_role_stmt
 
 backup_stmt ::=
-	'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+	'BACKUP' opt_backup_targets 'INTO' sconst_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+	| 'BACKUP' opt_backup_targets 'INTO' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
 	| 'BACKUP' opt_backup_targets 'INTO' 'LATEST' 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
 	| 'BACKUP' opt_backup_targets 'TO' string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
 
@@ -338,6 +339,10 @@ alter_role_stmt ::=
 
 opt_backup_targets ::=
 	targets
+
+sconst_or_placeholder ::=
+	'SCONST'
+	| 'PLACEHOLDER'
 
 string_or_placeholder_opt_list ::=
 	string_or_placeholder
@@ -1680,10 +1685,6 @@ sequence_name ::=
 opt_sequence_option_list ::=
 	sequence_option_list
 	| 
-
-sconst_or_placeholder ::=
-	'SCONST'
-	| 'PLACEHOLDER'
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
