@@ -46,6 +46,10 @@ message SketchSpec {
 
   // Only used by the SampleAggregator.
   optional string stat_name = 5 [(gogoproto.nullable) = false];
+
+  // Index is needed by some types (for example the geo types) when generating
+  // inverted index entries, since it may contain configuration.
+  optional sqlbase.IndexDescriptor index = 6 [(gogoproto.nullable) = true];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which
