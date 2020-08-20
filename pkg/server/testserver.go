@@ -653,7 +653,7 @@ func StartTenant(
 		nil, // handler
 	)
 
-	pgL, err := net.Listen("tcp", args.Config.SQLAddr)
+	pgL, err := listen(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {
 		return "", "", err
 	}
