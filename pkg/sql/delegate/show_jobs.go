@@ -21,6 +21,15 @@ import (
 
 func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	sqltelemetry.IncrementShowCounter(sqltelemetry.Jobs)
+
+	if n.Schedules != nil {
+		// Limit the jobs displayed to the ones started by specified schedules.
+		return parse(fmt.Sprintf(`
+SHOW JOBS SELECT id FROM system.jobs WHERE created_by_type='%s' and created_by_id IN (%s)
+`, jobs.CreatedByScheduledJobs, n.Schedules.String()),
+		)
+	}
+
 	const (
 		selectClause = `SELECT job_id, job_type, description, statement, user_name, status,
 				       running_status, created, started, finished, modified,
@@ -28,7 +37,7 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 				FROM crdb_internal.jobs`
 	)
 	var typePredicate, whereClause, orderbyClause string
-	if n.Jobs == nil && n.Schedules == nil {
+	if n.Jobs == nil {
 		// Display all [only automatic] jobs without selecting specific jobs.
 		if n.Automatic {
 			typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
@@ -45,13 +54,9 @@ func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
-	} else if n.Schedules == nil {
+	} else {
 		// Limit the jobs displayed to the select statement in n.Jobs.
 		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
-	} else {
-		// Limit the jobs displayed to the ones started by specified schedules.
-		whereClause = fmt.Sprintf(`WHERE created_by_type='%s' and created_by_id in (%s)`,
-			jobs.CreatedByScheduledJobs, n.Schedules.String())
 	}
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
