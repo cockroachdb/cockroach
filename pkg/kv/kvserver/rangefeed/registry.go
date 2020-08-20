@@ -53,11 +53,11 @@ type Stream interface {
 // has finished.
 type registration struct {
 	// Input.
-	span             roachpb.Span
-	catchupTimestamp hlc.Timestamp
-	catchupIter      storage.SimpleIterator
-	withDiff         bool
-	metrics          *Metrics
+	span                   roachpb.Span
+	catchupTimestamp       hlc.Timestamp
+	catchupIterConstructor func() storage.SimpleIterator
+	withDiff               bool
+	metrics                *Metrics
 
 	// Output.
 	stream Stream
@@ -86,7 +86,7 @@ type registration struct {
 func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
-	catchupIter storage.SimpleIterator,
+	catchupIterConstructor func() storage.SimpleIterator,
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -94,14 +94,14 @@ func newRegistration(
 	errC chan<- *roachpb.Error,
 ) registration {
 	r := registration{
-		span:             span,
-		catchupTimestamp: startTS,
-		catchupIter:      catchupIter,
-		withDiff:         withDiff,
-		metrics:          metrics,
-		stream:           stream,
-		errC:             errC,
-		buf:              make(chan *roachpb.RangeFeedEvent, bufferSz),
+		span:                   span,
+		catchupTimestamp:       startTS,
+		catchupIterConstructor: catchupIterConstructor,
+		withDiff:               withDiff,
+		metrics:                metrics,
+		stream:                 stream,
+		errC:                   errC,
+		buf:                    make(chan *roachpb.RangeFeedEvent, bufferSz),
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -231,13 +231,11 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 // canceled, or when the buffer has overflowed and all pre-overflow entries
 // have been emitted.
 func (r *registration) outputLoop(ctx context.Context) error {
-	// If the registration has a catch-up scan,
-	if r.catchupIter != nil {
-		if err := r.runCatchupScan(); err != nil {
-			err = errors.Wrap(err, "catch-up scan failed")
-			log.Errorf(ctx, "%v", err)
-			return err
-		}
+	// If the registration has a catch-up scan, run it.
+	if err := r.maybeRunCatchupScan(); err != nil {
+		err = errors.Wrap(err, "catch-up scan failed")
+		log.Errorf(ctx, "%v", err)
+		return err
 	}
 
 	// Normal buffered output loop.
@@ -274,18 +272,22 @@ func (r *registration) runOutputLoop(ctx context.Context) {
 	r.disconnect(roachpb.NewError(err))
 }
 
-// runCatchupScan starts a catchup scan which will output entries for all
+// maybeRunCatchupScan starts a catchup scan which will output entries for all
 // recorded changes in the replica that are newer than the catchupTimestamp.
 // This uses the iterator provided when the registration was originally created;
 // after the scan completes, the iterator will be closed.
-func (r *registration) runCatchupScan() error {
-	if r.catchupIter == nil {
+//
+// If the registration does not have a catchUpIteratorConstructor, this method
+// is a no-op.
+func (r *registration) maybeRunCatchupScan() error {
+	if r.catchupIterConstructor == nil {
 		return nil
 	}
+	catchupIter := r.catchupIterConstructor()
+	r.catchupIterConstructor = nil
 	start := timeutil.Now()
 	defer func() {
-		r.catchupIter.Close()
-		r.catchupIter = nil
+		catchupIter.Close()
 		r.metrics.RangeFeedCatchupScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
@@ -323,16 +325,16 @@ func (r *registration) runCatchupScan() error {
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
 	var meta enginepb.MVCCMetadata
-	r.catchupIter.SeekGE(startKey)
+	catchupIter.SeekGE(startKey)
 	for {
-		if ok, err := r.catchupIter.Valid(); err != nil {
+		if ok, err := catchupIter.Valid(); err != nil {
 			return err
-		} else if !ok || !r.catchupIter.UnsafeKey().Less(endKey) {
+		} else if !ok || !catchupIter.UnsafeKey().Less(endKey) {
 			break
 		}
 
-		unsafeKey := r.catchupIter.UnsafeKey()
-		unsafeVal := r.catchupIter.UnsafeValue()
+		unsafeKey := catchupIter.UnsafeKey()
+		unsafeVal := catchupIter.UnsafeValue()
 		if !unsafeKey.IsValue() {
 			// Found a metadata key.
 			if err := protoutil.Unmarshal(unsafeVal, &meta); err != nil {
@@ -344,7 +346,7 @@ func (r *registration) runCatchupScan() error {
 				// past the corresponding provisional key-value. To do this,
 				// scan to the timestamp immediately before (i.e. the key
 				// immediately after) the provisional key.
-				r.catchupIter.SeekGE(storage.MVCCKey{
+				catchupIter.SeekGE(storage.MVCCKey{
 					Key:       unsafeKey.Key,
 					Timestamp: hlc.Timestamp(meta.Timestamp).Prev(),
 				})
@@ -375,7 +377,7 @@ func (r *registration) runCatchupScan() error {
 		if ignore && !r.withDiff {
 			// Skip all the way to the next key.
 			// NB: fast-path to avoid value copy when !r.withDiff.
-			r.catchupIter.NextKey()
+			catchupIter.NextKey()
 			continue
 		}
 
@@ -388,10 +390,10 @@ func (r *registration) runCatchupScan() error {
 
 		if ignore {
 			// Skip all the way to the next key.
-			r.catchupIter.NextKey()
+			catchupIter.NextKey()
 		} else {
 			// Move to the next version of this key.
-			r.catchupIter.Next()
+			catchupIter.Next()
 
 			var event roachpb.RangeFeedEvent
 			event.MustSetValue(&roachpb.RangeFeedValue{

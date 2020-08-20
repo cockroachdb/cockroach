@@ -37,6 +37,7 @@ import (
 	clog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	crdberrors "github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
@@ -1735,4 +1736,44 @@ func (c *SyncedCluster) Parallel(
 
 func (c *SyncedCluster) escapedTag() string {
 	return strings.Replace(c.Tag, "/", "\\/", -1)
+}
+
+// Init initializes the cluster. It does it through node 1 (as per ServerNodes)
+// to maintain parity with auto-init behavior of `roachprod start` (when
+// --skip-init) is not specified. The implementation should be kept in
+// sync with Cockroach.Start.
+func (c *SyncedCluster) Init() {
+	r := c.Impl.(Cockroach)
+	h := &crdbInstallHelper{c: c, r: r}
+
+	// See (Cockroach).Start. We reserve a few special operations for the first
+	// node, so we strive to maintain the same here for interoperability.
+	const firstNodeIdx = 0
+
+	vers, err := getCockroachVersion(c, c.ServerNodes()[firstNodeIdx])
+	if err != nil {
+		log.Fatalf("unable to retrieve cockroach version: %v", err)
+	}
+
+	if !vers.AtLeast(version.MustParse("v20.1.0")) {
+		log.Fatal("`roachprod init` only supported for v20.1 and beyond")
+	}
+
+	fmt.Printf("%s: initializing cluster\n", h.c.Name)
+	initOut, err := h.initializeCluster(firstNodeIdx)
+	if err != nil {
+		log.Fatalf("unable to initialize cluster: %v", err)
+	}
+	if initOut != "" {
+		fmt.Println(initOut)
+	}
+
+	fmt.Printf("%s: setting cluster settings\n", h.c.Name)
+	clusterSettingsOut, err := h.setClusterSettings(firstNodeIdx)
+	if err != nil {
+		log.Fatalf("unable to set cluster settings: %v", err)
+	}
+	if clusterSettingsOut != "" {
+		fmt.Println(clusterSettingsOut)
+	}
 }

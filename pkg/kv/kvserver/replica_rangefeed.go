@@ -194,28 +194,32 @@ func (r *Replica) RangeFeed(
 	}
 
 	// Register the stream with a catch-up iterator.
-	var catchUpIter storage.SimpleIterator
+	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
-		innerIter := r.Engine().NewIterator(storage.IterOptions{
-			UpperBound: args.Span.EndKey,
-			// RangeFeed originally intended to use the time-bound iterator
-			// performance optimization. However, they've had correctness issues in
-			// the past (#28358, #34819) and no-one has the time for the due-diligence
-			// necessary to be confidant in their correctness going forward. Not using
-			// them causes the total time spent in RangeFeed catchup on changefeed
-			// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
-			// workable. See #35122 for details.
-			// MinTimestampHint: args.Timestamp,
-		})
-		catchUpIter = iteratorWithCloser{
-			SimpleIterator: innerIter,
-			close:          iterSemRelease,
+		catchUpIterFunc = func() storage.SimpleIterator {
+
+			innerIter := r.Engine().NewIterator(storage.IterOptions{
+				UpperBound: args.Span.EndKey,
+				// RangeFeed originally intended to use the time-bound iterator
+				// performance optimization. However, they've had correctness issues in
+				// the past (#28358, #34819) and no-one has the time for the due-diligence
+				// necessary to be confidant in their correctness going forward. Not using
+				// them causes the total time spent in RangeFeed catchup on changefeed
+				// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
+				// workable. See #35122 for details.
+				// MinTimestampHint: args.Timestamp,
+			})
+			catchUpIter := iteratorWithCloser{
+				SimpleIterator: innerIter,
+				close:          iterSemRelease,
+			}
+			// Responsibility for releasing the semaphore now passes to the iterator.
+			iterSemRelease = nil
+			return catchUpIter
 		}
-		// Responsibility for releasing the semaphore now passes to the iterator.
-		iterSemRelease = nil
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, errC,
 	)
 	r.raftMu.Unlock()
 
@@ -296,7 +300,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchupIter storage.SimpleIterator,
+	catchupIter rangefeed.IteratorConstructor,
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
@@ -341,16 +345,18 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := r.Engine().NewIterator(storage.IterOptions{
-		UpperBound: desc.EndKey.AsRawKey(),
-		// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
-		// we should periodically persist the resolved timestamp so that we
-		// can initialize the rangefeed using an iterator that only needs to
-		// observe timestamps back to the last recorded resolved timestamp.
-		// This is safe because we know that there are no unresolved intents
-		// at times before a resolved timestamp.
-		// MinTimestampHint: r.ResolvedTimestamp,
-	})
+	rtsIter := func() storage.SimpleIterator {
+		return r.Engine().NewIterator(storage.IterOptions{
+			UpperBound: desc.EndKey.AsRawKey(),
+			// TODO(nvanbenschoten): To facilitate fast restarts of rangefeed
+			// we should periodically persist the resolved timestamp so that we
+			// can initialize the rangefeed using an iterator that only needs to
+			// observe timestamps back to the last recorded resolved timestamp.
+			// This is safe because we know that there are no unresolved intents
+			// at times before a resolved timestamp.
+			// MinTimestampHint: r.ResolvedTimestamp,
+		})
+	}
 	p.Start(r.store.Stopper(), rtsIter)
 
 	// Register with the processor *before* we attach its reference to the
@@ -360,7 +366,6 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// server shutdown.
 	reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
 	if !reg {
-		catchupIter.Close() // clean up
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
 			errC <- roachpb.NewError(&roachpb.NodeUnavailableError{})
