@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -46,6 +47,8 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 	"if positive, allowed size in excess of target size for SSTs from export requests",
 	64<<20, /* 64 MiB */
 )
+
+const maxUploadRetries = 5
 
 func init() {
 	batcheval.RegisterReadOnlyCommand(roachpb.Export, declareKeysExport, evalExport)
@@ -200,7 +203,15 @@ func evalExport(
 			// Create a unique int differently.
 			nodeID := cArgs.EvalCtx.NodeID()
 			exported.Path = fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(base.SQLInstanceID(nodeID)))
-			if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
+			if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxUploadRetries, func() error {
+				// We blindly retry any error here because we expect the caller to have
+				// verified the target is writable before sending ExportRequests for it.
+				if err := exportStore.WriteFile(ctx, exported.Path, bytes.NewReader(data)); err != nil {
+					log.VEventf(ctx, 1, "failed to put file: %+v", err)
+					return err
+				}
+				return nil
+			}); err != nil {
 				return result.Result{}, err
 			}
 		}

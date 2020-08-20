@@ -138,6 +138,10 @@ func MakeS3Storage(
 	if conf.Endpoint != "" {
 		sess.Config.S3ForcePathStyle = aws.Bool(true)
 	}
+	sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+	maxRetries := 10
+	sess.Config.MaxRetries = &maxRetries
+
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
