@@ -1046,6 +1046,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	msg raftpb.Message,
 	toReplica, fromReplica roachpb.ReplicaDescriptor,
 	quiesce bool,
+	lagging laggingReplicaSet,
 ) bool {
 	var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
 	switch msg.Type {
@@ -1059,12 +1060,14 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		return false
 	}
 	beat := RaftHeartbeat{
-		RangeID:       r.RangeID,
-		ToReplicaID:   toReplica.ReplicaID,
-		FromReplicaID: fromReplica.ReplicaID,
-		Term:          msg.Term,
-		Commit:        msg.Commit,
-		Quiesce:       quiesce,
+		RangeID:                           r.RangeID,
+		ToReplicaID:                       toReplica.ReplicaID,
+		FromReplicaID:                     fromReplica.ReplicaID,
+		Term:                              msg.Term,
+		Commit:                            msg.Commit,
+		Quiesce:                           quiesce,
+		LaggingFollowersOnQuiesce:         lagging,
+		LaggingFollowersOnQuiesceAccurate: quiesce,
 	}
 	if log.V(4) {
 		log.Infof(ctx, "coalescing beat: %+v", beat)
@@ -1171,7 +1174,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 		return
 	}
 
-	if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, false) {
+	if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, false, nil) {
 		return
 	}
 

@@ -261,6 +261,11 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// laggingFollowersOnQuiesce is the set of dead replicas that are not
+		// up-to-date with the rest of the quiescent Raft group. Nil if !quiescent.
+		laggingFollowersOnQuiesce laggingReplicaSet
+		// TODO(nvanbenschoten): remove in v21.1.
+		laggingFollowersOnQuiesceAccurate bool
 		// mergeComplete is non-nil if a merge is in-progress, in which case any
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.

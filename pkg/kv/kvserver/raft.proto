@@ -14,6 +14,7 @@ option go_package = "kvserver";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "kv/kvserver/kvserverpb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
@@ -33,6 +34,8 @@ message RaftHeartbeat {
   uint64 commit = 5;
   bool quiesce = 6;
   reserved 7;
+  repeated storagepb.Liveness lagging_followers_on_quiesce = 8 [(gogoproto.nullable) = false];
+  bool lagging_followers_on_quiesce_accurate = 10;
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -60,6 +63,26 @@ message RaftMessageRequest {
   // Raft which will generate a MsgHeartbeatResp that will unquiesce
   // the sender.
   bool quiesce = 5;
+  // If quiesce is true, this set contains liveness information about
+  // the replicas that were dead when the leader decided to quiesce and
+  // were lagging behind the quiescence log index (meaning they would
+  // have prevented quiescence had they been alive). If any replica
+  // (leader or follower) becomes aware that a replica in this set has
+  // become live, it should unquiesce the range so that the replica can
+  // be caught back up.
+  repeated storagepb.Liveness lagging_followers_on_quiesce = 9 [(gogoproto.nullable) = false];
+  // This field helps migrate in the lagging_followers_on_quiesce field. For
+  // messages sent by versions of Cockroach that do not know about the
+  // lagging_followers_on_quiesce field (i.e. v20.1), we need to assume that all
+  // replicas are lagging, not that none of them are.
+  //
+  // TODO(nvanbenschoten): Migration path:
+  // v20.2: Add this field. Always set to true when quiesce == true.
+  //        Consult field on receiver. Consider all replicas "lagging"
+  //        if not set to true on liveness change.
+  // v21.1: Keep sending. Stop consulting.
+  // v21.2: Remove field.
+  bool lagging_followers_on_quiesce_accurate = 10;
 
   // A coalesced heartbeat request is any RaftMessageRequest with a nonzero number of
   // heartbeats or heartbeat_resps.

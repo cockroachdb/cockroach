@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -95,8 +96,10 @@ func (s *Store) uncoalesceBeats(
 				StoreID:   toReplica.StoreID,
 				ReplicaID: beat.ToReplicaID,
 			},
-			Message: msg,
-			Quiesce: beat.Quiesce,
+			Message:                           msg,
+			Quiesce:                           beat.Quiesce,
+			LaggingFollowersOnQuiesce:         beat.LaggingFollowersOnQuiesce,
+			LaggingFollowersOnQuiesceAccurate: beat.LaggingFollowersOnQuiesceAccurate,
 		}
 		if log.V(4) {
 			log.Infof(ctx, "uncoalesced beat: %+v", beatReqs[i])
@@ -212,26 +215,13 @@ func (s *Store) processRaftRequestWithReplica(
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
 		}
-		// If another replica tells us to quiesce, we verify that according to
-		// it, we are fully caught up, and that we believe it to be the leader.
-		// If we didn't do this, this replica could only unquiesce by means of
-		// an election, which means that the request prompting the unquiesce
-		// would end up with latency on the order of an election timeout.
-		//
-		// There are additional checks in quiesceLocked() that prevent us from
-		// quiescing if there's outstanding work.
-		r.mu.Lock()
-		status := r.raftBasicStatusRLocked()
-		ok := status.Term == req.Message.Term &&
-			status.Commit == req.Message.Commit &&
-			status.Lead == req.Message.From &&
-			r.quiesceLocked()
-		r.mu.Unlock()
-		if ok {
+		if r.maybeQuiesceOnNotify(
+			ctx,
+			req.Message,
+			laggingReplicaSet(req.LaggingFollowersOnQuiesce),
+			req.LaggingFollowersOnQuiesceAccurate,
+		) {
 			return nil
-		}
-		if log.V(4) {
-			log.Infof(ctx, "not quiescing: local raft status is %+v, incoming quiesce message is %+v", status, req.Message)
 		}
 	}
 
@@ -536,23 +526,34 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	return exists // ready
 }
 
-// nodeIsLiveCallback is invoked when a node transitions from non-live
-// to live. Iterate through all replicas and find any which belong to
-// ranges containing the implicated node. Unquiesce if currently
-// quiesced. Note that this mechanism can race with concurrent
-// invocations of processTick, which may have a copy of the previous
-// livenessMap where the now-live node is down. Those instances should
-// be rare, however, and we expect the newly live node to eventually
-// unquiesce the range.
-func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
+// nodeIsLiveCallback is invoked when a node transitions from non-live to live.
+// Iterate through all replicas and find any which belong to ranges containing
+// the implicated node. Unquiesce if currently quiesced and the node's replica
+// is not up-to-date.
+//
+// See the comment in shouldFollowerQuiesceOnNotify for details on how these two
+// functions combine to provide the guarantee that:
+//
+//   If a quorum of replica in a Raft group is alive and at least
+//   one of these replicas is up-to-date, the Raft group will catch
+//   up any of the live, lagging replicas.
+//
+// Note that this mechanism can race with concurrent invocations of processTick,
+// which may have a copy of the previous livenessMap where the now-live node is
+// down. Those instances should be rare, however, and we expect the newly live
+// node to eventually unquiesce the range.
+func (s *Store) nodeIsLiveCallback(l kvserverpb.Liveness) {
 	s.updateLivenessMap()
 
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 		r := (*Replica)(v)
-		for _, rep := range r.Desc().Replicas().All() {
-			if rep.NodeID == nodeID {
-				r.unquiesce()
-			}
+		r.mu.RLock()
+		quiescent := r.mu.quiescent
+		lagging := r.mu.laggingFollowersOnQuiesce
+		laggingAccurate := r.mu.laggingFollowersOnQuiesceAccurate
+		r.mu.RUnlock()
+		if quiescent && (lagging.MemberStale(l) || !laggingAccurate) {
+			r.unquiesce()
 		}
 		return true
 	})
