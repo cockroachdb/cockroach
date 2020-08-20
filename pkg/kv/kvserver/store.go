@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -1237,7 +1238,7 @@ func IterateIDPrefixKeys(
 	reader storage.Reader,
 	keyFn func(roachpb.RangeID) roachpb.Key,
 	msg protoutil.Message,
-	f func(_ roachpb.RangeID) (more bool, _ error),
+	f func(_ roachpb.RangeID) error,
 ) error {
 	rangeID := roachpb.RangeID(1)
 	iter := reader.NewIterator(storage.IterOptions{
@@ -1294,8 +1295,10 @@ func IterateIDPrefixKeys(
 			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
 		}
 
-		more, err := f(rangeID)
-		if !more || err != nil {
+		if err := f(rangeID); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
 			return err
 		}
 		rangeID++
