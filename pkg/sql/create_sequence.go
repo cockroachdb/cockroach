@@ -224,5 +224,5 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = descpb.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable()
+	return desc, desc.Validate(params.ctx, params.p.txn, keys.SystemSQLCodec)
 }
