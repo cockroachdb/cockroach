@@ -36,7 +36,7 @@ import (
 // Do not manipulate these fields directly, use methods in the ScheduledJob.
 type scheduledJobRecord struct {
 	ScheduleID      int64                     `col:"schedule_id"`
-	ScheduleName    string                    `col:"schedule_name"`
+	ScheduleLabel   string                    `col:"schedule_label"`
 	Owner           string                    `col:"owner"`
 	NextRun         time.Time                 `col:"next_run"`
 	ScheduleExpr    string                    `col:"schedule_expr"`
@@ -110,15 +110,15 @@ func (j *ScheduledJob) ScheduleID() int64 {
 	return j.rec.ScheduleID
 }
 
-// ScheduleName returns schedule name.
-func (j *ScheduledJob) ScheduleName() string {
-	return j.rec.ScheduleName
+// ScheduleLabel returns schedule label.
+func (j *ScheduledJob) ScheduleLabel() string {
+	return j.rec.ScheduleLabel
 }
 
-// SetScheduleName updates schedule name.
-func (j *ScheduledJob) SetScheduleName(name string) {
-	j.rec.ScheduleName = name
-	j.markDirty("schedule_name")
+// SetScheduleLabel updates schedule label.
+func (j *ScheduledJob) SetScheduleLabel(label string) {
+	j.rec.ScheduleLabel = label
+	j.markDirty("schedule_label")
 }
 
 // Owner returns schedule owner.
@@ -421,8 +421,8 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 		var err error
 
 		switch col {
-		case `schedule_name`:
-			arg = tree.NewDString(j.rec.ScheduleName)
+		case `schedule_label`:
+			arg = tree.NewDString(j.rec.ScheduleLabel)
 		case `owner`:
 			arg = tree.NewDString(j.rec.Owner)
 		case `next_run`:

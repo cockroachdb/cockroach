@@ -336,7 +336,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			name: "partitioned-backup",
 			user: enterpriseUser,
 			query: `
-		CREATE SCHEDULE FOR BACKUP DATABASE system 
+		CREATE SCHEDULE FOR BACKUP DATABASE system
     INTO ('nodelocal://0/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://0/backup2?COCKROACH_LOCALITY=default')
 		WITH revision_history
     RECURRING '1 2 * * *'
@@ -406,7 +406,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				stmt := getScheduledBackupStatement(t, s.ExecutionArgs())
 				expectedSchedule, ok := expectedByName[stmt]
 				require.True(t, ok, "could not find matching name for %q", stmt)
-				require.Regexp(t, regexp.MustCompile(expectedSchedule.nameRe), s.ScheduleName())
+				require.Regexp(t, regexp.MustCompile(expectedSchedule.nameRe), s.ScheduleLabel())
 
 				expectedShown := fmt.Sprintf("%q", expectedSchedule.backupStmt)
 				if expectedSchedule.shownStmt != "" {

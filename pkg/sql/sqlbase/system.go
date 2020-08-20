@@ -317,7 +317,7 @@ create table system.statement_diagnostics(
 	ScheduledJobsTableSchema = `
 CREATE TABLE system.scheduled_jobs (
     schedule_id      INT DEFAULT unique_rowid() PRIMARY KEY NOT NULL,
-    schedule_name    STRING NOT NULL,
+    schedule_label    STRING NOT NULL,
     created          TIMESTAMPTZ NOT NULL DEFAULT now(),
     owner            STRING,
     next_run         TIMESTAMPTZ,
@@ -331,8 +331,8 @@ CREATE TABLE system.scheduled_jobs (
 
     FAMILY sched (schedule_id, next_run),
     FAMILY other (
-       schedule_name, created, owner, schedule_expr, 
-       schedule_details, executor_type, execution_args, schedule_changes 
+			schedule_label, created, owner, schedule_expr,
+       schedule_details, executor_type, execution_args, schedule_changes
     )
 )`
 
@@ -1606,7 +1606,7 @@ var (
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "schedule_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
-			{Name: "schedule_name", ID: 2, Type: types.String, Nullable: false},
+			{Name: "schedule_label", ID: 2, Type: types.String, Nullable: false},
 			{Name: "created", ID: 3, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
 			{Name: "owner", ID: 4, Type: types.String, Nullable: true},
 			{Name: "next_run", ID: 5, Type: types.TimestampTZ, Nullable: true},
@@ -1628,7 +1628,7 @@ var (
 			{
 				Name: "other",
 				ID:   1,
-				ColumnNames: []string{"schedule_name", "created", "owner", "schedule_expr", "schedule_details",
+				ColumnNames: []string{"schedule_label", "created", "owner", "schedule_expr", "schedule_details",
 					"executor_type", "execution_args", "schedule_changes"},
 				ColumnIDs: []descpb.ColumnID{2, 3, 4, 6, 7, 8, 9, 10},
 			},

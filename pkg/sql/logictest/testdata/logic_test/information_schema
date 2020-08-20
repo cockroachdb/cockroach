@@ -964,7 +964,7 @@ system              public             630200280_36_2_not_null  statement_finger
 system              public             630200280_36_3_not_null  statement IS NOT NULL
 system              public             630200280_36_4_not_null  collected_at IS NOT NULL
 system              public             630200280_37_1_not_null  schedule_id IS NOT NULL
-system              public             630200280_37_2_not_null  schedule_name IS NOT NULL
+system              public             630200280_37_2_not_null  schedule_label IS NOT NULL
 system              public             630200280_37_3_not_null  created IS NOT NULL
 system              public             630200280_37_8_not_null  executor_type IS NOT NULL
 system              public             630200280_37_9_not_null  execution_args IS NOT NULL
@@ -1226,7 +1226,7 @@ system         public        scheduled_jobs                   schedule_changes  
 system         public        scheduled_jobs                   schedule_details          7
 system         public        scheduled_jobs                   schedule_expr             6
 system         public        scheduled_jobs                   schedule_id               1
-system         public        scheduled_jobs                   schedule_name             2
+system         public        scheduled_jobs                   schedule_label            2
 system         public        settings                         lastUpdated               3
 system         public        settings                         name                      1
 system         public        settings                         value                     2
@@ -1497,12 +1497,12 @@ DROP TABLE num_prec
 
 statement ok
 CREATE TABLE time_prec (
-  a TIME, 
+  a TIME,
   b TIME(0),
   c TIMETZ,
   d TIMETZ(1),
-  e TIMESTAMP, 
-  f TIMESTAMP(2), 
+  e TIMESTAMP,
+  f TIMESTAMP(2),
   g TIMESTAMPTZ,
   h TIMESTAMPTZ(3),
   i INTERVAL,

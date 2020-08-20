@@ -172,7 +172,7 @@ func (s *jobScheduler) processSchedule(
 	// Grab job executor and execute the job.
 	log.Infof(ctx,
 		"Starting job for schedule %d (%s); next run scheduled for %s",
-		schedule.ScheduleID(), schedule.ScheduleName(), schedule.NextRun())
+		schedule.ScheduleID(), schedule.ScheduleLabel(), schedule.NextRun())
 
 	if err := executor.ExecuteJob(ctx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())

@@ -351,6 +351,15 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
+	{
+		// Introduced in v20.2.
+		name: "rename schedule_label",
+		workFn: func(ctx context.Context, r runner) error {
+			return r.execAsRoot(ctx, "rename-schedule-name",
+				"ALTER TABLE system.scheduled_jobs RENAME COLUMN schedule_name TO schedule_label")
+		},
+		includedInBootstrap: clusterversion.VersionByKey(clusterversion.VersionAlterColumnTypeGeneral),
+	},
 }
 
 func staticIDs(
@@ -1317,7 +1326,7 @@ ADD COLUMN IF NOT EXISTS created_by_id INT FAMILY fam_0_id_status_created_payloa
 `
 	addIdxStmt := `
 CREATE INDEX IF NOT EXISTS jobs_created_by_type_created_by_id_idx
-ON system.jobs (created_by_type, created_by_id) 
+ON system.jobs (created_by_type, created_by_id)
 STORING (status)
 `
 	asNode := sqlbase.InternalExecutorSessionDataOverride{

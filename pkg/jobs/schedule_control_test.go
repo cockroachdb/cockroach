@@ -102,7 +102,7 @@ func TestScheduleControl(t *testing.T) {
 		}
 
 		querySchedules := "SELECT schedule_id FROM " + th.env.ScheduledJobsTableName() +
-			" WHERE schedule_name LIKE 'pause-resume-many-%'"
+			" WHERE schedule_label LIKE 'pause-resume-many-%'"
 
 		th.sqlDB.Exec(t, "PAUSE SCHEDULES "+querySchedules)
 

@@ -78,7 +78,7 @@ const (
 	VersionMaterializedViews
 	VersionBox2DType
 	VersionLeasedDatabaseDescriptors
-
+	VersionRenameScheduledJobLabel
 	// Add new versions here (step one of two).
 )
 
@@ -582,6 +582,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLeasedDatabasedDescriptors enables leased database descriptors.
 		Key:     VersionLeasedDatabaseDescriptors,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 18},
+	},
+	{
+		// VersionBox2DType enables the use of the box2d type.
+		Key:     VersionRenameScheduledJobLabel,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 19},
 	},
 
 	// Add new versions here (step two of two).
