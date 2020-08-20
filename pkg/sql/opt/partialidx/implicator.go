@@ -450,7 +450,7 @@ func (im *Implicator) atomImpliesPredicate(
 
 	default:
 		// atom A => atom B iff B contains A.
-		return im.atomContainsAtom(pred, e)
+		return im.atomContainsAtom(pred, e, exactMatches)
 	}
 }
 
@@ -461,7 +461,9 @@ func (im *Implicator) atomImpliesPredicate(
 // Constraints are used to prove containment because they make it easy to assess
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
-func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
+func (im *Implicator) atomContainsAtom(
+	a, b opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+) bool {
 	// Build constraint sets for a and b, unless they have been cached.
 	aSet, aTight, ok := im.fetchConstraint(a)
 	if !ok {
@@ -484,10 +486,8 @@ func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	//
 	//   /1: (/NULL - ]; /2: (/NULL - ]
 	//
-	// TODO(mgartner): Prove implication in cases like (a > b) => (a >= b),
-	// without using constraints.
 	if aSet.Length() > 1 || bSet.Length() > 1 {
-		return false
+		return im.tryProveWithoutConstraints(a, b, exactMatches)
 	}
 
 	// Containment cannot be proven if either constraint is not tight, because
@@ -506,6 +506,79 @@ func (im *Implicator) atomContainsAtom(a, b opt.ScalarExpr) bool {
 	}
 
 	return ac.Contains(im.evalCtx, bc)
+}
+
+// comparison is a bit set used to represent the set of comparison operators:
+// {=, <, >, <>, <=, >=}. If multiple bit flags are set, 'OR' semantics are
+// followed. For example, 'eq | lt' is equivalent to '< OR =', or '<='.
+type comparison uint8
+
+const (
+	// eq represents an equality comparison, '='.
+	eq comparison = 1 << iota
+	// lt represents a less-than comparison, '<'.
+	lt
+	// gt represents a greater-than comparison, '>'.
+	gt
+)
+
+// comparisonMap maps from operator types to the bit set representations.
+var comparisonMap = map[opt.Operator]comparison{
+	opt.EqOp: eq,
+	opt.LtOp: lt,
+	opt.GtOp: gt,
+	opt.LeOp: eq | lt,
+	opt.GeOp: eq | gt,
+	opt.NeOp: lt | gt,
+}
+
+// commute returns the commuted version of this comparison struct.
+func (c comparison) commute() comparison {
+	// Commutation of a comparison operator can be accomplished by swapping the
+	// lt and gt bits.
+	const ltPos = 1
+	const gtPos = 2
+
+	ltBit := (c >> ltPos) & 1
+	gtBit := (c >> gtPos) & 1
+	xorBits := ltBit ^ gtBit
+	xorBits = (xorBits << ltPos) | (xorBits << gtPos)
+	return c ^ xorBits
+}
+
+// contains returns true if the given comparison is contained by this
+// comparison.
+func (c comparison) contains(o comparison) bool {
+	return c|o == c
+}
+
+// tryProveWithoutConstraints attempts to prove that b => a if both a and b are
+// comparison expressions such as '<='.
+func (im *Implicator) tryProveWithoutConstraints(
+	a, b opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+) bool {
+	aComp, ok := comparisonMap[a.Op()]
+	if !ok {
+		return false
+	}
+	bComp, ok := comparisonMap[b.Op()]
+	if !ok {
+		return false
+	}
+	aLeft, aRight := a.Child(0), a.Child(1)
+	bLeft, bRight := b.Child(0), b.Child(1)
+
+	// Require that the left and right inputs of the two expressions be equal.
+	if aLeft == bRight && aRight == bLeft {
+		bComp = bComp.commute()
+	} else if aLeft != bLeft || aRight != bRight {
+		return false
+	}
+	if aComp == bComp {
+		// The expression can removed from the filters.
+		exactMatches[b] = struct{}{}
+	}
+	return aComp.contains(bComp)
 }
 
 // cacheConstraint caches a constraint set and a tight boolean for the given

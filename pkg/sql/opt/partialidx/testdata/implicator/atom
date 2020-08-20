@@ -130,15 +130,21 @@ predtest vars=(int, int)
 true
 └── remaining filters: none
 
-# TODO(mgartner): This filter should imply the predicate. The current logic does
-# not support this because it relies solely on constraints which can only
-# represent variable constraints in relation to constants.
+predtest vars=(int, int)
+@1 = @2
+=>
+@2 = @1
+----
+true
+└── remaining filters: none
+
 predtest vars=(int, int)
 @1 > @2
 =>
 @1 >= @2
 ----
-false
+true
+└── remaining filters: @1 > @2
 
 predtest vars=(int)
 @1 = 1
@@ -193,6 +199,46 @@ predtest vars=(int, int)
 (@1, @2) > (2, 0)
 ----
 false
+
+predtest vars=(int, int)
+@1 < @2
+=>
+@2 > @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(int, int)
+@1 <= @2
+=>
+@2 >= @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(int, int)
+@1 < @2
+=>
+@2 >= @1
+----
+true
+└── remaining filters: @1 < @2
+
+predtest vars=(int, int)
+@1 <> @2
+=>
+@2 <> @1
+----
+true
+└── remaining filters: none
+
+predtest vars=(int, int)
+@1 < @2
+=>
+@1 <> @2
+----
+true
+└── remaining filters: @1 < @2
 
 # IS (NOT) NULL
 
