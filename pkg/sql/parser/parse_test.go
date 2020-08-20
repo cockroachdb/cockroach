@@ -1518,6 +1518,7 @@ func TestParse(t *testing.T) {
 		{`BACKUP TABLE foo TO 'bar'`},
 		{`BACKUP TABLE foo INTO 'bar'`},
 		{`BACKUP TABLE foo INTO LATEST IN 'bar'`},
+		{`BACKUP TABLE foo INTO 'subdir' IN 'bar'`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@hourly'`},
 		{`CREATE SCHEDULE 'my schedule' FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'`},
 		{`CREATE SCHEDULE FOR BACKUP TABLE foo INTO 'bar' RECURRING '@daily'`},
