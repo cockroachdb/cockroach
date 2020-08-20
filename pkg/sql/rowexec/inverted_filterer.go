@@ -128,7 +128,6 @@ func newInvertedFilterer(
 		ifr.FlowCtx.Cfg.TempStorage,
 		ifr.MemMonitor,
 		ifr.diskMonitor,
-		0, /* rowCapacity */
 	)
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {

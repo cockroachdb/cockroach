@@ -78,7 +78,6 @@ func (s *sorterBase) init(
 		flowCtx.Cfg.TempStorage,
 		memMonitor,
 		s.diskMonitor,
-		0, /* rowCapacity */
 	)
 	s.rows = &rc
 

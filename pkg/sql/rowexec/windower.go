@@ -642,7 +642,6 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		w.FlowCtx.Cfg.TempStorage,
 		w.MemMonitor,
 		w.diskMonitor,
-		0, /* rowCapacity */
 	)
 	i, err := w.allRowsPartitioned.NewAllRowsIterator(ctx)
 	if err != nil {

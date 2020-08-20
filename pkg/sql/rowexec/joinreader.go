@@ -304,7 +304,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 		jr.FlowCtx.Cfg.TempStorage,
 		jr.MemMonitor,
 		jr.diskMonitor,
-		0, /* rowCapacity */
 	)
 	if limit < mon.DefaultPoolAllocationSize {
 		// The memory limit is too low for caching, most likely to force disk

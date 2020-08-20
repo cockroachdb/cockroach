@@ -37,7 +37,7 @@ func TestRowContainer(t *testing.T) {
 				m := mon.NewUnlimitedMonitor(
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
-				rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
+				rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol))
 				row := make(tree.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
@@ -84,7 +84,7 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 	defer m.Stop(ctx)
 
 	resCols := sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.Int}}
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCols), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCols))
 	defer rc.Close(ctx)
 
 	// Verify that a panic is thrown for out-of-range conditions.
@@ -110,7 +110,7 @@ func TestRowContainerZeroCols(t *testing.T) {
 	m := mon.NewUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(nil), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(nil))
 	defer rc.Close(ctx)
 
 	const numRows = 10
@@ -123,6 +123,26 @@ func TestRowContainerZeroCols(t *testing.T) {
 		t.Fatalf("expected %d rows, but found %d", numRows, rc.Len())
 	}
 	row := rc.At(0)
+	if row == nil {
+		t.Fatalf("expected non-nil row")
+	}
+	if len(row) != 0 {
+		t.Fatalf("expected empty row")
+	}
+
+	// Clear and try again.
+	rc.Clear(context.Background())
+
+	const numRowsAfterClear = 5
+	for i := 0; i < numRowsAfterClear; i++ {
+		if _, err := rc.AddRow(context.Background(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rc.Len() != numRowsAfterClear {
+		t.Fatalf("expected %d rows, but found %d", numRowsAfterClear, rc.Len())
+	}
+	row = rc.At(0)
 	if row == nil {
 		t.Fatalf("expected non-nil row")
 	}
@@ -146,7 +166,7 @@ func BenchmarkRowContainerAt(b *testing.B) {
 		resCol[i] = sqlbase.ResultColumn{Typ: types.Int}
 	}
 
-	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol), 0)
+	rc := NewRowContainer(m.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(resCol))
 	defer rc.Close(context.Background())
 
 	row := make(tree.Datums, numCols)

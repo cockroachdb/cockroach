@@ -263,7 +263,6 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 			flowCtx.Cfg.TempStorage,
 			rb.outputs[i].memoryMonitor,
 			rb.outputs[i].diskMonitor,
-			0, /* rowCapacity */
 		)
 
 		// Initialize any outboxes.
