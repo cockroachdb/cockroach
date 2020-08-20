@@ -17,9 +17,7 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -246,20 +244,6 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	rowCount := 0
 	lastWakeupTime := timeutil.Now()
 
-	// Inverted index variables for EncodeInvertedIndexKeys.
-	// TODO(mjibson): Once we support configuring geospatial indexes
-	// via SQL, we will need to pass down the actual index descriptors
-	// or something to here so that we can generate the correct inverted
-	// index keys. At this point we'll also need to worry about users who
-	// have multiple indexes with different configurations over the same
-	// column. For now, since we don't even allow users to change the
-	// defaults, we can just not worry about it.
-	invIndexDesc := &descpb.IndexDescriptor{
-		GeoConfig: geoindex.Config{
-			S2Geography: geoindex.DefaultGeographyIndexConfig().S2Geography,
-			S2Geometry:  geoindex.DefaultGeometryIndexConfig().S2Geometry,
-		},
-	}
 	var invKeys [][]byte
 	invRow := sqlbase.EncDatumRow{sqlbase.EncDatum{}}
 	timer := timeutil.NewTimer()
@@ -349,9 +333,16 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			if err := row[col].EnsureDecoded(s.outTypes[col], &da); err != nil {
 				return false, err
 			}
+
+			index := s.invSketch[col].spec.Index
+			if index == nil {
+				// If we don't have an index descriptor don't attempt to generate inverted
+				// index entries.
+				continue
+			}
 			switch s.outTypes[col].Family() {
 			case types.GeographyFamily, types.GeometryFamily:
-				invKeys, err = sqlbase.EncodeGeoInvertedIndexTableKeys(row[col].Datum, nil /* inKey */, invIndexDesc)
+				invKeys, err = sqlbase.EncodeGeoInvertedIndexTableKeys(row[col].Datum, nil /* inKey */, index)
 			default:
 				invKeys, err = sqlbase.EncodeInvertedIndexTableKeys(row[col].Datum, nil /* inKey */)
 			}
