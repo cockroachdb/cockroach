@@ -1613,6 +1613,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// engine type as well as type of start (initial boot vs restart).
 	nodeStartCounter := "storage.engine."
 	switch s.cfg.StorageEngine {
+	case enginepb.EngineTypeDefault:
+		fallthrough
 	case enginepb.EngineTypePebble:
 		nodeStartCounter += "pebble."
 	case enginepb.EngineTypeRocksDB:
