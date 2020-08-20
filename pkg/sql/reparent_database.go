@@ -1,0 +1,275 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
+)
+
+type reparentDatabaseNode struct {
+	n         *tree.ReparentDatabase
+	db        *sqlbase.MutableDatabaseDescriptor
+	newParent *sqlbase.MutableDatabaseDescriptor
+}
+
+func (p *planner) ReparentDatabase(
+	ctx context.Context, n *tree.ReparentDatabase,
+) (planNode, error) {
+	// We'll only allow the admin to perform this reparenting action.
+	if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... CONVERT TO SCHEMA"); err != nil {
+		return nil, err
+	}
+
+	// Ensure that the cluster version is high enough to create the schema.
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionUserDefinedSchemas) {
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			`creating schemas requires all nodes to be upgraded to %s`,
+			clusterversion.VersionByKey(clusterversion.VersionUserDefinedSchemas))
+	}
+
+	// Check that creation of schemas is enabled.
+	if !p.EvalContext().SessionData.UserDefinedSchemasEnabled {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"session variable experimental_enable_user_defined_schemas is set to false, cannot create a schema")
+	}
+
+	db, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Name), true /* required */)
+	if err != nil {
+		return nil, err
+	}
+
+	parent, err := p.ResolveMutableDatabaseDescriptor(ctx, string(n.Parent), true /* required */)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure that this database wouldn't collide with a name under the new database.
+	exists, err := p.schemaExists(ctx, parent.ID, db.Name)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", db.Name)
+	}
+
+	// Ensure the database has a valid schema name.
+	if err := sqlbase.IsSchemaNameValid(db.Name); err != nil {
+		return nil, err
+	}
+
+	// We can't reparent a database that has any child schemas other than public.
+	if len(db.Schemas) > 0 {
+		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot convert database with schemas into schema")
+	}
+
+	return &reparentDatabaseNode{
+		n:         n,
+		db:        db,
+		newParent: parent,
+	}, nil
+}
+
+func (n *reparentDatabaseNode) startExec(params runParams) error {
+	ctx, p, codec := params.ctx, params.p, params.ExecCfg().Codec
+
+	// Make a new schema corresponding to the target db.
+	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, codec)
+	if err != nil {
+		return err
+	}
+	schema := sqlbase.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
+		ParentID:   n.newParent.ID,
+		Name:       n.db.Name,
+		ID:         id,
+		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
+	})
+	// Add the new schema to the parent database's name map.
+	if n.newParent.Schemas == nil {
+		n.newParent.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	}
+	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{
+		ID:      schema.ID,
+		Dropped: false,
+	}
+
+	if err := p.createDescriptorWithID(
+		ctx,
+		sqlbase.NewSchemaKey(n.newParent.ID, schema.Name).Key(p.ExecCfg().Codec),
+		id,
+		schema,
+		params.ExecCfg().Settings,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	b := p.txn.NewBatch()
+
+	// Get all objects under the target database.
+	objNames, err := resolver.GetObjectNames(ctx, p.txn, p, codec, n.db, tree.PublicSchema, true /* explicitPrefix */)
+	if err != nil {
+		return err
+	}
+
+	// For each object, adjust the ParentID and ParentSchemaID fields to point
+	// to the new parent DB and schema.
+	for _, objName := range objNames {
+		// First try looking up objName as a table.
+		found, desc, err := p.LookupObject(
+			ctx,
+			tree.ObjectLookupFlags{
+				// Note we set required to be false here in order to not error out
+				// if we don't find the object.
+				CommonLookupFlags: tree.CommonLookupFlags{Required: false},
+				RequireMutable:    true,
+				IncludeOffline:    true,
+				DesiredObjectKind: tree.TableObject,
+			},
+			objName.Catalog(),
+			objName.Schema(),
+			objName.Object(),
+		)
+		if err != nil {
+			return err
+		}
+		if found {
+			// Remap the ID's on the table.
+			tbl, ok := desc.(*sqlbase.MutableTableDescriptor)
+			if !ok {
+				return errors.AssertionFailedf("%q was not a MutableTableDescriptor", objName.Object())
+			}
+
+			// If this table has any dependents, then we can't proceed (similar to the
+			// restrictions around renaming tables). See #10083.
+			if len(tbl.GetDependedOnBy()) > 0 {
+				var names []string
+				const errStr = "cannot convert database %q into schema because %q has dependent objects"
+				tblName, err := p.getQualifiedTableName(ctx, tbl)
+				if err != nil {
+					return errors.Wrapf(err, errStr, n.db.Name, tbl.Name)
+				}
+				for _, ref := range tbl.GetDependedOnBy() {
+					dep, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)
+					if err != nil {
+						return errors.Wrapf(err, errStr, n.db.Name, tblName.String())
+					}
+					fqName, err := p.getQualifiedTableName(ctx, dep)
+					if err != nil {
+						return errors.Wrapf(err, errStr, n.db.Name, dep.Name)
+					}
+					names = append(names, fqName.String())
+				}
+				return sqlbase.NewDependentObjectErrorf(
+					"could not convert database %q into schema because %q has dependent objects %v",
+					n.db.Name,
+					tblName.String(),
+					names,
+				)
+			}
+
+			tbl.AddDrainingName(descpb.NameInfo{
+				ParentID:       tbl.ParentID,
+				ParentSchemaID: tbl.GetParentSchemaID(),
+				Name:           tbl.Name,
+			})
+			tbl.ParentID = n.newParent.ID
+			tbl.UnexposedParentSchemaID = schema.ID
+			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, tbl.ParentID, tbl.GetParentSchemaID(), tbl.Name).Key(codec)
+			b.CPut(objKey, tbl.ID, nil /* expected */)
+			if err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
+				return err
+			}
+		} else {
+			// If we couldn't resolve objName as a table, try a type.
+			found, desc, err := p.LookupObject(
+				ctx,
+				tree.ObjectLookupFlags{
+					CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+					RequireMutable:    true,
+					IncludeOffline:    true,
+					DesiredObjectKind: tree.TypeObject,
+				},
+				objName.Catalog(),
+				objName.Schema(),
+				objName.Object(),
+			)
+			if err != nil {
+				return err
+			}
+			// If we couldn't find the object at all, then continue.
+			if !found {
+				continue
+			}
+			// Remap the ID's on the type.
+			typ, ok := desc.(*sqlbase.MutableTypeDescriptor)
+			if !ok {
+				return errors.AssertionFailedf("%q was not a MutableTypeDescriptor", objName.Object())
+			}
+			typ.AddDrainingName(descpb.NameInfo{
+				ParentID:       typ.ParentID,
+				ParentSchemaID: typ.ParentSchemaID,
+				Name:           typ.Name,
+			})
+			typ.ParentID = n.newParent.ID
+			typ.ParentSchemaID = schema.ID
+			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, typ.ParentID, typ.ParentSchemaID, typ.Name).Key(codec)
+			b.CPut(objKey, typ.ID, nil /* expected */)
+			if err := p.writeTypeSchemaChange(ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Delete the public schema namespace entry for this database. Per our check
+	// during initialization, this is the only schema present under n.db.
+	b.Del(catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, n.db.ID, keys.RootNamespaceID, tree.PublicSchema).Key(codec))
+
+	// This command can only be run when database leasing is supported, so we don't
+	// have to handle the case where it isn't.
+	n.db.AddDrainingName(descpb.NameInfo{
+		ParentID:       keys.RootNamespaceID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           n.db.Name,
+	})
+	n.db.State = descpb.DatabaseDescriptor_DROP
+	if err := p.writeDatabaseChangeToBatch(ctx, n.db, b); err != nil {
+		return err
+	}
+
+	if err := p.txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	return p.createDropDatabaseJob(
+		ctx,
+		n.db.ID,
+		nil, /* tableDropDetails */
+		nil, /* typesToDrop */
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	)
+}
+
+func (n *reparentDatabaseNode) Next(params runParams) (bool, error) { return false, nil }
+func (n *reparentDatabaseNode) Values() tree.Datums                 { return tree.Datums{} }
+func (n *reparentDatabaseNode) Close(ctx context.Context)           {}
+func (n *reparentDatabaseNode) ReadingOwnWrites()                   {}

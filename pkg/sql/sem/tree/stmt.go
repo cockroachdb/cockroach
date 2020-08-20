@@ -593,6 +593,12 @@ func (*RenameDatabase) StatementType() StatementType { return DDL }
 func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
 
 // StatementType implements the Statement interface.
+func (*ReparentDatabase) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ReparentDatabase) StatementTag() string { return "TODO (rohany): Implement" }
+
+// StatementType implements the Statement interface.
 func (*RenameIndex) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1051,6 +1057,7 @@ func (n *Relocate) String() string                       { return AsString(n) }
 func (n *RefreshMaterializedView) String() string        { return AsString(n) }
 func (n *RenameColumn) String() string                   { return AsString(n) }
 func (n *RenameDatabase) String() string                 { return AsString(n) }
+func (n *ReparentDatabase) String() string               { return AsString(n) }
 func (n *RenameIndex) String() string                    { return AsString(n) }
 func (n *RenameTable) String() string                    { return AsString(n) }
 func (n *Restore) String() string                        { return AsString(n) }

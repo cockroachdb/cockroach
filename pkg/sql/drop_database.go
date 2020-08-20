@@ -164,7 +164,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		p.Descriptors().AddUncommittedDatabaseDeprecated(n.dbDesc.GetName(), n.dbDesc.GetID(), descs.DBDropped)
 
 	} else {
-		n.dbDesc.DrainingNames = append(n.dbDesc.DrainingNames, descpb.NameInfo{
+		n.dbDesc.AddDrainingName(descpb.NameInfo{
 			ParentID:       keys.RootNamespaceID,
 			ParentSchemaID: keys.RootNamespaceID,
 			Name:           n.dbDesc.Name,

@@ -119,6 +119,8 @@ func buildOpaque(
 		plan, err = p.RenameColumn(ctx, n)
 	case *tree.RenameDatabase:
 		plan, err = p.RenameDatabase(ctx, n)
+	case *tree.ReparentDatabase:
+		plan, err = p.ReparentDatabase(ctx, n)
 	case *tree.RenameIndex:
 		plan, err = p.RenameIndex(ctx, n)
 	case *tree.RenameTable:
@@ -216,6 +218,7 @@ func init() {
 		&tree.RenameDatabase{},
 		&tree.RenameIndex{},
 		&tree.RenameTable{},
+		&tree.ReparentDatabase{},
 		&tree.Revoke{},
 		&tree.RevokeRole{},
 		&tree.Scatter{},
