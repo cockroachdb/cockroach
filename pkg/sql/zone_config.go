@@ -313,7 +313,7 @@ func resolveSubzone(
 	indexName := string(zs.TableOrIndex.Index)
 	var index *descpb.IndexDescriptor
 	if indexName == "" {
-		index = &table.TableDesc().PrimaryIndex
+		index = table.GetPrimaryIndex()
 		indexName = index.Name
 	} else {
 		var err error

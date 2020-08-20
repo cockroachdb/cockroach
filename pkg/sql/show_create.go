@@ -66,7 +66,7 @@ func ShowCreateTable(
 	p PlanHookState,
 	tn *tree.TableName,
 	dbPrefix string,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc sqlbase.TableDescriptor,
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
@@ -74,7 +74,7 @@ func ShowCreateTable(
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
-	if desc.Temporary {
+	if desc.IsTemporary() {
 		f.WriteString("TEMP ")
 	}
 	f.WriteString("TABLE ")
@@ -93,25 +93,24 @@ func ShowCreateTable(
 			return "", err
 		}
 		f.WriteString(colstr)
-		if desc.IsPhysicalTable() && desc.PrimaryIndex.ColumnIDs[0] == col.ID {
+		if desc.IsPhysicalTable() && desc.GetPrimaryIndex().ColumnIDs[0] == col.ID {
 			// Only set primaryKeyIsOnVisibleColumn to true if the primary key
 			// is on a visible column (not rowid).
 			primaryKeyIsOnVisibleColumn = true
 		}
 	}
 	if primaryKeyIsOnVisibleColumn ||
-		(desc.IsPhysicalTable() && desc.PrimaryIndex.IsSharded()) {
+		(desc.IsPhysicalTable() && desc.GetPrimaryIndex().IsSharded()) {
 		f.WriteString(",\n\tCONSTRAINT ")
-		formatQuoteNames(&f.Buffer, desc.PrimaryIndex.Name)
+		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().Name)
 		f.WriteString(" ")
 		f.WriteString(desc.PrimaryKeyString())
 	}
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
 	// exclude check mutations below, for consistency.
 	if displayOptions.FKDisplayMode != OmitFKClausesFromCreate {
-		for i := range desc.OutboundFKs {
+		if err := desc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 			fkCtx := tree.NewFmtCtx(tree.FmtSimple)
-			fk := &desc.OutboundFKs[i]
 			fkCtx.WriteString(",\n\tCONSTRAINT ")
 			fkCtx.FormatNameP(&fk.Name)
 			fkCtx.WriteString(" ")
@@ -127,15 +126,20 @@ func ShowCreateTable(
 				sessiondata.EmptySearchPath,
 			); err != nil {
 				if displayOptions.FKDisplayMode == OmitMissingFKClausesFromCreate {
-					continue
-				} else { // When FKDisplayMode == IncludeFkClausesInCreate.
-					return "", err
+					return nil
 				}
+				// When FKDisplayMode == IncludeFkClausesInCreate.
+				return err
 			}
 			f.WriteString(fkCtx.String())
+			return nil
+		}); err != nil {
+			return "", err
 		}
 	}
-	allIdx := append(desc.Indexes, desc.PrimaryIndex)
+	allIdx := append(
+		append([]descpb.IndexDescriptor{}, desc.GetPublicNonPrimaryIndexes()...),
+		*desc.GetPrimaryIndex())
 	for i := range allIdx {
 		idx := &allIdx[i]
 		// Only add indexes to the create_statement column, and not to the
@@ -151,7 +155,7 @@ func ShowCreateTable(
 			// clauses as well.
 			includeInterleaveClause = true
 		}
-		if idx.ID != desc.PrimaryIndex.ID && includeInterleaveClause {
+		if idx.ID != desc.GetPrimaryIndex().ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
 			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
@@ -183,17 +187,17 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if err := showCreateInterleave(&desc.PrimaryIndex, &f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(desc.GetPrimaryIndex(), &f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
-		a, p.ExecCfg().Codec, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
+		a, p.ExecCfg().Codec, desc, desc.GetPrimaryIndex(), &desc.GetPrimaryIndex().Partitioning, &f.Buffer, 0 /* indent */, 0, /* colOffset */
 	); err != nil {
 		return "", err
 	}
 
 	if !displayOptions.IgnoreComments {
-		if err := showComments(tn, desc, selectComment(ctx, p, desc.ID), &f.Buffer); err != nil {
+		if err := showComments(tn, desc, selectComment(ctx, p, desc.GetID()), &f.Buffer); err != nil {
 			return "", err
 		}
 	}

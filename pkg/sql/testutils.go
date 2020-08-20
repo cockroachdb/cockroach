@@ -42,7 +42,7 @@ func CreateTestTableDescriptor(
 	evalCtx := tree.MakeTestingEvalContext(st)
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
-		desc, err := MakeTableDesc(
+		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
 			nil, /* vs */
@@ -57,9 +57,9 @@ func CreateTestTableDescriptor(
 			&sessiondata.SessionData{}, /* sessionData */
 			tree.PersistencePermanent,
 		)
-		return &desc, err
+		return desc, err
 	case *tree.CreateSequence:
-		desc, err := MakeSequenceTableDesc(
+		desc, err := NewSequenceTableDesc(
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,
@@ -68,7 +68,7 @@ func CreateTestTableDescriptor(
 			tree.PersistencePermanent,
 			nil, /* params */
 		)
-		return &desc, err
+		return desc, err
 	default:
 		return nil, errors.Errorf("unexpected AST %T", stmt.AST)
 	}

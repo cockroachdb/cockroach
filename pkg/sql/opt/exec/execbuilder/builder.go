@@ -84,6 +84,14 @@ type Builder struct {
 
 	// IsDDL is set to true if the statement contains DDL.
 	IsDDL bool
+
+	// containsFullTableScan is set to true if the statement contains a primary
+	// index scan.
+	ContainsFullTableScan bool
+
+	// containsFullIndexScan is set to true if the statement contains a secondary
+	// index scan.
+	ContainsFullIndexScan bool
 }
 
 // New constructs an instance of the execution node builder using the

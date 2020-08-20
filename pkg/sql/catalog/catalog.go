@@ -61,18 +61,6 @@ type VirtualObject interface {
 	Desc() Descriptor
 }
 
-// TableEntry is the value type of FkTableMetadata: An optional table
-// descriptor, populated when the table is public/leasable, and an IsAdding
-// flag.
-type TableEntry struct {
-	// Desc is the descriptor of the table. This can be nil if eg.
-	// the table is not public.
-	Desc *sqlbase.ImmutableTableDescriptor
-
-	// IsAdding indicates the descriptor is being created.
-	IsAdding bool
-}
-
 // ResolvedObjectPrefix represents the resolved components of an object name
 // prefix. It contains the parent database and schema.
 type ResolvedObjectPrefix struct {

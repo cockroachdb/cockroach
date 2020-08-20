@@ -262,22 +262,22 @@ CREATE TABLE crdb_internal.tables (
 				}
 			}
 
-			addDesc := func(table *descpb.TableDescriptor, dbName tree.Datum, scName string) error {
+			addDesc := func(table sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
 				leaseNodeDatum := tree.DNull
 				leaseExpDatum := tree.DNull
-				if table.Lease != nil {
-					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(table.Lease.NodeID)))
+				if lease := table.GetLease(); lease != nil {
+					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(lease.NodeID)))
 					leaseExpDatum, err = tree.MakeDTimestamp(
-						timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
+						timeutil.Unix(0, lease.ExpirationTime), time.Nanosecond,
 					)
 					if err != nil {
 						return err
 					}
 				}
 				dropTimeDatum := tree.DNull
-				if table.DropTime != 0 {
+				if dropTime := table.GetDropTime(); dropTime != 0 {
 					dropTimeDatum, err = tree.MakeDTimestamp(
-						timeutil.Unix(0, table.DropTime), time.Nanosecond,
+						timeutil.Unix(0, dropTime), time.Nanosecond,
 					)
 					if err != nil {
 						return err
@@ -285,19 +285,19 @@ CREATE TABLE crdb_internal.tables (
 				}
 				row = row[:0]
 				row = append(row,
-					tree.NewDInt(tree.DInt(int64(table.ID))),
+					tree.NewDInt(tree.DInt(int64(table.GetID()))),
 					tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
-					tree.NewDString(table.Name),
+					tree.NewDString(table.GetName()),
 					dbName,
-					tree.NewDInt(tree.DInt(int64(table.Version))),
-					tree.TimestampToInexactDTimestamp(table.ModificationTime),
-					tree.TimestampToDecimalDatum(table.ModificationTime),
-					tree.NewDString(table.FormatVersion.String()),
-					tree.NewDString(table.State.String()),
+					tree.NewDInt(tree.DInt(int64(table.GetVersion()))),
+					tree.TimestampToInexactDTimestamp(table.GetModificationTime()),
+					tree.TimestampToDecimalDatum(table.GetModificationTime()),
+					tree.NewDString(table.GetFormatVersion().String()),
+					tree.NewDString(table.GetState().String()),
 					leaseNodeDatum,
 					leaseExpDatum,
 					dropTimeDatum,
-					tree.NewDString(table.AuditMode.String()),
+					tree.NewDString(table.GetAuditMode().String()),
 					tree.NewDString(scName),
 				)
 				return pusher.pushRow(row...)
@@ -318,7 +318,7 @@ CREATE TABLE crdb_internal.tables (
 					// effectively deleted.
 					dbName = fmt.Sprintf("[%d]", table.GetParentID())
 				}
-				if err := addDesc(table.TableDesc(), tree.NewDString(dbName), "public"); err != nil {
+				if err := addDesc(table, tree.NewDString(dbName), "public"); err != nil {
 					return err
 				}
 			}
@@ -378,8 +378,8 @@ CREATE TABLE crdb_internal.table_row_statistics (
 		// Walk over all available tables and show row count for each of them
 		// using collected statistics.
 		return forEachTableDescAll(ctx, p, db, virtualMany,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-				tableID := tree.DInt(table.ID)
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+				tableID := tree.DInt(table.GetID())
 				rowCount := tree.DNull
 				// For Virtual Tables report NULL row count.
 				if !table.IsVirtualTable() {
@@ -390,7 +390,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 				}
 				return addRow(
 					tree.NewDInt(tableID),
-					tree.NewDString(table.Name),
+					tree.NewDString(table.GetName()),
 					rowCount,
 				)
 			},
@@ -1544,7 +1544,7 @@ CREATE TABLE crdb_internal.create_statements (
 )
 `, virtualOnce, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *sqlbase.ImmutableDatabaseDescriptor, scName string,
-		table *sqlbase.ImmutableTableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+		table sqlbase.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""
 		parentNameStr := tree.DNull
 		if db != nil {
@@ -1558,7 +1558,7 @@ CREATE TABLE crdb_internal.create_statements (
 		alterStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
 		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(scName), ExplicitSchema: true}
-		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.Name))
+		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
 		var err error
 		if table.IsView() {
 			descType = typeView
@@ -1575,7 +1575,7 @@ CREATE TABLE crdb_internal.create_statements (
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.Indexes, table, alterStmts,
+			if err := showAlterStatementWithInterleave(ctx, &name, contextName, lookup, table.GetPublicNonPrimaryIndexes(), table, alterStmts,
 				validateStmts, &p.semaCtx); err != nil {
 				return err
 			}
@@ -1586,28 +1586,27 @@ CREATE TABLE crdb_internal.create_statements (
 			return err
 		}
 
-		descID := tree.NewDInt(tree.DInt(table.ID))
+		descID := tree.NewDInt(tree.DInt(table.GetID()))
 		dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
 		if createNofk == "" {
 			createNofk = stmt
 		}
 		hasPartitions := false
-		for i := range table.Indexes {
-			if table.Indexes[i].Partitioning.NumColumns != 0 {
+		_ = table.ForeachIndex(sqlbase.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+			if idxDesc.Partitioning.NumColumns != 0 {
 				hasPartitions = true
-				break
 			}
-		}
-		hasPartitions = hasPartitions || table.PrimaryIndex.Partitioning.NumColumns != 0
+			return nil
+		})
 		return addRow(
 			dbDescID,
 			parentNameStr,
 			scNameStr,
 			descID,
 			descType,
-			tree.NewDString(table.Name),
+			tree.NewDString(table.GetName()),
 			tree.NewDString(stmt),
-			tree.NewDString(table.State.String()),
+			tree.NewDString(table.GetState().String()),
 			tree.NewDString(createNofk),
 			alterStmts,
 			validateStmts,
@@ -1621,13 +1620,12 @@ func showAlterStatementWithInterleave(
 	contextName string,
 	lCtx simpleSchemaResolver,
 	allIdx []descpb.IndexDescriptor,
-	table *sqlbase.ImmutableTableDescriptor,
+	table sqlbase.TableDescriptor,
 	alterStmts *tree.DArray,
 	validateStmts *tree.DArray,
 	semaCtx *tree.SemaContext,
 ) error {
-	for i := range table.OutboundFKs {
-		fk := &table.OutboundFKs[i]
+	if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 		f := tree.NewFmtCtx(tree.FmtSimple)
 		f.WriteString("ALTER TABLE ")
 		f.FormatNode(tn)
@@ -1657,9 +1655,9 @@ func showAlterStatementWithInterleave(
 		f.WriteString(" VALIDATE CONSTRAINT ")
 		f.FormatNameP(&fk.Name)
 
-		if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
-			return err
-		}
+		return validateStmts.Append(tree.NewDString(f.CloseAndGetString()))
+	}); err != nil {
+		return err
 	}
 
 	for i := range allIdx {
@@ -1690,7 +1688,7 @@ func showAlterStatementWithInterleave(
 					return err
 				}
 			} else {
-				tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.ID)))
+				tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.GetID())))
 				tableName.ExplicitCatalog = false
 				tableName.ExplicitSchema = false
 			}
@@ -1713,7 +1711,7 @@ func showAlterStatementWithInterleave(
 func showCreateIndexWithInterleave(
 	ctx context.Context,
 	f *tree.FmtCtx,
-	table *sqlbase.ImmutableTableDescriptor,
+	table sqlbase.TableDescriptor,
 	idx *descpb.IndexDescriptor,
 	tableName tree.TableName,
 	parentName tree.TableName,
@@ -1761,11 +1759,12 @@ CREATE TABLE crdb_internal.table_columns (
 		row := make(tree.Datums, 8)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-					tableID := tree.NewDInt(tree.DInt(table.ID))
-					tableName := tree.NewDString(table.Name)
-					for i := range table.Columns {
-						col := &table.Columns[i]
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.GetID()))
+					tableName := tree.NewDString(table.GetName())
+					columns := table.GetPublicColumns()
+					for i := range columns {
+						col := &columns[i]
 						defStr := tree.DNull
 						if col.DefaultExpr != nil {
 							defExpr, err := schemaexpr.FormatExprForDisplay(ctx, table, *col.DefaultExpr, &p.semaCtx)
@@ -1820,38 +1819,30 @@ CREATE TABLE crdb_internal.table_indexes (
 		row := make(tree.Datums, 7)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-					tableID := tree.NewDInt(tree.DInt(table.ID))
-					tableName := tree.NewDString(table.Name)
-					row = row[:0]
-					row = append(row,
-						tableID,
-						tableName,
-						tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
-						tree.NewDString(table.PrimaryIndex.Name),
-						primary,
-						tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
-						tree.MakeDBool(table.PrimaryIndex.Type == descpb.IndexDescriptor_INVERTED),
-					)
-					if err := pusher.pushRow(row...); err != nil {
-						return err
-					}
-					for _, idx := range table.Indexes {
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+					tableID := tree.NewDInt(tree.DInt(table.GetID()))
+					tableName := tree.NewDString(table.GetName())
+					// We report the primary index of non-physical tables here. These
+					// indexes are not reported as a part of ForeachIndex.
+					return table.ForeachIndex(sqlbase.IndexOpts{
+						NonPhysicalPrimaryIndex: true,
+					}, func(idx *descpb.IndexDescriptor, isPrimary bool) error {
 						row = row[:0]
+						idxType := secondary
+						if isPrimary {
+							idxType = primary
+						}
 						row = append(row,
 							tableID,
 							tableName,
 							tree.NewDInt(tree.DInt(idx.ID)),
 							tree.NewDString(idx.Name),
-							secondary,
+							idxType,
 							tree.MakeDBool(tree.DBool(idx.Unique)),
 							tree.MakeDBool(idx.Type == descpb.IndexDescriptor_INVERTED),
 						)
-						if err := pusher.pushRow(row...); err != nil {
-							return err
-						}
-					}
-					return nil
+						return pusher.pushRow(row...)
+					})
 				},
 			)
 		}
@@ -1888,10 +1879,10 @@ CREATE TABLE crdb_internal.index_columns (
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
-			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
+			func(parent *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+				tableID := tree.NewDInt(tree.DInt(table.GetID()))
 				parentName := parent.GetName()
-				tableName := tree.NewDString(table.Name)
+				tableName := tree.NewDString(table.GetName())
 
 				reportIndex := func(idx *descpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
@@ -1906,7 +1897,7 @@ CREATE TABLE crdb_internal.index_columns (
 							// to the user, because we really want to see the
 							// erroneous data in the virtual table.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than names (%d) (corrupted schema?)",
-								table.ID, idx.ID, parentName, table.Name, idx.Name,
+								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
 								len(idx.ColumnIDs), len(idx.ColumnNames))
 						} else {
 							colName = tree.NewDString(idx.ColumnNames[i])
@@ -1914,7 +1905,7 @@ CREATE TABLE crdb_internal.index_columns (
 						if i >= len(idx.ColumnDirections) {
 							// See comment above.
 							log.Errorf(ctx, "index descriptor for [%d@%d] (%s.%s@%s) has more key column IDs (%d) than directions (%d) (corrupted schema?)",
-								table.ID, idx.ID, parentName, table.Name, idx.Name,
+								table.GetID(), idx.ID, parentName, table.GetName(), idx.Name,
 								len(idx.ColumnIDs), len(idx.ColumnDirections))
 						} else {
 							colDir = idxDirMap[idx.ColumnDirections[i]]
@@ -1961,15 +1952,11 @@ CREATE TABLE crdb_internal.index_columns (
 					return nil
 				}
 
-				if err := reportIndex(&table.PrimaryIndex); err != nil {
-					return err
-				}
-				for i := range table.Indexes {
-					if err := reportIndex(&table.Indexes[i]); err != nil {
-						return err
-					}
-				}
-				return nil
+				return table.ForeachIndex(sqlbase.IndexOpts{
+					NonPhysicalPrimaryIndex: true,
+				}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+					return reportIndex(idxDesc)
+				})
 			})
 	},
 }
@@ -2000,9 +1987,9 @@ CREATE TABLE crdb_internal.backward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
 			/* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor, tableLookup tableLookupFn) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor, tableLookup tableLookupFn) error {
+				tableID := tree.NewDInt(tree.DInt(table.GetID()))
+				tableName := tree.NewDString(table.GetName())
 
 				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
 					for _, interleaveParent := range idx.Interleave.Ancestors {
@@ -2022,9 +2009,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					}
 					return nil
 				}
-
-				for i := range table.OutboundFKs {
-					fk := &table.OutboundFKs[i]
+				if err := table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 					refTbl, err := tableLookup.getTableByID(fk.ReferencedTableID)
 					if err != nil {
 						return err
@@ -2033,7 +2018,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					if err != nil {
 						return err
 					}
-					if err := addRow(
+					return addRow(
 						tableID, tableName,
 						tree.DNull,
 						tree.DNull,
@@ -2042,25 +2027,21 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						tree.NewDInt(tree.DInt(refIdx.ID)),
 						tree.NewDString(fk.Name),
 						tree.DNull,
-					); err != nil {
-						return err
-					}
-				}
-
-				// Record the backward references of the primary index.
-				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+					)
+				}); err != nil {
 					return err
 				}
 
-				// Record the backward references of secondary indexes.
-				for i := range table.Indexes {
-					if err := reportIdxDeps(&table.Indexes[i]); err != nil {
-						return err
-					}
+				// Record the backward references of the primary index.
+				if err := table.ForeachIndex(sqlbase.IndexOpts{},
+					func(idxDesc *descpb.IndexDescriptor, _ bool) error {
+						return reportIdxDeps(idxDesc)
+					}); err != nil {
+					return err
 				}
 
 				// Record the view dependencies.
-				for _, tIdx := range table.DependsOn {
+				for _, tIdx := range table.GetDependsOn() {
 					if err := addRow(
 						tableID, tableName,
 						tree.DNull,
@@ -2076,8 +2057,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				}
 
 				// Record sequence dependencies.
-				for i := range table.Columns {
-					col := &table.Columns[i]
+				return table.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
 					for _, sequenceID := range col.UsesSequenceIds {
 						if err := addRow(
 							tableID, tableName,
@@ -2092,8 +2072,8 @@ CREATE TABLE crdb_internal.backward_dependencies (
 							return err
 						}
 					}
-				}
-				return nil
+					return nil
+				})
 			})
 	},
 }
@@ -2148,9 +2128,9 @@ CREATE TABLE crdb_internal.forward_dependencies (
 		interleaveDep := tree.NewDString("interleave")
 		sequenceDep := tree.NewDString("sequence")
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no backward/forward dependencies*/
-			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-				tableID := tree.NewDInt(tree.DInt(table.ID))
-				tableName := tree.NewDString(table.Name)
+			func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+				tableID := tree.NewDInt(tree.DInt(table.GetID()))
+				tableName := tree.NewDString(table.GetName())
 
 				reportIdxDeps := func(idx *descpb.IndexDescriptor) error {
 					for _, interleaveRef := range idx.InterleavedBy {
@@ -2169,10 +2149,8 @@ CREATE TABLE crdb_internal.forward_dependencies (
 					}
 					return nil
 				}
-
-				for i := range table.InboundFKs {
-					fk := &table.InboundFKs[i]
-					if err := addRow(
+				if err := table.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+					return addRow(
 						tableID, tableName,
 						tree.DNull,
 						tree.NewDInt(tree.DInt(fk.OriginTableID)),
@@ -2180,53 +2158,39 @@ CREATE TABLE crdb_internal.forward_dependencies (
 						tree.DNull,
 						tree.DNull,
 						tree.DNull,
-					); err != nil {
-						return err
-					}
-				}
-
-				// Record the backward references of the primary index.
-				if err := reportIdxDeps(&table.PrimaryIndex); err != nil {
+					)
+				}); err != nil {
 					return err
 				}
 
-				// Record the backward references of secondary indexes.
-				for i := range table.Indexes {
-					if err := reportIdxDeps(&table.Indexes[i]); err != nil {
-						return err
-					}
+				// Record the backward references of the primary index.
+				if err := table.ForeachIndex(sqlbase.IndexOpts{}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+					return reportIdxDeps(idxDesc)
+				}); err != nil {
+					return err
+				}
+				reportDependedOnBy := func(
+					dep *descpb.TableDescriptor_Reference, depTypeString *tree.DString,
+				) error {
+					return addRow(
+						tableID, tableName,
+						tree.DNull,
+						tree.NewDInt(tree.DInt(dep.ID)),
+						depTypeString,
+						tree.NewDInt(tree.DInt(dep.IndexID)),
+						tree.DNull,
+						tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+					)
 				}
 
 				if table.IsTable() || table.IsView() {
-					// Record the view dependencies.
-					for _, dep := range table.DependedOnBy {
-						if err := addRow(
-							tableID, tableName,
-							tree.DNull,
-							tree.NewDInt(tree.DInt(dep.ID)),
-							viewDep,
-							tree.NewDInt(tree.DInt(dep.IndexID)),
-							tree.DNull,
-							tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
-						); err != nil {
-							return err
-						}
-					}
+					return table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						return reportDependedOnBy(dep, viewDep)
+					})
 				} else if table.IsSequence() {
-					// Record the sequence dependencies.
-					for _, dep := range table.DependedOnBy {
-						if err := addRow(
-							tableID, tableName,
-							tree.DNull,
-							tree.NewDInt(tree.DInt(dep.ID)),
-							sequenceDep,
-							tree.NewDInt(tree.DInt(dep.IndexID)),
-							tree.DNull,
-							tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
-						); err != nil {
-							return err
-						}
-					}
+					return table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						return reportDependedOnBy(dep, sequenceDep)
+					})
 				}
 				return nil
 			})
@@ -2591,10 +2555,10 @@ CREATE TABLE crdb_internal.zones (
 				if err != nil {
 					return err
 				}
-				if p.CheckAnyPrivilege(ctx, tableEntry.Desc) != nil {
+				if p.CheckAnyPrivilege(ctx, tableEntry) != nil {
 					continue
 				}
-				table = tableEntry.Desc
+				table = tableEntry
 			}
 
 			// Write down information about the zone in the table.
@@ -3040,7 +3004,7 @@ func addPartitioningRows(
 	ctx context.Context,
 	p *planner,
 	database string,
-	table *sqlbase.ImmutableTableDescriptor,
+	table sqlbase.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	partitioning *descpb.PartitioningDescriptor,
 	parentName tree.Datum,
@@ -3055,7 +3019,7 @@ func addPartitioningRows(
 		return nil
 	}
 
-	tableID := tree.NewDInt(tree.DInt(table.ID))
+	tableID := tree.NewDInt(tree.DInt(table.GetID()))
 	indexID := tree.NewDInt(tree.DInt(index.ID))
 	numColumns := tree.NewDInt(tree.DInt(partitioning.NumColumns))
 
@@ -3098,7 +3062,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.ID), index, l.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, l.Name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -3154,7 +3118,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, config.SystemTenantObjectID(table.ID), index, r.Name, false /* getInheritedDefault */)
+			ctx, p.txn, config.SystemTenantObjectID(table.GetID()), index, r.Name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -3213,8 +3177,10 @@ CREATE TABLE crdb_internal.partitions (
 		}
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
-				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table *ImmutableTableDescriptor) error {
-					return table.ForeachNonDropIndex(func(index *descpb.IndexDescriptor) error {
+				func(db *sqlbase.ImmutableDatabaseDescriptor, _ string, table sqlbase.TableDescriptor) error {
+					return table.ForeachIndex(sqlbase.IndexOpts{
+						AddMutations: true,
+					}, func(index *descpb.IndexDescriptor, _ bool) error {
 						return addPartitioningRows(ctx, p, dbName, table, index, &index.Partitioning,
 							tree.DNull /* parentName */, 0 /* colOffset */, pusher.pushRow)
 					})

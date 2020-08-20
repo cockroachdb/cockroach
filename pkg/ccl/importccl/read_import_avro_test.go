@@ -198,12 +198,13 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 	evalCtx := tree.MakeTestingEvalContext(st)
 
 	return &testHelper{
-		schemaJSON:  string(schemaJSON),
-		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs),
-		codec:       codec,
-		gens:        gens,
-		settings:    st,
-		evalCtx:     evalCtx,
+		schemaJSON: string(schemaJSON),
+		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs).
+			Immutable().(*sqlbase.ImmutableTableDescriptor),
+		codec:    codec,
+		gens:     gens,
+		settings: st,
+		evalCtx:  evalCtx,
 	}
 }
 

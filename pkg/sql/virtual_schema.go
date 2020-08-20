@@ -152,7 +152,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 
 	// Virtual tables never use SERIAL so we need not process SERIAL
 	// types here.
-	mutDesc, err := MakeTableDesc(
+	mutDesc, err := NewTableDesc(
 		ctx,
 		nil, /* txn */
 		nil, /* vs */
@@ -323,7 +323,9 @@ func (v virtualSchemaEntry) GetObjectByName(
 	case tree.TableObject:
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
-				return mutableVirtualDefEntry{desc: def.desc}, nil
+				return mutableVirtualDefEntry{
+					desc: sqlbase.NewMutableExistingTableDescriptor(*def.desc.TableDesc()),
+				}, nil
 			}
 			return &def, nil
 		}
@@ -366,21 +368,21 @@ func (v virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *descpb.TableDescriptor
+	desc                       *sqlbase.ImmutableTableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
 }
 
 func (e virtualDefEntry) Desc() catalog.Descriptor {
-	return sqlbase.NewImmutableTableDescriptor(*e.desc)
+	return e.desc
 }
 
 type mutableVirtualDefEntry struct {
-	desc *descpb.TableDescriptor
+	desc *sqlbase.MutableTableDescriptor
 }
 
 func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
-	return sqlbase.NewMutableExistingTableDescriptor(*e.desc)
+	return e.desc
 }
 
 type virtualTypeEntry struct {
@@ -631,7 +633,7 @@ func NewVirtualSchemaHolder(
 
 			entry := virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       &tableDesc,
+				desc:                       sqlbase.NewImmutableTableDescriptor(tableDesc),
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
@@ -716,7 +718,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (virtualDe
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*descpb.TableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.ImmutableTableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (virtualDefEntry, error)
@@ -729,7 +731,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*descpb.TableDescriptor, error) {
+) (*sqlbase.ImmutableTableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

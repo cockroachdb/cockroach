@@ -131,6 +131,9 @@ type SessionData struct {
 	TempTablesEnabled bool
 	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
 	HashShardedIndexesEnabled bool
+	// DisallowFullTableScans indicates whether queries that plan full table scans
+	// should be rejected.
+	DisallowFullTableScans bool
 	// ImplicitSelectForUpdate is true if FOR UPDATE locking may be used during
 	// the row-fetch phase of mutation statements.
 	ImplicitSelectForUpdate bool

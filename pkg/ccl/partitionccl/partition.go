@@ -271,7 +271,9 @@ func selectPartitionExprs(
 
 	a := &sqlbase.DatumAlloc{}
 	var prefixDatums []tree.Datum
-	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
+	if err := tableDesc.ForeachIndex(sqlbase.IndexOpts{
+		AddMutations: true,
+	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 		genExpr := true
 		return selectPartitionExprsByName(
 			a, evalCtx, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName, genExpr)

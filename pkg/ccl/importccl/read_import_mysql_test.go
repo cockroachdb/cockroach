@@ -135,8 +135,8 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	fks := fkHandler{
 		allowed: true,
 		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{
-			referencedSimple.Name: sqlbase.NewMutableCreatedTableDescriptor(*referencedSimple.TableDesc())},
-		),
+			referencedSimple.Name: referencedSimple,
+		}),
 	}
 
 	t.Run("simple", func(t *testing.T) {

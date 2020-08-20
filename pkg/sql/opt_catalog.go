@@ -223,15 +223,16 @@ func (oc *optCatalog) ResolveDataSourceByID(
 
 	tableLookup, err := oc.planner.LookupTableByID(ctx, descpb.ID(dataSourceID))
 
-	if err != nil || tableLookup.IsAdding {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) || tableLookup.IsAdding {
-			return nil, tableLookup.IsAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+	if err != nil {
+		isAdding := catalog.HasAddingTableError(err)
+		if errors.Is(err, sqlbase.ErrDescriptorNotFound) || isAdding {
+			return nil, isAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
 		return nil, false, err
 	}
 
 	// The name is only used for virtual tables, which can't be looked up by ID.
-	ds, err := oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup.Desc, &tree.TableName{})
+	ds, err := oc.dataSourceForDesc(ctx, cat.Flags{}, tableLookup, &tree.TableName{})
 	return ds, false, err
 }
 

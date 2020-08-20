@@ -406,7 +406,6 @@ func mysqlTableToCockroach(
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
 			seqVals[id] = startingValue
 		}
-		var desc sqlbase.MutableTableDescriptor
 		var err error
 		if p != nil {
 			params := p.RunParams(ctx)
@@ -414,7 +413,7 @@ func mysqlTableToCockroach(
 				owner = params.SessionData().User
 			}
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			desc, err = sql.MakeSequenceTableDesc(
+			seqDesc, err = sql.NewSequenceTableDesc(
 				seqName,
 				opts,
 				parentID,
@@ -427,7 +426,7 @@ func mysqlTableToCockroach(
 			)
 		} else {
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
-			desc, err = sql.MakeSequenceTableDesc(
+			seqDesc, err = sql.NewSequenceTableDesc(
 				seqName,
 				opts,
 				parentID,
@@ -442,8 +441,7 @@ func mysqlTableToCockroach(
 		if err != nil {
 			return nil, nil, err
 		}
-		seqDesc = &desc
-		fks.resolver[seqName] = &desc
+		fks.resolver[seqName] = seqDesc
 		id++
 	}
 
@@ -565,7 +563,7 @@ func addDelayedFKs(
 		); err != nil {
 			return err
 		}
-		if err := fixDescriptorFKState(def.tbl.TableDesc()); err != nil {
+		if err := fixDescriptorFKState(def.tbl); err != nil {
 			return err
 		}
 		if err := def.tbl.AllocateIDs(); err != nil {

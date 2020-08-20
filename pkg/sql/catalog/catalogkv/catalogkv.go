@@ -541,16 +541,15 @@ func ConditionalGetTableDescFromTxn(
 		return nil, err
 	}
 	var existing *descpb.Descriptor
-	var existingTable *descpb.TableDescriptor
 	if existingKV.Value != nil {
 		existing = &descpb.Descriptor{}
 		if err := existingKV.Value.GetProto(existing); err != nil {
 			return nil, errors.Wrapf(err,
 				"decoding current table descriptor value for id: %d", expectation.GetID())
 		}
-		existingTable = sqlbase.TableFromDescriptor(existing, existingKV.Value.Timestamp)
 	}
-	if !expectation.TableDesc().Equal(existingTable) {
+	sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, existing, existingKV.Value.Timestamp)
+	if !expectation.DescriptorProto().Equal(existing) {
 		return nil, &roachpb.ConditionFailedError{ActualValue: existingKV.Value}
 	}
 	return existingKV.Value.TagAndDataBytes(), nil

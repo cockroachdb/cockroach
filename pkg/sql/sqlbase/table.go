@@ -317,13 +317,15 @@ func GetColumnTypes(
 	return types, nil
 }
 
-type tableLookupFn func(descpb.ID) (TableDescriptor, error)
+// TableLookupFn is used to resolve a table from an ID, particularly when
+// getting constraint info.
+type TableLookupFn func(descpb.ID) (TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 	ctx context.Context, txn protoGetter, codec keys.SQLCodec,
 ) (map[string]descpb.ConstraintDetail, error) {
-	var tableLookup tableLookupFn
+	var tableLookup TableLookupFn
 	if txn != nil {
 		tableLookup = func(id descpb.ID) (TableDescriptor, error) {
 			raw, err := getTableDescFromID(ctx, txn, codec, id)
@@ -339,7 +341,7 @@ func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 // GetConstraintInfoWithLookup returns a summary of all constraints on the
 // table using the provided function to fetch a TableDescriptor from an ID.
 func (desc *ImmutableTableDescriptor) GetConstraintInfoWithLookup(
-	tableLookup tableLookupFn,
+	tableLookup TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(tableLookup)
 }
@@ -354,7 +356,7 @@ func (desc *ImmutableTableDescriptor) CheckUniqueConstraints() error {
 // if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
 func (desc *ImmutableTableDescriptor) collectConstraintInfo(
-	tableLookup tableLookupFn,
+	tableLookup TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	info := make(map[string]descpb.ConstraintDetail)
 
@@ -475,7 +477,7 @@ func FindFKReferencedIndex(
 		return primaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the referenced column.
-	indexes := referencedTable.GetIndexes()
+	indexes := referencedTable.GetPublicNonPrimaryIndexes()
 	for i := range indexes {
 		idx := &indexes[i]
 		if idx.IsValidReferencedIndex(referencedColIDs) {
@@ -500,7 +502,7 @@ func FindFKOriginIndex(
 		return primaryIndex, nil
 	}
 	// If the PK doesn't match, find the index corresponding to the origin column.
-	indexes := originTable.GetIndexes()
+	indexes := originTable.GetPublicNonPrimaryIndexes()
 	for i := range indexes {
 		idx := &indexes[i]
 		if idx.IsValidOriginIndex(originColIDs) {
