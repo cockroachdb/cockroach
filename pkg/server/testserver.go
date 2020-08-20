@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -667,7 +666,7 @@ func StartTenant(
 		_ = pgL.Close()
 	})
 
-	httpL, err := net.Listen("tcp", args.Config.HTTPAddr)
+	httpL, err := listen(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return "", "", err
 	}
