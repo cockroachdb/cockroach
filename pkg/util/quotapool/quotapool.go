@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TODO(ajwerner): provide option to limit the maximum queue size.
@@ -139,7 +140,7 @@ func New(name string, initialResource Resource, options ...Option) *QuotaPool {
 }
 
 // TimeSource returns the TimeSource associated with this QuotaPool.
-func (qp *QuotaPool) TimeSource() TimeSource {
+func (qp *QuotaPool) TimeSource() timeutil.TimeSource {
 	return qp.timeSource
 }
 
@@ -232,7 +233,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 	}
 
 	// Set up the infrastructure to report slow requests.
-	var slowTimer Timer
+	var slowTimer timeutil.TimerI
 	var slowTimerC <-chan time.Time
 	if qp.onSlowAcquisition != nil {
 		slowTimer = qp.timeSource.NewTimer()
@@ -245,7 +246,7 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 
 	// Set up the infrastructure to deal with rate-limiter style pools which
 	// retry after the passage of time.
-	var tryAgainTimer Timer
+	var tryAgainTimer timeutil.TimerI
 	var tryAgainTimerC <-chan time.Time
 	stopTryAgainTimer := func() {
 		if tryAgainTimer == nil {

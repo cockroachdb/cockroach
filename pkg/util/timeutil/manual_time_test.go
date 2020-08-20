@@ -8,14 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package quotapool_test
+package timeutil_test
 
 import (
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,24 +29,24 @@ func TestManualTime(t *testing.T) {
 	t5 := t0.Add(5 * time.Second)
 
 	t.Run("Advance", func(t *testing.T) {
-		mt := quotapool.NewManualTime(t0)
+		mt := timeutil.NewManualTime(t0)
 		require.Equal(t, t0, mt.Now())
 		mt.Advance(time.Second)
 		require.Equal(t, t1, mt.Now())
 	})
 	t.Run("AdvanceTo", func(t *testing.T) {
-		mt := quotapool.NewManualTime(t0)
+		mt := timeutil.NewManualTime(t0)
 		mt.AdvanceTo(t2)
 		require.Equal(t, t2, mt.Now())
 		mt.AdvanceTo(t1)
 		require.Equal(t, t2, mt.Now())
 	})
 	t.Run("Timer.Stop on unset", func(t *testing.T) {
-		mt := quotapool.NewManualTime(t0)
+		mt := timeutil.NewManualTime(t0)
 		timer := mt.NewTimer()
 		require.False(t, timer.Stop())
 	})
-	ensureDontSend := func(t *testing.T, timers ...quotapool.Timer) {
+	ensureDontSend := func(t *testing.T, timers ...timeutil.TimerI) {
 		for _, timer := range timers {
 			select {
 			case <-timer.Ch():
@@ -55,7 +55,7 @@ func TestManualTime(t *testing.T) {
 			}
 		}
 	}
-	ensureSends := func(t *testing.T, timer quotapool.Timer) {
+	ensureSends := func(t *testing.T, timer timeutil.TimerI) {
 		select {
 		case <-timer.Ch():
 		default:
@@ -63,13 +63,13 @@ func TestManualTime(t *testing.T) {
 		}
 	}
 	t.Run("Timer basics", func(t *testing.T) {
-		mt := quotapool.NewManualTime(t0)
-		mkTimer := func(d time.Duration) quotapool.Timer {
+		mt := timeutil.NewManualTime(t0)
+		mkTimer := func(d time.Duration) timeutil.TimerI {
 			timer := mt.NewTimer()
 			timer.Reset(d)
 			return timer
 		}
-		timers := []quotapool.Timer{
+		timers := []timeutil.TimerI{
 			mkTimer(0 * time.Second),
 			mkTimer(1 * time.Second),
 			mkTimer(2 * time.Second),

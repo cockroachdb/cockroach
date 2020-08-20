@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -144,7 +144,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	// This test utilizes manual time to make the rate-limiting calculations more
 	// obvious. This timesource is not used inside the actual database.
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	timeSource := quotapool.NewManualTime(t0)
+	timeSource := timeutil.NewManualTime(t0)
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
