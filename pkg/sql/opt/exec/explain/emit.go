@@ -497,6 +497,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attr("equality cols are key", "")
 		}
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
+		e.emitLockingPolicy(a.Locking)
 
 	case interleavedJoinOp:
 		a := n.args.(*interleavedJoinArgs)
@@ -736,10 +737,10 @@ func (e *emitter) emitLockingPolicy(locking *tree.LockingItem) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
-		e.ob.VAttr("locking strength", strength.PrettyString())
+		e.ob.Attr("locking strength", strength.PrettyString())
 	}
 	if waitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
-		e.ob.VAttr("locking wait policy", waitPolicy.PrettyString())
+		e.ob.Attr("locking wait policy", waitPolicy.PrettyString())
 	}
 }
 

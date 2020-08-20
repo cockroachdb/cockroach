@@ -72,7 +72,7 @@ const allSchedules = 0
 // scheduled jobs that should be started.
 func getFindSchedulesStatement(env scheduledjobs.JobSchedulerEnv, maxSchedules int64) string {
 	limitClause := ""
-	if maxSchedules > 0 {
+	if maxSchedules != allSchedules {
 		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
 	}
 
@@ -236,8 +236,10 @@ func (s *jobScheduler) executeSchedules(
 	defer stats.updateMetrics(&s.metrics)
 
 	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
-	rows, cols, err := s.InternalExecutor.QueryWithCols(ctx, "find-scheduled-jobs", nil,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+	rows, cols, err := s.InternalExecutor.QueryWithCols(
+		ctx, "find-scheduled-jobs",
+		txn,
+		sqlbase.InternalExecutorSessionDataOverride{User: security.NodeUser},
 		findSchedulesStmt)
 
 	if err != nil {
@@ -252,8 +254,20 @@ func (s *jobScheduler) executeSchedules(
 			continue
 		}
 
+		sp, err := txn.CreateSavepoint(ctx)
+		if err != nil {
+			return err
+		}
+
 		if err := s.processSchedule(ctx, schedule, numRunning, stats, txn); err != nil {
-			// We don't know if txn is good at this point, so bail out.
+			log.Errorf(ctx, "error processing schedule %d: %+v", schedule.ScheduleID(), err)
+
+			if err := txn.RollbackToSavepoint(ctx, sp); err != nil {
+				return errors.Wrapf(err, "failed to rollback savepoint for schedule %d", schedule.ScheduleID())
+			}
+		}
+
+		if err := txn.ReleaseSavepoint(ctx, sp); err != nil {
 			return err
 		}
 	}

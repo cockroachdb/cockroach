@@ -649,3 +649,21 @@ var DefaultLocationInformation = []struct {
 		Longitude: "3.81886",
 	},
 }
+
+// Locality returns the locality of the Store, which is the Locality of the node
+// plus an extra tier for the node itself.
+func (s StoreDescriptor) Locality() Locality {
+	return s.Node.Locality.AddTier(
+		Tier{Key: "node", Value: s.Node.NodeID.String()})
+}
+
+// AddTier creates a new Locality with a Tier at the end.
+func (l Locality) AddTier(tier Tier) Locality {
+	if len(l.Tiers) > 0 {
+		tiers := make([]Tier, len(l.Tiers), len(l.Tiers)+1)
+		copy(tiers, l.Tiers)
+		tiers = append(tiers, tier)
+		return Locality{Tiers: tiers}
+	}
+	return Locality{Tiers: []Tier{tier}}
+}

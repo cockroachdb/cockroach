@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1206,12 +1207,30 @@ func (r *importResumer) Resume(
 	if details.Walltime == 0 {
 		// TODO(dt): update job status to mention waiting for tables to go offline.
 		for _, i := range details.Tables {
-			if _, err := p.ExecCfg().LeaseManager.WaitForOneVersion(ctx, i.Desc.ID, retry.Options{}); err != nil {
-				return err
+			if !i.IsNew {
+				if _, err := p.ExecCfg().LeaseManager.WaitForOneVersion(ctx, i.Desc.ID, retry.Options{}); err != nil {
+					return err
+				}
 			}
 		}
 
+		// Now that we know all the tables are offline, pick a walltime at which we
+		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
+
+		// Check if the tables being imported into are starting empty, in which
+		// case we can cheaply clear-range instead of revert-range to cleanup.
+		for i := range details.Tables {
+			if !details.Tables[i].IsNew {
+				tblSpan := sqlbase.NewImmutableTableDescriptor(*details.Tables[i].Desc).TableSpan(keys.TODOSQLCodec)
+				res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
+				if err != nil {
+					return errors.Wrap(err, "checking if existing table is empty")
+				}
+				details.Tables[i].WasEmpty = len(res) == 0
+			}
+		}
+
 		if err := r.job.WithTxn(nil).SetDetails(ctx, details); err != nil {
 			return err
 		}
@@ -1432,9 +1451,14 @@ func (r *importResumer) dropTables(
 	}
 
 	var revert []*sqlbase.ImmutableTableDescriptor
+	var empty []*sqlbase.ImmutableTableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			revert = append(revert, sqlbase.NewImmutableTableDescriptor(*tbl.Desc))
+			if tbl.WasEmpty {
+				empty = append(empty, sqlbase.NewImmutableTableDescriptor(*tbl.Desc))
+			} else {
+				revert = append(revert, sqlbase.NewImmutableTableDescriptor(*tbl.Desc))
+			}
 		}
 	}
 
@@ -1454,6 +1478,12 @@ func (r *importResumer) dropTables(
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
 		if err := sql.RevertTables(ctx, txn.DB(), execCfg, revert, ts, sql.RevertTableDefaultBatchSize); err != nil {
 			return errors.Wrap(err, "rolling back partially completed IMPORT")
+		}
+	}
+
+	for i := range empty {
+		if err := gcjob.ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, empty[i]); err != nil {
+			return errors.Wrapf(err, "clearing data for table %d", empty[i].ID)
 		}
 	}
 

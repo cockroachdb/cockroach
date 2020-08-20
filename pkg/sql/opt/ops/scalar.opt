@@ -471,6 +471,22 @@ define Overlaps {
     Right ScalarExpr
 }
 
+# BBoxCovers is the ~ operator when used with geometry or bounding box
+# operands. It maps to tree.RegMatch.
+[Scalar, Bool, Comparison]
+define BBoxCovers {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+# BBoxIntersects is the && operator when used with geometry or bounding box
+# operands. It maps to tree.Overlaps.
+[Scalar, Bool, Comparison]
+define BBoxIntersects {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar, Bool]
