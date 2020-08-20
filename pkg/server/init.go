@@ -120,19 +120,6 @@ type initDiskState struct {
 // a CockroachDB server can be started up after ServeAndWait returns.
 type initState struct {
 	initDiskState
-	// joined is true if this is a new node. Note that the initDiskState may
-	// reflect the result of bootstrapping a new cluster, i.e. it is not true
-	// that joined==true implies that the initDiskState shows no initialized
-	// engines.
-	//
-	// This flag should only be used for logging and reporting. A newly
-	// bootstrapped single-node cluster is functionally equivalent to one that
-	// restarted; any decisions should be made on persisted data instead of
-	// this flag.
-	//
-	// TODO(tbg): remove this bool. The Node can find out another way whether
-	// it just joined or restarted.
-	joined bool
 }
 
 // NeedsInit returns true if (and only if) none if the engines are initialized.
@@ -149,6 +136,10 @@ func (s *initServer) NeedsInit() bool {
 //
 // The returned initState may not reflect a bootstrapped cluster yet, but it
 // is guaranteed to have a ClusterID set.
+// initialStart is true if this is a new node. This flag should only be used for
+// logging and reporting. A newly bootstrapped single-node cluster is, for e.g.,
+// functionally equivalent to one that restarted; any decisions should be made
+// on persisted data instead of this flag.
 //
 // This method must be called only once.
 //
@@ -156,13 +147,10 @@ func (s *initServer) NeedsInit() bool {
 // all cases.
 func (s *initServer) ServeAndWait(
 	ctx context.Context, stopper *stop.Stopper, sv *settings.Values, g *gossip.Gossip,
-) (*initState, error) {
+) (state *initState, initialStart bool, err error) {
 	if !s.NeedsInit() {
 		// If already bootstrapped, return early.
-		return &initState{
-			initDiskState: *s.inspectState,
-			joined:        false,
-		}, nil
+		return &initState{initDiskState: *s.inspectState}, false, nil
 	}
 
 	log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting "+
@@ -170,7 +158,7 @@ func (s *initServer) ServeAndWait(
 
 	select {
 	case <-stopper.ShouldQuiesce():
-		return nil, stop.ErrUnavailable
+		return nil, false, stop.ErrUnavailable
 	case state := <-s.bootstrapReqCh:
 		// Bootstrap() did its job. At this point, we know that the cluster
 		// version will be bootstrapVersion (=state.clusterVersion.Version), but
@@ -182,11 +170,11 @@ func (s *initServer) ServeAndWait(
 		// having every freshly bootstrapped cluster spend time at an old
 		// cluster version.
 		if err := clusterversion.Initialize(ctx, state.clusterVersion.Version, sv); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		log.Infof(ctx, "**** cluster %s has been created", state.clusterID)
-		return state, nil
+		return state, true, nil
 	case <-g.Connected:
 		// Gossip connected, that is, we know a ClusterID. Due to the early
 		// return above, we know that all of our engines are empty, i.e. we
@@ -212,13 +200,10 @@ func (s *initServer) ServeAndWait(
 		// easy.
 		clusterID, err := g.GetClusterID()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		s.inspectState.clusterID = clusterID
-		return &initState{
-			initDiskState: *s.inspectState,
-			joined:        true,
-		}, nil
+		return &initState{initDiskState: *s.inspectState}, true, nil
 	}
 }
 

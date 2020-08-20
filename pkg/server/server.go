@@ -676,10 +676,11 @@ func (s *Server) NodeID() roachpb.NodeID {
 	return s.node.Descriptor.NodeID
 }
 
-// InitialBoot returns whether this is the first time the node has booted.
-// Only intended to help print debugging info during server startup.
-func (s *Server) InitialBoot() bool {
-	return s.node.initialBoot
+// InitialStart returns whether this is the first time the node has started (as
+// opposed to being restarted). Only intended to help print debugging info
+// during server startup.
+func (s *Server) InitialStart() bool {
+	return s.node.initialStart
 }
 
 // grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
@@ -1316,7 +1317,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// connections.
 	startRPCServer(workersCtx)
 	onInitServerReady()
-	state, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, s.gossip)
+	state, initialStart, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV, s.gossip)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
@@ -1415,6 +1416,7 @@ func (s *Server) Start(ctx context.Context) error {
 		advAddrU,
 		advSQLAddrU,
 		*state,
+		initialStart,
 		s.cfg.ClusterName,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
@@ -1603,7 +1605,7 @@ func (s *Server) Start(ctx context.Context) error {
 	case enginepb.EngineTypeTeePebbleRocksDB:
 		nodeStartCounter += "pebble+rocksdb."
 	}
-	if s.InitialBoot() {
+	if s.InitialStart() {
 		nodeStartCounter += "initial-boot"
 	} else {
 		nodeStartCounter += "restart"
