@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -35,7 +35,7 @@ func makeMetricsSink(metrics *Metrics, s Sink) *metricsSink {
 }
 
 func (s *metricsSink) EmitRow(
-	ctx context.Context, table *descpb.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
 	start := timeutil.Now()
 	err := s.wrapped.EmitRow(ctx, table, key, value, updated)

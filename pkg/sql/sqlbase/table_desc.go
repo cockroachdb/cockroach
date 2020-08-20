@@ -24,6 +24,16 @@ import (
 var _ TableDescriptor = (*ImmutableTableDescriptor)(nil)
 var _ TableDescriptor = (*MutableTableDescriptor)(nil)
 
+// IndexOpts configures the behavior of TableDescriptor.ForeachIndex.
+type IndexOpts struct {
+	// NonPhysicalPrimaryIndex should be included.
+	NonPhysicalPrimaryIndex bool
+	// DropMutations should be included.
+	DropMutations bool
+	// AddMutations should be included.
+	AddMutations bool
+}
+
 // TableDescriptor is an interface around the table descriptor types.
 //
 // TODO(ajwerner): This interface likely belongs in a catalog/tabledesc package
@@ -35,37 +45,49 @@ type TableDescriptor interface {
 	TableDesc() *descpb.TableDescriptor
 
 	GetState() descpb.TableDescriptor_State
+	GetSequenceOpts() *descpb.TableDescriptor_SequenceOpts
+	GetViewQuery() string
+	GetLease() *descpb.TableDescriptor_SchemaChangeLease
+	GetDropTime() int64
+	GetFormatVersion() descpb.FormatVersion
 
-	HasPrimaryKey() bool
+	GetPrimaryIndexID() descpb.IndexID
 	GetPrimaryIndex() *descpb.IndexDescriptor
-	GetIndexes() []descpb.IndexDescriptor
+	GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor
+	ForeachIndex(opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error) error
+	AllNonDropIndexes() []*descpb.IndexDescriptor
 	ForeachNonDropIndex(f func(idxDesc *descpb.IndexDescriptor) error) error
 	IndexSpan(codec keys.SQLCodec, id descpb.IndexID) roachpb.Span
 	IsInterleaved() bool
 	FindIndexByID(id descpb.IndexID) (*descpb.IndexDescriptor, error)
 	FindIndexByName(name string) (_ *descpb.IndexDescriptor, dropped bool, _ error)
 	FindIndexesWithPartition(name string) []*descpb.IndexDescriptor
-	AllNonDropIndexes() []*descpb.IndexDescriptor
+	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 
+	HasPrimaryKey() bool
+	PrimaryKeyString() string
+
+	GetPublicColumns() []descpb.ColumnDescriptor
+	ForeachPublicColumn(f func(col *descpb.ColumnDescriptor) error) error
+	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)
 	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
 	FindColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)
-	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
-
 	ColumnIdxMap() map[descpb.ColumnID]int
-	GetPublicColumns() []descpb.ColumnDescriptor
 	GetColumnAtIdx(idx int) *descpb.ColumnDescriptor
 	AllNonDropColumns() []descpb.ColumnDescriptor
-
+	VisibleColumns() []descpb.ColumnDescriptor
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 
 	IsTable() bool
 	IsView() bool
 	MaterializedView() bool
 	IsSequence() bool
+	IsTemporary() bool
+	IsVirtualTable() bool
+	IsPhysicalTable() bool
 
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
-	GetDependedOnBy() []descpb.TableDescriptor_Reference
 
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 	GetAllReferencedTypeIDs(
@@ -73,7 +95,14 @@ type TableDescriptor interface {
 	) (descpb.IDs, error)
 
 	Validate(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec) error
-	IsVirtualTable() bool
+
+	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
+	GetDependsOn() []descpb.ID
+	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
+	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
+	GetChecks() []*descpb.TableDescriptor_CheckConstraint
+	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
+	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 }
 
 // Immutable implements the MutableDescriptor interface.

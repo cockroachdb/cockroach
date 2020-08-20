@@ -244,7 +244,7 @@ func readPostgresCreateTable(
 			}
 			for name, seq := range createSeq {
 				id := descpb.ID(int(defaultCSVTableID) + len(ret))
-				desc, err := sql.MakeSequenceTableDesc(
+				desc, err := sql.NewSequenceTableDesc(
 					name,
 					seq.Options,
 					parentID,
@@ -258,8 +258,8 @@ func readPostgresCreateTable(
 				if err != nil {
 					return nil, err
 				}
-				fks.resolver[desc.Name] = &desc
-				ret = append(ret, &desc)
+				fks.resolver[desc.Name] = desc
+				ret = append(ret, desc)
 			}
 			backrefs := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 			for _, create := range createTbl {
@@ -288,7 +288,7 @@ func readPostgresCreateTable(
 						return nil, err
 					}
 				}
-				if err := fixDescriptorFKState(desc.TableDesc()); err != nil {
+				if err := fixDescriptorFKState(desc); err != nil {
 					return nil, err
 				}
 			}
@@ -486,7 +486,7 @@ func readPostgresStmt(
 		}
 	case *tree.BeginTransaction, *tree.CommitTransaction:
 		// ignore txns.
-	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData:
+	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData, *tree.Delete:
 		// ignore SETs and DMLs.
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
@@ -833,6 +833,17 @@ func (m *pgDumpReader) readFile(
 			// ignored.
 		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence:
 			// handled during schema extraction.
+		case *tree.Delete:
+			switch stmt := i.Table.(type) {
+			case *tree.AliasedTableExpr:
+				// ogr2ogr has `DELETE FROM geometry_columns / geography_columns ...` statements.
+				// We're not planning to support this functionality in CRDB, so it is safe to ignore it when countered in PGDUMP.
+				if tn, ok := stmt.Expr.(*tree.TableName); !(ok && (tn.Table() == "geometry_columns" || tn.Table() == "geography_columns")) {
+					return errors.Errorf("unsupported DELETE FROM %T statement: %s", stmt, stmt)
+				}
+			default:
+				return errors.Errorf("unsupported %T statement: %s", i, i)
+			}
 		default:
 			return errors.Errorf("unsupported %T statement: %v", i, i)
 		}

@@ -1299,7 +1299,7 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, 
 		rf.rowReadyTable.decodedRow[i] = row[i].Datum
 	}
 
-	if index.ID == table.GetPrimaryIndex().ID {
+	if index.ID == table.GetPrimaryIndexID() {
 		err = rf.checkPrimaryIndexDatumEncodings(ctx)
 	} else {
 		err = rf.checkSecondaryIndexDatumEncodings(ctx)

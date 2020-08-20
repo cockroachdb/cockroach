@@ -719,3 +719,31 @@ query BI
 SELECT * FROM t44132 WHERE c0
 ----
 true NULL
+
+# Tests for `disallow_full_table_scans`
+statement ok
+CREATE TABLE t_disallow_scans(a INT);
+
+statement ok
+INSERT INTO t_disallow_scans VALUES (1), (2), (3)
+
+statement ok
+SELECT * FROM t_disallow_scans
+
+statement ok
+SET disallow_full_table_scans = true
+
+statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
+SELECT * FROM t_disallow_scans
+
+# Internal statements should still be allowed with this setting.
+statement ok
+SELECT * FROM pg_class
+
+statement ok
+SELECT * FROM crdb_internal.jobs
+
+# Cleanup
+statement ok
+SET disallow_full_table_scans = false
+

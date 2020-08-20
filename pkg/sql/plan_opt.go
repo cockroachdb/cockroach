@@ -552,6 +552,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var result *planComponents
 	var explainPlan *explain.Plan
 	var isDDL bool
+	var containsFullTableScan bool
+	var containsFullIndexScan bool
 	if planTop.appStats != nil {
 		// We do not set this flag upfront when initializing planTop because the
 		// planning process could in principle modify the AST, resulting in a
@@ -570,6 +572,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		}
 		result = plan.(*planComponents)
 		isDDL = bld.IsDDL
+		containsFullTableScan = bld.ContainsFullTableScan
+		containsFullIndexScan = bld.ContainsFullIndexScan
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
@@ -581,6 +585,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 		explainPlan = plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
 		isDDL = bld.IsDDL
+		containsFullTableScan = bld.ContainsFullTableScan
+		containsFullIndexScan = bld.ContainsFullIndexScan
 	}
 
 	if stmt.ExpectedTypes != nil {
@@ -599,6 +605,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.flags = opc.flags
 	if isDDL {
 		planTop.flags.Set(planFlagIsDDL)
+	}
+	if containsFullTableScan {
+		planTop.flags.Set(planFlagContainsFullTableScan)
+	}
+	if containsFullIndexScan {
+		planTop.flags.Set(planFlagContainsFullIndexScan)
 	}
 	return nil
 }

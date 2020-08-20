@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -5206,7 +5207,9 @@ func TestImportPgDumpGeo(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sqlDB.Exec(t, string(geoSQL))
+		// We cannot process DELETE FROM geometry_columns statement, so ignore it.
+		replacedSQL := regexp.MustCompile("DELETE FROM[^;]*").ReplaceAll(geoSQL, []byte(""))
+		sqlDB.Exec(t, string(replacedSQL))
 
 		// Verify both created tables are identical.
 		importCreate := sqlDB.QueryStr(t, `SELECT create_statement FROM [SHOW CREATE importdb."HydroNode"]`)

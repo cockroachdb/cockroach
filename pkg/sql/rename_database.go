@@ -141,7 +141,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				continue
 			}
 			tbDesc := objDesc.(sqlbase.TableDescriptor)
-			for _, dependedOn := range tbDesc.GetDependedOnBy() {
+
+			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
 				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
 				if err != nil {
 					return err
@@ -158,7 +159,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					return err
 				}
 				if isAllowed {
-					continue
+					return nil
 				}
 
 				tbTableName := tree.MakeTableNameWithSchema(
@@ -216,6 +217,8 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 				// Otherwise, we default to the view error message.
 				return errors.WithHintf(depErr,
 					"you can drop %q instead", dependentDescQualifiedString)
+			}); err != nil {
+				return err
 			}
 		}
 	}
@@ -230,7 +233,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 // This is a workaround for #45411 until #34416 is resolved.
 func isAllowedDependentDescInRenameDatabase(
 	ctx context.Context,
-	dependedOn descpb.TableDescriptor_Reference,
+	dependedOn *descpb.TableDescriptor_Reference,
 	tbDesc sqlbase.TableDescriptor,
 	dependentDesc *sqlbase.ImmutableTableDescriptor,
 	dbName string,

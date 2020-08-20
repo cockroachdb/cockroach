@@ -97,10 +97,10 @@ func doCreateSequence(
 	// creationTime is initialized to a zero value and populated at read time.
 	// See the comment in desc.MaybeIncrementVersion.
 	//
-	// TODO(ajwerner): remove the timestamp from MakeSequenceTableDesc, it's
+	// TODO(ajwerner): remove the timestamp from NewSequenceTableDesc, it's
 	// currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
-	desc, err := MakeSequenceTableDesc(
+	desc, err := NewSequenceTableDesc(
 		name.Table(),
 		opts,
 		dbDesc.GetID(),
@@ -126,7 +126,7 @@ func doCreateSequence(
 		name.Table(),
 	).Key(params.ExecCfg().Codec)
 	if err = params.p.createDescriptorWithID(
-		params.ctx, key, id, &desc, params.EvalContext().Settings, jobDesc,
+		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,
 	); err != nil {
 		return err
 	}
@@ -163,8 +163,8 @@ func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (*createSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (*createSequenceNode) Close(context.Context)        {}
 
-// MakeSequenceTableDesc creates a sequence descriptor.
-func MakeSequenceTableDesc(
+// NewSequenceTableDesc creates a sequence descriptor.
+func NewSequenceTableDesc(
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
 	parentID descpb.ID,
@@ -174,7 +174,7 @@ func MakeSequenceTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,
-) (sqlbase.MutableTableDescriptor, error) {
+) (*sqlbase.MutableTableDescriptor, error) {
 	desc := sqlbase.InitTableDescriptor(
 		id,
 		parentID,
@@ -216,7 +216,7 @@ func MakeSequenceTableDesc(
 	}
 	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */, params, id)
 	if err != nil {
-		return desc, err
+		return nil, err
 	}
 	desc.SequenceOpts = opts
 
@@ -224,5 +224,8 @@ func MakeSequenceTableDesc(
 	// immediately.
 	desc.State = descpb.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable()
+	if err := desc.ValidateTable(); err != nil {
+		return nil, err
+	}
+	return &desc, nil
 }

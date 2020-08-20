@@ -149,7 +149,7 @@ func MakeSimpleTableDescriptor(
 	}
 	affected := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
 
-	tableDesc, err := sql.MakeTableDesc(
+	tableDesc, err := sql.NewTableDesc(
 		ctx,
 		nil, /* txn */
 		fks.resolver,
@@ -169,18 +169,18 @@ func MakeSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	if err := fixDescriptorFKState(tableDesc.TableDesc()); err != nil {
+	if err := fixDescriptorFKState(tableDesc); err != nil {
 		return nil, err
 	}
 
-	return &tableDesc, nil
+	return tableDesc, nil
 }
 
 // fixDescriptorFKState repairs validity and table states set during descriptor
-// creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
+// creation. sql.NewTableDesc and ResolveFK set the table to the ADD state
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
-func fixDescriptorFKState(tableDesc *descpb.TableDescriptor) error {
+func fixDescriptorFKState(tableDesc *sqlbase.MutableTableDescriptor) error {
 	tableDesc.State = descpb.TableDescriptor_PUBLIC
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
@@ -313,6 +313,8 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id descpb.ID) (catalog.TableEntry, error) {
-	return catalog.TableEntry{}, errSchemaResolver
+func (r fkResolver) LookupTableByID(
+	ctx context.Context, id descpb.ID,
+) (*sqlbase.ImmutableTableDescriptor, error) {
+	return nil, errSchemaResolver
 }

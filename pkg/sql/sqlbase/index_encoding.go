@@ -211,7 +211,7 @@ func MakeSpanFromEncDatums(
 	alloc *DatumAlloc,
 	keyPrefix []byte,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc.TableDesc(), index, alloc, keyPrefix)
+	startKey, complete, containsNull, err := makeKeyFromEncDatums(values, types, dirs, tableDesc, index, alloc, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, false, err
 	}
@@ -408,7 +408,7 @@ func makeKeyFromEncDatums(
 	values EncDatumRow,
 	types []*types.T,
 	dirs []descpb.IndexDescriptor_Direction,
-	tableDesc *descpb.TableDescriptor,
+	tableDesc TableDescriptor,
 	index *descpb.IndexDescriptor,
 	alloc *DatumAlloc,
 	keyPrefix []byte,
@@ -459,7 +459,7 @@ func makeKeyFromEncDatums(
 			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
-		key = EncodePartialTableIDIndexID(key, tableDesc.ID, index.ID)
+		key = EncodePartialTableIDIndexID(key, tableDesc.GetID(), index.ID)
 	}
 	var (
 		err error
