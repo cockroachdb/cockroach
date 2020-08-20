@@ -2404,7 +2404,7 @@ func (s *adminServer) requireAdminUser(ctx context.Context) (userName string, er
 		return "", err
 	}
 	if !isAdmin {
-		return "", errInsufficientPrivilege
+		return "", errRequiresAdmin
 	}
 	return userName, nil
 }
@@ -2487,4 +2487,9 @@ func (s *adminServer) hasRoleOption(
 	return bool(dbDatum), nil
 }
 
-var errInsufficientPrivilege = status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+var errRequiresAdmin = status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+
+func errRequiresRoleOption(option roleoption.Option) error {
+	return status.Errorf(
+		codes.PermissionDenied, "this operation requires %s privilege", option)
+}

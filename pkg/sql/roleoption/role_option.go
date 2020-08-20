@@ -45,20 +45,24 @@ const (
 	NOCONTROLJOB
 	VIEWACTIVITY
 	NOVIEWACTIVITY
+	CANCELQUERY
+	NOCANCELQUERY
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{
-	CREATEROLE:    `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
-	NOCREATEROLE:  `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
-	LOGIN:         `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
-	NOLOGIN:       `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
-	VALIDUNTIL:    `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
-	CONTROLJOB:    `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB')`,
-	NOCONTROLJOB:  `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
+	CREATEROLE:     `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEROLE')`,
+	NOCREATEROLE:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEROLE'`,
+	LOGIN:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'NOLOGIN'`,
+	NOLOGIN:        `UPSERT INTO system.role_options (username, option) VALUES ($1, 'NOLOGIN')`,
+	VALIDUNTIL:     `UPSERT INTO system.role_options (username, option, value) VALUES ($1, 'VALID UNTIL', $2::timestamptz::string)`,
+	CONTROLJOB:     `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CONTROLJOB')`,
+	NOCONTROLJOB:   `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLJOB'`,
 	VIEWACTIVITY:   `UPSERT INTO system.role_options (username, option) VALUES ($1, 'VIEWACTIVITY')`,
 	NOVIEWACTIVITY: `DELETE FROM system.role_options WHERE username = $1 AND option = 'VIEWACTIVITY'`,
+	CANCELQUERY:    `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CANCELQUERY')`,
+	NOCANCELQUERY:  `DELETE FROM system.role_options WHERE username = $1 AND option = 'CANCELQUERY'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -68,16 +72,18 @@ func (o Option) Mask() uint32 {
 
 // ByName is a map of string -> kind value.
 var ByName = map[string]Option{
-	"CREATEROLE":    CREATEROLE,
-	"NOCREATEROLE":  NOCREATEROLE,
-	"PASSWORD":      PASSWORD,
-	"LOGIN":         LOGIN,
-	"NOLOGIN":       NOLOGIN,
-	"VALID_UNTIL":   VALIDUNTIL,
-	"CONTROLJOB":    CONTROLJOB,
-	"NOCONTROLJOB":  NOCONTROLJOB,
+	"CREATEROLE":     CREATEROLE,
+	"NOCREATEROLE":   NOCREATEROLE,
+	"PASSWORD":       PASSWORD,
+	"LOGIN":          LOGIN,
+	"NOLOGIN":        NOLOGIN,
+	"VALID_UNTIL":    VALIDUNTIL,
+	"CONTROLJOB":     CONTROLJOB,
+	"NOCONTROLJOB":   NOCONTROLJOB,
 	"VIEWACTIVITY":   VIEWACTIVITY,
 	"NOVIEWACTIVITY": NOVIEWACTIVITY,
+	"CANCELQUERY":    CANCELQUERY,
+	"NOCANCELQUERY":  NOCANCELQUERY,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -170,7 +176,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&CONTROLJOB.Mask() != 0 &&
 			roleOptionBits&NOCONTROLJOB.Mask() != 0) ||
 		(roleOptionBits&VIEWACTIVITY.Mask() != 0 &&
-			roleOptionBits&NOVIEWACTIVITY.Mask() != 0) {
+			roleOptionBits&NOVIEWACTIVITY.Mask() != 0) ||
+		(roleOptionBits&CANCELQUERY.Mask() != 0 &&
+			roleOptionBits&NOCANCELQUERY.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil
