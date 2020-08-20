@@ -570,17 +570,6 @@ func (ht *hashTable) maybeAllocateSameAndVisited() {
 	ht.visited[0] = true
 }
 
-// lookupInitial finds the corresponding hash table buckets for the equality
-// column of the batch and stores the results in groupID. It also initializes
-// toCheck with all indices in the range [0, batchSize).
-func (ht *hashTable) lookupInitial(ctx context.Context, batchSize int, sel []int) {
-	ht.computeBuckets(ctx, ht.probeScratch.buckets, ht.probeScratch.keys, batchSize, sel)
-	for i := 0; i < batchSize; i++ {
-		ht.probeScratch.groupID[i] = ht.buildScratch.first[ht.probeScratch.buckets[i]]
-		ht.probeScratch.toCheck[i] = uint64(i)
-	}
-}
-
 // findNext determines the id of the next key inside the groupID buckets for
 // each equality column key in toCheck.
 func (ht *hashTable) findNext(next []uint64, nToCheck uint64) {
