@@ -2533,7 +2533,7 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "withMerge", run)
 }
 
-// slowSnapRaftHandler delays any snapshots to rangeID until waitCh is closed.
+// slowSnapRaftHandler delays any snapshots to rangeID until WaitCh is closed.
 type slowSnapRaftHandler struct {
 	rangeID roachpb.RangeID
 	waitCh  chan struct{}
@@ -3792,10 +3792,7 @@ func setupClusterWithSubsumedRange(
 	waitForBlocked func(),
 	cleanupFunc func(),
 ) {
-	state := mergeFilterState{
-		blockMergeTrigger: make(chan hlc.Timestamp),
-		finishMergeTxn:    make(chan struct{}),
-	}
+	filter := mergeFilter{}
 	var blockedRequestCount int32
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -3803,7 +3800,7 @@ func setupClusterWithSubsumedRange(
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue:    true,
 					MaxOffset:            testMaxOffset,
-					TestingRequestFilter: state.suspendMergeTrigger,
+					TestingRequestFilter: filter.SuspendMergeTrigger,
 					TestingConcurrencyRetryFilter: func(
 						ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
 					) {
@@ -3824,14 +3821,15 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	errCh := make(chan error)
+	blocker := filter.BlockNextMerge()
 	go func() {
 		_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 		errCh <- err.GoError()
 	}()
-	freezeStart = <-state.blockMergeTrigger
+	freezeStart = <-blocker.WaitCh()
 	cleanupFunc = func() {
 		// Let the merge commit.
-		close(state.finishMergeTxn)
+		blocker.Unblock()
 		require.NoError(t, <-errCh)
 	}
 	waitForBlocked = func() {
