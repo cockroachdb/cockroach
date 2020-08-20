@@ -78,7 +78,7 @@ UPDATE SET a=5
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 15
+ ├── canary column: 12
  ├── fetch columns: a:12 b:13 c:14 rowid:15
  ├── insert-mapping:
  │    ├── x:6 => a:1
@@ -130,10 +130,10 @@ upsert abc
       │    └── projections
       │         └── b:13 + 1 [as=column18:18]
       └── projections
-           ├── CASE WHEN rowid:15 IS NULL THEN x:6 ELSE a_new:17 END [as=upsert_a:19]
-           ├── CASE WHEN rowid:15 IS NULL THEN y:7 ELSE b:13 END [as=upsert_b:20]
-           ├── CASE WHEN rowid:15 IS NULL THEN column11:11 ELSE column18:18 END [as=upsert_c:21]
-           └── CASE WHEN rowid:15 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
+           ├── CASE WHEN a:12 IS NULL THEN x:6 ELSE a_new:17 END [as=upsert_a:19]
+           ├── CASE WHEN a:12 IS NULL THEN y:7 ELSE b:13 END [as=upsert_b:20]
+           ├── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column18:18 END [as=upsert_c:21]
+           └── CASE WHEN a:12 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
 
 # Set all columns, multi-column conflict.
 build
@@ -218,7 +218,7 @@ WHERE abc.a>0
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 15
+ ├── canary column: 12
  ├── fetch columns: a:12 b:13 c:14 rowid:15
  ├── insert-mapping:
  │    ├── x:6 => a:1
@@ -268,16 +268,16 @@ upsert abc
       │    │    │    │    └── filters
       │    │    │    │         └── x:6 = a:12
       │    │    │    └── filters
-      │    │    │         └── (rowid:15 IS NULL) OR (a:12 > 0)
+      │    │    │         └── (a:12 IS NULL) OR (a:12 > 0)
       │    │    └── projections
       │    │         └── 10 [as=b_new:17]
       │    └── projections
       │         └── b_new:17 + 1 [as=column18:18]
       └── projections
-           ├── CASE WHEN rowid:15 IS NULL THEN x:6 ELSE a:12 END [as=upsert_a:19]
-           ├── CASE WHEN rowid:15 IS NULL THEN y:7 ELSE b_new:17 END [as=upsert_b:20]
-           ├── CASE WHEN rowid:15 IS NULL THEN column11:11 ELSE column18:18 END [as=upsert_c:21]
-           └── CASE WHEN rowid:15 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
+           ├── CASE WHEN a:12 IS NULL THEN x:6 ELSE a:12 END [as=upsert_a:19]
+           ├── CASE WHEN a:12 IS NULL THEN y:7 ELSE b_new:17 END [as=upsert_b:20]
+           ├── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column18:18 END [as=upsert_c:21]
+           └── CASE WHEN a:12 IS NULL THEN column10:10 ELSE rowid:15 END [as=upsert_rowid:22]
 
 # Use RETURNING INSERT..ON CONFLICT as a FROM clause.
 build
@@ -294,7 +294,7 @@ sort
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
       │    └── upsert abc
       │         ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null rowid:4!null
-      │         ├── canary column: 13
+      │         ├── canary column: 10
       │         ├── fetch columns: abc.a:10 abc.b:11 abc.c:12 rowid:13
       │         ├── insert-mapping:
       │         │    ├── column1:6 => abc.a:1
@@ -351,10 +351,10 @@ sort
       │              │    └── projections
       │              │         └── b_new:15 + 1 [as=column16:16]
       │              └── projections
-      │                   ├── CASE WHEN rowid:13 IS NULL THEN column1:6 ELSE abc.a:10 END [as=upsert_a:17]
-      │                   ├── CASE WHEN rowid:13 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:18]
-      │                   ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_c:19]
-      │                   └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
+      │                   ├── CASE WHEN abc.a:10 IS NULL THEN column1:6 ELSE abc.a:10 END [as=upsert_a:17]
+      │                   ├── CASE WHEN abc.a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:18]
+      │                   ├── CASE WHEN abc.a:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_c:19]
+      │                   └── CASE WHEN abc.a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
       └── with-scan &1
            ├── columns: a:21!null b:22!null c:23!null
            └── mapping:
@@ -371,7 +371,7 @@ UPDATE SET a=tab.a*excluded.a
 ----
 upsert tab
  ├── columns: <none>
- ├── canary column: 13
+ ├── canary column: 10
  ├── fetch columns: a:10 b:11 c:12 rowid:13
  ├── insert-mapping:
  │    ├── column1:6 => a:1
@@ -422,10 +422,10 @@ upsert tab
       │    └── projections
       │         └── b:11 + 1 [as=column16:16]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:17]
-           ├── CASE WHEN rowid:13 IS NULL THEN column2:7 ELSE b:11 END [as=upsert_b:18]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_c:19]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
+           ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:17]
+           ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b:11 END [as=upsert_b:18]
+           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column16:16 END [as=upsert_c:19]
+           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:20]
 
 # Conflict columns are in different order than index key columns.
 build
@@ -732,7 +732,7 @@ UPDATE SET (b, a)=(SELECT x, y+excluded.b FROM xyz WHERE x=excluded.a)
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 13
+ ├── canary column: 10
  ├── fetch columns: a:10 b:11 c:12 rowid:13
  ├── insert-mapping:
  │    ├── column1:6 => a:1
@@ -795,10 +795,10 @@ upsert abc
       │    └── projections
       │         └── x:15 + 1 [as=column20:20]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN column1:6 ELSE "?column?":19 END [as=upsert_a:21]
-           ├── CASE WHEN rowid:13 IS NULL THEN column2:7 ELSE x:15 END [as=upsert_b:22]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column20:20 END [as=upsert_c:23]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:24]
+           ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE "?column?":19 END [as=upsert_a:21]
+           ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE x:15 END [as=upsert_b:22]
+           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column20:20 END [as=upsert_c:23]
+           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:24]
 
 # Default expressions.
 build
@@ -809,7 +809,7 @@ UPDATE SET a=DEFAULT, b=DEFAULT
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 13
+ ├── canary column: 10
  ├── fetch columns: a:10 b:11 c:12 rowid:13
  ├── insert-mapping:
  │    ├── column1:6 => a:1
@@ -862,10 +862,10 @@ upsert abc
       │    └── projections
       │         └── b_new:16 + 1 [as=column17:17]
       └── projections
-           ├── CASE WHEN rowid:13 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:18]
-           ├── CASE WHEN rowid:13 IS NULL THEN column2:7 ELSE b_new:16 END [as=upsert_b:19]
-           ├── CASE WHEN rowid:13 IS NULL THEN column9:9 ELSE column17:17 END [as=upsert_c:20]
-           └── CASE WHEN rowid:13 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:21]
+           ├── CASE WHEN a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:18]
+           ├── CASE WHEN a:10 IS NULL THEN column2:7 ELSE b_new:16 END [as=upsert_b:19]
+           ├── CASE WHEN a:10 IS NULL THEN column9:9 ELSE column17:17 END [as=upsert_c:20]
+           └── CASE WHEN a:10 IS NULL THEN column8:8 ELSE rowid:13 END [as=upsert_rowid:21]
 
 # ------------------------------------------------------------------------------
 # Test mutation columns.
@@ -2372,3 +2372,82 @@ insert unique_partial_indexes
            ├── column3:7 = 'foo' [as=column13:13]
            ├── column3:7 = 'bar' [as=column14:14]
            └── true [as=column15:15]
+
+exec-ddl
+DROP INDEX u4
+----
+
+# Error when two arbiter indexes are found for ON CONFLICT DO UPDATE.
+build
+INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' AND c = 'bar' DO UPDATE SET b = 10
+----
+error (42P10): there are multiple unique or exclusion constraints matching the ON CONFLICT specification
+
+build
+INSERT INTO unique_partial_indexes VALUES (1, 1, 'bar') ON CONFLICT (b) WHERE c = 'foo' DO UPDATE SET b = 10
+----
+upsert unique_partial_indexes
+ ├── columns: <none>
+ ├── canary column: 9
+ ├── fetch columns: a:9 b:10 c:11
+ ├── insert-mapping:
+ │    ├── column1:5 => a:1
+ │    ├── column2:6 => b:2
+ │    └── column3:7 => c:3
+ ├── update-mapping:
+ │    └── upsert_b:17 => b:2
+ ├── partial index put columns: column19:19 column20:20
+ ├── partial index del columns: column13:13 column14:14
+ └── project
+      ├── columns: column19:19 column20:20 column1:5!null column2:6!null column3:7!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12 column13:13 column14:14 b_new:15!null upsert_a:16 upsert_b:17!null upsert_c:18
+      ├── project
+      │    ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18 column1:5!null column2:6!null column3:7!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12 column13:13 column14:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null column1:5!null column2:6!null column3:7!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12 column13:13 column14:14
+      │    │    ├── project
+      │    │    │    ├── columns: column13:13 column14:14 column1:5!null column2:6!null column3:7!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null a:9 b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    │    │    │    │    └── ensure-upsert-distinct-on
+      │    │    │    │    │         ├── columns: column1:5!null column2:6!null column3:7!null upsert_partial_index_distinct1:8
+      │    │    │    │    │         ├── grouping columns: column2:6!null upsert_partial_index_distinct1:8
+      │    │    │    │    │         ├── project
+      │    │    │    │    │         │    ├── columns: upsert_partial_index_distinct1:8 column1:5!null column2:6!null column3:7!null
+      │    │    │    │    │         │    ├── values
+      │    │    │    │    │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
+      │    │    │    │    │         │    │    └── (1, 1, 'bar')
+      │    │    │    │    │         │    └── projections
+      │    │    │    │    │         │         └── (column3:7 = 'foo') OR NULL::BOOL [as=upsert_partial_index_distinct1:8]
+      │    │    │    │    │         └── aggregations
+      │    │    │    │    │              ├── first-agg [as=column1:5]
+      │    │    │    │    │              │    └── column1:5
+      │    │    │    │    │              └── first-agg [as=column3:7]
+      │    │    │    │    │                   └── column3:7
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: a:9!null b:10 c:11!null crdb_internal_mvcc_timestamp:12
+      │    │    │    │    │    ├── scan unique_partial_indexes
+      │    │    │    │    │    │    ├── columns: a:9!null b:10 c:11 crdb_internal_mvcc_timestamp:12
+      │    │    │    │    │    │    └── partial index predicates
+      │    │    │    │    │    │         ├── secondary: filters
+      │    │    │    │    │    │         │    └── c:11 = 'foo'
+      │    │    │    │    │    │         └── u2: filters
+      │    │    │    │    │    │              └── c:11 = 'bar'
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── c:11 = 'foo'
+      │    │    │    │    └── filters
+      │    │    │    │         ├── column2:6 = b:10
+      │    │    │    │         └── column3:7 = 'foo'
+      │    │    │    └── projections
+      │    │    │         ├── c:11 = 'foo' [as=column13:13]
+      │    │    │         └── c:11 = 'bar' [as=column14:14]
+      │    │    └── projections
+      │    │         └── 10 [as=b_new:15]
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:5 ELSE a:9 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:9 IS NULL THEN column2:6 ELSE b_new:15 END [as=upsert_b:17]
+      │         └── CASE WHEN a:9 IS NULL THEN column3:7 ELSE c:11 END [as=upsert_c:18]
+      └── projections
+           ├── upsert_c:18 = 'foo' [as=column19:19]
+           └── upsert_c:18 = 'bar' [as=column20:20]

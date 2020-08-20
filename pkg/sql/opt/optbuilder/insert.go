@@ -308,7 +308,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 			// Left-join each input row to the target table, using conflict columns
 			// derived from the primary index as the join condition.
 			primaryOrds := getIndexLaxKeyOrdinals(mb.tab.Index(cat.PrimaryIndex))
-			mb.buildInputForUpsert(inScope, primaryOrds, nil /* whereClause */)
+			mb.buildInputForUpsert(inScope, primaryOrds, nil /* arbiterPredicate */, nil /* whereClause */)
 
 			// Add additional columns for computed expressions that may depend on any
 			// updated columns, as well as mutation columns with default values.
@@ -323,7 +323,7 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Left-join each input row to the target table, using the conflict columns
 		// as the join condition.
 		conflictOrds := mb.mapPublicColumnNamesToOrdinals(ins.OnConflict.Columns)
-		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.Where)
+		mb.buildInputForUpsert(inScope, conflictOrds, ins.OnConflict.ArbiterPredicate, ins.OnConflict.Where)
 
 		// Derive the columns that will be updated from the SET expressions.
 		mb.addTargetColsForUpdate(ins.OnConflict.Exprs)
@@ -776,53 +776,13 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 			insertColSet,
 		)
 
-		// If the index is a unique partial index, only those input rows that
-		// satisfy the partial index predicate should be de-duplicated. For
-		// example:
-		//
-		//   CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
-		//   INSERT INTO t VALUES (1, 1), (1, 2), (1, -1), (1, -10) ON CONFLICT DO NOTHING
-		//
-		// The rows (1, 1), (1, -1), and (1, -10) should be inserted. (1, -1)
-		// and (1, -10) should not be removed from the input set. Even though
-		// their values for a conflict with the other input rows, their values
-		// for b are less than 0, so they will not conflict given the unique
-		// partial index predicate.
-		//
-		// In order to avoid de-duplicating all input rows, we project a new
-		// column to group by. This column is true if the predicate is satisfied
-		// and NULL otherwise. For the example above, the projected column would
-		// be (b > 0) OR NULL. The values of the projected rows would be:
-		//
-		//   (1, 1)   -> (1, 1, true)
-		//   (1, 2)   -> (1, 2, true)
-		//   (1, -1)  -> (1, -1, NULL)
-		//   (1, -10) -> (1, -10, NULL)
-		//
-		// The set of conflictCols used for de-duplication includes a and the
-		// projected column. The UpsertDistinctOn considers NULL values as
-		// unique, so the rows remaining would be (1, 1, true), (1, -1, NULL),
-		// and (1, -10, NULL).
-		//
-		// The projected column is removed from the output columns via a
-		// projection that wraps the UpsertDistinctOn.
+		// If the index is a partial index, project a new column that allows the
+		// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
+		// partial index predicate. See projectPartialIndexDistinctColumn for more
+		// details.
 		var partialIndexDistinctCol *scopeColumn
 		if isPartial {
-			projectionScope := mb.outScope.replace()
-			projectionScope.appendColumnsFromScope(insertColScope)
-
-			expr := &tree.OrExpr{
-				Left:  predExpr,
-				Right: tree.DNull,
-			}
-			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
-
-			alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
-			partialIndexDistinctCol = mb.b.addColumn(projectionScope, alias, texpr)
-			mb.b.buildScalar(texpr, mb.outScope, projectionScope, partialIndexDistinctCol, nil)
-
-			mb.b.constructProjectForScope(mb.outScope, projectionScope)
-			mb.outScope = projectionScope
+			partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
 		}
 
 		// Add an UpsertDistinctOn operator to ensure there are no duplicate input
@@ -862,13 +822,41 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 // given insert row conflicts with an existing row in the table. If it is null,
 // then there is no conflict.
 func (mb *mutationBuilder) buildInputForUpsert(
-	inScope *scope, conflictOrds util.FastIntSet, whereClause *tree.Where,
+	inScope *scope, conflictOrds util.FastIntSet, arbiterPredicate tree.Expr, whereClause *tree.Where,
 ) {
-	// Check that the ON CONFLICT columns reference at most one target row.
-	// Using LEFT OUTER JOIN to detect conflicts relies upon this being true
-	// (otherwise result cardinality could increase). This is also a Postgres
-	// requirement.
-	mb.ensureUniqueConflictCols(conflictOrds)
+	// Determine the set of arbiter indexes to use to check for conflicts.
+	arbiterIndexes := mb.arbiterIndexes(conflictOrds, arbiterPredicate)
+
+	// TODO(mgartner): Add support for multiple arbiter indexes, similar to
+	// buildInputForDoNothing.
+	if arbiterIndexes.Len() > 1 {
+		panic(pgerror.Newf(pgcode.InvalidColumnReference,
+			"there are multiple unique or exclusion constraints matching the ON CONFLICT specification"))
+	}
+
+	insertColScope := mb.outScope.replace()
+	insertColScope.appendColumnsFromScope(mb.outScope)
+
+	// Ignore any ordering requested by the input.
+	mb.outScope.ordering = nil
+
+	idx, _ := arbiterIndexes.Next(0)
+	index := mb.tab.Index(idx)
+
+	_, isPartial := index.Predicate()
+	var predExpr tree.Expr
+	if isPartial {
+		predExpr = mb.parsePartialIndexPredicateExpr(idx)
+	}
+
+	// If the index is a partial index, project a new column that allows the
+	// UpsertDistinctOn to only de-duplicate insert rows that satisfy the
+	// partial index predicate. See projectPartialIndexDistinctColumn for more
+	// details.
+	var partialIndexDistinctCol *scopeColumn
+	if isPartial {
+		partialIndexDistinctCol = mb.projectPartialIndexDistinctColumn(insertColScope, idx)
+	}
 
 	// Ensure that input is distinct on the conflict columns. Otherwise, the
 	// Upsert could affect the same row more than once, which can lead to index
@@ -882,9 +870,20 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	for ord, ok := conflictOrds.Next(0); ok; ord, ok = conflictOrds.Next(ord + 1) {
 		conflictCols.Add(mb.insertColIDs[ord])
 	}
-	mb.outScope.ordering = nil
+	if partialIndexDistinctCol != nil {
+		conflictCols.Add(partialIndexDistinctCol.id)
+	}
+
 	mb.outScope = mb.b.buildDistinctOn(
 		conflictCols, mb.outScope, true /* nullsAreDistinct */, duplicateUpsertErrText)
+
+	// Remove the partialIndexDistinctCol from the output.
+	if isPartial {
+		projectionScope := mb.outScope.replace()
+		projectionScope.appendColumnsFromScope(insertColScope)
+		mb.b.constructProjectForScope(mb.outScope, projectionScope)
+		mb.outScope = projectionScope
+	}
 
 	// Re-alias all INSERT columns so that they are accessible as if they were
 	// part of a special data source named "crdb_internal.excluded".
@@ -910,10 +909,23 @@ func (mb *mutationBuilder) buildInputForUpsert(
 		inScope,
 	)
 
+	// If the index is a unique partial index, then rows that are not in the
+	// partial index cannot conflict with insert rows. Therefore, a Select wraps
+	// the scan on the right side of the left outer join with the partial index
+	// predicate expression as the filter.
+	if isPartial {
+		texpr := fetchScope.resolveAndRequireType(predExpr, types.Bool)
+		predScalar := mb.b.buildScalar(texpr, fetchScope, nil, nil, nil)
+		fetchScope.expr = mb.b.factory.ConstructSelect(
+			fetchScope.expr,
+			memo.FiltersExpr{mb.b.factory.ConstructFiltersItem(predScalar)},
+		)
+	}
+
 	// Record a not-null "canary" column. After the left-join, this will be null
 	// if no conflict has been detected, or not null otherwise. At least one not-
 	// null column must exist, since primary key columns are not-null.
-	canaryScopeCol := &fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
+	canaryScopeCol := &fetchScope.cols[findNotNullIndexCol(index)]
 	mb.canaryColID = canaryScopeCol.id
 
 	// Set fetchColIDs to reference the columns created for the fetch values.
@@ -939,6 +951,16 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			)
 			on = append(on, mb.b.factory.ConstructFiltersItem(condition))
 		}
+	}
+
+	// If the index is a unique partial index, then insert rows that do not
+	// satisfy the partial index predicate cannot conflict with existing rows in
+	// the unique partial index. Therefore, the partial index predicate
+	// expression is added to the ON filters.
+	if isPartial {
+		texpr := insertColScope.resolveAndRequireType(predExpr, types.Bool)
+		predScalar := mb.b.buildScalar(texpr, insertColScope, nil, nil, nil)
+		on = append(on, mb.b.factory.ConstructFiltersItem(predScalar))
 	}
 
 	// Construct the left join.
@@ -1256,30 +1278,57 @@ func (mb *mutationBuilder) arbiterIndexes(
 	return arbiters
 }
 
-// ensureUniqueConflictCols tries to prove that the given set of column ordinals
-// correspond to the columns of at least one UNIQUE index on the target table.
-// If true, then ensureUniqueConflictCols returns the matching index. Otherwise,
-// it reports an error.
-func (mb *mutationBuilder) ensureUniqueConflictCols(conflictOrds util.FastIntSet) cat.Index {
-	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
-		index := mb.tab.Index(idx)
+// projectPartialIndexDistinctColumn projects a column to facilitate
+// de-duplicating insert rows for UPSERT/INSERT ON CONFLICT when the arbiter
+// index is a partial index. Only those insert rows that satisfy the partial
+// index predicate should be de-duplicated. For example:
+//
+//   CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a) WHERE b > 0)
+//   INSERT INTO t VALUES (1, 1), (1, 2), (1, -1), (1, -10) ON CONFLICT DO NOTHING
+//
+// The rows (1, 1), (1, -1), and (1, -10) should be inserted. (1, -1)
+// and (1, -10) should not be removed from the input set. Even though
+// their values for a conflict with the other input rows, their values
+// for b are less than 0, so they will not conflict given the unique
+// partial index predicate.
+//
+// In order to avoid de-duplicating all input rows, we project a new
+// column to group by. This column is true if the predicate is satisfied
+// and NULL otherwise. For the example above, the projected column would
+// be (b > 0) OR NULL. The values of the projected rows would be:
+//
+//   (1, 1)   -> (1, 1, true)
+//   (1, 2)   -> (1, 2, true)
+//   (1, -1)  -> (1, -1, NULL)
+//   (1, -10) -> (1, -10, NULL)
+//
+// The set of conflict columns to be used for de-duplication includes a and the
+// newly projected column. The UpsertDistinctOn considers NULL values as unique,
+// so the rows remaining would be (1, 1, true), (1, -1, NULL), and (1, -10,
+// NULL).
+//
+// The newly project scopeColumn is returned.
+func (mb *mutationBuilder) projectPartialIndexDistinctColumn(
+	insertScope *scope, idx cat.IndexOrdinal,
+) *scopeColumn {
+	projectionScope := mb.outScope.replace()
+	projectionScope.appendColumnsFromScope(insertScope)
 
-		// Skip non-unique indexes. Use lax key columns, which always contain
-		// the minimum columns that ensure uniqueness. Null values are considered
-		// to be *not* equal, but that's OK because the join condition rejects
-		// nulls anyway.
-		if !index.IsUnique() || index.LaxKeyColumnCount() != conflictOrds.Len() {
-			continue
-		}
-
-		// Determine whether the conflict columns match the columns in the lax key.
-		indexOrds := getIndexLaxKeyOrdinals(index)
-		if indexOrds.Equals(conflictOrds) {
-			return index
-		}
+	predExpr := mb.parsePartialIndexPredicateExpr(idx)
+	expr := &tree.OrExpr{
+		Left:  predExpr,
+		Right: tree.DNull,
 	}
-	panic(pgerror.Newf(pgcode.InvalidColumnReference,
-		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
+	texpr := insertScope.resolveAndRequireType(expr, types.Bool)
+
+	alias := fmt.Sprintf("upsert_partial_index_distinct%d", idx)
+	scopeCol := mb.b.addColumn(projectionScope, alias, texpr)
+	mb.b.buildScalar(texpr, mb.outScope, projectionScope, scopeCol, nil)
+
+	mb.b.constructProjectForScope(mb.outScope, projectionScope)
+	mb.outScope = projectionScope
+
+	return scopeCol
 }
 
 // mapPublicColumnNamesToOrdinals returns the set of ordinal positions within

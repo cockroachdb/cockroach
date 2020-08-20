@@ -1843,7 +1843,7 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.1
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 17
+ ├── canary column: 20
  ├── fetch columns: k:17 i:18 f:19 s:20 j:21
  ├── insert-mapping:
  │    ├── "?column?":13 => k:1
@@ -1895,7 +1895,7 @@ upsert a
       │         ├── i:8 = i:18 [outer=(8,18), constraints=(/8: (/NULL - ]; /18: (/NULL - ]), fd=(8)==(18), (18)==(8)]
       │         └── "?column?":14 = s:20 [outer=(14,20), constraints=(/14: (/NULL - ]; /20: (/NULL - ]), fd=(14)==(20), (20)==(14)]
       └── projections
-           └── CASE WHEN k:17 IS NULL THEN column15:15 ELSE 1.1 END [as=upsert_f:26, outer=(15,17)]
+           └── CASE WHEN s:20 IS NULL THEN column15:15 ELSE 1.1 END [as=upsert_f:26, outer=(15,20)]
 
 # --------------------------------------------------
 # EliminateDistinctOnValues
@@ -2235,7 +2235,7 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 12
+ ├── canary column: 15
  ├── fetch columns: k:12 i:13 f:14 s:15 j:16
  ├── insert-mapping:
  │    ├── column1:7 => k:1
@@ -2276,7 +2276,7 @@ upsert a
       │         ├── column3:9 = i:13 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
       │         └── column2:8 = s:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
       └── projections
-           └── CASE WHEN k:12 IS NULL THEN column10:10 ELSE 1.0 END [as=upsert_f:21, outer=(10,12)]
+           └── CASE WHEN s:15 IS NULL THEN column10:10 ELSE 1.0 END [as=upsert_f:21, outer=(10,15)]
 
 # EnsureUpsertDistinctOn is not removed when there are duplicates.
 norm expect-not=EliminateDistinctOnValues
@@ -2285,7 +2285,7 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 12
+ ├── canary column: 15
  ├── fetch columns: k:12 i:13 f:14 s:15 j:16
  ├── insert-mapping:
  │    ├── column1:7 => k:1
@@ -2343,7 +2343,7 @@ upsert a
       │         ├── column3:9 = i:13 [outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
       │         └── column2:8 = s:15 [outer=(8,15), constraints=(/8: (/NULL - ]; /15: (/NULL - ]), fd=(8)==(15), (15)==(8)]
       └── projections
-           └── CASE WHEN k:12 IS NULL THEN column10:10 ELSE 1.0 END [as=upsert_f:21, outer=(10,12)]
+           └── CASE WHEN s:15 IS NULL THEN column10:10 ELSE 1.0 END [as=upsert_f:21, outer=(10,15)]
 
 # DO NOTHING case where all distinct ops can be removed.
 norm expect=EliminateDistinctOnValues
