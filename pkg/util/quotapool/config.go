@@ -70,7 +70,7 @@ func (f optionFunc) apply(cfg *config) { f(cfg) }
 
 // WithTimeSource is used to configure a quotapool to use the provided
 // TimeSource.
-func WithTimeSource(ts TimeSource) Option {
+func WithTimeSource(ts timeutil.TimeSource) Option {
 	return optionFunc(func(cfg *config) {
 		cfg.timeSource = ts
 	})
@@ -88,12 +88,12 @@ type config struct {
 	onAcquisition            AcquisitionFunc
 	onSlowAcquisition        SlowAcquisitionFunc
 	slowAcquisitionThreshold time.Duration
-	timeSource               TimeSource
+	timeSource               timeutil.TimeSource
 	closer                   <-chan struct{}
 }
 
 var defaultConfig = config{
-	timeSource: defaultTimeSource{},
+	timeSource: timeutil.DefaultTimeSource{},
 }
 
 func initializeConfig(cfg *config, options ...Option) {

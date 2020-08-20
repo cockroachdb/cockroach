@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package quotapool
+package timeutil
 
 import (
 	"container/heap"
@@ -47,7 +47,7 @@ func (m *ManualTime) Now() time.Time {
 }
 
 // NewTimer constructs a new Timer.
-func (m *ManualTime) NewTimer() Timer {
+func (m *ManualTime) NewTimer() TimerI {
 	return &manualTimer{m: m}
 }
 
@@ -152,7 +152,7 @@ type manualTimer struct {
 	ch chan time.Time
 }
 
-var _ Timer = (*manualTimer)(nil)
+var _ TimerI = (*manualTimer)(nil)
 
 func (m *manualTimer) Reset(duration time.Duration) {
 	m.Stop()

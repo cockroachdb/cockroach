@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -40,7 +39,7 @@ func TestCloser(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	start := timeutil.Now()
-	timeSource := quotapool.NewManualTime(start)
+	timeSource := timeutil.NewManualTime(start)
 	factory := tenantrate.NewLimiterFactory(st, &tenantrate.TestingKnobs{
 		TimeSource: timeSource,
 	})
@@ -76,7 +75,7 @@ type testState struct {
 	running     map[string]*launchState
 	rl          *tenantrate.LimiterFactory
 	m           *metric.Registry
-	clock       *quotapool.ManualTime
+	clock       *timeutil.ManualTime
 	settings    *cluster.Settings
 }
 
@@ -140,7 +139,7 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 	ts.initialized = true
 	ts.running = make(map[string]*launchState)
 	ts.tenants = make(map[roachpb.TenantID][]tenantrate.Limiter)
-	ts.clock = quotapool.NewManualTime(t0)
+	ts.clock = timeutil.NewManualTime(t0)
 	ts.settings = cluster.MakeTestingClusterSettings()
 	limits := tenantrate.LimitConfigsFromSettings(ts.settings)
 	parseLimits(t, d, &limits)
