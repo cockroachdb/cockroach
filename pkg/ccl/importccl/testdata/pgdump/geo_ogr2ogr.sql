@@ -1,4 +1,5 @@
 BEGIN;
+DELETE FROM geometry_columns WHERE f_table_name = 'nyc_census_blocks' AND f_table_schema = 'public';
 CREATE TABLE "public"."HydroNode" (    "fid" SERIAL,    CONSTRAINT "HydroNode_pk" PRIMARY KEY ("fid") );
 SELECT AddGeometryColumn('public','HydroNode','geom',4326,'POINT',2);
 ALTER TABLE "public"."HydroNode" ADD COLUMN "id" VARCHAR(38) NOT NULL;
