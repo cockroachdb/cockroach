@@ -88,7 +88,7 @@ require (
 	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20170921033129-f5072df9c550 // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.6.1 // indirect
-	github.com/jackc/pgproto3/v2 v2.0.2
+	github.com/jackc/pgproto3/v2 v2.0.4
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v4 v4.6.0
 	github.com/jaegertracing/jaeger v1.17.0
