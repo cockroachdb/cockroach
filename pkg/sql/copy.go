@@ -318,7 +318,7 @@ func (c *copyMachine) readBinaryData(ctx context.Context, final bool) (brk bool,
 		}
 	case binaryStateFoundTrailer:
 		if !final {
-			return false, pgerror.New(pgcode.ProtocolViolation,
+			return false, pgerror.New(pgcode.BadCopyFileFormat,
 				"copy data present after trailer")
 		}
 		return true, nil
@@ -342,7 +342,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 		return nil
 	}
 	if fieldCount < 1 {
-		return pgerror.Newf(pgcode.ProtocolViolation,
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"unexpected field count: %d", fieldCount)
 	}
 	exprs := make(tree.Exprs, fieldCount)
@@ -366,7 +366,7 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 			data,
 		)
 		if err != nil {
-			return pgerror.Wrapf(err, pgcode.ProtocolViolation,
+			return pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
 				"decode datum as %s: %s", c.resultColumns[i].Typ.SQLString(), data)
 		}
 		sz := d.Size()
@@ -392,7 +392,7 @@ func (c *copyMachine) readBinarySignature() error {
 		return err
 	}
 	if !bytes.Equal(sig[:], []byte(binarySignature)) {
-		return pgerror.New(pgcode.ProtocolViolation,
+		return pgerror.New(pgcode.BadCopyFileFormat,
 			"unrecognized binary copy signature")
 	}
 	c.binaryState = binaryStateRead
@@ -501,7 +501,7 @@ func (c *copyMachine) insertRows(ctx context.Context) (retErr error) {
 func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	parts := bytes.Split(line, fieldDelim)
 	if len(parts) != len(c.resultColumns) {
-		return pgerror.Newf(pgcode.ProtocolViolation,
+		return pgerror.Newf(pgcode.BadCopyFileFormat,
 			"expected %d values, got %d", len(c.resultColumns), len(parts))
 	}
 	exprs := make(tree.Exprs, len(parts))

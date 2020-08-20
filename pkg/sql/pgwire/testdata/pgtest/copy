@@ -1,0 +1,53 @@
+send
+Query {"String": "CREATE TABLE t (i INT8, t TEXT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# COPY with both empty string and \N for NULL.
+send
+Query {"String": "DELETE FROM t"}
+Query {"String": "COPY t FROM STDIN"}
+CopyData {"Data": "1\tblah\n"}
+CopyData {"Data": "2\t\n"}
+CopyData {"Data": "3\t\\N\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+Query {"String": "SELECT * FROM t ORDER BY i"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"CommandComplete","CommandTag":"COPY 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"blah"}]}
+{"Type":"DataRow","Values":[{"text":"2"},null]}
+{"Type":"DataRow","Values":[{"text":"3"},null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Wrong number of columns.
+send
+Query {"String": "COPY t FROM STDIN"}
+CopyData {"Data": "1\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0,0]}
+{"Type":"ErrorResponse","Code":"22P04"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
