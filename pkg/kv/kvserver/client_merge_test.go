@@ -3803,7 +3803,7 @@ func setupClusterWithSubsumedRange(
 				Store: &kvserver.StoreTestingKnobs{
 					DisableMergeQueue:    true,
 					MaxOffset:            testMaxOffset,
-					TestingRequestFilter: state.suspendMergeTrigger,
+					TestingRequestFilter: state.SuspendMergeTrigger,
 					TestingConcurrencyRetryFilter: func(
 						ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
 					) {
@@ -3824,14 +3824,15 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	errCh := make(chan error)
+	state.BlockNextMerge()
 	go func() {
 		_, err := kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 		errCh <- err.GoError()
 	}()
-	freezeStart = <-state.blockMergeTrigger
+	freezeStart = <-state.FirstMergeFreezeStart()
 	cleanupFunc = func() {
 		// Let the merge commit.
-		close(state.finishMergeTxn)
+		state.UnblockMerge()
 		require.NoError(t, <-errCh)
 	}
 	waitForBlocked = func() {
