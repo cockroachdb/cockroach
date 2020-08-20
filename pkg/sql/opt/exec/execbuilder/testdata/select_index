@@ -1613,17 +1613,18 @@ scan  ·              ·
 query TTT
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
-·               distribution   local
-·               vectorized     false
-update          ·              ·
- │              table          t4
- │              set            c
- │              auto commit    ·
- └── render     ·              ·
-      └── scan  ·              ·
-·               missing stats  ·
-·               table          t4@primary
-·               spans          [/10/20 - /10/20]
+·               distribution      local
+·               vectorized        false
+update          ·                 ·
+ │              table             t4
+ │              set               c
+ │              auto commit       ·
+ └── render     ·                 ·
+      └── scan  ·                 ·
+·               missing stats     ·
+·               table             t4@primary
+·               spans             [/10/20 - /10/20]
+·               locking strength  for update
 
 # Optimization should not be applied for deletes.
 query TTT

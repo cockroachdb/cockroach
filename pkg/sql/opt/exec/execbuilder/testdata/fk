@@ -309,6 +309,7 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
+ │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join (anti)  ·                   ·
@@ -337,6 +338,7 @@ root                               ·                      ·
  │                                 missing stats          ·
  │                                 table                  child@primary
  │                                 spans                  [/10 - /10]
+ │                                 locking strength       for update
  └── fk-check                      ·                      ·
       └── error if rows            ·                      ·
            └── lookup join (anti)  ·                      ·
@@ -362,6 +364,7 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               parent@primary
  │                                    spans               FULL SCAN
+ │                                    locking strength    for update
  ├── fk-check                         ·                   ·
  │    └── error if rows               ·                   ·
  │         └── hash join              ·                   ·
@@ -402,39 +405,40 @@ root                                  ·                   ·
 query TTT
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
-·                                     distribution   local
-·                                     vectorized     false
-root                                  ·              ·
- ├── update                           ·              ·
- │    │                               table          parent
- │    │                               set            p
- │    └── buffer                      ·              ·
- │         │                          label          buffer 1
- │         └── render                 ·              ·
- │              └── scan              ·              ·
- │                                    missing stats  ·
- │                                    table          parent@parent_other_key
- │                                    spans          [/10 - /10]
- ├── fk-check                         ·              ·
- │    └── error if rows               ·              ·
- │         └── lookup join (semi)     ·              ·
- │              │                     table          child@child_p_idx
- │              │                     equality       (p) = (p)
- │              └── except            ·              ·
- │                   ├── scan buffer  ·              ·
- │                   │                label          buffer 1
- │                   └── scan buffer  ·              ·
- │                                    label          buffer 1
- └── fk-check                         ·              ·
-      └── error if rows               ·              ·
-           └── lookup join (semi)     ·              ·
-                │                     table          child_nullable@child_nullable_p_idx
-                │                     equality       (p) = (p)
-                └── except            ·              ·
-                     ├── scan buffer  ·              ·
-                     │                label          buffer 1
-                     └── scan buffer  ·              ·
-·                                     label          buffer 1
+·                                     distribution      local
+·                                     vectorized        false
+root                                  ·                 ·
+ ├── update                           ·                 ·
+ │    │                               table             parent
+ │    │                               set               p
+ │    └── buffer                      ·                 ·
+ │         │                          label             buffer 1
+ │         └── render                 ·                 ·
+ │              └── scan              ·                 ·
+ │                                    missing stats     ·
+ │                                    table             parent@parent_other_key
+ │                                    spans             [/10 - /10]
+ │                                    locking strength  for update
+ ├── fk-check                         ·                 ·
+ │    └── error if rows               ·                 ·
+ │         └── lookup join (semi)     ·                 ·
+ │              │                     table             child@child_p_idx
+ │              │                     equality          (p) = (p)
+ │              └── except            ·                 ·
+ │                   ├── scan buffer  ·                 ·
+ │                   │                label             buffer 1
+ │                   └── scan buffer  ·                 ·
+ │                                    label             buffer 1
+ └── fk-check                         ·                 ·
+      └── error if rows               ·                 ·
+           └── lookup join (semi)     ·                 ·
+                │                     table             child_nullable@child_nullable_p_idx
+                │                     equality          (p) = (p)
+                └── except            ·                 ·
+                     ├── scan buffer  ·                 ·
+                     │                label             buffer 1
+                     └── scan buffer  ·                 ·
+·                                     label             buffer 1
 
 statement ok
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT NOT NULL REFERENCES child(c))
@@ -455,6 +459,7 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
+ │                                    locking strength    for update
  └── fk-check                         ·                   ·
       └── error if rows               ·                   ·
            └── hash join              ·                   ·
@@ -490,6 +495,7 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
+ │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join (anti)  ·                   ·
@@ -517,6 +523,7 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
+ │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join (anti)  ·                   ·
@@ -545,6 +552,7 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               child@primary
  │                                    spans               FULL SCAN
+ │                                    locking strength    for update
  ├── fk-check                         ·                   ·
  │    └── error if rows               ·                   ·
  │         └── hash join (anti)       ·                   ·
@@ -594,6 +602,7 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               child@primary
  │                               spans               FULL SCAN
+ │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join (anti)  ·                   ·
@@ -625,6 +634,7 @@ root                             ·                   ·
  │                               missing stats       ·
  │                               table               self@primary
  │                               spans               FULL SCAN
+ │                               locking strength    for update
  └── fk-check                    ·                   ·
       └── error if rows          ·                   ·
            └── hash join (anti)  ·                   ·
@@ -653,6 +663,7 @@ root                                  ·                   ·
  │                                    missing stats       ·
  │                                    table               self@primary
  │                                    spans               FULL SCAN
+ │                                    locking strength    for update
  └── fk-check                         ·                   ·
       └── error if rows               ·                   ·
            └── hash join              ·                   ·
