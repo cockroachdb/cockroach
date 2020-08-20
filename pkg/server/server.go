@@ -408,6 +408,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.HistogramWindowInterval(),
 	)
 	registry.AddMetricStruct(nodeLiveness.Metrics())
+	nodeDialer.SetDecommissionedChecker(livenessToDecommissionedCheckerAdapter(nodeLiveness))
 
 	storePool := kvserver.NewStorePool(
 		cfg.AmbientCtx,
@@ -647,6 +648,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 	}
 	return lateBoundServer, err
+}
+
+type decommissionedChecker struct {
+	nl *kvserver.NodeLiveness
+}
+
+var _ nodedialer.DecommissionedChecker = decommissionedChecker{}
+
+func (checker decommissionedChecker) Decomissioned(nodeID roachpb.NodeID) bool {
+	rec, err := checker.nl.GetLiveness(nodeID)
+	if err != nil {
+		// Assume the node is not decommissioned.
+		return false
+	}
+	return rec.Membership.Decommissioned()
+}
+
+func livenessToDecommissionedCheckerAdapter(
+	nl *kvserver.NodeLiveness,
+) nodedialer.DecommissionedChecker {
+	return decommissionedChecker{nl: nl}
 }
 
 // ClusterSettings returns the cluster settings.

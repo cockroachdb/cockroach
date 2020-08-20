@@ -33,13 +33,62 @@ import (
 // No more than one failure to connect to a given node will be logged in the given interval.
 const logPerNodeFailInterval = time.Minute
 
-type wrappedBreaker struct {
-	*circuit.Breaker
+// decommissionAwareBreaker is a circuit breaker meant to be used for dialing
+// connections to a particular node. Besides checking the inner circuit.Breaker,
+// the decommissionAwareBreaker also takes a callback to be checked every time;
+// the callback is supposed to check whether the respective node is known to be
+// decommissioned. The callback will come from the node liveness module.
+type decommissionAwareBreaker struct {
 	log.EveryN
+
+	breaker *circuit.Breaker
+	// decommissionedCheck returns true if the node has been decommissioned. In
+	// that case, Ready() returns a special status.
+	decommissionedCheck func() bool
+}
+
+func newWrappedBreaker(breaker *circuit.Breaker, decomCheck func() bool) *decommissionAwareBreaker {
+	return &decommissionAwareBreaker{
+		breaker:             breaker,
+		EveryN:              log.Every(logPerNodeFailInterval),
+		decommissionedCheck: decomCheck,
+	}
+}
+
+func (b decommissionAwareBreaker) Fail(err error) {
+	b.breaker.Fail(err)
+}
+
+type nodeStatus int
+
+const (
+	nodeOK nodeStatus = iota
+	nodeBreakerTripped
+	nodeDecommissioned
+)
+
+func (b decommissionAwareBreaker) Ready() nodeStatus {
+	if b.decommissionedCheck != nil {
+		if b.decommissionedCheck() {
+			return nodeDecommissioned
+		}
+	}
+	if b.breaker.Ready() {
+		return nodeOK
+	}
+	return nodeBreakerTripped
+}
+
+func (b decommissionAwareBreaker) Success() {
+	b.breaker.Success()
 }
 
 // An AddressResolver translates NodeIDs into addresses.
 type AddressResolver func(roachpb.NodeID) (net.Addr, error)
+
+type DecommissionedChecker interface {
+	Decomissioned(roachpb.NodeID) bool
+}
 
 // A Dialer wraps an *rpc.Context for dialing based on node IDs. For each node,
 // it maintains a circuit breaker that prevents rapid connection attempts and
@@ -48,7 +97,8 @@ type Dialer struct {
 	rpcContext *rpc.Context
 	resolver   AddressResolver
 
-	breakers [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*wrappedBreaker
+	breakers     [rpc.NumConnectionClasses]syncutil.IntMap // map[roachpb.NodeID]*decommissionAwareBreaker
+	decomChecker DecommissionedChecker
 }
 
 // New initializes a Dialer.
@@ -57,6 +107,10 @@ func New(rpcContext *rpc.Context, resolver AddressResolver) *Dialer {
 		rpcContext: rpcContext,
 		resolver:   resolver,
 	}
+}
+
+func (n *Dialer) SetDecommissionedChecker(checker DecommissionedChecker) {
+	n.decomChecker = checker
 }
 
 // Stopper returns this node dialer's Stopper.
@@ -137,22 +191,40 @@ func (n *Dialer) DialInternalClient(
 	return ctx, roachpb.NewInternalClient(conn), err
 }
 
+type nodeDecommissionedError struct {
+	nodeID roachpb.NodeID
+}
+
+func (e nodeDecommissionedError) Error() string {
+	return fmt.Sprintf("node %d has been decommissioned", e.nodeID)
+}
+
+func newNodeDecommissionedError(nodeID roachpb.NodeID) error {
+	return nodeDecommissionedError{nodeID: nodeID}
+}
+
 // dial performs the dialing of the remote connection. If breaker is nil,
 // then perform this logic without using any breaker functionality.
 func (n *Dialer) dial(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	addr net.Addr,
-	breaker *wrappedBreaker,
+	breaker *decommissionAwareBreaker,
 	class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
-	if breaker != nil && !breaker.Ready() {
-		err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
-		return nil, err
+	if breaker != nil {
+		breakerStatus := breaker.Ready()
+		switch breakerStatus {
+		case nodeBreakerTripped:
+			err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
+			return nil, err
+		case nodeDecommissioned:
+			return nil, newNodeDecommissionedError(nodeID)
+		}
 	}
 	defer func() {
 		// Enforce a minimum interval between warnings for failed connections.
@@ -202,7 +274,7 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
 	}
-	if !n.getBreaker(nodeID, class).Ready() {
+	if n.getBreaker(nodeID, class).Ready() != nodeOK {
 		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
@@ -225,18 +297,31 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 func (n *Dialer) GetCircuitBreaker(
 	nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) *circuit.Breaker {
-	return n.getBreaker(nodeID, class).Breaker
+	// !!! this should return the wrappedBreaker
+	return n.getBreaker(nodeID, class).breaker
 }
 
-func (n *Dialer) getBreaker(nodeID roachpb.NodeID, class rpc.ConnectionClass) *wrappedBreaker {
+func (n *Dialer) getBreaker(
+	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) *decommissionAwareBreaker {
 	breakers := &n.breakers[class]
 	value, ok := breakers.Load(int64(nodeID))
 	if !ok {
 		name := fmt.Sprintf("rpc %v [n%d]", n.rpcContext.Config.Addr, nodeID)
-		breaker := &wrappedBreaker{Breaker: n.rpcContext.NewBreaker(name), EveryN: log.Every(logPerNodeFailInterval)}
+		breaker := newWrappedBreaker(
+			n.rpcContext.NewBreaker(name),
+			func() bool {
+				if n.decomChecker == nil {
+					// If we're not configured with a checker, we assume the node is not
+					// decommissioned.
+					return false
+				}
+				return n.decomChecker.Decomissioned(nodeID)
+			}, /* decomCheck */
+		)
 		value, _ = breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
 	}
-	return (*wrappedBreaker)(value)
+	return (*decommissionAwareBreaker)(value)
 }
 
 type dialerAdapter Dialer
