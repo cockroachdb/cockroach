@@ -743,6 +743,7 @@ unreserved_keyword ::=
 	| 'CONSTRAINTS'
 	| 'CONTROLJOB'
 	| 'CONVERSION'
+	| 'CONVERT'
 	| 'COPY'
 	| 'COVERING'
 	| 'CREATEROLE'
@@ -1117,6 +1118,7 @@ alter_database_stmt ::=
 	alter_rename_database_stmt
 	| alter_zone_database_stmt
 	| alter_database_owner
+	| alter_database_to_schema_stmt
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1530,6 +1532,9 @@ alter_zone_database_stmt ::=
 
 alter_database_owner ::=
 	'ALTER' 'DATABASE' database_name 'OWNER' 'TO' role_spec
+
+alter_database_to_schema_stmt ::=
+	'ALTER' 'DATABASE' database_name 'CONVERT' 'TO' 'SCHEMA' 'WITH' 'PARENT' database_name
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
