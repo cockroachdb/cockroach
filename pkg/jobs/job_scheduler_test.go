@@ -525,6 +525,7 @@ func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {
 	// Create a one off job which writes some values into 'foo' table.
 	schedule := NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 	schedule.SetScheduleLabel("test schedule")
+	schedule.SetOwner("test")
 	schedule.SetNextRun(timeutil.Now())
 	any, err := types.MarshalAny(
 		&jobspb.SqlStatementExecutionArg{Statement: "INSERT INTO defaultdb.foo VALUES (1), (2), (3)"})

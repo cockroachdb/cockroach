@@ -40,11 +40,11 @@ type scheduledJobRecord struct {
 	ScheduleLabel   string                    `col:"schedule_name"`
 	Owner           string                    `col:"owner"`
 	NextRun         time.Time                 `col:"next_run"`
+	ScheduleState   jobspb.ScheduleState      `col:"schedule_state"`
 	ScheduleExpr    string                    `col:"schedule_expr"`
 	ScheduleDetails jobspb.ScheduleDetails    `col:"schedule_details"`
 	ExecutorType    string                    `col:"executor_type"`
 	ExecutionArgs   jobspb.ExecutionArguments `col:"execution_args"`
-	ScheduleChanges jobspb.ScheduleChangeInfo `col:"schedule_changes"`
 }
 
 // InvalidScheduleID is a constant indicating the schedule ID is not valid.
@@ -222,30 +222,25 @@ func (j *ScheduledJob) SetScheduleDetails(details jobspb.ScheduleDetails) {
 	j.markDirty("schedule_details")
 }
 
-// AddScheduleChangeReason adds change information to this job.
-// Arguments are interpreted same as printf.
-// If there are too many changes already recorded, trims older changes.
-func (j *ScheduledJob) AddScheduleChangeReason(reasonFmt string, args ...interface{}) {
-	if len(j.rec.ScheduleChanges.Changes) > 10 {
-		j.rec.ScheduleChanges.Changes = j.rec.ScheduleChanges.Changes[1:]
+// SetScheduleStatus sets schedule status.
+func (j *ScheduledJob) SetScheduleStatus(fmtOrMsg string, args ...interface{}) {
+	if len(args) == 0 {
+		j.rec.ScheduleState.Status = fmtOrMsg
+	} else {
+		j.rec.ScheduleState.Status = fmt.Sprintf(fmtOrMsg, args...)
 	}
-
-	j.rec.ScheduleChanges.Changes = append(
-		j.rec.ScheduleChanges.Changes,
-		jobspb.ScheduleChangeInfo_Change{
-			Time:   j.env.Now().UnixNano(),
-			Reason: fmt.Sprintf(reasonFmt, args...),
-		})
-	j.markDirty("schedule_changes")
+	j.markDirty("schedule_state")
 }
 
-// LastChangeReason returns the last schedule change reason.
-func (j *ScheduledJob) LastChangeReason() string {
-	l := len(j.rec.ScheduleChanges.Changes)
-	if l > 0 {
-		return j.rec.ScheduleChanges.Changes[l-1].Reason
-	}
-	return ""
+// ScheduleStatus returns schedule status.
+func (j *ScheduledJob) ScheduleStatus() string {
+	return j.rec.ScheduleState.Status
+}
+
+// ClearScheduleStatus clears schedule status.
+func (j *ScheduledJob) ClearScheduleStatus() {
+	j.rec.ScheduleState.Status = ""
+	j.markDirty("schedule_state")
 }
 
 // ScheduleExpr returns the schedule expression for this schedule.
@@ -254,19 +249,10 @@ func (j *ScheduledJob) ScheduleExpr() string {
 }
 
 // Pause pauses this schedule.
-func (j *ScheduledJob) Pause(reason string) {
+// Use ScheduleNextRun to unpause.
+func (j *ScheduledJob) Pause() {
 	j.rec.NextRun = time.Time{}
 	j.markDirty("next_run")
-	j.AddScheduleChangeReason(reason)
-}
-
-// Unpause resumes running this schedule.
-func (j *ScheduledJob) Unpause(reason string) error {
-	if err := j.SetSchedule(j.rec.ScheduleExpr); err != nil {
-		return err
-	}
-	j.AddScheduleChangeReason(reason)
-	return nil
 }
 
 // SetExecutionDetails sets execution specific fields for this schedule.
@@ -274,6 +260,11 @@ func (j *ScheduledJob) SetExecutionDetails(executor string, args jobspb.Executio
 	j.rec.ExecutorType = executor
 	j.rec.ExecutionArgs = args
 	j.markDirty("executor_type", "execution_args")
+}
+
+// ClearDirty clears the dirty map making this object appear as if it was just loaded.
+func (j *ScheduledJob) ClearDirty() {
+	j.dirty = make(map[string]struct{})
 }
 
 // InitFromDatums initializes this ScheduledJob object based on datums and column names.
@@ -434,6 +425,8 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 			} else {
 				arg, err = tree.MakeDTimestampTZ(j.rec.NextRun, time.Microsecond)
 			}
+		case `schedule_state`:
+			arg, err = marshalProto(&j.rec.ScheduleState)
 		case `schedule_expr`:
 			arg = tree.NewDString(j.rec.ScheduleExpr)
 		case `schedule_details`:
@@ -442,8 +435,6 @@ func (j *ScheduledJob) marshalChanges() ([]string, []interface{}, error) {
 			arg = tree.NewDString(j.rec.ExecutorType)
 		case `execution_args`:
 			arg, err = marshalProto(&j.rec.ExecutionArgs)
-		case `schedule_changes`:
-			arg, err = marshalProto(&j.rec.ScheduleChanges)
 		default:
 			return nil, nil, errors.Newf("cannot marshal column %q", col)
 		}
