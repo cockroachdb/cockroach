@@ -592,7 +592,7 @@ ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 arr_stats        {rowid}       4          4               0           true
-arr_stats_x      {x}           4          3               1           true
+arr_stats_x      {x}           4          3               1           false
 
 # Test that enum columns always have histograms collected for them.
 statement ok
@@ -856,3 +856,95 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 1            0           0                    1
 3            1           1                    1
+
+# Verify that having 0, 1, or 2 inverted indexes on geo types works.
+statement ok
+CREATE TABLE geo_table (
+   id INT8 PRIMARY KEY,
+   geog GEOGRAPHY(GEOMETRY,4326) NULL,
+   geom GEOMETRY(GEOMETRY,3857) NULL
+);
+INSERT INTO geo_table VALUES (1, 'LINESTRING(0 0, 100 100)', ST_GeomFromText('LINESTRING(0 0, 100 100)', 3857));
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        false
+{geom}        false
+{id}          true
+
+statement ok
+CREATE INDEX geom_idx_1 ON geo_table USING GIST(geom) WITH (geometry_min_x=0, s2_max_level=15);
+CREATE INDEX geog_idx_1 ON geo_table USING GIST(geog) WITH (s2_level_mod=3);
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        true
+{geom}        true
+{id}          true
+
+statement ok
+CREATE INDEX geom_idx_2 ON geo_table USING GIST(geom) WITH (geometry_min_x=5);
+CREATE INDEX geog_idx_2 ON geo_table USING GIST(geog);
+CREATE STATISTICS s FROM geo_table;
+
+query TB colnames
+SELECT
+  column_names,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE geo_table]
+ORDER BY
+  column_names::STRING, created
+----
+column_names  has_histogram
+{geog}        true
+{geom}        true
+{id}          true
+
+# Demonstrate that buckets change when the first chosen index is dropped.
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
+WHERE statistics_name = 's' AND column_names = '{geog}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound             range_rows  distinct_range_rows  equal_rows
+'\xfd1000000000000000'  0           0                    1
+'\xfd5000000000000000'  0           0                    1
+
+statement ok
+DROP INDEX geo_table@geog_idx_1;
+CREATE STATISTICS s FROM geo_table;
+
+# Demonstrate that buckets change when the first chosen index is dropped.
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
+WHERE statistics_name = 's' AND column_names = '{geog}'
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound             range_rows  distinct_range_rows  equal_rows
+'\xfd1000000000000000'  0           0                    1
+'\xfd4500000000000000'  0           0                    1
+'\xfd4700000000000000'  0           0                    1
+'\xfd5ad4000000000000'  0           0                    1
