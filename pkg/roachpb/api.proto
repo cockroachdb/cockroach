@@ -1011,6 +1011,11 @@ message QueryTxnResponse {
   // Contains the current state of the queried transaction. If the queried
   // transaction record does not exist, this will be empty.
   Transaction queried_txn = 2 [(gogoproto.nullable) = false];
+  // txn_record_exists is set if the queried_txn comes from a transaction record
+  // read from the database. If not set, then the txn record was "synthesized".
+  //
+  // The field only started being populated in 20.2, so 20.1 nodes never set it.
+  bool txn_record_exists = 4;
   // Specifies a list of transaction IDs which are waiting on the txn.
   repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
