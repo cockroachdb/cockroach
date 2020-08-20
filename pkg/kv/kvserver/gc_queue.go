@@ -467,15 +467,15 @@ func (gcq *gcQueue) process(
 			}
 			return err
 		},
-		func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+		func(ctx context.Context, txn *roachpb.Transaction) error {
 			err := repl.store.intentResolver.
-				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, intents, gcTimestamp,
+				CleanupTxnIntentsOnGCAsync(ctx, repl.RangeID, txn, gcTimestamp,
 					func(pushed, succeeded bool) {
 						if pushed {
 							gcq.store.metrics.GCPushTxn.Inc(1)
 						}
 						if succeeded {
-							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+							gcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
 						}
 					})
 			if errors.Is(err, stop.ErrThrottled) {
