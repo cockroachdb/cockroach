@@ -486,7 +486,7 @@ func readPostgresStmt(
 		}
 	case *tree.BeginTransaction, *tree.CommitTransaction:
 		// ignore txns.
-	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData:
+	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData, *tree.Delete:
 		// ignore SETs and DMLs.
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
@@ -833,6 +833,17 @@ func (m *pgDumpReader) readFile(
 			// ignored.
 		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence:
 			// handled during schema extraction.
+		case *tree.Delete:
+			switch stmt := i.Table.(type) {
+			case *tree.AliasedTableExpr:
+				// ogr2ogr has `DELETE FROM geometry_columns / geography_columns ...` statements.
+				// We're not planning to support this functionality in CRDB, so it is safe to ignore it when countered in PGDUMP.
+				if tn, ok := stmt.Expr.(*tree.TableName); !(ok && (tn.Table() == "geometry_columns" || tn.Table() == "geography_columns")) {
+					return errors.Errorf("unsupported DELETE FROM %T statement: %s", stmt, stmt)
+				}
+			default:
+				return errors.Errorf("unsupported %T statement: %s", i, i)
+			}
 		default:
 			return errors.Errorf("unsupported %T statement: %v", i, i)
 		}
