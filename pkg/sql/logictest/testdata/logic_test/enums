@@ -1135,3 +1135,6 @@ public greeting2  hello
 public int        Z|S of int
 public notbad     dup|DUP
 uds    typ        schema
+
+statement error pq: cannot create "fakedb.typ" because the target database or schema does not exist
+CREATE TYPE fakedb.typ AS ENUM ('schema')
