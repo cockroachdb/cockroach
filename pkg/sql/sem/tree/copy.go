@@ -24,6 +24,8 @@ type CopyFrom struct {
 type CopyOptions struct {
 	Destination Expr
 	CopyFormat  CopyFormat
+	Delimiter   Expr
+	Null        Expr
 }
 
 var _ NodeFormatter = &CopyOptions{}
@@ -52,7 +54,7 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {
-			ctx.WriteString(", ")
+			ctx.WriteString(" ")
 		}
 		addSep = true
 	}
@@ -69,7 +71,21 @@ func (o *CopyOptions) Format(ctx *FmtCtx) {
 		switch o.CopyFormat {
 		case CopyFormatBinary:
 			ctx.WriteString("BINARY")
+		case CopyFormatCSV:
+			ctx.WriteString("CSV")
 		}
+	}
+	if o.Delimiter != nil {
+		maybeAddSep()
+		ctx.WriteString("DELIMITER ")
+		o.Delimiter.Format(ctx)
+		addSep = true
+	}
+	if o.Null != nil {
+		maybeAddSep()
+		ctx.WriteString("NULL ")
+		o.Null.Format(ctx)
+		addSep = true
 	}
 }
 
@@ -93,6 +109,18 @@ func (o *CopyOptions) CombineWith(other *CopyOptions) error {
 		}
 		o.CopyFormat = other.CopyFormat
 	}
+	if other.Delimiter != nil {
+		if o.Delimiter != nil {
+			return errors.New("delimiter option specified multiple times")
+		}
+		o.Delimiter = other.Delimiter
+	}
+	if other.Null != nil {
+		if o.Null != nil {
+			return errors.New("null option specified multiple times")
+		}
+		o.Null = other.Null
+	}
 	return nil
 }
 
@@ -103,4 +131,5 @@ type CopyFormat int
 const (
 	CopyFormatText CopyFormat = iota
 	CopyFormatBinary
+	CopyFormatCSV
 )
