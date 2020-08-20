@@ -773,6 +773,10 @@ type ResolveOptions struct {
 	// ranges trying to read one of its old intents, the access will be trapped
 	// and the read will return an error, thus avoiding the read missing to see
 	// its own write.
+	//
+	// This field is ignored for intents that aren't resolved for an ABORTED txn;
+	// in other words, only intents from ABORTED transactions ever poison the
+	// abort spans.
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.

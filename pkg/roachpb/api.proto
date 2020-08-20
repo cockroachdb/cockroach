@@ -1079,6 +1079,8 @@ message ResolveIntentRequest {
   // The status of the transaction.
   TransactionStatus status = 3;
   // Optionally poison the abort span for the transaction on the intent's range.
+  // The field is ignored if status != ABORTED (i.e. only intents from ABORTED
+  // txns ever poison the abort spans).
   bool poison = 4;
   // The list of ignored seqnum ranges as per the Transaction record.
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 5 [
@@ -1105,8 +1107,9 @@ message ResolveIntentRangeRequest {
   storage.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
   TransactionStatus status = 3;
-  // Optionally poison the abort span for the transaction on all ranges
-  // on which the intents reside.
+  // Optionally poison the abort span for the transaction on all ranges on which
+  // the intents reside. The field is ignored if status != ABORTED (i.e. only
+  // intents from ABORTED txns ever poison the abort spans).
   bool poison = 4;
   // The minimum timestamp for any intents written by this
   // transaction. If present, this value can be used to optimize the
