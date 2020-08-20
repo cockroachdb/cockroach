@@ -110,7 +110,7 @@ func (a *applyJoinNode) startExec(params runParams) error {
 	a.run.out = make(tree.Datums, len(a.columns))
 	ci := sqlbase.ColTypeInfoFromResCols(a.rightCols)
 	acc := params.EvalContext().Mon.MakeBoundAccount()
-	a.run.rightRows = rowcontainer.NewRowContainer(acc, ci, 0 /* rowCapacity */)
+	a.run.rightRows = rowcontainer.NewRowContainer(acc, ci)
 	return nil
 }
 

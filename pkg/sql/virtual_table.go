@@ -238,8 +238,10 @@ var _ rowPusher = &vTableLookupJoinNode{}
 // startExec implements the planNode interface.
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
-	v.run.rows = rowcontainer.NewRowContainer(params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(v.columns), 0)
+	v.run.rows = rowcontainer.NewRowContainer(
+		params.EvalContext().Mon.MakeBoundAccount(),
+		sqlbase.ColTypeInfoFromResCols(v.columns),
+	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
 	db, err := params.p.LogicalSchemaAccessor().GetDatabaseDesc(

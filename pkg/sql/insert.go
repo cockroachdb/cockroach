@@ -83,16 +83,13 @@ type insertRun struct {
 	traceKV bool
 }
 
-func (r *insertRun) initRowContainer(
-	params runParams, columns sqlbase.ResultColumns, rowCapacity int,
-) {
+func (r *insertRun) initRowContainer(params runParams, columns sqlbase.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
 	r.ti.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(columns),
-		rowCapacity,
 	)
 
 	// In some cases (e.g. `INSERT INTO t (a) ...`) the data source
@@ -199,7 +196,7 @@ func (n *insertNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	n.run.initRowContainer(params, n.columns, 0 /* rowCapacity */)
+	n.run.initRowContainer(params, n.columns)
 
 	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
 }

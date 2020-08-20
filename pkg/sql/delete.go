@@ -76,7 +76,8 @@ func (d *deleteNode) startExec(params runParams) error {
 	if d.run.rowsNeeded {
 		d.run.td.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(d.columns), 0)
+			sqlbase.ColTypeInfoFromResCols(d.columns),
+		)
 	}
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext())
 }
