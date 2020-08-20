@@ -1491,25 +1491,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	if state.bootstrapped {
-		// If a new cluster is just starting up, force all the system ranges
-		// through the replication queue so they upreplicate as quickly as
-		// possible when a new node joins. Without this code, the upreplication
-		// would be up to the whim of the scanner, which might be too slow for
-		// new clusters.
-		// TODO(tbg): instead of this dubious band-aid we should make the
-		// replication queue reactive enough to avoid relying on the scanner
-		// alone.
-		var done bool
-		return s.node.stores.VisitStores(func(store *kvserver.Store) error {
-			if !done {
-				done = true
-				return store.ForceReplicationScanAndProcess()
-			}
-			return nil
-		})
-	}
-
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.

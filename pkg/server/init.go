@@ -133,10 +133,6 @@ type initState struct {
 	// TODO(tbg): remove this bool. The Node can find out another way whether
 	// it just joined or restarted.
 	joined bool
-	// bootstrapped is true if a new cluster was initialized. If this is true,
-	// 'joined' above is also true. Usage of this field should follow that of
-	// 'joined' as well.
-	bootstrapped bool
 }
 
 // NeedsInit returns true if (and only if) none if the engines are initialized.
@@ -166,7 +162,6 @@ func (s *initServer) ServeAndWait(
 		return &initState{
 			initDiskState: *s.inspectState,
 			joined:        false,
-			bootstrapped:  false,
 		}, nil
 	}
 
@@ -223,7 +218,6 @@ func (s *initServer) ServeAndWait(
 		return &initState{
 			initDiskState: *s.inspectState,
 			joined:        true,
-			bootstrapped:  false,
 		}, nil
 	}
 }
