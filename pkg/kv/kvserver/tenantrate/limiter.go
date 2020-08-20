@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -129,7 +130,7 @@ func (rl *limiter) updateLimits(limits LimitConfigs) {
 // tokenBuckets is the implementation of Resource which remains in the quotapool
 // for a limiter.
 type tokenBuckets struct {
-	clock       quotapool.TimeSource
+	clock       timeutil.TimeSource
 	lastUpdated time.Time
 	requests    tokenBucket
 	readBytes   tokenBucket

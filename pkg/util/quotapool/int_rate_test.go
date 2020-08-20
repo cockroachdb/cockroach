@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestRateLimiterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	mt := quotapool.NewManualTime(t0)
+	mt := timeutil.NewManualTime(t0)
 	rl := quotapool.NewRateLimiter("test", 10, 20,
 		quotapool.WithTimeSource(mt))
 	ctx := context.Background()
@@ -148,7 +149,7 @@ func TestRateLimiterWithVerySmallDelta(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	mt := quotapool.NewManualTime(t0)
+	mt := timeutil.NewManualTime(t0)
 	rl := quotapool.NewRateLimiter("test", 2e9, 1e10,
 		quotapool.WithTimeSource(mt))
 	ctx := context.Background()
