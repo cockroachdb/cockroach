@@ -166,6 +166,7 @@ func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
 }
 
+// HasRoleOption is part of the tree.EvalSessionAccessor interface.
 func (ep *DummySessionAccessor) HasRoleOption(
 	ctx context.Context, roleOption roleoption.Option,
 ) (bool, error) {

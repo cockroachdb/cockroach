@@ -1812,7 +1812,7 @@ func (s *statusServer) CancelSession(
 
 	if !isAdmin && sessionUser != req.Username {
 		// A user can only cancel their own sessions.
-		return nil, errInsufficientPrivilege
+		return nil, errRequiresAdmin
 	}
 
 	nodeID, local, err := s.parseNodeID(req.NodeId)
@@ -1829,8 +1829,47 @@ func (s *statusServer) CancelSession(
 		return status.CancelSession(ctx, req)
 	}
 
+	reqUserHasAdmin, err := s.admin.hasAdminRole(ctx, req.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if !reqUserHasAdmin {
+		// Check if the user has permission to see the session.
+		var session serverpb.Session
+		for _, s := range s.sessionRegistry.SerializeAll() {
+			if bytes.Equal(req.SessionID, s.ID) {
+				session = s
+				break
+			}
+		}
+		if len(session.ID) == 0 {
+			return nil, fmt.Errorf("session ID %s not found", sql.BytesToClusterWideID(req.SessionID))
+		}
+
+		if session.Username != req.Username {
+			// Must have CANCELQUERY privilege to cancel other users' sessions.
+			ok, err := s.admin.hasRoleOption(ctx, req.Username, roleoption.CANCELQUERY)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, errRequiresRoleOption(roleoption.CANCELQUERY)
+			}
+			// Non-admins cannot cancel admins' sessions.
+			isAdminSession, err := s.admin.hasAdminRole(ctx, session.Username)
+			if err != nil {
+				return nil, err
+			}
+			if isAdminSession {
+				return nil, status.Error(
+					codes.PermissionDenied, "permission denied to cancel admin session")
+			}
+		}
+	}
+
 	output := &serverpb.CancelSessionResponse{}
-	canceled, err := s.sessionRegistry.CancelSession(req.SessionID, req.Username)
+	canceled, err := s.sessionRegistry.CancelSession(req.SessionID)
 
 	if err != nil {
 		output.Error = err.Error()
@@ -1852,7 +1891,7 @@ func (s *statusServer) CancelQuery(
 
 	if !isAdmin && sessionUser != req.Username {
 		// A user can only cancel their own queries.
-		return nil, errInsufficientPrivilege
+		return nil, errRequiresAdmin
 	}
 
 	ctx = propagateGatewayMetadata(ctx)
@@ -1871,8 +1910,49 @@ func (s *statusServer) CancelQuery(
 		return status.CancelQuery(ctx, req)
 	}
 
+	reqUserHasAdmin, err := s.admin.hasAdminRole(ctx, req.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if !reqUserHasAdmin {
+		// Check if the user has permission to see the query's session.
+		var session serverpb.Session
+		for _, s := range s.sessionRegistry.SerializeAll() {
+			for _, q := range s.ActiveQueries {
+				if req.QueryID == q.ID {
+					session = s
+					break
+				}
+			}
+		}
+		if len(session.ID) == 0 {
+			return nil, fmt.Errorf("query ID %s not found", req.QueryID)
+		}
+
+		if session.Username != req.Username {
+			// Must have CANCELQUERY privilege to cancel other users' queries.
+			ok, err := s.admin.hasRoleOption(ctx, req.Username, roleoption.CANCELQUERY)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, errRequiresRoleOption(roleoption.CANCELQUERY)
+			}
+			// Non-admins cannot cancel admins' queries.
+			isAdminQuery, err := s.admin.hasAdminRole(ctx, session.Username)
+			if err != nil {
+				return nil, err
+			}
+			if isAdminQuery {
+				return nil, status.Error(
+					codes.PermissionDenied, "permission denied to cancel admin query")
+			}
+		}
+	}
+
 	output := &serverpb.CancelQueryResponse{}
-	canceled, err := s.sessionRegistry.CancelQuery(req.QueryID, req.Username)
+	canceled, err := s.sessionRegistry.CancelQuery(req.QueryID)
 
 	if err != nil {
 		output.Error = err.Error()
