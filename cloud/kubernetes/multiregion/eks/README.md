@@ -70,7 +70,7 @@ For each region, replace:
 
 - `region2` and `region3` with the namespaces in which the CockroachDB pods will run in the other 2 regions.
 
-- `ip1`, `ip2`, and `ip3` with the IP addresses of the EKS instances in the region.
+- `ip1`, `ip2`, and `ip3` with the IP addresses of the Network Load Balancers in the region.
 
 First back up the existing ConfigMap in each region:
 
