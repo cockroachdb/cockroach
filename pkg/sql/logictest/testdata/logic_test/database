@@ -1,4 +1,6 @@
-# LogicTest: !3node-tenant(52567)
+# LogicTest: default-configs local-mixed-20.1-20.2
+# The mixed configuration is enabled to test backward compatibility for database
+# schema changes.
 
 statement ok
 CREATE DATABASE a

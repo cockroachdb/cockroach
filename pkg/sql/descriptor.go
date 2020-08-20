@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +54,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*sqlbase.ImmutableDatabaseDescriptor, bool, error) {
+) (*sqlbase.MutableDatabaseDescriptor, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -79,10 +81,6 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	// TODO(ajwerner): Consider whether this should be returning a
-	// MutableDatabaseDescriptor and where/how this will interact with the
-	// descs.Collection (now it happens well above this call, which is probably
-	// fine).
 	desc := sqlbase.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
@@ -143,23 +141,42 @@ func (p *planner) createDescriptorWithID(
 		return err
 	}
 
-	if mutType, ok := descriptor.(*sqlbase.MutableTypeDescriptor); ok {
-		if err := mutType.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
-			return err
-		}
-		if err := p.Descriptors().AddUncommittedDescriptor(mutType); err != nil {
-			return err
-		}
+	mutDesc, ok := descriptor.(catalog.MutableDescriptor)
+	if !ok {
+		log.Fatalf(ctx, "unexpected type %T when creating descriptor", descriptor)
 	}
-
-	mutDesc, isTable := descriptor.(*sqlbase.MutableTableDescriptor)
-	if isTable {
-		if err := mutDesc.ValidateTable(); err != nil {
+	isTable := false
+	switch desc := mutDesc.(type) {
+	case *sqlbase.MutableTypeDescriptor:
+		if err := desc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
+	case *sqlbase.MutableTableDescriptor:
+		isTable = true
+		if err := desc.ValidateTable(); err != nil {
+			return err
+		}
+		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+			return err
+		}
+	case *sqlbase.MutableDatabaseDescriptor:
+		if err := desc.Validate(); err != nil {
+			return err
+		}
+		if p.Descriptors().DatabaseLeasingUnsupported() {
+			p.Descriptors().AddUncommittedDatabaseDeprecated(desc.Name, desc.ID, descs.DBCreated)
+		} else {
+			if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+				return err
+			}
+		}
+	case *sqlbase.MutableSchemaDescriptor:
+		// TODO (lucy): Call AddUncommittedDescriptor when we're ready.
+	default:
+		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
 	}
 
 	if err := p.txn.Run(ctx, b); err != nil {
@@ -169,7 +186,7 @@ func (p *planner) createDescriptorWithID(
 		// Queue a schema change job to eventually make the table public.
 		if err := p.createOrUpdateSchemaChangeJob(
 			ctx,
-			mutDesc,
+			mutDesc.(*MutableTableDescriptor),
 			jobDesc,
 			descpb.InvalidMutationID); err != nil {
 			return err

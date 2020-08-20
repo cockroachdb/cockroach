@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -326,7 +327,10 @@ func makeMetrics(internal bool) Metrics {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	if s.cfg.Codec.ForSystemTenant() {
+	// TODO (lucy): If this node was started on some previous cluster version,
+	// figure out a way to stop listening to gossip updates for the old database
+	// cache after all transactions are guaranteed to not be using it.
+	if !s.cfg.Settings.Version.IsActive(ctx, clusterversion.VersionLeasedDatabaseDescriptors) {
 		gossipUpdateC := s.cfg.SystemConfig.RegisterSystemConfigChannel()
 		stopper.RunWorker(ctx, func(ctx context.Context) {
 			for {
@@ -641,7 +645,7 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = descs.MakeCollection(s.cfg.LeaseManager,
+	ex.extraTxnState.descCollection = descs.MakeCollection(ctx, s.cfg.LeaseManager,
 		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache, sd)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
@@ -2232,7 +2236,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 
 		// Wait for the cache to reflect the dropped databases if any.
-		ex.extraTxnState.descCollection.WaitForCacheToDropDatabases(ex.Ctx())
+		ex.extraTxnState.descCollection.WaitForCacheToDropDatabasesDeprecated(ex.Ctx())
 
 		fallthrough
 	case txnRestart, txnRollback:

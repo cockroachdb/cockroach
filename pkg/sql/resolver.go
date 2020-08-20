@@ -40,13 +40,28 @@ func (p *planner) ResolveUncachedDatabaseByName(
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		var desc sqlbase.DatabaseDescriptor
 		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
-			ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(required),
+			ctx, p.txn, p.ExecCfg().Codec, dbName,
+			tree.DatabaseLookupFlags{CommonLookupFlags: p.CommonLookupFlags(required)},
 		)
 		if desc != nil {
 			res = desc.(*sqlbase.ImmutableDatabaseDescriptor)
 		}
 	})
 	return res, err
+}
+
+func (p *planner) ResolveMutableDatabaseDescriptor(
+	ctx context.Context, name string, required bool,
+) (*sqlbase.MutableDatabaseDescriptor, error) {
+	desc, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
+		ctx, p.txn, p.ExecCfg().Codec, name, tree.DatabaseLookupFlags{
+			CommonLookupFlags: p.CommonLookupFlags(required),
+			RequireMutable:    true,
+		})
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	return desc.(*sqlbase.MutableDatabaseDescriptor), nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -98,9 +113,9 @@ func (p *planner) ResolveUncachedTableDescriptor(
 	return table, err
 }
 
-func (p *planner) ResolveUncachedDatabase(
+func (p *planner) ResolveTargetObject(
 	ctx context.Context, un *tree.UnresolvedObjectName,
-) (res *UncachedDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
+) (res *ImmutableDatabaseDescriptor, namePrefix tree.ObjectNamePrefix, err error) {
 	var prefix *catalog.ResolvedObjectPrefix
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prefix, namePrefix, err = resolver.ResolveTargetObject(ctx, p, un)
@@ -113,7 +128,8 @@ func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
 	sc := p.LogicalSchemaAccessor()
-	dbDesc, err := sc.GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec, dbName, p.CommonLookupFlags(false /*required*/))
+	dbDesc, err := sc.GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec, dbName,
+		tree.DatabaseLookupFlags{CommonLookupFlags: p.CommonLookupFlags(false /*required*/)})
 	if err != nil || dbDesc == nil {
 		return false, nil, err
 	}
@@ -155,9 +171,8 @@ func (p *planner) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	// TODO (lucy): This database access should go through the collection.
-	//  When I try to use the DatabaseCache() here, a nil pointer deref occurs.
-	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, desc.ParentID)
+	dbDesc, err := p.Descriptors().GetDatabaseVersionByID(ctx, p.txn, desc.ParentID,
+		tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -228,7 +243,7 @@ func getDescriptorsFromTargetList(
 		}
 		descs := make([]sqlbase.Descriptor, 0, len(targets.Databases))
 		for _, database := range targets.Databases {
-			descriptor, err := p.ResolveUncachedDatabaseByName(ctx, string(database), true /*required*/)
+			descriptor, err := p.ResolveMutableDatabaseDescriptor(ctx, string(database), true /*required*/)
 			if err != nil {
 				return nil, err
 			}
@@ -335,7 +350,8 @@ func findTableContainingIndex(
 	lookupFlags tree.CommonLookupFlags,
 ) (result *tree.TableName, desc *MutableTableDescriptor, err error) {
 	sa := sc.LogicalSchemaAccessor()
-	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, codec, dbName, lookupFlags)
+	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, codec, dbName,
+		tree.DatabaseLookupFlags{CommonLookupFlags: lookupFlags})
 	if dbDesc == nil || err != nil {
 		return nil, nil, err
 	}

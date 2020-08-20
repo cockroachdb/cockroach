@@ -241,7 +241,9 @@ var varGen = map[string]sessionVar{
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
 				if _, err := evalCtx.schemaAccessors.logical.GetDatabaseDesc(
-					ctx, evalCtx.Txn, evalCtx.Codec, dbName, tree.DatabaseLookupFlags{Required: true},
+					ctx, evalCtx.Txn, evalCtx.Codec, dbName, tree.DatabaseLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{Required: true},
+					},
 				); err != nil {
 					return "", err
 				}

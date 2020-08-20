@@ -207,6 +207,9 @@ const (
 	// fields, and, more generally, flags the job as being suitable for the job
 	// registry to adopt.
 	JobResumerFormatVersion
+	// DatabaseJobFormatVersion indicates that database schema changes are
+	// run in the schema change job.
+	DatabaseJobFormatVersion
 
 	// Silence unused warning.
 	_ = BaseFormatVersion

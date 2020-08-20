@@ -54,7 +54,7 @@ type MutableDatabaseDescriptor struct {
 // initial version from an id and name.
 func NewInitialDatabaseDescriptor(
 	id descpb.ID, name string, owner string,
-) *ImmutableDatabaseDescriptor {
+) *MutableDatabaseDescriptor {
 	return NewInitialDatabaseDescriptorWithPrivileges(id, name,
 		descpb.NewDefaultPrivilegeDescriptor(owner))
 }
@@ -63,8 +63,8 @@ func NewInitialDatabaseDescriptor(
 // initial version from an id and name.
 func NewInitialDatabaseDescriptorWithPrivileges(
 	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
-) *ImmutableDatabaseDescriptor {
-	return NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+) *MutableDatabaseDescriptor {
+	return NewMutableCreatedDatabaseDescriptor(descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
@@ -80,6 +80,17 @@ func makeImmutableDatabaseDescriptor(desc descpb.DatabaseDescriptor) ImmutableDa
 func NewImmutableDatabaseDescriptor(desc descpb.DatabaseDescriptor) *ImmutableDatabaseDescriptor {
 	ret := makeImmutableDatabaseDescriptor(desc)
 	return &ret
+}
+
+// NewMutableCreatedDatabaseDescriptor returns a MutableDatabaseDescriptor from
+// the given database descriptor with a nil cluster version. This is for a
+// database that is created in the same transaction.
+func NewMutableCreatedDatabaseDescriptor(
+	desc descpb.DatabaseDescriptor,
+) *MutableDatabaseDescriptor {
+	return &MutableDatabaseDescriptor{
+		ImmutableDatabaseDescriptor: makeImmutableDatabaseDescriptor(desc),
+	}
 }
 
 // NewMutableExistingDatabaseDescriptor returns a MutableDatabaseDescriptor from the
@@ -130,11 +141,6 @@ func (desc *ImmutableDatabaseDescriptor) GetAuditMode() descpb.TableDescriptor_A
 
 // Adding implements the Descriptor interface.
 func (desc *ImmutableDatabaseDescriptor) Adding() bool {
-	return false
-}
-
-// Dropped implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) Dropped() bool {
 	return false
 }
 
