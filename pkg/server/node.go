@@ -147,18 +147,18 @@ func (nm nodeMetrics) callComplete(d time.Duration, pErr *roachpb.Error) {
 // IDs for bootstrapping the node itself or new stores as they're added
 // on subsequent instantiations.
 type Node struct {
-	stopper     *stop.Stopper
-	clusterID   *base.ClusterIDContainer // UUID for Cockroach cluster
-	Descriptor  roachpb.NodeDescriptor   // Node ID, network/physical topology
-	storeCfg    kvserver.StoreConfig     // Config to use and pass to stores
-	eventLogger sql.EventLogger
-	stores      *kvserver.Stores // Access to node-local stores
-	metrics     nodeMetrics
-	recorder    *status.MetricsRecorder
-	startedAt   int64
-	lastUp      int64
-	initialBoot bool // True if this is the first time this node has started.
-	txnMetrics  kvcoord.TxnMetrics
+	stopper      *stop.Stopper
+	clusterID    *base.ClusterIDContainer // UUID for Cockroach cluster
+	Descriptor   roachpb.NodeDescriptor   // Node ID, network/physical topology
+	storeCfg     kvserver.StoreConfig     // Config to use and pass to stores
+	eventLogger  sql.EventLogger
+	stores       *kvserver.Stores // Access to node-local stores
+	metrics      nodeMetrics
+	recorder     *status.MetricsRecorder
+	startedAt    int64
+	lastUp       int64
+	initialStart bool // True if this is the first time this node has started.
+	txnMetrics   kvcoord.TxnMetrics
 
 	perReplicaServer kvserver.Server
 }
@@ -268,7 +268,6 @@ func bootstrapCluster(
 			initializedEngines: engines,
 			newEngines:         nil,
 		},
-		joined: true,
 	}
 	return state, nil
 }
@@ -336,6 +335,7 @@ func (n *Node) start(
 	ctx context.Context,
 	addr, sqlAddr net.Addr,
 	state initState,
+	initialStart bool,
 	clusterName string,
 	attrs roachpb.Attributes,
 	locality roachpb.Locality,
@@ -345,10 +345,10 @@ func (n *Node) start(
 	// Obtaining the NodeID requires a dance of sorts. If the node has initialized
 	// stores, the NodeID is persisted in each of them. If not, then we'll need to
 	// use the KV store to get a NodeID assigned.
-	n.initialBoot = state.joined
+	n.initialStart = initialStart
 	nodeID := state.nodeID
 	if nodeID == 0 {
-		if !state.joined {
+		if !initialStart {
 			log.Fatalf(ctx, "node has no NodeID, but claims to not be joining cluster")
 		}
 		// Allocate NodeID. Note that Gossip is already connected because if there's
@@ -775,7 +775,7 @@ func (n *Node) recordJoinEvent() {
 
 	logEventType := sql.EventLogNodeRestart
 	lastUp := n.lastUp
-	if n.initialBoot {
+	if n.initialStart {
 		logEventType = sql.EventLogNodeJoin
 		lastUp = n.startedAt
 	}
