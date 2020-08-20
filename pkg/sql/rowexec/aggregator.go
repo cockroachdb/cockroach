@@ -621,7 +621,11 @@ func (ag *hashAggregator) emitRow() (
 		ag.alreadyAccountedFor = 0
 		for _, f := range ag.funcs {
 			if f.seen != nil {
-				f.seen = make(map[string]struct{})
+				// It turns out that it is faster to delete entries from the
+				// old map rather than allocating a new one.
+				for s := range f.seen {
+					delete(f.seen, s)
+				}
 			}
 		}
 
@@ -683,7 +687,11 @@ func (ag *orderedAggregator) emitRow() (
 		}
 		for _, f := range ag.funcs {
 			if f.seen != nil {
-				f.seen = make(map[string]struct{})
+				// It turns out that it is faster to delete entries from the
+				// old map rather than allocating a new one.
+				for s := range f.seen {
+					delete(f.seen, s)
+				}
 			}
 		}
 
