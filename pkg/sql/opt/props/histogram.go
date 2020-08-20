@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -178,15 +179,14 @@ func (h *Histogram) CanFilter(c *constraint.Constraint) (colOffset, exactPrefix 
 	return 0, exactPrefix, false
 }
 
-// Filter filters the histogram according to the given constraint, and returns
-// a new histogram with the results. CanFilter should be called first to
-// validate that c can filter the histogram.
-func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
-	colOffset, exactPrefix, ok := h.CanFilter(c)
-	if !ok {
-		panic(errors.AssertionFailedf("column mismatch"))
-	}
-
+func (h *Histogram) filter(
+	spanCount int,
+	getSpan func(int) *constraint.Span,
+	desc bool,
+	colOffset, exactPrefix int,
+	prefix []tree.Datum,
+	columns constraint.Columns,
+) *Histogram {
 	bucketCount := h.BucketCount()
 	filtered := &Histogram{
 		evalCtx: h.evalCtx,
@@ -203,21 +203,15 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
 
-	prefix := make([]tree.Datum, colOffset)
-	for i := range prefix {
-		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
-	}
-	desc := c.Columns.Get(colOffset).Descending()
 	var iter histogramIter
 	iter.init(h, desc)
 	spanIndex := 0
-	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: c.Columns}
+	keyCtx := constraint.KeyContext{EvalCtx: h.evalCtx, Columns: columns}
 
 	// Find the first span that may overlap with the histogram.
 	firstBucket := makeSpanFromBucket(&iter, prefix)
-	spanCount := c.Spans.Count()
 	for spanIndex < spanCount {
-		span := c.Spans.Get(spanIndex)
+		span := getSpan(spanIndex)
 		if firstBucket.StartsAfter(&keyCtx, span) {
 			spanIndex++
 			continue
@@ -229,7 +223,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	}
 
 	// Use binary search to find the first bucket that overlaps with the span.
-	span := c.Spans.Get(spanIndex)
+	span := getSpan(spanIndex)
 	bucIndex := sort.Search(bucketCount, func(i int) bool {
 		iter.setIdx(i)
 		bucket := makeSpanFromBucket(&iter, prefix)
@@ -263,7 +257,7 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 		// Convert the bucket to a span in order to take advantage of the
 		// constraint library.
 		left := makeSpanFromBucket(&iter, prefix)
-		right := c.Spans.Get(spanIndex)
+		right := getSpan(spanIndex)
 
 		if left.StartsAfter(&keyCtx, right) {
 			spanIndex++
@@ -333,6 +327,56 @@ func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
 	}
 
 	return filtered
+}
+
+// Filter filters the histogram according to the given constraint, and returns
+// a new histogram with the results. CanFilter should be called first to
+// validate that c can filter the histogram.
+func (h *Histogram) Filter(c *constraint.Constraint) *Histogram {
+	colOffset, exactPrefix, ok := h.CanFilter(c)
+	if !ok {
+		panic(errors.AssertionFailedf("column mismatch"))
+	}
+	prefix := make([]tree.Datum, colOffset)
+	for i := range prefix {
+		prefix[i] = c.Spans.Get(0).StartKey().Value(i)
+	}
+	desc := c.Columns.Get(colOffset).Descending()
+
+	return h.filter(c.Spans.Count(), c.Spans.Get, desc, colOffset, exactPrefix, prefix, c.Columns)
+}
+
+// InvertedFilter filters the histogram according to the given inverted
+// constraint, and returns a new histogram with the results.
+func (h *Histogram) InvertedFilter(spans invertedexpr.InvertedSpans) *Histogram {
+	var columns constraint.Columns
+	columns.InitSingle(opt.MakeOrderingColumn(h.col, false /* desc */))
+	// TODO(mjibson): SpansToRead are sometimes not sorted. See #51438.
+	sort.Slice(spans, func(i, j int) bool {
+		return bytes.Compare(spans[i].Start, spans[j].Start) < 0
+	})
+	return h.filter(
+		len(spans),
+		func(idx int) *constraint.Span {
+			return makeSpanFromInvertedSpan(spans[idx])
+		},
+		false, /* desc */
+		0,     /* exactPrefix */
+		0,     /* colOffset */
+		nil,   /* prefix */
+		columns,
+	)
+}
+
+func makeSpanFromInvertedSpan(invSpan invertedexpr.InvertedSpan) *constraint.Span {
+	var span constraint.Span
+	span.Init(
+		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.Start))),
+		constraint.IncludeBoundary,
+		constraint.MakeKey(tree.NewDBytes(tree.DBytes(invSpan.End))),
+		constraint.ExcludeBoundary,
+	)
+	return &span
 }
 
 func (h *Histogram) getNextLowerBound(currentUpperBound tree.Datum) tree.Datum {
