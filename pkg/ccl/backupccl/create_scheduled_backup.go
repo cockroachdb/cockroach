@@ -389,8 +389,8 @@ func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tre
 	if sj.IsPaused() {
 		nextRun = tree.DNull
 		status = "PAUSED"
-		if reason := sj.LastChangeReason(); reason != "" {
-			status += ": " + reason
+		if s := sj.ScheduleStatus(); s != "" {
+			status += ": " + s
 		}
 	} else {
 		next, err := tree.MakeDTimestampTZ(sj.NextRun(), time.Microsecond)
