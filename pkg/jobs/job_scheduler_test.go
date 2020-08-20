@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,8 +41,6 @@ import (
 func TestJobSchedulerReschedulesRunning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 52959)
 
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
@@ -84,7 +81,10 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 			// The job should not run -- it should be rescheduled `recheckJobAfter` time in the
 			// future.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return s.executeSchedules(ctx, allSchedules, txn)
+				}))
 
 			if wait == jobspb.ScheduleDetails_WAIT {
 				expectedRunTime = h.env.Now().Add(recheckRunningAfter)
@@ -138,7 +138,10 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 
 			// Execute the job and verify it has the next run scheduled.
 			s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-			require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+			require.NoError(t,
+				h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+					return s.executeSchedules(ctx, allSchedules, txn)
+				}))
 
 			expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 			loaded = h.loadSchedule(t, j.ScheduleID())
@@ -175,7 +178,10 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 
 	// Execute the job and verify it has the next run scheduled.
 	s := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
-	require.NoError(t, s.executeSchedules(ctx, allSchedules, nil))
+	require.NoError(t,
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			return s.executeSchedules(ctx, allSchedules, txn)
+		}))
 
 	expectedRunTime = cronexpr.MustParse("@hourly").Next(h.env.Now())
 	loaded = h.loadSchedule(t, j.ScheduleID())
@@ -429,6 +435,70 @@ func TestJobSchedulerDaemonHonorsMaxJobsLimit(t *testing.T) {
 		return nil
 	})
 	stopper.Stop(ctx)
+}
+
+// returnErrorExecutor counts the number of times it is
+// called, and always returns an error.
+type returnErrorExecutor struct {
+	numCalls int
+}
+
+func (e *returnErrorExecutor) ExecuteJob(
+	_ context.Context,
+	_ *scheduledjobs.JobExecutionConfig,
+	_ scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	_ *kv.Txn,
+) error {
+	e.numCalls++
+	return errors.Newf("error for schedule %d", schedule.ScheduleID())
+}
+
+func (e *returnErrorExecutor) NotifyJobTermination(
+	_ context.Context,
+	_ int64,
+	_ Status,
+	_ scheduledjobs.JobSchedulerEnv,
+	_ *ScheduledJob,
+	_ sqlutil.InternalExecutor,
+	_ *kv.Txn,
+) error {
+	return nil
+}
+
+func (e *returnErrorExecutor) Metrics() metric.Struct {
+	return nil
+}
+
+var _ ScheduledJobExecutor = &returnErrorExecutor{}
+
+func TestJobSchedulerToleratesBadSchedules(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	const executorName = "return_error"
+	ex := &returnErrorExecutor{}
+	defer registerScopedScheduledJobExecutor(executorName, ex)()
+
+	// Create few one-off schedules.
+	const numJobs = 5
+	scheduleRunTime := h.env.Now().Add(time.Hour)
+	for i := 0; i < numJobs; i++ {
+		s := h.newScheduledJobForExecutor("schedule", executorName, nil)
+		s.SetNextRun(scheduleRunTime)
+		require.NoError(t, s.Create(ctx, h.cfg.InternalExecutor, nil))
+	}
+	h.env.SetTime(scheduleRunTime.Add(time.Second))
+	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
+	require.NoError(t,
+		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			return daemon.executeSchedules(ctx, numJobs, txn)
+		}))
+	require.Equal(t, numJobs, ex.numCalls)
 }
 
 func TestJobSchedulerDaemonUsesSystemTables(t *testing.T) {

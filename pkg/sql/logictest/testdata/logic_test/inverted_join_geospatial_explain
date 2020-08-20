@@ -186,3 +186,79 @@ project                 ·                    ·                           (lk) 
 ·                       estimated row count  1000 (missing stats)        ·            ·
 ·                       table                rtable@primary              ·            ·
 ·                       spans                FULL SCAN                   ·            ·
+
+# Bounding box operations.
+statement ok
+SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
+
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
+----
+·                             distribution           local                                ·                                         ·
+·                             vectorized             true                                 ·                                         ·
+project                       ·                      ·                                    (lk, rk1, rk2)                            ·
+ │                            estimated row count    326700 (missing stats)               ·                                         ·
+ └── lookup join (inner)      ·                      ·                                    (lk, geom1, rk1, rk2, geom)               ·
+      │                       estimated row count    326700 (missing stats)               ·                                         ·
+      │                       table                  rtable@primary                       ·                                         ·
+      │                       equality               (rk1, rk2) = (rk1,rk2)               ·                                         ·
+      │                       equality cols are key  ·                                    ·                                         ·
+      │                       pred                   geom1 ~ geom                         ·                                         ·
+      └── project             ·                      ·                                    (lk, geom1, rk1, rk2)                     ·
+           │                  estimated row count    10000 (missing stats)                ·                                         ·
+           └── inverted join  ·                      ·                                    (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                │             table                  rtable@geom_index                    ·                                         ·
+                │             inverted expr          st_covers(geom1, geom_inverted_key)  ·                                         ·
+                └── scan      ·                      ·                                    (lk, geom1)                               ·
+·                             estimated row count    1000 (missing stats)                 ·                                         ·
+·                             table                  ltable@primary                       ·                                         ·
+·                             spans                  FULL SCAN                            ·                                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
+----
+·                             distribution           local                                   ·                                         ·
+·                             vectorized             true                                    ·                                         ·
+project                       ·                      ·                                       (lk, rk1, rk2)                            ·
+ │                            estimated row count    326700 (missing stats)                  ·                                         ·
+ └── lookup join (inner)      ·                      ·                                       (lk, geom1, rk1, rk2, geom)               ·
+      │                       estimated row count    326700 (missing stats)                  ·                                         ·
+      │                       table                  rtable@primary                          ·                                         ·
+      │                       equality               (rk1, rk2) = (rk1,rk2)                  ·                                         ·
+      │                       equality cols are key  ·                                       ·                                         ·
+      │                       pred                   geom ~ geom1                            ·                                         ·
+      └── project             ·                      ·                                       (lk, geom1, rk1, rk2)                     ·
+           │                  estimated row count    10000 (missing stats)                   ·                                         ·
+           └── inverted join  ·                      ·                                       (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                │             table                  rtable@geom_index                       ·                                         ·
+                │             inverted expr          st_coveredby(geom1, geom_inverted_key)  ·                                         ·
+                └── scan      ·                      ·                                       (lk, geom1)                               ·
+·                             estimated row count    1000 (missing stats)                    ·                                         ·
+·                             table                  ltable@primary                          ·                                         ·
+·                             spans                  FULL SCAN                               ·                                         ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+SELECT lk, rk1, rk2 FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
+----
+·                             distribution           local                                    ·                                         ·
+·                             vectorized             true                                     ·                                         ·
+project                       ·                      ·                                        (lk, rk1, rk2)                            ·
+ │                            estimated row count    326700 (missing stats)                   ·                                         ·
+ └── lookup join (inner)      ·                      ·                                        (lk, geom1, rk1, rk2, geom)               ·
+      │                       estimated row count    326700 (missing stats)                   ·                                         ·
+      │                       table                  rtable@primary                           ·                                         ·
+      │                       equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
+      │                       equality cols are key  ·                                        ·                                         ·
+      │                       pred                   geom && geom1                            ·                                         ·
+      └── project             ·                      ·                                        (lk, geom1, rk1, rk2)                     ·
+           │                  estimated row count    10000 (missing stats)                    ·                                         ·
+           └── inverted join  ·                      ·                                        (lk, geom1, rk1, rk2, geom_inverted_key)  ·
+                │             table                  rtable@geom_index                        ·                                         ·
+                │             inverted expr          st_intersects(geom1, geom_inverted_key)  ·                                         ·
+                └── scan      ·                      ·                                        (lk, geom1)                               ·
+·                             estimated row count    1000 (missing stats)                     ·                                         ·
+·                             table                  ltable@primary                           ·                                         ·
+·                             spans                  FULL SCAN                                ·                                         ·

@@ -757,10 +757,34 @@ func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb
 	}
 }
 
-// getLocalities returns the localities for the provided replicas.
+// getLocalitiesByStore returns the localities for the provided replicas. In
+// this case we consider the node part of the failure domain and add it to
+// the locality data.
+func (sp *StorePool) getLocalitiesByStore(
+	replicas []roachpb.ReplicaDescriptor,
+) map[roachpb.StoreID]roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	localities := make(map[roachpb.StoreID]roachpb.Locality)
+	for _, replica := range replicas {
+		nodeTier := roachpb.Tier{Key: "node", Value: replica.NodeID.String()}
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.StoreID] = locality.locality.AddTier(nodeTier)
+		} else {
+			localities[replica.StoreID] = roachpb.Locality{
+				Tiers: []roachpb.Tier{nodeTier},
+			}
+		}
+	}
+	return localities
+}
+
+// getLocalitiesByNode returns the localities for the provided replicas. In this
+// case we only consider the locality by node, where the node itself is not
+// part of the failure domain.
 // TODO(bram): consider storing a full list of all node to node diversity
 // scores for faster lookups.
-func (sp *StorePool) getLocalities(
+func (sp *StorePool) getLocalitiesByNode(
 	replicas []roachpb.ReplicaDescriptor,
 ) map[roachpb.NodeID]roachpb.Locality {
 	sp.localitiesMu.RLock()

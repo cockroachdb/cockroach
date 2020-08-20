@@ -34,14 +34,14 @@ func TestTryJoinGeoIndex(t *testing.T) {
 	// Create the input table.
 	if _, err := tc.ExecuteDDL(
 		"CREATE TABLE t1 (geom1 GEOMETRY, geog1 GEOGRAPHY, geom11 GEOMETRY, geog11 GEOGRAPHY, " +
-			"inet1 INET)",
+			"inet1 INET, bbox1 box2d)",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Create the indexed table.
 	if _, err := tc.ExecuteDDL(
-		"CREATE TABLE t2 (geom2 GEOMETRY, geog2 GEOGRAPHY, inet2 INET, " +
+		"CREATE TABLE t2 (geom2 GEOMETRY, geog2 GEOGRAPHY, inet2 INET, bbox2 box2d, " +
 			"INVERTED INDEX (geom2), INVERTED INDEX (geog2))",
 	); err != nil {
 		t.Fatal(err)
@@ -200,6 +200,78 @@ func TestTryJoinGeoIndex(t *testing.T) {
 				"st_coveredby('SRID=4326;POINT(-40.23456 70.456772)'::geography, geog2)) AND " +
 				"st_covers('SRID=4326;POINT(-42.89456 75.938299)'::geography, geog2)",
 		},
+
+		// Bounding box operators.
+		{
+			filters:      "bbox1 ~ geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(bbox1::geometry, geom2)",
+		},
+		{
+			filters:      "geom2 ~ bbox1",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_coveredby(bbox1::geometry, geom2)",
+		},
+		{
+			filters:      "geom1 ~ geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_covers(geom1, geom2)",
+		},
+		{
+			filters:      "geom2 ~ geom1",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_coveredby(geom1, geom2)",
+		},
+		{
+			filters:      "bbox1 && geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(bbox1::geometry, geom2)",
+		},
+		{
+			filters:      "geom2 && bbox1",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(bbox1::geometry, geom2)",
+		},
+		{
+			filters:      "geom1 && geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(geom1, geom2)",
+		},
+		{
+			filters:      "geom2 && geom1",
+			indexOrd:     geomOrd,
+			invertedExpr: "st_intersects(geom1, geom2)",
+		},
+		{
+			filters:  "geom2 && geom1 AND 'BOX(1 2, 3 4)'::box2d ~ geom2",
+			indexOrd: geomOrd,
+			invertedExpr: "st_intersects(geom1, geom2) AND " +
+				"st_covers('BOX(1 2, 3 4)'::box2d::geometry, geom2)",
+		},
+		{
+			// Wrong index ordinal.
+			filters:      "bbox1 ~ geom2",
+			indexOrd:     geogOrd,
+			invertedExpr: "",
+		},
+		{
+			// At least one column from the input is required.
+			filters:      "bbox2 ~ geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
+		{
+			// At least one column from the input is required.
+			filters:      "'BOX(1 2, 3 4)'::box2d ~ geom2",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
+		{
+			// Wrong types.
+			filters:      "geom1::string ~ geom2::string",
+			indexOrd:     geomOrd,
+			invertedExpr: "",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -318,6 +390,54 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 			indexOrd: geogOrd,
 			ok:       true,
 		},
+
+		// Bounding box operators.
+		{
+			filters:  "'BOX(1 2, 3 4)'::box2d ~ geom",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "geom ~ 'BOX(1 2, 3 4)'::box2d",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "'LINESTRING ( 0 0, 0 2 )'::geometry ~ geom",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "geom ~ 'LINESTRING ( 0 0, 0 2 )'::geometry",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "'BOX(1 2, 3 4)'::box2d && geom",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "geom && 'BOX(1 2, 3 4)'::box2d",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "'LINESTRING ( 0 0, 0 2 )'::geometry && geom",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			filters:  "geom && 'LINESTRING ( 0 0, 0 2 )'::geometry",
+			indexOrd: geomOrd,
+			ok:       true,
+		},
+		{
+			// Wrong index ordinal.
+			filters:  "'BOX(1 2, 3 4)'::box2d ~ geom",
+			indexOrd: geogOrd,
+			ok:       false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -331,7 +451,7 @@ func TestTryConstrainGeoIndex(t *testing.T) {
 		// that is tested elsewhere. This is just testing that we are constraining
 		// the index when we expect to.
 		_, ok := invertedidx.TryConstrainGeoIndex(
-			evalCtx.Context, filters, tab, md.Table(tab).Index(tc.indexOrd),
+			evalCtx.Context, &f, filters, tab, md.Table(tab).Index(tc.indexOrd),
 		)
 		if tc.ok != ok {
 			t.Fatalf("expected %v, got %v", tc.ok, ok)
