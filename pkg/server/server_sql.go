@@ -110,8 +110,6 @@ type sqlServerOptionalKVArgs struct {
 	gossip gossip.OptionalGossip
 	// To register blob and DistSQL servers.
 	grpcServer *grpc.Server
-	// Used by executorConfig.
-	recorder *status.MetricsRecorder
 	// For the temporaryObjectCleaner.
 	isMeta1Leaseholder func(context.Context, hlc.Timestamp) (bool, error)
 	// DistSQL, lease management, and others want to know the node they're on.
@@ -169,6 +167,9 @@ type sqlServerArgs struct {
 
 	// Various components want to register themselves with metrics.
 	registry *metric.Registry
+
+	// Recorder exposes metrics to the prometheus endpoint.
+	recorder *status.MetricsRecorder
 
 	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
 	sessionRegistry *sql.SessionRegistry

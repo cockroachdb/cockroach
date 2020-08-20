@@ -554,7 +554,6 @@ func makeSQLServerArgs(
 			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
 			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
-			recorder:     recorder,
 			isMeta1Leaseholder: func(_ context.Context, timestamp hlc.Timestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
@@ -582,6 +581,7 @@ func makeSQLServerArgs(
 		distSender:               ds,
 		db:                       db,
 		registry:                 registry,
+		recorder:                 recorder,
 		sessionRegistry:          sql.NewSessionRegistry(),
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      &jobs.Registry{},
