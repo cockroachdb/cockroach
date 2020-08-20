@@ -484,8 +484,8 @@ func processLocalKeyRange(
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
 	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, storage.MVCCScanOptions{},
-		func(kv roachpb.KeyValue) (bool, error) {
-			return false, handleOne(kv)
+		func(kv roachpb.KeyValue) error {
+			return handleOne(kv)
 		})
 	return err
 }

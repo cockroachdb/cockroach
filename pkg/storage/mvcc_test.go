@@ -1874,9 +1874,9 @@ func TestMVCCDeleteRange(t *testing.T) {
 			kvs := []roachpb.KeyValue{}
 			if _, err = MVCCIterate(
 				ctx, engine, keyMin, keyMax, hlc.Timestamp{WallTime: 2}, MVCCScanOptions{Tombstones: true},
-				func(kv roachpb.KeyValue) (bool, error) {
+				func(kv roachpb.KeyValue) error {
 					kvs = append(kvs, kv)
-					return false, nil
+					return nil
 				},
 			); err != nil {
 				t.Fatal(err)

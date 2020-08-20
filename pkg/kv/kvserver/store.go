@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -1237,7 +1238,7 @@ func IterateIDPrefixKeys(
 	reader storage.Reader,
 	keyFn func(roachpb.RangeID) roachpb.Key,
 	msg protoutil.Message,
-	f func(_ roachpb.RangeID) (more bool, _ error),
+	f func(_ roachpb.RangeID) error,
 ) error {
 	rangeID := roachpb.RangeID(1)
 	iter := reader.NewIterator(storage.IterOptions{
@@ -1294,8 +1295,10 @@ func IterateIDPrefixKeys(
 			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
 		}
 
-		more, err := f(rangeID)
-		if !more || err != nil {
+		if err := f(rangeID); err != nil {
+			if iterutil.Done(err) {
+				return nil
+			}
 			return err
 		}
 		rangeID++
@@ -1308,7 +1311,7 @@ func IterateIDPrefixKeys(
 func IterateRangeDescriptors(
 	ctx context.Context,
 	reader storage.Reader,
-	fn func(desc roachpb.RangeDescriptor) (done bool, err error),
+	fn func(desc roachpb.RangeDescriptor) error,
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
 	// Iterator over all range-local key-based data.
@@ -1318,23 +1321,29 @@ func IterateRangeDescriptors(
 	allCount := 0
 	matchCount := 0
 	bySuffix := make(map[string]int)
-	kvToDesc := func(kv roachpb.KeyValue) (bool, error) {
+	kvToDesc := func(kv roachpb.KeyValue) error {
 		allCount++
 		// Only consider range metadata entries; ignore others.
 		_, suffix, _, err := keys.DecodeRangeKey(kv.Key)
 		if err != nil {
-			return false, err
+			return err
 		}
 		bySuffix[string(suffix)]++
 		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
-			return false, nil
+			return nil
 		}
 		var desc roachpb.RangeDescriptor
 		if err := kv.Value.GetProto(&desc); err != nil {
-			return false, err
+			return err
 		}
 		matchCount++
-		return fn(desc)
+		if err := fn(desc); err != nil {
+			if iterutil.Done(err) {
+				return iterutil.StopIteration()
+			}
+			return err
+		}
+		return nil
 	}
 
 	_, err := storage.MVCCIterate(ctx, reader, start, end, hlc.MaxTimestamp,
@@ -1440,9 +1449,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
 	err = IterateRangeDescriptors(ctx, s.engine,
-		func(desc roachpb.RangeDescriptor) (bool, error) {
+		func(desc roachpb.RangeDescriptor) error {
 			if !desc.IsInitialized() {
-				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
+				return errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 			replicaDesc, found := desc.GetReplicaDescriptor(s.StoreID())
 			if !found {
@@ -1454,7 +1463,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				// 20.2 or after as there was a migration in 20.1 to remove them and
 				// no pre-emptive snapshot should have been sent since 19.2 was
 				// finalized.
-				return false /* done */, errors.AssertionFailedf(
+				return errors.AssertionFailedf(
 					"found RangeDescriptor for range %d at generation %d which does not"+
 						" contain this store %d",
 					log.Safe(desc.RangeID),
@@ -1464,7 +1473,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 			rep, err := newReplica(ctx, &desc, s, replicaDesc.ReplicaID)
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			// We can't lock s.mu across NewReplica due to the lock ordering
@@ -1474,7 +1483,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			err = s.addReplicaInternalLocked(rep)
 			s.mu.Unlock()
 			if err != nil {
-				return false, err
+				return err
 			}
 
 			// Add this range and its stats to our counter.
@@ -1482,7 +1491,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if tenantID, ok := rep.TenantID(); ok {
 				s.metrics.addMVCCStats(ctx, tenantID, rep.GetMVCCStats())
 			} else {
-				return false, errors.AssertionFailedf("found newly constructed replica"+
+				return errors.AssertionFailedf("found newly constructed replica"+
 					" for range %d at generation %d with an invalid tenant ID in store %d",
 					log.Safe(desc.RangeID),
 					log.Safe(desc.Generation),
@@ -1503,7 +1512,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// TODO(bdarnell): Also initialize raft groups when read leases are needed.
 			// TODO(bdarnell): Scan all ranges at startup for unapplied log entries
 			// and initialize those groups.
-			return false, nil
+			return nil
 		})
 	if err != nil {
 		return err

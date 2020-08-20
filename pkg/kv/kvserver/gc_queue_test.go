@@ -893,9 +893,9 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
 	if _, err := storage.MVCCIterate(ctx, tc.store.Engine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
-		storage.MVCCScanOptions{}, func(roachpb.KeyValue) (bool, error) {
+		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
-			return false, nil
+			return nil
 		}); err != nil {
 		t.Fatal(err)
 	}
