@@ -234,6 +234,10 @@ func (hj *hashJoiner) Init() {
 		hashTableLoadFactor,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
+		// Store all columns from the right source since we need to be able to
+		// export the full batches when falling back to the external hash
+		// joiner.
+		nil, /* colsToStore */
 		allowNullEquality,
 		hashTableFullBuildMode,
 		probeMode,
