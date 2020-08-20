@@ -429,16 +429,14 @@ func (hj *externalHashJoiner) partitionBatch(
 		return
 	}
 	scratchBatch := hj.scratch.leftBatch
-	sourceSpec := hj.spec.left
+	eqCols := hj.spec.left.eqCols
 	partitioner := hj.leftPartitioner
 	if side == rightSide {
 		scratchBatch = hj.scratch.rightBatch
-		sourceSpec = hj.spec.right
+		eqCols = hj.spec.right.eqCols
 		partitioner = hj.rightPartitioner
 	}
-	selections := hj.tupleDistributor.distribute(
-		ctx, batch, sourceSpec.sourceTypes, sourceSpec.eqCols,
-	)
+	selections := hj.tupleDistributor.distribute(ctx, batch, eqCols)
 	for idx, sel := range selections {
 		partitionIdx := hj.partitionIdxOffset + idx
 		if len(sel) > 0 {

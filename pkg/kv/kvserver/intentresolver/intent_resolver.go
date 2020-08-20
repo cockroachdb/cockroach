@@ -546,7 +546,6 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	endTxns []result.EndTxnIntents,
 	allowSyncProcessing bool,
 ) error {
-	now := ir.clock.Now()
 	for i := range endTxns {
 		et := &endTxns[i] // copy for goroutine
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
@@ -555,8 +554,9 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsLockUpdates(et.Txn, et.Txn.LockSpans)
-			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, et.Txn, intents, now, et.Poison, nil); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(
+				ctx, rangeID, et.Txn, et.Poison, nil, /* onComplete */
+			); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %v", err)
 				}
@@ -600,7 +600,6 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.LockUpdate,
 	now hlc.Timestamp,
 	onComplete func(pushed, succeeded bool),
 ) error {
@@ -652,11 +651,11 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 					log.VErrEventf(ctx, 2, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
 					return
 				}
-				// Get the pushed txn and update the intents slice.
-				txn = &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-				for i := range intents {
-					intents[i].SetTxn(txn)
-				}
+				// Update the txn with the result of the push, such that the intents we're about
+				// to resolve get a final status.
+				finalizedTxn := &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+				txn = txn.Clone()
+				txn.Update(finalizedTxn)
 			}
 			var onCleanupComplete func(error)
 			if onComplete != nil {
@@ -668,7 +667,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			// Set onComplete to nil to disable the deferred call as the call has now
 			// been delegated to the callback passed to cleanupFinishedTxnIntents.
 			onComplete = nil
-			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, intents, now, false /* poison */, onCleanupComplete)
+			err := ir.cleanupFinishedTxnIntents(ctx, rangeID, txn, false /* poison */, onCleanupComplete)
 			if err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %+v", err)
@@ -726,17 +725,14 @@ func (ir *IntentResolver) gcTxnRecord(
 	return nil
 }
 
-// cleanupFinishedTxnIntents cleans up extant intents owned by a single
-// transaction and when all intents have been successfully resolved, the
-// transaction record is GC'ed asynchronously. onComplete will be called when
-// all processing has completed which is likely to be after this call returns
-// in the case of success.
+// cleanupFinishedTxnIntents cleans up a txn's extant intents and, when all
+// intents have been successfully resolved, the transaction record is GC'ed
+// asynchronously. onComplete will be called when all processing has completed
+// which is likely to be after this call returns in the case of success.
 func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	txn *roachpb.Transaction,
-	intents []roachpb.LockUpdate,
-	now hlc.Timestamp,
 	poison bool,
 	onComplete func(error),
 ) (err error) {
@@ -749,7 +745,7 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 	}()
 	// Resolve intents.
 	opts := ResolveOptions{Poison: poison, MinTimestamp: txn.MinTimestamp}
-	if pErr := ir.ResolveIntents(ctx, intents, opts); pErr != nil {
+	if pErr := ir.ResolveIntents(ctx, txn.LocksAsLockUpdates(), opts); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to resolve intents")
 	}
 	// Run transaction record GC outside of ir.sem.
@@ -769,10 +765,14 @@ func (ir *IntentResolver) cleanupFinishedTxnIntents(
 		})
 }
 
-// ResolveOptions is used during intent resolution. It specifies whether the
-// caller wants the call to block, and whether the ranges containing the intents
-// are to be poisoned.
+// ResolveOptions is used during intent resolution.
 type ResolveOptions struct {
+	// If set, the abort spans on the ranges containing the intents are to be
+	// poisoned. If the transaction that had laid down this intent is still
+	// running (so this resolving is performed by a pusher) and goes back to these
+	// ranges trying to read one of its old intents, the access will be trapped
+	// and the read will return an error, thus avoiding the read missing to see
+	// its own write.
 	Poison bool
 	// The original transaction timestamp from the earliest txn epoch; if
 	// supplied, resolution of intent ranges can be optimized in some cases.

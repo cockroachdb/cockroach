@@ -172,6 +172,11 @@ BOX(-1 -1,1 1)
 BOX(4 -5,4 -5)
 BOX(-1 -5,4 1)
 
+query T
+select st_combinebbox(st_expand(NULL::BOX2D, 0.7845514859561931:::FLOAT8::FLOAT8)::BOX2D::BOX2D, '010200000000000000':::GEOMETRY::GEOMETRY)::BOX2D;
+----
+NULL
+
 subtest st_expand
 
 query TT

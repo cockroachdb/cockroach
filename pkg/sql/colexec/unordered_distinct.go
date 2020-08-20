@@ -24,15 +24,13 @@ import (
 // numHashBuckets determines the number of buckets that the hash table is
 // created with.
 func NewUnorderedDistinct(
-	allocator *colmem.Allocator,
-	input colexecbase.Operator,
-	distinctCols []uint32,
-	typs []*types.T,
-	numHashBuckets uint64,
+	allocator *colmem.Allocator, input colexecbase.Operator, distinctCols []uint32, typs []*types.T,
 ) colexecbase.Operator {
+	// This number was chosen after running the micro-benchmarks.
+	const hashTableLoadFactor = 2.0
 	ht := newHashTable(
 		allocator,
-		numHashBuckets,
+		hashTableLoadFactor,
 		typs,
 		distinctCols,
 		true, /* allowNullEquality */

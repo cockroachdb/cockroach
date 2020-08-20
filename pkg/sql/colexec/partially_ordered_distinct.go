@@ -23,9 +23,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TODO(yuzefovich): tune.
-const partiallyOrderedDistinctNumHashBuckets = 1024
-
 // newPartiallyOrderedDistinct creates a distinct operator on the given
 // distinct columns when we have partial ordering on some of the distinct
 // columns.
@@ -63,10 +60,7 @@ func newPartiallyOrderedDistinct(
 			distinctUnorderedCols = append(distinctUnorderedCols, distinctCol)
 		}
 	}
-	distinct := NewUnorderedDistinct(
-		allocator, chunkerOperator, distinctUnorderedCols, typs,
-		partiallyOrderedDistinctNumHashBuckets,
-	)
+	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
 		distinct: distinct.(ResettableOperator),

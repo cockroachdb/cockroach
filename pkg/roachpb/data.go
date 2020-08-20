@@ -88,7 +88,7 @@ func (rk RKey) AsRawKey() Key {
 
 // Less returns true if receiver < otherRK.
 func (rk RKey) Less(otherRK RKey) bool {
-	return bytes.Compare(rk, otherRK) < 0
+	return rk.Compare(otherRK) < 0
 }
 
 // Compare compares the two RKeys.
@@ -434,7 +434,7 @@ func (v *Value) SetGeo(so geopb.SpatialObject) error {
 
 // SetBox2D encodes the specified Box2D value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
-func (v *Value) SetBox2D(b *geo.CartesianBoundingBox) {
+func (v *Value) SetBox2D(b geo.CartesianBoundingBox) {
 	v.ensureRawBytes(headerSize + 32)
 	encoding.EncodeUint64Ascending(v.RawBytes[headerSize:headerSize], math.Float64bits(b.LoX))
 	encoding.EncodeUint64Ascending(v.RawBytes[headerSize+8:headerSize+8], math.Float64bits(b.HiX))
@@ -582,35 +582,35 @@ func (v Value) GetGeo() (geopb.SpatialObject, error) {
 
 // GetBox2D decodes a geo value from the bytes field of the receiver. If the
 // tag is not BOX2D an error will be returned.
-func (v Value) GetBox2D() (*geo.CartesianBoundingBox, error) {
+func (v Value) GetBox2D() (geo.CartesianBoundingBox, error) {
+	box := geo.CartesianBoundingBox{}
 	if tag := v.GetTag(); tag != ValueType_BOX2D {
-		return nil, fmt.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
+		return box, fmt.Errorf("value type is not %s: %s", ValueType_BOX2D, tag)
 	}
-	box := &geo.CartesianBoundingBox{}
 	dataBytes := v.dataBytes()
 	if len(dataBytes) != 32 {
-		return nil, fmt.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
+		return box, fmt.Errorf("float64 value should be exactly 32 bytes: %d", len(dataBytes))
 	}
 	var err error
 	var val uint64
 	dataBytes, val, err = encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
-		return nil, err
+		return box, err
 	}
 	box.LoX = math.Float64frombits(val)
 	dataBytes, val, err = encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
-		return nil, err
+		return box, err
 	}
 	box.HiX = math.Float64frombits(val)
 	dataBytes, val, err = encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
-		return nil, err
+		return box, err
 	}
 	box.LoY = math.Float64frombits(val)
 	_, val, err = encoding.DecodeUint64Ascending(dataBytes)
 	if err != nil {
-		return nil, err
+		return box, err
 	}
 	box.HiY = math.Float64frombits(val)
 
@@ -1176,6 +1176,15 @@ func (t *Transaction) UpgradePriority(minPriority enginepb.TxnPriority) {
 // This method will never return false for a writing transaction.
 func (t *Transaction) IsLocking() bool {
 	return t.Key != nil
+}
+
+// LocksAsLockUpdates turns t.LockSpans into a bunch of LockUpdates.
+func (t *Transaction) LocksAsLockUpdates() []LockUpdate {
+	ret := make([]LockUpdate, len(t.LockSpans))
+	for i, sp := range t.LockSpans {
+		ret[i] = MakeLockUpdate(t, sp)
+	}
+	return ret
 }
 
 // String formats transaction into human readable string.
@@ -1993,20 +2002,12 @@ func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcq
 }
 
 // MakeLockUpdate makes a lock update from the given txn and span.
+//
+// See also txn.LocksAsLockUpdates().
 func MakeLockUpdate(txn *Transaction, span Span) LockUpdate {
 	u := LockUpdate{Span: span}
 	u.SetTxn(txn)
 	return u
-}
-
-// AsLockUpdates takes a slice of spans and returns it as a slice of
-// lock updates.
-func AsLockUpdates(txn *Transaction, spans []Span) []LockUpdate {
-	ret := make([]LockUpdate, len(spans))
-	for i := range spans {
-		ret[i] = MakeLockUpdate(txn, spans[i])
-	}
-	return ret
 }
 
 // SetTxn updates the transaction details in the lock update.

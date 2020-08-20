@@ -48,15 +48,15 @@ func (b *CartesianBoundingBox) Repr() string {
 }
 
 // ParseCartesianBoundingBox parses a box2d string into a bounding box.
-func ParseCartesianBoundingBox(s string) (*CartesianBoundingBox, error) {
-	b := &CartesianBoundingBox{}
+func ParseCartesianBoundingBox(s string) (CartesianBoundingBox, error) {
+	b := CartesianBoundingBox{}
 	var prefix string
 	numScanned, err := fmt.Sscanf(s, "%3s(%f %f,%f %f)", &prefix, &b.LoX, &b.LoY, &b.HiX, &b.HiY)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error parsing box2d")
+		return b, errors.Wrapf(err, "error parsing box2d")
 	}
 	if numScanned != 5 || strings.ToLower(prefix) != "box" {
-		return nil, errors.Newf("expected format 'box(min_x min_y,max_x max_y)'")
+		return b, errors.Newf("expected format 'box(min_x min_y,max_x max_y)'")
 	}
 	return b, nil
 }

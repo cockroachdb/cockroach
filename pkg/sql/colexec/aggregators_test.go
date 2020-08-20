@@ -979,6 +979,7 @@ func benchmarkAggregateFunction(
 	aggInputTypes []*types.T,
 	groupSize int,
 	nullProb float64,
+	numInputBatches int,
 ) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
@@ -987,7 +988,6 @@ func benchmarkAggregateFunction(
 	aggMemAcc := evalCtx.Mon.MakeBoundAccount()
 	defer aggMemAcc.Close(ctx)
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
-	const numInputBatches = 64
 	const bytesFixedLength = 8
 	typs := append([]*types.T{types.Int}, aggInputTypes...)
 	nTuples := numInputBatches * coldata.BatchSize()
@@ -996,12 +996,19 @@ func benchmarkAggregateFunction(
 		cols[i] = testAllocator.NewMemColumn(typs[i], nTuples)
 	}
 	groups := cols[0].Int64()
-	curGroup := -1
-	for i := 0; i < nTuples; i++ {
-		if groupSize == 1 || i%groupSize == 0 {
-			curGroup++
+	if agg.name == "hash" {
+		numGroups := nTuples / groupSize
+		for i := 0; i < nTuples; i++ {
+			groups[i] = int64(rng.Intn(numGroups))
 		}
-		groups[i] = int64(curGroup)
+	} else {
+		curGroup := -1
+		for i := 0; i < nTuples; i++ {
+			if groupSize == 1 || i%groupSize == 0 {
+				curGroup++
+			}
+			groups[i] = int64(curGroup)
+		}
 	}
 	for _, col := range cols[1:] {
 		coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
@@ -1064,11 +1071,21 @@ func benchmarkAggregateFunction(
 		// For COUNT_ROWS we'll just use 8 bytes.
 		argumentsSize = 8
 	}
+	var inputTypesString string
+	switch len(aggInputTypes) {
+	case 1:
+		// Override the string so that the name of the benchmark was the same
+		// as in pre-20.2 releases (which allows us to compare against old
+		// numbers).
+		inputTypesString = aggInputTypes[0].String()
+	default:
+		inputTypesString = fmt.Sprintf("%s", aggInputTypes)
+	}
 	b.Run(fmt.Sprintf(
 		"%s/%s/%s/groupSize=%d/hasNulls=%t/numInputBatches=%d",
-		fName, agg.name, aggInputTypes, groupSize, nullProb > 0, numInputBatches),
+		fName, agg.name, inputTypesString, groupSize, nullProb > 0, numInputBatches),
 		func(b *testing.B) {
-			b.SetBytes(int64(argumentsSize * len(aggInputTypes) * nTuples))
+			b.SetBytes(int64(argumentsSize * nTuples))
 			for i := 0; i < b.N; i++ {
 				a.(resetter).reset(ctx)
 				// Exhaust aggregator until all batches have been read.
@@ -1086,10 +1103,20 @@ func benchmarkAggregateFunction(
 // depending on the parameters of the input.
 func BenchmarkAggregator(b *testing.B) {
 	aggFn := execinfrapb.AggregatorSpec_MIN
+	numBatches := []int{4, 64, 1024}
+	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()}
+	if testing.Short() {
+		numBatches = []int{64}
+		groupSizes = []int{1, coldata.BatchSize()}
+	}
 	for _, agg := range aggTypes {
-		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
-			for _, nullProb := range []float64{0.0, nullProbability} {
-				benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.Int}, groupSize, nullProb)
+		for _, numInputBatches := range numBatches {
+			for _, groupSize := range groupSizes {
+				for _, nullProb := range []float64{0.0, nullProbability} {
+					benchmarkAggregateFunction(
+						b, agg, aggFn, []*types.T{types.Int}, groupSize, nullProb, numInputBatches,
+					)
+				}
 			}
 		}
 	}
@@ -1101,7 +1128,12 @@ func BenchmarkAggregator(b *testing.B) {
 // enough signal on the speeds of aggregate functions. For more diverse
 // configurations look at BenchmarkAggregator.
 func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
-	for aggFnNumber := 0; aggFnNumber < len(execinfrapb.AggregatorSpec_Func_name); aggFnNumber++ {
+	const numInputBatches = 64
+	numFnsToRun := len(execinfrapb.AggregatorSpec_Func_name)
+	if testing.Short() {
+		numFnsToRun = 1
+	}
+	for aggFnNumber := 0; aggFnNumber < numFnsToRun; aggFnNumber++ {
 		aggFn := execinfrapb.AggregatorSpec_Func(aggFnNumber)
 		if !isAggOptimized(aggFn) {
 			continue
@@ -1118,7 +1150,9 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 				aggInputTypes = []*types.T{types.Int}
 			}
 			for _, groupSize := range []int{1, coldata.BatchSize()} {
-				benchmarkAggregateFunction(b, agg, aggFn, aggInputTypes, groupSize, nullProbability)
+				benchmarkAggregateFunction(
+					b, agg, aggFn, aggInputTypes, groupSize, nullProbability, numInputBatches,
+				)
 			}
 		}
 	}
@@ -1269,9 +1303,9 @@ func TestHashAggregator(t *testing.T) {
 			input: tuples{
 				{0, 3},
 				{0, 4},
-				{HashTableNumBuckets, 6},
+				{coldata.BatchSize(), 6},
 				{0, 5},
-				{HashTableNumBuckets, 7},
+				{coldata.BatchSize(), 7},
 			},
 			typs:      []*types.T{types.Int, types.Int},
 			groupCols: []uint32{0},
@@ -1333,25 +1367,20 @@ func TestHashAggregator(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	for _, numOfHashBuckets := range []int{0 /* no limit */, 1, coldata.BatchSize()} {
-		for _, tc := range tcs {
-			if err := tc.init(); err != nil {
-				t.Fatal(err)
-			}
-			constructors, constArguments, outputTypes, err := ProcessAggregations(
-				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
-			)
-			require.NoError(t, err)
-			log.Infof(context.Background(), "numOfHashBuckets=%d", numOfHashBuckets)
-			runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
-				a, err := NewHashAggregator(
-					testAllocator, testMemAcc, sources[0], tc.typs, tc.spec,
-					&evalCtx, constructors, constArguments, outputTypes,
-				)
-				a.(*hashAggregator).testingKnobs.numOfHashBuckets = uint64(numOfHashBuckets)
-				return a, err
-			})
+	for _, tc := range tcs {
+		if err := tc.init(); err != nil {
+			t.Fatal(err)
 		}
+		constructors, constArguments, outputTypes, err := ProcessAggregations(
+			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+		)
+		require.NoError(t, err)
+		runTests(t, []tuples{tc.input}, tc.expected, unorderedVerifier, func(sources []colexecbase.Operator) (colexecbase.Operator, error) {
+			return NewHashAggregator(
+				testAllocator, testMemAcc, sources[0], tc.typs, tc.spec,
+				&evalCtx, constructors, constArguments, outputTypes,
+			)
+		})
 	}
 }
 

@@ -2937,11 +2937,11 @@ func (d *DGeometry) Size() uintptr {
 
 // DBox2D is the Datum representation of the Box2D type.
 type DBox2D struct {
-	*geo.CartesianBoundingBox
+	geo.CartesianBoundingBox
 }
 
 // NewDBox2D returns a new Box2D Datum.
-func NewDBox2D(b *geo.CartesianBoundingBox) *DBox2D {
+func NewDBox2D(b geo.CartesianBoundingBox) *DBox2D {
 	return &DBox2D{CartesianBoundingBox: b}
 }
 
@@ -2990,7 +2990,7 @@ func (d *DBox2D) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	o := other.(*DBox2D)
-	return d.CartesianBoundingBox.Compare(o.CartesianBoundingBox)
+	return d.CartesianBoundingBox.Compare(&o.CartesianBoundingBox)
 }
 
 // Prev implements the Datum interface.
@@ -3041,7 +3041,7 @@ func (d *DBox2D) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DBox2D) Size() uintptr {
-	return unsafe.Sizeof(*d) + unsafe.Sizeof(*d.CartesianBoundingBox)
+	return unsafe.Sizeof(*d) + unsafe.Sizeof(d.CartesianBoundingBox)
 }
 
 // DJSON is the JSON Datum.
@@ -4651,7 +4651,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 }{
 	types.UnknownFamily:        {unsafe.Sizeof(dNull{}), fixedSize},
 	types.BoolFamily:           {unsafe.Sizeof(DBool(false)), fixedSize},
-	types.Box2DFamily:          {unsafe.Sizeof(DBox2D{CartesianBoundingBox: &geo.CartesianBoundingBox{}}), fixedSize},
+	types.Box2DFamily:          {unsafe.Sizeof(DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{}}), fixedSize},
 	types.BitFamily:            {unsafe.Sizeof(DBitArray{}), variableSize},
 	types.IntFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.FloatFamily:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},

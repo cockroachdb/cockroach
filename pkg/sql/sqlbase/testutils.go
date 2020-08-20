@@ -108,7 +108,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		}
 	case types.Box2DFamily:
 		b := geo.NewCartesianBoundingBox().AddPoint(rng.NormFloat64(), rng.NormFloat64()).AddPoint(rng.NormFloat64(), rng.NormFloat64())
-		return tree.NewDBox2D(b)
+		return tree.NewDBox2D(*b)
 	case types.GeographyFamily:
 		gm, err := typ.GeoMetadata()
 		if err != nil {
@@ -513,7 +513,7 @@ var (
 			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 290*12)},
 		},
 		types.Box2DFamily: {
-			&tree.DBox2D{CartesianBoundingBox: &geo.CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: -10, HiX: 10, LoY: -10, HiY: 10}}},
+			&tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: -10, HiX: 10, LoY: -10, HiY: 10}}},
 		},
 		types.GeographyFamily: {
 			// NOTE(otan): we cannot use WKT here because roachtests do not have geos uploaded.

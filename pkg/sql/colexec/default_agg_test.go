@@ -157,11 +157,14 @@ func TestDefaultAggregateFunc(t *testing.T) {
 }
 
 func BenchmarkDefaultAggregateFunction(b *testing.B) {
+	const numInputBatches = 64
 	aggFn := execinfrapb.AggregatorSpec_STRING_AGG
 	for _, agg := range aggTypes {
 		for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize() / 2, coldata.BatchSize()} {
 			for _, nullProb := range []float64{0.0, nullProbability} {
-				benchmarkAggregateFunction(b, agg, aggFn, []*types.T{types.String, types.String}, groupSize, nullProb)
+				benchmarkAggregateFunction(
+					b, agg, aggFn, []*types.T{types.String, types.String}, groupSize, nullProb, numInputBatches,
+				)
 			}
 		}
 	}

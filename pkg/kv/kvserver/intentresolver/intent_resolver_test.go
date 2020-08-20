@@ -53,8 +53,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		Clock:   clock,
 	}
 	type testCase struct {
-		txn           *roachpb.Transaction
-		intents       []roachpb.LockUpdate
+		txn *roachpb.Transaction
+		// intentSpans, if set, are appended to txn.LockSpans. They'll result in
+		// ResolveIntent requests.
+		intentSpans   []roachpb.Span
 		sendFuncs     *sendFuncs
 		expectPushed  bool
 		expectSucceed bool
@@ -106,13 +108,13 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn1,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
-				resolveIntentsSendFunc(t),
+				resolveIntentsSendFuncEx(t, checkTxnAborted),
 				failSendFunc,
 			),
 			expectPushed: true,
@@ -126,10 +128,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn1,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: roachpb.Key("aa")},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -165,9 +167,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn3,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -185,10 +187,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn3,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: roachpb.Key("aa")},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -207,7 +209,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// is no push but that the gc has occurred successfully.
 		{
 			txn:           txn4,
-			intents:       []roachpb.LockUpdate{},
+			intentSpans:   []roachpb.Span{},
 			sendFuncs:     newSendFuncs(t, gcSendFunc(t)),
 			expectSucceed: true,
 		},
@@ -222,7 +224,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				didPush, didSucceed = pushed, succeeded
 				close(done)
 			}
-			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, c.txn, c.intents, clock.Now(), onComplete)
+			txn := c.txn.Clone()
+			txn.LockSpans = append([]roachpb.Span{}, c.intentSpans...)
+			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, txn, clock.Now(), onComplete)
 			if err != nil {
 				t.Fatalf("unexpected error sending async transaction")
 			}
@@ -480,7 +484,7 @@ func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
 				}
 			}
 		}
-		return respForResolveIntentBatch(t, ba), nil
+		return respForResolveIntentBatch(t, ba, dontCheckTxnStatus), nil
 	}
 	sf := newSendFuncs(t,
 		sendFunc(check),
@@ -832,7 +836,26 @@ func singlePushTxnSendFunc(t *testing.T) sendFunc {
 	return pushTxnSendFunc(t, 1)
 }
 
-func resolveIntentsSendFuncs(sf *sendFuncs, numIntents int, minRequests int) sendFunc {
+// checkTxnStatusOpt specifies whether some mock handlers for ResolveIntent(s)
+// request should assert the intent's status before resolving it, or not.
+type checkTxnStatusOpt bool
+
+const (
+	// checkTxnAborted makes the mock ResolveIntent check that the intent's txn is
+	// aborted (and so the intent would be discarded by the production code).
+	checkTxnAborted checkTxnStatusOpt = true
+
+	// NOTE: There should be a checkTxnCommitted option, but no test currently
+	// uses it.
+
+	// A bunch of tests use dontCheckTxnStatus because they take shortcuts that
+	// causes intents to not be cleaned with a txn that was properly finalized.
+	dontCheckTxnStatus checkTxnStatusOpt = false
+)
+
+func resolveIntentsSendFuncsEx(
+	sf *sendFuncs, numIntents int, minRequests int, opt checkTxnStatusOpt,
+) sendFunc {
 	toResolve := int64(numIntents)
 	reqsSeen := int64(0)
 	var f sendFunc
@@ -849,15 +872,27 @@ func resolveIntentsSendFuncs(sf *sendFuncs, numIntents int, minRequests int) sen
 			sf.t.Errorf("expected at least %d requests to resolve %d intents, only saw %d",
 				minRequests, numIntents, seen)
 		}
-		return respForResolveIntentBatch(sf.t, ba), nil
+		return respForResolveIntentBatch(sf.t, ba, opt), nil
 	}
 	return f
 }
 
-func resolveIntentsSendFunc(t *testing.T) sendFunc {
+func resolveIntentsSendFuncEx(t *testing.T, checkTxnStatusOpt checkTxnStatusOpt) sendFunc {
 	return func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		return respForResolveIntentBatch(t, ba), nil
+		return respForResolveIntentBatch(t, ba, checkTxnStatusOpt), nil
 	}
+}
+
+// resolveIntentsSendFuncs is like resolveIntentsSendFuncsEx, except it never checks
+// the intents' txn status.
+func resolveIntentsSendFuncs(sf *sendFuncs, numIntents int, minRequests int) sendFunc {
+	return resolveIntentsSendFuncsEx(sf, numIntents, minRequests, dontCheckTxnStatus)
+}
+
+// resolveIntentsSendFunc is like resolveIntentsSendFuncEx, but it never checks
+// the intents' txn status.
+func resolveIntentsSendFunc(t *testing.T) sendFunc {
+	return resolveIntentsSendFuncEx(t, dontCheckTxnStatus)
 }
 
 func failSendFunc(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -896,16 +931,24 @@ func respForPushTxnBatch(t *testing.T, ba roachpb.BatchRequest) *roachpb.BatchRe
 	return resp
 }
 
-func respForResolveIntentBatch(t *testing.T, ba roachpb.BatchRequest) *roachpb.BatchResponse {
+func respForResolveIntentBatch(
+	t *testing.T, ba roachpb.BatchRequest, checkTxnStatusOpt checkTxnStatusOpt,
+) *roachpb.BatchResponse {
 	resp := &roachpb.BatchResponse{}
+	var status roachpb.TransactionStatus
 	for _, r := range ba.Requests {
-		if _, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+		if rir, ok := r.GetInner().(*roachpb.ResolveIntentRequest); ok {
+			status = rir.AsLockUpdate().Status
 			resp.Add(&roachpb.ResolveIntentResponse{})
-		} else if _, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+		} else if rirr, ok := r.GetInner().(*roachpb.ResolveIntentRangeRequest); ok {
+			status = rirr.AsLockUpdate().Status
 			resp.Add(&roachpb.ResolveIntentRangeResponse{})
 		} else {
 			t.Errorf("Unexpected request in batch for intent resolution: %T", r.GetInner())
 		}
+	}
+	if checkTxnStatusOpt == checkTxnAborted && status != roachpb.ABORTED {
+		t.Errorf("expected txn to be finalized, got status: %s", status)
 	}
 	return resp
 }

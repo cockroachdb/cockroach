@@ -574,7 +574,7 @@ func TestGCQueueProcess(t *testing.T) {
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
 			},
-			func(ctx context.Context, txn *roachpb.Transaction, intents []roachpb.LockUpdate) error {
+			func(ctx context.Context, txn *roachpb.Transaction) error {
 				return nil
 			})
 	}()

@@ -578,7 +578,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			now, thresh, policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
-			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.LockUpdate) error { return nil },
+			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
 		)
 		if err != nil {
 			return err
