@@ -132,140 +132,185 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 		aggregations = append(aggregations, execinfrapb.AggregatorSpec_Aggregation{Func: aggFn})
 	}
 	for _, hashAgg := range []bool{false, true} {
-		for numGroupingCols := 1; numGroupingCols <= maxNumGroupingCols; numGroupingCols++ {
-			// We will be grouping based on the first numGroupingCols columns
-			// (which will be of INT types) with the values for the columns set
-			// manually below.
-			inputTypes := make([]*types.T, 0, numGroupingCols+len(aggregations))
-			for i := 0; i < numGroupingCols; i++ {
-				inputTypes = append(inputTypes, types.Int)
+		filteringAggOptions := []bool{false}
+		if hashAgg {
+			// We currently support filtering aggregation only for hash
+			// aggregator.
+			filteringAggOptions = []bool{false, true}
+		}
+		for _, filteringAgg := range filteringAggOptions {
+			numFilteringCols := 0
+			if filteringAgg {
+				numFilteringCols = 1
 			}
-			// After all grouping columns, we will have input columns for each
-			// of the aggregate functions. Here, we will set up the column
-			// indices, and the types will be regenerated below
-			numColsSoFar := numGroupingCols
-			for i := range aggregations {
-				numArguments := aggregateFuncToNumArguments[aggregations[i].Func]
-				aggregations[i].ColIdx = make([]uint32, numArguments)
-				for j := range aggregations[i].ColIdx {
-					aggregations[i].ColIdx[j] = uint32(numColsSoFar)
-					numColsSoFar++
+			for numGroupingCols := 1; numGroupingCols <= maxNumGroupingCols; numGroupingCols++ {
+				// We will be grouping based on the first numGroupingCols columns
+				// (which will be of INT types) with the values for the columns set
+				// manually below.
+				numUtilityCols := numGroupingCols + numFilteringCols
+				inputTypes := make([]*types.T, 0, numUtilityCols+len(aggregations))
+				for i := 0; i < numGroupingCols; i++ {
+					inputTypes = append(inputTypes, types.Int)
 				}
-			}
-			outputTypes := make([]*types.T, len(aggregations))
-
-			for run := 0; run < nRuns; run++ {
-				inputTypes = inputTypes[:numGroupingCols]
-				var rows sqlbase.EncDatumRows
+				// Check whether we want to add a column for FILTER clause.
+				var filteringColIdx uint32
+				if filteringAgg {
+					filteringColIdx = uint32(len(inputTypes))
+					inputTypes = append(inputTypes, types.Bool)
+				}
+				// After all utility columns, we will have input columns for each
+				// of the aggregate functions. Here, we will set up the column
+				// indices, and the types will be generated below.
+				numColsSoFar := numUtilityCols
 				for i := range aggregations {
-					aggFn := aggregations[i].Func
-					aggFnInputTypes := make([]*types.T, len(aggregations[i].ColIdx))
-					for {
-						for j := range aggFnInputTypes {
-							aggFnInputTypes[j] = sqlbase.RandType(rng)
-						}
-						// There is a special case for concat_agg, string_agg, st_extent
-						// and st_makeline when at least one argument is a
-						// tuple. Such cases pass GetAggregateInfo check below,
-						// but they are actually invalid, and during normal
-						// execution it is caught during type-checking.
-						// However, we don't want to do fully-fledged type
-						// checking, so we hard-code an exception here.
-						invalid := false
-						switch aggFn {
-						case execinfrapb.AggregatorSpec_CONCAT_AGG,
-							execinfrapb.AggregatorSpec_STRING_AGG,
-							execinfrapb.AggregatorSpec_ST_MAKELINE,
-							execinfrapb.AggregatorSpec_ST_EXTENT:
+					numArguments := aggregateFuncToNumArguments[aggregations[i].Func]
+					aggregations[i].ColIdx = make([]uint32, numArguments)
+					for j := range aggregations[i].ColIdx {
+						aggregations[i].ColIdx[j] = uint32(numColsSoFar)
+						numColsSoFar++
+					}
+				}
+				outputTypes := make([]*types.T, len(aggregations))
+
+				for run := 0; run < nRuns; run++ {
+					inputTypes = inputTypes[:numUtilityCols]
+					var rows sqlbase.EncDatumRows
+					hasJSONColumn := false
+					for i := range aggregations {
+						aggFn := aggregations[i].Func
+						aggFnInputTypes := make([]*types.T, len(aggregations[i].ColIdx))
+						for {
+							for j := range aggFnInputTypes {
+								aggFnInputTypes[j] = sqlbase.RandType(rng)
+							}
+							// There is a special case for concat_agg, string_agg,
+							// st_makeline, and st_extent when at least one argument is a
+							// tuple. Such cases pass GetAggregateInfo check below,
+							// but they are actually invalid, and during normal
+							// execution it is caught during type-checking.
+							// However, we don't want to do fully-fledged type
+							// checking, so we hard-code an exception here.
+							invalid := false
+							switch aggFn {
+							case execinfrapb.AggregatorSpec_CONCAT_AGG,
+								execinfrapb.AggregatorSpec_STRING_AGG,
+								execinfrapb.AggregatorSpec_ST_MAKELINE,
+								execinfrapb.AggregatorSpec_ST_EXTENT:
+								for _, typ := range aggFnInputTypes {
+									if typ.Family() == types.TupleFamily {
+										invalid = true
+										break
+									}
+								}
+							}
+							if invalid {
+								continue
+							}
 							for _, typ := range aggFnInputTypes {
-								if typ.Family() == types.TupleFamily {
-									invalid = true
-									break
+								hasJSONColumn = hasJSONColumn || typ.Family() == types.JsonFamily
+							}
+							if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
+								outputTypes[i] = outputType
+								break
+							}
+						}
+						inputTypes = append(inputTypes, aggFnInputTypes...)
+					}
+					rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
+					groupIdx := 0
+					for _, row := range rows {
+						for i := 0; i < numGroupingCols; i++ {
+							if rng.Float64() < nullProbability {
+								row[i] = sqlbase.EncDatum{Datum: tree.DNull}
+							} else {
+								row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(groupIdx))}
+								if rng.Float64() < nextGroupProb {
+									groupIdx++
 								}
 							}
 						}
-						if invalid {
+					}
+
+					// Update the specifications of aggregate functions to
+					// possibly include DISTINCT and/or FILTER clauses.
+					for _, aggFn := range aggregations {
+						distinctProb := 0.5
+						if !hashAgg {
+							// We currently support distinct aggregation only
+							// for hash aggregator.
+							distinctProb = 0
+						}
+						if hasJSONColumn {
+							// We currently cannot encode json columns, so we
+							// don't support distinct aggregation in both
+							// row-by-row and vectorized engines.
+							distinctProb = 0
+						}
+						aggFn.Distinct = rng.Float64() < distinctProb
+						if filteringAgg {
+							aggFn.FilterColIdx = &filteringColIdx
+						} else {
+							aggFn.FilterColIdx = nil
+						}
+					}
+					aggregatorSpec := &execinfrapb.AggregatorSpec{
+						Type:         execinfrapb.AggregatorSpec_NON_SCALAR,
+						GroupCols:    groupingCols[:numGroupingCols],
+						Aggregations: aggregations,
+					}
+					if hashAgg {
+						// Let's shuffle the rows for the hash aggregator.
+						rand.Shuffle(nRows, func(i, j int) {
+							rows[i], rows[j] = rows[j], rows[i]
+						})
+					} else {
+						aggregatorSpec.OrderedGroupCols = groupingCols[:numGroupingCols]
+						orderedCols := execinfrapb.ConvertToColumnOrdering(
+							execinfrapb.Ordering{Columns: orderingCols[:numGroupingCols]},
+						)
+						// Although we build the input rows in "non-decreasing" order, it is
+						// possible that some NULL values are present here and there, so we
+						// need to sort the rows to satisfy the ordering conditions.
+						sort.Slice(rows, func(i, j int) bool {
+							cmp, err := rows[i].Compare(inputTypes, &da, orderedCols, &evalCtx, rows[j])
+							if err != nil {
+								t.Fatal(err)
+							}
+							return cmp < 0
+						})
+					}
+					pspec := &execinfrapb.ProcessorSpec{
+						Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
+						Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
+					}
+					args := verifyColOperatorArgs{
+						anyOrder:    hashAgg,
+						inputTypes:  [][]*types.T{inputTypes},
+						inputs:      []sqlbase.EncDatumRows{rows},
+						outputTypes: outputTypes,
+						pspec:       pspec,
+					}
+					if err := verifyColOperator(args); err != nil {
+						if strings.Contains(err.Error(), "different errors returned") {
+							// Columnar and row-based aggregators are likely to hit
+							// different errors, and we will swallow those and move
+							// on.
 							continue
 						}
-						if _, outputType, err := execinfrapb.GetAggregateInfo(aggFn, aggFnInputTypes...); err == nil {
-							outputTypes[i] = outputType
-							break
-						}
-					}
-					inputTypes = append(inputTypes, aggFnInputTypes...)
-				}
-				rows = sqlbase.RandEncDatumRowsOfTypes(rng, nRows, inputTypes)
-				groupIdx := 0
-				for _, row := range rows {
-					for i := 0; i < numGroupingCols; i++ {
-						if rng.Float64() < nullProbability {
-							row[i] = sqlbase.EncDatum{Datum: tree.DNull}
-						} else {
-							row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(groupIdx))}
-							if rng.Float64() < nextGroupProb {
-								groupIdx++
+						fmt.Printf("--- seed = %d run = %d filter = %t hash = %t ---\n",
+							seed, run, filteringAgg, hashAgg)
+						var aggFnNames string
+						for i, agg := range aggregations {
+							if i > 0 {
+								aggFnNames += " "
 							}
+							aggFnNames += agg.Func.String()
 						}
+						fmt.Printf("--- %s ---\n", aggFnNames)
+						prettyPrintTypes(inputTypes, "t" /* tableName */)
+						prettyPrintInput(rows, inputTypes, "t" /* tableName */)
+						t.Fatal(err)
 					}
-				}
-
-				aggregatorSpec := &execinfrapb.AggregatorSpec{
-					Type:         execinfrapb.AggregatorSpec_NON_SCALAR,
-					GroupCols:    groupingCols[:numGroupingCols],
-					Aggregations: aggregations,
-				}
-				if hashAgg {
-					// Let's shuffle the rows for the hash aggregator.
-					rand.Shuffle(nRows, func(i, j int) {
-						rows[i], rows[j] = rows[j], rows[i]
-					})
-				} else {
-					aggregatorSpec.OrderedGroupCols = groupingCols[:numGroupingCols]
-					orderedCols := execinfrapb.ConvertToColumnOrdering(
-						execinfrapb.Ordering{Columns: orderingCols[:numGroupingCols]},
-					)
-					// Although we build the input rows in "non-decreasing" order, it is
-					// possible that some NULL values are present here and there, so we
-					// need to sort the rows to satisfy the ordering conditions.
-					sort.Slice(rows, func(i, j int) bool {
-						cmp, err := rows[i].Compare(inputTypes, &da, orderedCols, &evalCtx, rows[j])
-						if err != nil {
-							t.Fatal(err)
-						}
-						return cmp < 0
-					})
-				}
-				pspec := &execinfrapb.ProcessorSpec{
-					Input: []execinfrapb.InputSyncSpec{{ColumnTypes: inputTypes}},
-					Core:  execinfrapb.ProcessorCoreUnion{Aggregator: aggregatorSpec},
-				}
-				args := verifyColOperatorArgs{
-					anyOrder:    hashAgg,
-					inputTypes:  [][]*types.T{inputTypes},
-					inputs:      []sqlbase.EncDatumRows{rows},
-					outputTypes: outputTypes,
-					pspec:       pspec,
-				}
-				if err := verifyColOperator(args); err != nil {
-					if strings.Contains(err.Error(), "different errors returned") {
-						// Columnar and row-based aggregators are likely to hit
-						// different errors, and we will swallow those and move
-						// on.
-						continue
-					}
-					fmt.Printf("--- seed = %d run = %d hash = %t ---\n",
-						seed, run, hashAgg)
-					var aggFnNames string
-					for i, agg := range aggregations {
-						if i > 0 {
-							aggFnNames += " "
-						}
-						aggFnNames += agg.Func.String()
-					}
-					fmt.Printf("--- %s ---\n", aggFnNames)
-					prettyPrintTypes(inputTypes, "t" /* tableName */)
-					prettyPrintInput(rows, inputTypes, "t" /* tableName */)
-					t.Fatal(err)
 				}
 			}
 		}
