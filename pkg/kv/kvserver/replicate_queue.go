@@ -200,7 +200,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 		})
 	}
 	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
-		nl.RegisterCallback(func(_ roachpb.NodeID) {
+		nl.RegisterCallback(func(_ kvserverpb.Liveness) {
 			updateFn()
 		})
 	}
