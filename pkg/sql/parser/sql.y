@@ -1134,7 +1134,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.Persistence> opt_persistence_temp_table
 %type <bool> role_or_group_or_user
 
-%type <tree.Expr>  opt_cron_expr cron_expr opt_description sconst_or_placeholder
+%type <tree.Expr>  cron_expr opt_description sconst_or_placeholder
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
@@ -2100,7 +2100,19 @@ refresh_stmt:
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
-  BACKUP opt_backup_targets INTO string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+  BACKUP opt_backup_targets INTO sconst_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
+  {
+    $$.val = &tree.Backup{
+      Targets: $2.targetListPtr(),
+      To: $6.stringOrPlaceholderOptList(),
+      Nested: true,
+      AppendToLatest: false,
+      Subdir: $4.expr(),
+      AsOf: $7.asOfClause(),
+      Options: *$8.backupOptions(),
+    }
+  }
+| BACKUP opt_backup_targets INTO string_or_placeholder_opt_list opt_as_of_clause opt_with_backup_options
   {
     $$.val = &tree.Backup{
       Targets: $2.targetListPtr(),
@@ -2309,13 +2321,6 @@ cron_expr:
   {
     $$.val = $2.expr()
   }
-
-opt_cron_expr:
-  RECURRING NEVER
-  {
-    $$.val = nil
-  }
-| cron_expr
 
 opt_full_backup_clause:
   FULL BACKUP sconst_or_placeholder
