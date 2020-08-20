@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -28,7 +29,7 @@ import (
 
 type dropSchemaNode struct {
 	n  *tree.DropSchema
-	db *sqlbase.ImmutableDatabaseDescriptor
+	db *sqlbase.MutableDatabaseDescriptor
 	d  *dropCascadeState
 }
 
@@ -36,8 +37,7 @@ type dropSchemaNode struct {
 var _ planNode = &dropSchemaNode{n: nil}
 
 func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode, error) {
-	// TODO (rohany, lucy-zhang): Use a mutable database access method here.
-	db, err := p.ResolveUncachedDatabaseByName(ctx, p.CurrentDatabase(), true /* required */)
+	db, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +94,6 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	mutDB := sqlbase.NewMutableExistingDatabaseDescriptor(*n.db.DatabaseDesc())
-
 	// Queue the job to actually drop the schema.
 	schemaIDs := make([]descpb.ID, len(n.d.schemasToDelete))
 	for i := range n.d.schemasToDelete {
@@ -110,7 +108,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 			ParentSchemaID: keys.RootNamespaceID,
 			Name:           mutDesc.Name,
 		})
-		mutDB.Schemas[mutDesc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
+		n.db.Schemas[mutDesc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
 			ID:      mutDesc.ID,
 			Dropped: true,
 		}
@@ -122,7 +120,10 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	}
 
 	// Write out the change to the database.
-	if err := p.writeDatabaseChange(ctx, mutDB); err != nil {
+	if err := p.writeNonDropDatabaseChange(
+		ctx, n.db,
+		fmt.Sprintf("updating parent database %s for %s", n.db.GetName(), tree.AsStringWithFQNames(n.n, params.Ann())),
+	); err != nil {
 		return err
 	}
 
@@ -177,7 +178,9 @@ func (p *planner) createDropSchemaJob(
 			DroppedTables:     tableDropDetails,
 			DroppedTypes:      typeIDs,
 			DroppedDatabaseID: descpb.InvalidID,
-			FormatVersion:     jobspb.JobResumerFormatVersion,
+			// The version distinction for database jobs doesn't matter for jobs that
+			// drop schemas.
+			FormatVersion: jobspb.DatabaseJobFormatVersion,
 		},
 		Progress: jobspb.SchemaChangeProgress{},
 	})

@@ -390,52 +390,6 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 }
 
-// Tests that SHOW TABLES works correctly when a database is recreated
-// during the time the underlying tables are still being deleted.
-func TestShowTablesAfterRecreateDatabase(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	params, _ := tests.CreateTestServerParams()
-	// Turn off the application of schema changes so that tables do not
-	// get completely dropped.
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			SchemaChangeJobNoOp: func() bool {
-				return true
-			},
-		},
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec(`
-DROP DATABASE t CASCADE;
-CREATE DATABASE t;
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	rows, err := sqlDB.Query(`
-SET DATABASE=t;
-SHOW TABLES;
-`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		t.Fatal("table should be invisible through SHOW TABLES")
-	}
-}
-
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

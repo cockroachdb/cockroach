@@ -167,7 +167,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// TODO (rohany): This is unfortunate that this call to setup vectorize makes
 			//  it's own flow context rather than being able to use the one that is made
 			//  later.
-			flowCtx := dsp.distSQLSrv.NewFlowContext(execinfrapb.FlowID{}, &evalCtx.EvalContext, setupReq.TraceKV, localState)
+			flowCtx := dsp.distSQLSrv.NewFlowContext(ctx, execinfrapb.FlowID{}, &evalCtx.EvalContext, setupReq.TraceKV, localState)
 			// This flowCtx is only used during the vectorize check, so we need to
 			// clean up any accessed descriptors after checking.
 			defer func() {
