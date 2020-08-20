@@ -171,6 +171,14 @@ var _ CCLOnlyStatement = &Export{}
 var _ CCLOnlyStatement = &ScheduledBackup{}
 
 // StatementType implements the Statement interface.
+func (*AlterDatabaseOwner) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABSE OWNER" }
+
+func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -977,6 +985,7 @@ func (*ValuesClause) StatementType() StatementType { return Rows }
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterIndex) String() string                     { return AsString(n) }
+func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterSchema) String() string                    { return AsString(n) }
 func (n *AlterTable) String() string                     { return AsString(n) }
 func (n *AlterTableCmds) String() string                 { return AsString(n) }

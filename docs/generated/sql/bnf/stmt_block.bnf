@@ -1116,6 +1116,7 @@ alter_sequence_stmt ::=
 alter_database_stmt ::=
 	alter_rename_database_stmt
 	| alter_zone_database_stmt
+	| alter_database_owner
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1526,6 +1527,9 @@ alter_rename_database_stmt ::=
 
 alter_zone_database_stmt ::=
 	'ALTER' 'DATABASE' database_name set_zone_config
+
+alter_database_owner ::=
+	'ALTER' 'DATABASE' database_name 'OWNER' 'TO' role_spec
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
@@ -1943,6 +1947,11 @@ alter_index_cmds ::=
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
+
+role_spec ::=
+	non_reserved_word_or_sconst
+	| 'CURRENT_USER'
+	| 'SESSION_USER'
 
 role_option ::=
 	'CREATEROLE'
@@ -2501,11 +2510,6 @@ opt_validate_behavior ::=
 audit_mode ::=
 	'READ' 'WRITE'
 	| 'OFF'
-
-role_spec ::=
-	non_reserved_word_or_sconst
-	| 'CURRENT_USER'
-	| 'SESSION_USER'
 
 signed_iconst64 ::=
 	signed_iconst

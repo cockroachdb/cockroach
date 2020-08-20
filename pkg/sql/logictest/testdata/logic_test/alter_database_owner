@@ -1,0 +1,63 @@
+statement ok
+CREATE DATABASE d
+
+# Ensure user must exist for set owner.
+statement error pq: role/user "fake_user" does not exist
+ALTER DATABASE d OWNER TO fake_user
+
+# Ensure the current user is a member of the role we're setting to.
+statement error pq: must be member of role "testuser"
+ALTER DATABASE d OWNER TO testuser
+
+user testuser
+
+# Ensure the user has to be an owner alter the owner.
+statement error pq: must be owner of database d
+ALTER DATABASE d OWNER TO testuser
+
+user root
+
+statement ok
+GRANT testuser TO root
+
+# testuser satisfies all the requirements to become an owner.
+statement ok
+ALTER DATABASE d OWNER TO testuser
+
+statement ok
+CREATE USER testuser2
+
+# setup to allow testuser2 as a member of testuser to alter the owner.
+statement ok
+REVOKE testuser FROM root
+
+statement ok
+GRANT testuser TO testuser2
+
+statement ok
+GRANT root TO testuser
+
+user testuser2
+
+# testuser2 should be able to alter the owner since it is a member of testuser.
+statement ok
+ALTER DATABASE d OWNER TO root
+
+# set the owner back to testuser.
+
+user root
+
+statement ok
+REVOKE root FROM testuser
+
+statement ok
+GRANT testuser TO root
+
+statement ok
+ALTER DATABASE d OWNER TO testuser
+
+user testuser
+
+# Ensure testuser is owner by dropping the database.
+statement ok
+DROP DATABASE d
