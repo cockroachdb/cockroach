@@ -2559,8 +2559,8 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 					return nil, err
 				}
 				ret := op(
-					MustBeDBox2D(left).CartesianBoundingBox,
-					MustBeDBox2D(right).CartesianBoundingBox,
+					&MustBeDBox2D(left).CartesianBoundingBox,
+					&MustBeDBox2D(right).CartesianBoundingBox,
 				)
 				return MakeDBool(DBool(ret)), nil
 			},
@@ -2574,7 +2574,7 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 					return nil, err
 				}
 				ret := op(
-					MustBeDBox2D(left).CartesianBoundingBox,
+					&MustBeDBox2D(left).CartesianBoundingBox,
 					MustBeDGeometry(right).CartesianBoundingBox(),
 				)
 				return MakeDBool(DBool(ret)), nil
@@ -2590,7 +2590,7 @@ func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bo
 				}
 				ret := op(
 					MustBeDGeometry(left).CartesianBoundingBox(),
-					MustBeDBox2D(right).CartesianBoundingBox,
+					&MustBeDBox2D(right).CartesianBoundingBox,
 				)
 				return MakeDBool(DBool(ret)), nil
 			},
