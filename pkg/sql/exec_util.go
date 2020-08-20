@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1302,8 +1301,9 @@ type registrySession interface {
 	serialize() serverpb.Session
 }
 
-// CancelQuery looks up the associated query in the session registry and cancels it.
-func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
+// CancelQuery looks up the associated query in the session registry and cancels
+// it. The caller is responsible for all permission checks.
+func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
 		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
@@ -1313,11 +1313,6 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for _, session := range r.sessions {
-		if !(username == security.RootUser || username == session.user()) {
-			// Skip this session.
-			continue
-		}
-
 		if session.cancelQuery(queryID) {
 			return true, nil
 		}
@@ -1326,19 +1321,15 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
-// CancelSession looks up the specified session in the session registry and cancels it.
-func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) (bool, error) {
+// CancelSession looks up the specified session in the session registry and
+// cancels it. The caller is responsible for all permission checks.
+func (r *SessionRegistry) CancelSession(sessionIDBytes []byte) (bool, error) {
 	sessionID := BytesToClusterWideID(sessionIDBytes)
 
 	r.Lock()
 	defer r.Unlock()
 
 	for id, session := range r.sessions {
-		if !(username == security.RootUser || username == session.user()) {
-			// Skip this session.
-			continue
-		}
-
 		if id == sessionID {
 			session.cancelSession()
 			return true, nil
