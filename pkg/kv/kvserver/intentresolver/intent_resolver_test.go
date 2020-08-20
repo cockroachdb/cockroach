@@ -53,8 +53,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		Clock:   clock,
 	}
 	type testCase struct {
-		txn           *roachpb.Transaction
-		intents       []roachpb.LockUpdate
+		txn *roachpb.Transaction
+		// intentSpans, if set, are appended to txn.LockSpans. They'll result in
+		// ResolveIntent requests.
+		intentSpans   []roachpb.Span
 		sendFuncs     *sendFuncs
 		expectPushed  bool
 		expectSucceed bool
@@ -106,9 +108,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn1,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -126,10 +128,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn1,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeLockUpdate(txn1, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: roachpb.Key("aa")},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -165,9 +167,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// has been pushed but that the garbage collection was not successful.
 		{
 			txn: txn3,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
@@ -185,10 +187,10 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// that the txn has both been pushed and successfully resolved.
 		{
 			txn: txn3,
-			intents: []roachpb.LockUpdate{
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: roachpb.Key("aa")}),
-				roachpb.MakeLockUpdate(txn3, roachpb.Span{Key: key, EndKey: roachpb.Key("b")}),
+			intentSpans: []roachpb.Span{
+				{Key: key},
+				{Key: roachpb.Key("aa")},
+				{Key: key, EndKey: roachpb.Key("b")},
 			},
 			sendFuncs: func() *sendFuncs {
 				s := newSendFuncs(t)
@@ -207,7 +209,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		// is no push but that the gc has occurred successfully.
 		{
 			txn:           txn4,
-			intents:       []roachpb.LockUpdate{},
+			intentSpans:   []roachpb.Span{},
 			sendFuncs:     newSendFuncs(t, gcSendFunc(t)),
 			expectSucceed: true,
 		},
@@ -222,7 +224,9 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				didPush, didSucceed = pushed, succeeded
 				close(done)
 			}
-			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, c.txn, c.intents, clock.Now(), onComplete)
+			txn := c.txn.Clone()
+			txn.LockSpans = append([]roachpb.Span{}, c.intentSpans...)
+			err := ir.CleanupTxnIntentsOnGCAsync(ctx, 1, txn, clock.Now(), onComplete)
 			if err != nil {
 				t.Fatalf("unexpected error sending async transaction")
 			}
