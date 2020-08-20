@@ -538,8 +538,16 @@ func (ir *IntentResolver) CleanupIntents(
 	return resolved, nil
 }
 
-// CleanupTxnIntentsAsync asynchronously cleans up intents owned by
-// a transaction on completion.
+// CleanupTxnIntentsAsync asynchronously cleans up intents owned by a
+// transaction on completion. When all intents have been successfully resolved,
+// the txn record is GC'ed.
+//
+// WARNING: Since this GCs the txn record, it should only be called in response
+// to requests coming from the coordinator or the GC Queue. We don't want other
+// actors to GC a txn record, since that can cause ambiguities for the
+// coordinator: if it had STAGED the txn, it won't be able to tell the
+// difference between a txn that had been implicitly committed and one that
+// someone else aborted.
 func (ir *IntentResolver) CleanupTxnIntentsAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,

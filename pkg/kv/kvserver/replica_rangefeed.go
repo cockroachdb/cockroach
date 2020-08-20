@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -101,16 +100,11 @@ func (tp *rangefeedTxnPusher) PushTxns(
 	return pushedTxns, nil
 }
 
-// CleanupTxnIntentsAsync is part of the rangefeed.TxnPusher interface.
-func (tp *rangefeedTxnPusher) CleanupTxnIntentsAsync(
-	ctx context.Context, txns []*roachpb.Transaction,
+// ResolveIntents is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) ResolveIntents(
+	ctx context.Context, intents []roachpb.LockUpdate,
 ) error {
-	endTxns := make([]result.EndTxnIntents, len(txns))
-	for i, txn := range txns {
-		endTxns[i].Txn = txn
-		endTxns[i].Poison = true
-	}
-	return tp.ir.CleanupTxnIntentsAsync(ctx, tp.r.RangeID, endTxns, true /* allowSyncProcessing */)
+	return tp.ir.ResolveIntents(ctx, intents, intentresolver.ResolveOptions{}).GoError()
 }
 
 type iteratorWithCloser struct {
