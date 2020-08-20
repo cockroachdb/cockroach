@@ -1357,6 +1357,7 @@ func TestParse(t *testing.T) {
 		{`COPY t (a, b, c) FROM STDIN`},
 		{`COPY crdb_internal.file_upload FROM STDIN WITH destination = 'filename'`},
 		{`COPY t (a, b, c) FROM STDIN WITH BINARY`},
+		{`COPY t (a, b, c) FROM STDIN WITH CSV DELIMITER ',' NULL 'NUL'`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
