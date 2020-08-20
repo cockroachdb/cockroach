@@ -2067,6 +2067,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Disable caching of responses.
 	w.Header().Set("Cache-control", "no-cache")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
 	ae := r.Header.Get(httputil.AcceptEncodingHeader)
 	switch {
