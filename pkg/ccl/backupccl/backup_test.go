@@ -1598,6 +1598,8 @@ func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(pbardea): Add tests for UDS + revision_history.
+
 	// Tests full cluster backup/restore with user defined schemas.
 	t.Run("full-cluster", func(t *testing.T) {
 		_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
@@ -1757,7 +1759,141 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO (rohany): Add some tests for backup/restore with revision history.
+	// This test takes a full backup and an incremental backup with revision
+	// history at certain timestamps, then restores to each of the timestamps to
+	// ensure that the types restored are correct.
+	//
+	// ts1: farewell type exists as (bye, cya)
+	// ts2: no farewell type exists
+	// ts3: farewell type exists as (another)
+	// ts4: no farewell type exists
+	// ts5: farewell type exists as (third)
+	t.Run("revision-history", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		var ts1, ts2, ts3, ts4, ts5 string
+		// Create some types, databases, and tables that use them.
+		sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d;
+CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
+CREATE TABLE d.t1 (x d.farewell);
+INSERT INTO d.t1 VALUES ('bye'), ('cya');
+CREATE TABLE d.plain (x int);
+INSERT INTO d.plain VALUES (1), (2);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
+
+		sqlDB.Exec(t, `
+DROP TABLE d.t1;
+DROP TYPE d.farewell;
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts2)
+
+		sqlDB.Exec(t, `
+CREATE TYPE d.farewell AS ENUM ('another');
+CREATE TABLE d.t1 (x d.farewell);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts3)
+		// Make a full backup that includes ts1, ts2 and ts3.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/rev-history-backup' WITH revision_history`)
+
+		sqlDB.Exec(t, `
+DROP TABLE d.t1;
+DROP TYPE d.farewell;
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts4)
+
+		sqlDB.Exec(t, `
+CREATE TYPE d.farewell AS ENUM ('third');
+CREATE TABLE d.t1 (x d.farewell);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts5)
+		// Make an incremental backup that includes ts4 and ts5.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/rev-history-backup' WITH revision_history`)
+
+		t.Run("ts1", func(t *testing.T) {
+			// Expect the farewell type ('bye', 'cya') to be restored - from the full
+			// backup.
+			sqlDB.Exec(t, `DROP DATABASE d;`)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' 
+  AS OF SYSTEM TIME %s
+`, ts1))
+			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+			sqlDB.Exec(t, `SELECT 'bye'::d.farewell; SELECT 'cya'::d.public.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'another'::d.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'third'::d.farewell;`)
+		})
+
+		t.Run("ts2", func(t *testing.T) {
+			// Expect no farewell type be restored - from the full backup.
+			sqlDB.Exec(t, `DROP DATABASE d;`)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
+		 AS OF SYSTEM TIME %s
+		`, ts2))
+			sqlDB.Exec(t, `CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+		})
+
+		t.Run("ts3", func(t *testing.T) {
+			// Expect the farewell type ('another') to be restored - from the full
+			// backup.
+			sqlDB.Exec(t, `DROP DATABASE d;`)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
+		 AS OF SYSTEM TIME %s
+		`, ts3))
+			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'bye'::d.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'cya'::d.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'third'::d.farewell;`)
+			sqlDB.Exec(t, `SELECT 'another'::d.farewell`)
+		})
+
+		t.Run("ts4", func(t *testing.T) {
+			// Expect no farewell type to be restored - from the incremental backup.
+			sqlDB.Exec(t, `DROP DATABASE d;`)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
+		 AS OF SYSTEM TIME %s
+		`, ts4))
+			sqlDB.Exec(t, `CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+		})
+
+		t.Run("ts5", func(t *testing.T) {
+			// Expect the farewell type ('third') to be restored - from the
+			// incremental backup.
+			sqlDB.Exec(t, `DROP DATABASE d;`)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
+		 AS OF SYSTEM TIME %s
+		`, ts5))
+			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'bye'::d.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'cya'::d.farewell;`)
+			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
+				`SELECT 'another'::d.farewell;`)
+			sqlDB.Exec(t, `SELECT 'third'::d.farewell`)
+		})
+	})
 
 	// Test full cluster backup/restore.
 	t.Run("full-cluster", func(t *testing.T) {

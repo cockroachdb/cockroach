@@ -482,14 +482,15 @@ func getRelevantDescChanges(
 			return nil, err
 		}
 		for _, i := range starting {
-			// TODO(ajwerner): Determine whether types and schemas need any special
+			// TODO(ajwerner,pbardea): Determine whether schemas need any special
 			// treatment here.
-			if table, isTable := i.(catalog.TableDescriptor); isTable {
+			switch desc := i.(type) {
+			case catalog.TableDescriptor, catalog.TypeDescriptor:
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
-				if _, ok := interestingParents[table.GetParentID()]; ok {
-					interestingIDs[table.GetID()] = struct{}{}
+				if _, ok := interestingParents[desc.GetParentID()]; ok {
+					interestingIDs[desc.GetID()] = struct{}{}
 				}
 			}
 			if _, ok := interestingIDs[i.GetID()]; ok {
@@ -515,9 +516,11 @@ func getRelevantDescChanges(
 		if _, ok := interestingIDs[change.ID]; ok {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			if table := sqlbase.TableFromDescriptor(change.Desc, hlc.Timestamp{}); table != nil {
-				if _, ok := interestingParents[table.ParentID]; ok {
-					interestingIDs[table.ID] = struct{}{}
+			desc := unwrapDescriptor(ctx, change.Desc)
+			switch desc := desc.(type) {
+			case catalog.TableDescriptor, catalog.TypeDescriptor:
+				if _, ok := interestingParents[desc.GetParentID()]; ok {
+					interestingIDs[desc.GetID()] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
 				}
 			}
@@ -562,6 +565,16 @@ func getAllDescChanges(
 				if err := rev.GetProto(&desc); err != nil {
 					return nil, err
 				}
+
+				// We update the modification time for the descriptors here with the
+				// timestamp of the KV row so that we can identify the appropriate
+				// descriptors to use during restore.
+				// Note that the modification time of descriptors on disk is usually 0.
+				// See the comment on MaybeSetDescriptorModificationTime... for more.
+				sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
+
+				// Collect the prior IDs of table descriptors, as the ID may have been
+				// changed during truncate.
 				r.Desc = &desc
 				t := sqlbase.TableFromDescriptor(&desc, rev.Timestamp)
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
