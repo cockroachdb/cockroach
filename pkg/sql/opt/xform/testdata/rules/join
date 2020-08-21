@@ -3360,6 +3360,56 @@ project
            ├── st_covers(n.geom:16, c.geom:10) [outer=(10,16), immutable]
            └── st_dwithin(c.geom:10, n.geom:16, 50.0) OR st_intersects(n.geom:16, '0102000000020000000000000000000000000000000000000000000000000000000000000000000040') [outer=(10,16), immutable]
 
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DFullyWithin(c.geom, n.geom, 50)
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_dfullywithin(c.geom:10, n.geom:16, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dfullywithin(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+
+opt expect=GenerateInvertedJoins
+SELECT
+  n.name, c.boroname
+FROM nyc_census_blocks AS c
+JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n
+ON ST_DFullyWithinExclusive(c.geom, n.geom, 50)
+----
+project
+ ├── columns: name:15 boroname:9
+ ├── immutable
+ └── inner-join (lookup nyc_neighborhoods)
+      ├── columns: c.boroname:9 c.geom:10 name:15 n.geom:16
+      ├── key columns: [13] = [13]
+      ├── lookup columns are key
+      ├── immutable
+      ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    ├── columns: c.boroname:9 c.geom:10 n.gid:13!null
+      │    ├── inverted-expr
+      │    │    └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0)
+      │    ├── scan c
+      │    │    └── columns: c.boroname:9 c.geom:10
+      │    └── filters (true)
+      └── filters
+           └── st_dfullywithinexclusive(c.geom:10, n.geom:16, 50.0) [outer=(10,16), immutable]
+
 opt expect=GenerateInvertedJoinsFromSelect
 SELECT
   n.name, c.boroname
