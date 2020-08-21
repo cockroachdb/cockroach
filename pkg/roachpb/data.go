@@ -1430,7 +1430,7 @@ func PrepareTransactionForRetry(
 // PrepareTransactionForRefresh returns whether the transaction can be refreshed
 // to the specified timestamp to avoid a client-side transaction restart. If
 // true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and refreshed timestamp set appropriately.
+// commit timestamp and read timestamp set appropriately.
 func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
 	if txn.CommitTimestampFixed {
 		return false, nil
@@ -1443,8 +1443,7 @@ func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bo
 // CanTransactionRefresh returns whether the transaction specified in the
 // supplied error can be retried at a refreshed timestamp to avoid a client-side
 // transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and refreshed timestamp set
-// appropriately.
+// with the provisional commit timestamp and read timestamp set appropriately.
 func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
 	txn := pErr.GetTxn()
 	if txn == nil {
