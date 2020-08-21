@@ -1279,6 +1279,7 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
 
 		{`ALTER SCHEMA s RENAME TO s2`},
+		{`ALTER SCHEMA s OWNER TO foo`},
 
 		{`ALTER TABLE a RENAME TO b`},
 		{`EXPLAIN ALTER TABLE a RENAME TO b`},

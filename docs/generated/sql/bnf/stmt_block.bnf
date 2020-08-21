@@ -1133,6 +1133,7 @@ alter_partition_stmt ::=
 
 alter_schema_stmt ::=
 	'ALTER' 'SCHEMA' schema_name 'RENAME' 'TO' schema_name
+	| 'ALTER' 'SCHEMA' schema_name 'OWNER' 'TO' role_spec
 
 alter_type_stmt ::=
 	'ALTER' 'TYPE' type_name 'ADD' 'VALUE' 'SCONST' opt_add_val_placement
@@ -1552,6 +1553,11 @@ alter_zone_partition_stmt ::=
 schema_name ::=
 	name
 
+role_spec ::=
+	non_reserved_word_or_sconst
+	| 'CURRENT_USER'
+	| 'SESSION_USER'
+
 opt_add_val_placement ::=
 	'BEFORE' 'SCONST'
 	| 'AFTER' 'SCONST'
@@ -1953,11 +1959,6 @@ alter_index_cmds ::=
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
-
-role_spec ::=
-	non_reserved_word_or_sconst
-	| 'CURRENT_USER'
-	| 'SESSION_USER'
 
 role_option ::=
 	'CREATEROLE'

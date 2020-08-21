@@ -5237,7 +5237,12 @@ alter_schema_stmt:
   }
 | ALTER SCHEMA schema_name OWNER TO role_spec
   {
-    return unimplementedWithIssueDetail(sqllex, 50882, "ALTER SCHEMA OWNER TO")
+    $$.val = &tree.AlterSchema{
+      Schema: $3,
+      Cmd: &tree.AlterSchemaOwner{
+        Owner: $6,
+      },
+    }
   }
 | ALTER SCHEMA error // SHOW HELP: ALTER SCHEMA
 
