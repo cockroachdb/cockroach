@@ -248,7 +248,7 @@ func doShutdown(ctx context.Context, c serverpb.AdminClient) (hardError bool, er
 func getAdminClient(ctx context.Context, cfg server.Config) (serverpb.AdminClient, func(), error) {
 	conn, _, finish, err := getClientGRPCConn(ctx, cfg)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to connect to the node")
+		return nil, nil, errors.Wrap(err, "failed to connect to the node")
 	}
 	return serverpb.NewAdminClient(conn), finish, nil
 }

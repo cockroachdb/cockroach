@@ -303,10 +303,10 @@ func checkFilters(filters FiltersExpr) {
 	for _, item := range filters {
 		if item.Condition.Op() == opt.RangeOp {
 			if !item.scalar.TightConstraints {
-				panic(errors.AssertionFailedf("Range operator should always have tight constraints"))
+				panic(errors.AssertionFailedf("range operator should always have tight constraints"))
 			}
 			if item.scalar.OuterCols.Len() != 1 {
-				panic(errors.AssertionFailedf("Range operator should have exactly one outer col"))
+				panic(errors.AssertionFailedf("range operator should have exactly one outer col"))
 			}
 		}
 	}

@@ -1353,7 +1353,7 @@ func (c *nameCache) get(
 	defer desc.mu.Unlock()
 
 	if !NameMatchesDescriptor(desc, parentID, parentSchemaID, name) {
-		panic(errors.AssertionFailedf("Out of sync entry in the name cache. "+
+		panic(errors.AssertionFailedf("out of sync entry in the name cache. "+
 			"Cache entry: (%d, %d, %q) -> %d. Lease: (%d, %d, %q).",
 			parentID, parentSchemaID, name,
 			desc.GetID(),

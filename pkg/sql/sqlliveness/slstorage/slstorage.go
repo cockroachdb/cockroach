@@ -189,7 +189,7 @@ func (s *Storage) fetchSession(
 			ctx, "expire-single-session", txn, `
 SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid.UnsafeBytes(),
 		)
-		return errors.Wrapf(err, "Could not query session id: %s", sid)
+		return errors.Wrapf(err, "could not query session id: %s", sid)
 	}); err != nil {
 		return false, hlc.Timestamp{}, err
 	}
@@ -269,7 +269,7 @@ func (s *Storage) Insert(
 		return err
 	}); err != nil {
 		s.metrics.WriteFailures.Inc(1)
-		return errors.Wrapf(err, "Could not insert session %s", sid)
+		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
 	log.Infof(ctx, "inserted sqlliveness session %s", sid)
 	s.metrics.WriteSuccesses.Inc(1)
@@ -297,7 +297,7 @@ UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING se
 		s.metrics.WriteFailures.Inc(1)
 	}
 	if err != nil {
-		return false, errors.Wrapf(err, "Could not update session %s", sid)
+		return false, errors.Wrapf(err, "could not update session %s", sid)
 	}
 	s.metrics.WriteSuccesses.Inc(1)
 	return sessionExists, nil

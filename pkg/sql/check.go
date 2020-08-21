@@ -51,7 +51,7 @@ func validateCheckExpr(
 	colSelectors := sqlbase.ColumnsSelectors(tableDesc.Columns)
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 	queryStr := fmt.Sprintf(`SELECT %s FROM [%d AS t] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), exprStr)
-	log.Infof(ctx, "Validating check constraint %q with query %q", expr, queryStr)
+	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
 
 	rows, err := ie.QueryRow(ctx, "validate check constraint", txn, queryStr)
 	if err != nil {
@@ -259,7 +259,7 @@ func validateForeignKey(
 			return err
 		}
 
-		log.Infof(ctx, "Validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
+		log.Infof(ctx, "validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
 			fk.Name,
 			srcTable.Name, colNames,
 			targetTable.GetName(), referencedColumnNames,
@@ -285,7 +285,7 @@ func validateForeignKey(
 		return err
 	}
 
-	log.Infof(ctx, "Validating FK %q (%q [%v] -> %q [%v]) with query %q",
+	log.Infof(ctx, "validating FK %q (%q [%v] -> %q [%v]) with query %q",
 		fk.Name,
 		srcTable.Name, colNames, targetTable.GetName(), referencedColumnNames,
 		query,

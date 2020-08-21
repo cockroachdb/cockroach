@@ -998,7 +998,7 @@ func removeDeadReplicas(
 		removeDeadReplicasOpts.deadStoreIDs)
 
 	if _, ok := deadStoreIDs[storeIdent.StoreID]; ok {
-		return nil, errors.Errorf("This store's ID (%s) marked as dead, aborting", storeIdent.StoreID)
+		return nil, errors.Errorf("this store's ID (%s) marked as dead, aborting", storeIdent.StoreID)
 	}
 
 	var newDescs []roachpb.RangeDescriptor

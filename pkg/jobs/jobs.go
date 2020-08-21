@@ -327,8 +327,8 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 		}
 		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 			return errors.Errorf(
-				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				fractionCompleted, *j.ID(),
+				"job %d: fractionCompleted %f is outside allowable range [0.0, 1.0]",
+				*j.ID(), fractionCompleted,
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -353,8 +353,8 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 		}
 		if highWater.Less(hlc.Timestamp{}) {
 			return errors.Errorf(
-				"Job: high-water %s is outside allowable range > 0.0 (job %d)",
-				highWater, *j.ID(),
+				"job %d: high-water %s is outside allowable range > 0.0",
+				*j.ID(), highWater,
 			)
 		}
 		md.Progress.Progress = &jobspb.Progress_HighWater{
@@ -591,7 +591,7 @@ func (j *Job) succeeded(ctx context.Context, fn func(context.Context, *kv.Txn) e
 			return nil
 		}
 		if md.Status != StatusRunning && md.Status != StatusPending {
-			return errors.Errorf("Job with status %s cannot be marked as succeeded", md.Status)
+			return errors.Errorf("job with status %s cannot be marked as succeeded", md.Status)
 		}
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
@@ -807,7 +807,7 @@ func UnmarshalPayload(datum tree.Datum) (*jobspb.Payload, error) {
 	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
-			"Job: failed to unmarshal payload as DBytes (was %T)", datum)
+			"job: failed to unmarshal payload as DBytes (was %T)", datum)
 	}
 	if err := protoutil.Unmarshal([]byte(*bytes), payload); err != nil {
 		return nil, err
@@ -822,7 +822,7 @@ func UnmarshalProgress(datum tree.Datum) (*jobspb.Progress, error) {
 	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
-			"Job: failed to unmarshal Progress as DBytes (was %T)", datum)
+			"job: failed to unmarshal Progress as DBytes (was %T)", datum)
 	}
 	if err := protoutil.Unmarshal([]byte(*bytes), progress); err != nil {
 		return nil, err
@@ -841,10 +841,10 @@ func unmarshalCreatedBy(createdByType, createdByID tree.Datum) (*CreatedByInfo, 
 			return &CreatedByInfo{Name: string(*ds), ID: int64(*id)}, nil
 		}
 		return nil, errors.Errorf(
-			"Job: failed to unmarshal created_by_type as DInt (was %T)", createdByID)
+			"job: failed to unmarshal created_by_type as DInt (was %T)", createdByID)
 	}
 	return nil, errors.Errorf(
-		"Job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
+		"job: failed to unmarshal created_by_type as DString (was %T)", createdByType)
 }
 
 // CurrentStatus returns the current job status from the jobs table or error.

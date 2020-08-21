@@ -281,6 +281,9 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 		if t.Constraint != nil {
 			fmt.Fprintf(mf.buf, ",constrained")
 		}
+		if t.InvertedConstraint != nil {
+			fmt.Fprintf(mf.buf, ",constrained inverted")
+		}
 		if t.HardLimit.IsSet() {
 			fmt.Fprintf(mf.buf, ",lim=%s", t.HardLimit)
 		}

@@ -830,7 +830,7 @@ POINT (90 0)
 statement error pq: st_pointfromgeohash\(\): geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
-statement error pq: st_pointfromgeohash\(\): Length of geohash must be greater than 0
+statement error pq: st_pointfromgeohash\(\): length of geohash must be greater than 0
 SELECT ST_AsText(ST_PointFromGeoHash(''))
 
 query TTTTTTTT

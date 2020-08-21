@@ -181,7 +181,7 @@ func createCACertAndKey(
 			return errors.Errorf("could not write CA key to file %s: %v", caKeyPath, err)
 		}
 
-		log.Infof(context.Background(), "Generated CA key %s", caKeyPath)
+		log.Infof(context.Background(), "generated CA key %s", caKeyPath)
 	} else {
 		if !allowKeyReuse {
 			return errors.Errorf("CA key %s exists, but key reuse is disabled", caKeyPath)
@@ -197,7 +197,7 @@ func createCACertAndKey(
 			return errors.Errorf("could not parse CA key file %s: %v", caKeyPath, err)
 		}
 
-		log.Infof(context.Background(), "Using CA key from file %s", caKeyPath)
+		log.Infof(context.Background(), "using CA key from file %s", caKeyPath)
 	}
 
 	// Generate certificate.
@@ -233,7 +233,7 @@ func createCACertAndKey(
 		if err != nil {
 			return errors.Errorf("could not parse existing CA cert file %s: %v", certPath, err)
 		}
-		log.Infof(context.Background(), "Found %d certificates in %s",
+		log.Infof(context.Background(), "found %d certificates in %s",
 			len(existingCertificates), certPath)
 	} else if !os.IsNotExist(err) {
 		return errors.Errorf("could not stat CA cert file %s: %v", certPath, err)
@@ -247,7 +247,7 @@ func createCACertAndKey(
 		return errors.Errorf("could not write CA certificate file %s: %v", certPath, err)
 	}
 
-	log.Infof(context.Background(), "Wrote %d certificates to %s", len(certificates), certPath)
+	log.Infof(context.Background(), "wrote %d certificates to %s", len(certificates), certPath)
 
 	return nil
 }
@@ -300,13 +300,13 @@ func CreateNodePair(
 	if err := writeCertificateToFile(certPath, nodeCert, overwrite); err != nil {
 		return errors.Errorf("error writing node server certificate to %s: %v", certPath, err)
 	}
-	log.Infof(context.Background(), "Generated node certificate: %s", certPath)
+	log.Infof(context.Background(), "generated node certificate: %s", certPath)
 
 	keyPath := cm.NodeKeyPath()
 	if err := writeKeyToFile(keyPath, nodeKey, overwrite); err != nil {
 		return errors.Errorf("error writing node server key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated node key: %s", keyPath)
+	log.Infof(context.Background(), "generated node key: %s", keyPath)
 
 	return nil
 }
@@ -355,13 +355,13 @@ func CreateUIPair(
 	if err := writeCertificateToFile(certPath, uiCert, overwrite); err != nil {
 		return errors.Errorf("error writing UI server certificate to %s: %v", certPath, err)
 	}
-	log.Infof(context.Background(), "Generated UI certificate: %s", certPath)
+	log.Infof(context.Background(), "generated UI certificate: %s", certPath)
 
 	keyPath := cm.UIKeyPath()
 	if err := writeKeyToFile(keyPath, uiKey, overwrite); err != nil {
 		return errors.Errorf("error writing UI server key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated UI key: %s", keyPath)
+	log.Infof(context.Background(), "generated UI key: %s", keyPath)
 
 	return nil
 }
@@ -426,20 +426,20 @@ func CreateClientPair(
 	if err := writeCertificateToFile(certPath, clientCert, overwrite); err != nil {
 		return errors.Errorf("error writing client certificate to %s: %v", certPath, err)
 	}
-	log.Infof(context.Background(), "Generated client certificate: %s", certPath)
+	log.Infof(context.Background(), "generated client certificate: %s", certPath)
 
 	keyPath := cm.ClientKeyPath(user)
 	if err := writeKeyToFile(keyPath, clientKey, overwrite); err != nil {
 		return errors.Errorf("error writing client key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated client key: %s", keyPath)
+	log.Infof(context.Background(), "generated client key: %s", keyPath)
 
 	if wantPKCS8Key {
 		pkcs8KeyPath := keyPath + ".pk8"
 		if err := writePKCS8KeyToFile(pkcs8KeyPath, clientKey, overwrite); err != nil {
 			return errors.Errorf("error writing client PKCS8 key to %s: %v", pkcs8KeyPath, err)
 		}
-		log.Infof(context.Background(), "Generated PKCS8 client key: %s", pkcs8KeyPath)
+		log.Infof(context.Background(), "generated PKCS8 client key: %s", pkcs8KeyPath)
 	}
 
 	return nil
@@ -523,13 +523,13 @@ func WriteTenantClientPair(certsDir string, cp *TenantClientPair, overwrite bool
 	if err := writeCertificateToFile(certPath, cp.Cert, overwrite); err != nil {
 		return errors.Errorf("error writing tenant certificate to %s: %v", certPath, err)
 	}
-	log.Infof(context.Background(), "Wrote SQL tenant client certificate: %s", certPath)
+	log.Infof(context.Background(), "wrote SQL tenant client certificate: %s", certPath)
 
 	keyPath := cm.TenantClientKeyPath(tenantIdentifier)
 	if err := writeKeyToFile(keyPath, cp.PrivateKey, overwrite); err != nil {
 		return errors.Errorf("error writing tenant key to %s: %v", keyPath, err)
 	}
-	log.Infof(context.Background(), "Generated tenant key: %s", keyPath)
+	log.Infof(context.Background(), "generated tenant key: %s", keyPath)
 	return nil
 }
 

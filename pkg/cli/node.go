@@ -321,7 +321,7 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
-		return errors.Wrap(err, "Failed to connect to the node")
+		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
 
@@ -544,7 +544,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
-		return errors.Wrap(err, "Failed to connect to the node")
+		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
 

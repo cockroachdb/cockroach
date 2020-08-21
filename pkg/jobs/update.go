@@ -99,7 +99,7 @@ func (ju *JobUpdater) hasUpdates() bool {
 // defined in jobs.go.
 func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 	if j.id == nil {
-		return errors.New("Job: cannot update: job not created")
+		return errors.New("job: cannot update: job not created")
 	}
 
 	var payload *jobspb.Payload
@@ -118,7 +118,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 
 		statusString, ok := row[0].(*tree.DString)
 		if !ok {
-			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
+			return errors.AssertionFailedf("job %d: expected string status, but got %T", *j.id, statusString)
 		}
 		status := Status(*statusString)
 		if payload, err = UnmarshalPayload(row[1]); err != nil {
@@ -194,7 +194,7 @@ func (j *Job) Update(ctx context.Context, updateFn UpdateFn) error {
 		}
 		if n != 1 {
 			return errors.Errorf(
-				"Job: expected exactly one row affected, but %d rows affected by job update", n,
+				"job %d: expected exactly one row affected, but %d rows affected by job update", *j.id, n,
 			)
 		}
 		return nil
