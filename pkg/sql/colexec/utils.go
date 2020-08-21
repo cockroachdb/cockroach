@@ -208,3 +208,49 @@ func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx i
 	}
 	b.length += endIdx - startIdx
 }
+
+// maybeAllocate* methods make sure that the passed in array is allocated, of
+// the desired length and zeroed out.
+func maybeAllocateUint64Array(array []uint64, length int) []uint64 {
+	if cap(array) < length {
+		return make([]uint64, length)
+	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], zeroUint64Column) {
+	}
+	return array
+}
+
+func maybeAllocateBoolArray(array []bool, length int) []bool {
+	if cap(array) < length {
+		return make([]bool, length)
+	}
+	array = array[:length]
+	for n := 0; n < length; n += copy(array[n:], zeroBoolColumn) {
+	}
+	return array
+}
+
+// maybeAllocateLimitedUint64Array is an optimized version of
+// maybeAllocateUint64Array that can *only* be used when length is at most
+// coldata.MaxBatchSize.
+func maybeAllocateLimitedUint64Array(array []uint64, length int) []uint64 {
+	if cap(array) < length {
+		return make([]uint64, length)
+	}
+	array = array[:length]
+	copy(array, zeroUint64Column)
+	return array
+}
+
+// maybeAllocateLimitedBoolArray is an optimized version of
+// maybeAllocateBool64Array that can *only* be used when length is at most
+// coldata.MaxBatchSize.
+func maybeAllocateLimitedBoolArray(array []bool, length int) []bool {
+	if cap(array) < length {
+		return make([]bool, length)
+	}
+	array = array[:length]
+	copy(array, zeroBoolColumn)
+	return array
+}

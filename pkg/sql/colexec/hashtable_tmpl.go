@@ -497,8 +497,6 @@ func _UPDATE_SEL_BODY(_USE_SEL bool) { // */}}
 			}
 		}
 	}
-	copy(ht.probeScratch.headID[:batchLength], zeroUint64Column)
-	copy(ht.probeScratch.differs[:batchLength], zeroBoolColumn)
 	// {{end}}
 	// {{/*
 } // */}}
@@ -530,7 +528,7 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
 func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	probeVecs := ht.probeScratch.keys
+	probeVecs := ht.keys
 	buildVecs := ht.vals.ColVecs()
 	buildKeyCols := ht.keyCols
 	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
