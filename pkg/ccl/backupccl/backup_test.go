@@ -1765,7 +1765,97 @@ func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(pbardea): Add tests for UDS + revision_history.
+	// This test takes a full backup and an incremental backup with revision
+	// history at certain timestamps, then restores to each of the timestamps to
+	// ensure that the types restored are correct.
+	t.Run("revision-history", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		var ts1, ts2, ts3, ts4, ts5, ts6 string
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+CREATE DATABASE d;
+USE d;
+
+CREATE SCHEMA sc;
+CREATE SCHEMA sc2;
+CREATE TABLE d.sc.t1 (x int);
+CREATE TABLE d.sc2.t1 (x bool);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
+
+		sqlDB.Exec(t, `
+ALTER SCHEMA sc RENAME TO sc3;
+ALTER SCHEMA sc2 RENAME TO sc;
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts2)
+
+		sqlDB.Exec(t, `
+DROP TABLE sc.t1;
+DROP TABLE sc3.t1;
+DROP SCHEMA sc;
+DROP SCHEMA sc3;
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts3)
+
+		sqlDB.Exec(t, `
+ CREATE SCHEMA sc;
+ CREATE TABLE sc.t1 (a STRING);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts4)
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/rev-history-backup' WITH revision_history`)
+
+		sqlDB.Exec(t, `
+DROP TABLE sc.t1;
+DROP SCHEMA sc;
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts5)
+
+		sqlDB.Exec(t, `
+CREATE SCHEMA sc;
+CREATE TABLE sc.t1 (a FLOAT);
+`)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts6)
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/rev-history-backup' WITH revision_history`)
+
+		t.Run("ts1", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts1)
+			sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES (1)")
+			sqlDB.Exec(t, "INSERT INTO d.sc2.t1 VALUES (true)")
+			sqlDB.Exec(t, "USE d; CREATE SCHEMA unused;")
+		})
+		t.Run("ts2", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts2)
+			sqlDB.Exec(t, "INSERT INTO d.sc3.t1 VALUES (1)")
+			sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES (true)")
+		})
+		t.Run("ts3", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts3)
+			sqlDB.Exec(t, "USE d")
+			sqlDB.Exec(t, "CREATE SCHEMA sc")
+			sqlDB.Exec(t, "CREATE SCHEMA sc3;")
+		})
+		t.Run("ts4", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts4)
+			sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES ('hello')")
+		})
+		t.Run("ts5", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts5)
+			sqlDB.Exec(t, "USE d")
+			sqlDB.Exec(t, "CREATE SCHEMA sc")
+		})
+		t.Run("ts6", func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d;")
+			sqlDB.Exec(t, "RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' AS OF SYSTEM TIME "+ts6)
+			sqlDB.Exec(t, `INSERT INTO d.sc.t1 VALUES (123.123)`)
+		})
+	})
 
 	// Tests full cluster backup/restore with user defined schemas.
 	t.Run("full-cluster", func(t *testing.T) {
