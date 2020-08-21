@@ -1883,7 +1883,7 @@ project
            └── st_dwithinexclusive('0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000', geom:3, 2.0) [outer=(3), immutable]
 
 # Commuted version of previous test.
-opt expect=GenerateInvertedIndexScans
+opt
 SELECT k FROM g WHERE ST_DWithinExclusive(geom, 'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))'::geometry, 2)
 ----
 project

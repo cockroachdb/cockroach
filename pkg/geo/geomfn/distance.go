@@ -114,7 +114,7 @@ func LongestLineString(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) 
 	if a.SRID() != b.SRID() {
 		return nil, geo.NewMismatchingSRIDsError(a, b)
 	}
-	u := newGeomMaxDistanceUpdater(math.MaxFloat64, geo.FnExclusive)
+	u := newGeomMaxDistanceUpdater(math.MaxFloat64, geo.FnInclusive)
 	return distanceLineStringInternal(a, b, u, geo.EmptyBehaviorOmit)
 }
 

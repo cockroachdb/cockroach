@@ -2525,7 +2525,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units inclusive. " +
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
@@ -3975,7 +3975,7 @@ Bottom Left.`,
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units exclusive. " +
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
