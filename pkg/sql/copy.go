@@ -58,6 +58,10 @@ type copyMachine struct {
 	resultColumns colinfo.ResultColumns
 	format        tree.CopyFormat
 	binaryState   binaryState
+	// forceNotNull disables converting values matching the null string to
+	// NULL. The spec says this is only supported for CSV, and also must specify
+	// which columns it applies to.
+	forceNotNull bool
 	// buf is used to parse input data into rows. It also accumulates a partial
 	// row between protocol messages.
 	buf bytes.Buffer
@@ -507,7 +511,9 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
 		s := string(part)
-		if s == nullString {
+		// Although the spec says this is only supported for CSV, we need it here to
+		// disable NULL conversion during file uploads.
+		if !c.forceNotNull && s == nullString {
 			exprs[i] = tree.DNull
 			continue
 		}
