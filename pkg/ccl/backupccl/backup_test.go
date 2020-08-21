@@ -1468,7 +1468,94 @@ func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(pbardea): Add tests for UDS + revision_history.
+	// This test takes a full backup and an incremental backup with revision
+	// history at certain timestamps, then restores to each of the timestamps to
+	// ensure that the types restored are correct.
+	t.Run("revision-history", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		// This test creates, renames and deletes user defined schemas and
+		// periodically takes backups. Schemas are asserted to be the right one by
+		// checking that the expected table is found under it, via an INSERT. If the
+		// wrong schema and table is restored, we expect the insert to fail.
+		revisions := []revisionTestCases{
+			{
+				sql: `
+SET experimental_enable_user_defined_schemas = true;
+CREATE DATABASE d;
+USE d;
+
+CREATE SCHEMA sc;
+CREATE SCHEMA sc2;
+CREATE TABLE d.sc.t1 (x int);
+CREATE TABLE d.sc2.t1 (x bool);
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES (1)")
+					sqlDB.Exec(t, "INSERT INTO d.sc2.t1 VALUES (true)")
+					sqlDB.Exec(t, "USE d; CREATE SCHEMA unused;")
+				},
+			},
+			{
+				sql: `
+CREATE SCHEMA unused;
+ALTER SCHEMA sc RENAME TO sc3;
+ALTER SCHEMA sc2 RENAME TO sc;
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, "INSERT INTO d.sc3.t1 VALUES (1)")
+					sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES (true)")
+					sqlDB.Exec(t, "CREATE TABLE d.unused.new (a INT)")
+				},
+			},
+			{
+				sql: `
+DROP TABLE sc.t1;
+DROP TABLE sc3.t1;
+DROP SCHEMA sc;
+DROP SCHEMA sc3;
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, "USE d")
+					sqlDB.Exec(t, "CREATE SCHEMA sc")
+					sqlDB.Exec(t, "CREATE SCHEMA sc3;")
+				},
+			},
+			{
+				sql: `
+CREATE SCHEMA sc;
+CREATE TABLE sc.t1 (a STRING);
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, "INSERT INTO d.sc.t1 VALUES ('hello')")
+				},
+				shouldBackup: true,
+			},
+			{
+				sql: `
+DROP TABLE sc.t1;
+DROP SCHEMA sc;
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, "USE d")
+					sqlDB.Exec(t, "CREATE SCHEMA sc")
+				},
+			},
+			{
+				sql: `
+CREATE SCHEMA sc;
+CREATE TABLE sc.t1 (a FLOAT);
+`,
+				check: func(t *testing.T) {
+					sqlDB.Exec(t, `INSERT INTO d.sc.t1 VALUES (123.123)`)
+				},
+				shouldBackup: true,
+			},
+		}
+
+		testRevisionHistory(t, sqlDB, revisions)
+	})
 
 	// Tests full cluster backup/restore with user defined schemas.
 	t.Run("full-cluster", func(t *testing.T) {
