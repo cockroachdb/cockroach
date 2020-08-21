@@ -69,7 +69,7 @@ func newWorkerSeqWrite(
 	data := make([]byte, diskOptions.WriteSize)
 	_, err := rand.Read(data)
 	if err != nil {
-		log.Fatalf(ctx, "Failed to fill byte array with random bytes %s", err)
+		log.Fatalf(ctx, "failed to fill byte array with random bytes %s", err)
 	}
 
 	w := &workerSeqWrite{data: data,

@@ -62,7 +62,7 @@ func TestSQLInstance(t *testing.T) {
 	require.Equal(t, s1.ID(), s2.ID())
 
 	_ = fakeStorage.Delete(ctx, s2.ID())
-	t.Logf("Deleted session %s", s2.ID())
+	t.Logf("deleted session %s", s2.ID())
 	a, err = fakeStorage.IsAlive(ctx, s2.ID())
 	require.NoError(t, err)
 	require.False(t, a)

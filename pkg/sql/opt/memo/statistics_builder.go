@@ -505,8 +505,27 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		return stats
 	}
 
-	// Make now and annotate the metadata table with it for next time.
 	tab := sb.md.Table(tabID)
+
+	// Create a mapping from table column ordinals to inverted index virtual column
+	// ordinals. This allows us to do a fast lookup while iterating over all stats
+	// from a statistic's column to any associated virtual columns. We don't merely
+	// loop over all table columns looking for virtual columns here because other
+	// things may one day use virtual columns and we want these to be explicitly
+	// tied to inverted indexes.
+	invIndexVirtualCols := make(map[int][]int)
+	for indexI, indexN := 0, tab.IndexCount(); indexI < indexN; indexI++ {
+		index := tab.Index(indexI)
+		if !index.IsInverted() {
+			continue
+		}
+		// The first column of inverted indexes is always virtual.
+		col := index.Column(0)
+		srcOrd := col.InvertedSourceColumnOrdinal()
+		invIndexVirtualCols[srcOrd] = append(invIndexVirtualCols[srcOrd], col.Ordinal())
+	}
+
+	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 	if tab.StatisticCount() == 0 {
 		// No statistics.
@@ -541,8 +560,28 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 				if cols.Len() == 1 && stat.Histogram() != nil &&
 					sb.evalCtx.SessionData.OptimizerUseHistograms {
 					col, _ := cols.Next(0)
-					colStat.Histogram = &props.Histogram{}
-					colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
+
+					// If this column is invertable, the histogram describes the inverted index
+					// entries, and we need to create a new stat for it, and not apply a histogram
+					// to the source column.
+					virtualColOrds := invIndexVirtualCols[stat.ColumnOrdinal(0)]
+					if len(virtualColOrds) == 0 {
+						colStat.Histogram = &props.Histogram{}
+						colStat.Histogram.Init(sb.evalCtx, col, stat.Histogram())
+					} else {
+						for _, virtualColOrd := range virtualColOrds {
+							invCol := tabID.ColumnID(virtualColOrd)
+							invCols := opt.MakeColSet(invCol)
+							if invColStat, ok := stats.ColStats.Add(invCols); ok {
+								invColStat.Histogram = &props.Histogram{}
+								invColStat.Histogram.Init(sb.evalCtx, invCol, stat.Histogram())
+								// Set inverted entry counts from the histogram.
+								invColStat.DistinctCount = invColStat.Histogram.DistinctValuesCount()
+								// Inverted indexes don't have nulls.
+								invColStat.NullCount = 0
+							}
+						}
+					}
 				}
 
 				// Make sure the distinct count is at least 1, for the same reason as
@@ -616,8 +655,13 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 	// If the constraint has a single span or is an inverted constraint, apply
 	// the constraint selectivity and the partial index predicate (if it exists)
 	// to the underlying table stats.
-	if scan.InvertedConstraint != nil ||
-		(scan.Constraint != nil && scan.Constraint.Spans.Count() < 2) {
+	if scan.InvertedConstraint != nil {
+		// TODO(mjibson): support partial index predicates for inverted constraints.
+		sb.invertedConstrainScan(scan, relProps)
+		sb.finalizeFromCardinality(relProps)
+		return
+	}
+	if scan.Constraint != nil && scan.Constraint.Spans.Count() < 2 {
 		sb.constrainScan(scan, scan.Constraint, pred, relProps, s)
 		sb.finalizeFromCardinality(relProps)
 		return
@@ -694,11 +738,7 @@ func (sb *statisticsBuilder) constrainScan(
 	// For now, don't apply constraints on inverted index columns.
 	if sb.md.Table(scan.Table).Index(scan.Index).IsInverted() {
 		if scan.InvertedConstraint != nil {
-			// For now, just assume a single closed span such as ["\xfd", "\xfe").
-			// This corresponds to two "conjuncts" as defined in
-			// numConjunctsInConstraint.
-			// TODO(rytaft): Use the constraint to estimate selectivity.
-			numUnappliedConjuncts += 2
+			panic(errors.AssertionFailedf("scan.InvertedConstraint not nil"))
 		}
 		if constraint != nil {
 			for i, n := 0, constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
@@ -742,6 +782,63 @@ func (sb *statisticsBuilder) constrainScan(
 	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(scan, notNullCols, constrainedCols))
+
+	// Adjust the selectivity so we don't double-count the histogram columns.
+	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
+}
+
+// invertedConstrainScan is called from buildScan to calculate the stats for
+// the scan based on the given inverted constraint.
+func (sb *statisticsBuilder) invertedConstrainScan(scan *ScanExpr, relProps *props.Relational) {
+	s := &relProps.Stats
+
+	// Calculate distinct counts and histograms for constrained columns
+	// ----------------------------------------------------------------
+	var numUnappliedConjuncts float64
+	var constrainedCols, histCols opt.ColSet
+	idx := sb.md.Table(scan.Table).Index(scan.Index)
+	// The constrained column is the first (and only) column in the inverted
+	// index. Using scan.Cols here would also include the PK, which we don't want.
+	constrainedCols.Add(scan.Table.ColumnID(idx.Column(0).Ordinal()))
+	if sb.shouldUseHistogram(relProps, constrainedCols) {
+		constrainedCols.ForEach(func(col opt.ColumnID) {
+			colSet := opt.MakeColSet(col)
+			// TODO(mjibson): set distinctCount to something correct. Max is fine for now
+			// because ensureColStat takes the minimum of the passed value and colSet's
+			// distinct count.
+			const distinctCount = math.MaxFloat64
+			sb.ensureColStat(colSet, distinctCount, scan, s)
+
+			inputStat, _ := sb.colStatFromInput(colSet, scan)
+			if inputHist := inputStat.Histogram; inputHist != nil {
+				// If we have a histogram, set the row count to its total, unfiltered
+				// count. This is needed because s.RowCount is currently the row count of the
+				// table, but should instead reflect the number of inverted index entries.
+				s.RowCount = inputHist.ValuesCount()
+				if colStat, ok := s.ColStats.Lookup(colSet); ok {
+					colStat.Histogram = inputHist.InvertedFilter(scan.InvertedConstraint)
+					histCols.Add(col)
+					sb.updateDistinctCountFromHistogram(colStat, inputStat.DistinctCount)
+				}
+			} else {
+				// Just assume a single closed span such as ["\xfd", "\xfe"). This corresponds
+				// to two "conjuncts" as defined in numConjunctsInConstraint.
+				numUnappliedConjuncts += 2
+			}
+		})
+	} else {
+		// Assume a single closed span.
+		numUnappliedConjuncts += 2
+	}
+
+	// Inverted indexes don't contain NULLs, so we do not need to have
+	// updateNullCountsFromNotNullCols or selectivityFromNullsRemoved here.
+
+	// Calculate row count and selectivity
+	// -----------------------------------
+	s.ApplySelectivity(sb.selectivityFromHistograms(histCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromMultiColDistinctCounts(constrainedCols, scan, s))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 	// Adjust the selectivity so we don't double-count the histogram columns.
 	s.ApplySelectivity(1.0 / sb.selectivityFromSingleColDistinctCounts(histCols, scan, s))
@@ -2506,14 +2603,20 @@ func (sb *statisticsBuilder) shouldUseHistogram(relProps *props.Relational, cols
 	if relProps.Cardinality.Max < minCardinalityForHistogram {
 		return false
 	}
-	hasInv := false
+	allowHist := true
 	cols.ForEach(func(col opt.ColumnID) {
 		colTyp := sb.md.ColumnMeta(col).Type
-		if sqlbase.ColumnTypeIsInvertedIndexable(colTyp) {
-			hasInv = true
+		switch colTyp {
+		case types.Geometry, types.Geography:
+			// Special case these since ColumnTypeIsInvertedIndexable returns true for
+			// them, but they are supported in histograms now.
+		default:
+			if sqlbase.ColumnTypeIsInvertedIndexable(colTyp) {
+				allowHist = false
+			}
 		}
 	})
-	return !hasInv
+	return allowHist
 }
 
 // rowsProcessed calculates and returns the number of rows processed by the

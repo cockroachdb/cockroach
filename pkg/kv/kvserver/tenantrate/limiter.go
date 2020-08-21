@@ -195,7 +195,7 @@ func (rb *tokenBuckets) Merge(val interface{}) (shouldNotify bool) {
 		// further in the future.
 		return false
 	default:
-		panic(errors.AssertionFailedf("Merge not implemented for %T", val))
+		panic(errors.AssertionFailedf("merge not implemented for %T", val))
 	}
 }
 

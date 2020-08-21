@@ -277,7 +277,7 @@ func (s *jobScheduler) executeSchedules(
 func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
-		log.Infof(ctx, "Waiting %s before scheduled jobs daemon start", initialDelay.String())
+		log.Infof(ctx, "waiting %s before scheduled jobs daemon start", initialDelay.String())
 
 		for timer := time.NewTimer(initialDelay); ; timer.Reset(
 			getWaitPeriod(&s.Settings.SV, s.TestingKnobs)) {
@@ -286,7 +286,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				return
 			case <-timer.C:
 				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Info(ctx, "Scheduled job daemon disabled")
+					log.Info(ctx, "scheduled job daemon disabled")
 					continue
 				}
 

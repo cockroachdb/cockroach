@@ -411,10 +411,10 @@ func (m *Outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 					return
 				}
 			case signal.SetupFlowRequest != nil:
-				log.Fatalf(ctx, "Unexpected SetupFlowRequest. "+
+				log.Fatalf(ctx, "unexpected SetupFlowRequest.\n"+
 					"This SyncFlow specific message should have been handled in RunSyncFlow.")
 			case signal.Handshake != nil:
-				log.Eventf(ctx, "Consumer sent handshake. Consuming flow scheduled: %t",
+				log.Eventf(ctx, "consumer sent handshake.\nConsuming flow scheduled: %t",
 					signal.Handshake.ConsumerScheduled)
 			}
 		}

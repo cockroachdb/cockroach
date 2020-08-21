@@ -128,7 +128,9 @@ func MakeBulkAdder(
 	// it will store in-memory before sending it to RocksDB.
 	b.memAcc = bulkMon.MakeBoundAccount()
 	if err := b.memAcc.Grow(ctx, b.curBufferSize); err != nil {
-		return nil, errors.Wrap(err, "Not enough memory available to create a BulkAdder. Try setting a higher --max-sql-memory.")
+		return nil, errors.WithHint(
+			errors.Wrap(err, "not enough memory available to create a BulkAdder"),
+			"Try setting a higher --max-sql-memory.")
 	}
 
 	return b, nil

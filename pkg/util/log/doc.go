@@ -35,8 +35,8 @@
 //
 // Examples:
 //
-//	log.Info(ctx, "Prepare to repel boarders")
-//	log.Fatal(ctx, "Initialization failed", err)
+//	log.Info(ctx, "prepare to repel boarders")
+//	log.Fatal(ctx, "initialization failed", err)
 //	log.Infof(ctx, "client error: %s", err)
 //
 // V-Style
@@ -49,7 +49,7 @@
 // Examples:
 //
 //	if log.V(2) {
-//		log.Info(ctx, "Starting transaction...")
+//		log.Info(ctx, "starting transaction...")
 //	}
 //
 // Events

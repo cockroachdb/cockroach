@@ -307,7 +307,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 	timestamp, err := info.Timestamp()
 	if err != nil {
 		// We can't panic here, tests don't have a build timestamp.
-		log.Warningf(ctx, "Could not parse build timestamp: %v", err)
+		log.Warningf(ctx, "could not parse build timestamp: %v", err)
 	}
 
 	// Build information.
