@@ -89,6 +89,32 @@ message StatementStatistics {
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 }
 
+message TransactionStatistics {
+  // Count is the total number of times this transaction was executed
+  // since the beginning of the reporting period.
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+
+  // MaxRetries collects the maximum observed number of automatic
+  // retries in the reporting period.
+  optional int64 max_retries = 2 [(gogoproto.nullable) = false];
+
+  // NumRows collects the total number of rows returned or observed across all
+  // statements.
+  optional NumericStat num_rows = 3 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time to service the transaction, from the time a
+  // transaction was received to end of execution.
+  optional NumericStat service_lat = 4 [(gogoproto.nullable) = false];
+
+  // RetryLat is the amount of time spent retrying the transaction.
+  optional NumericStat retry_lat = 5 [(gogoproto.nullable) = false];
+
+  // CommitLat is the amount of time required to commit the transaction after
+  // all statement operations have been applied.
+  optional NumericStat commit_lat = 6 [(gogoproto.nullable) = false];
+}
+
+
 message SensitiveInfo {
   option (gogoproto.equal) = true;
   // LastErr collects the last error encountered.
@@ -125,11 +151,29 @@ message StatementStatisticsKey {
   optional bool vec = 7 [(gogoproto.nullable) = false];
 }
 
-// CollectedStats wraps collected timings and metadata for some query's execution.
+// CollectedStatementStatistics wraps collected timings and metadata for some
+// query's execution.
 message CollectedStatementStatistics {
+  // ID is a hash of the statement key (query fingerprint, failure status,
+  // implicit txn or not) which can be used to identify the statement
+  // for instance in transaction statistics.
+  optional string id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "StmtID"];
   optional StatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
   optional StatementStatistics stats = 2 [(gogoproto.nullable) = false];
 }
+
+
+// CollectedTransactionStatistics wraps collected timings and metadata for some
+// transaction executions.
+message CollectedTransactionStatistics {
+  // StatementIDs is the IDs of the statements which this transaction comprises,
+  // in order.
+  repeated string statement_ids = 1 [(gogoproto.customname) = "StatementIDs", (gogoproto.casttype) = "StmtID"] ;
+  // App is the name of the app which executed the transaction.
+  optional string app = 2 [(gogoproto.nullable) = false];
+  optional TransactionStatistics stats = 3[(gogoproto.nullable) = false];
+}
+
 
 // ExplainTreePlanNode is a serialized representation of an EXPLAIN tree for a logical plan.
 message ExplainTreePlanNode {

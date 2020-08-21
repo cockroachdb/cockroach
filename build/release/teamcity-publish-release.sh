@@ -91,7 +91,7 @@ docker_login
 
 # TODO: update publish-artifacts with option to leave one or more cockroach binaries in the local filesystem
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach build/deploy
+cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 
 docker build --no-cache --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} --tag=${gcr_repository}:${build_name} build/deploy
 

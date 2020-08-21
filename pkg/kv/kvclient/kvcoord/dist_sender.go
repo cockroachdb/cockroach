@@ -1003,7 +1003,8 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// the commit succeeded.
 		return false, roachpb.NewAmbiguousResultErrorf("error=%s [intent missing]", pErr)
 	}
-	respTxn := &br.Responses[0].GetQueryTxn().QueriedTxn
+	resp := br.Responses[0].GetQueryTxn()
+	respTxn := &resp.QueriedTxn
 	switch respTxn.Status {
 	case roachpb.COMMITTED:
 		// The transaction has already been finalized as committed. The missing
@@ -1014,18 +1015,18 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// successfully, so ignore the error.
 		return true, nil
 	case roachpb.ABORTED:
-		// The transaction has either already been finalized as aborted or has
-		// been finalized as committed and already had its transaction record
-		// GCed. We can't distinguish between these two conditions with full
-		// certainty, so we're forced to return an ambiguous commit error.
-		// TODO(nvanbenschoten): QueryTxn will materialize an ABORTED transaction
-		// record if one does not already exist. If we are certain that no actor
-		// will ever persist an ABORTED transaction record after a COMMIT record is
-		// GCed and we returned whether the record was synthesized in the QueryTxn
-		// response then we could use the existence of an ABORTED transaction record
-		// to further isolates the ambiguity caused by the loss of information
-		// during intent resolution. If this error becomes a problem, we can explore
-		// this option.
+		// The transaction has either already been finalized as aborted or has been
+		// finalized as committed and already had its transaction record GCed. Both
+		// these cases return an ABORTED txn; in the GC case the record has been
+		// synthesized.
+		// If the the record has been GC'ed, then we can't distinguish between the
+		// two cases, and so we're forced to return an ambiguous error. On the other
+		// hand, if the record exists, then we know that the transaction did not
+		// commit because a committed record cannot be GC'ed and the recreated as
+		// ABORTED.
+		if resp.TxnRecordExists {
+			return false, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+		}
 		return false, roachpb.NewAmbiguousResultErrorf("intent missing and record aborted")
 	default:
 		// The transaction has not been finalized yet, so the missing intent

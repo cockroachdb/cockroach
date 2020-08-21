@@ -13,9 +13,11 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1543,6 +1545,120 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		if strings.Contains(event.PrettyInfo.NewDesc, "Min-System") ||
 			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {
 			t.Errorf("unexpected key value found in rangelog event info: %+v", event.PrettyInfo)
+		}
+	}
+}
+
+func TestStatusAPITransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	thirdServer := testCluster.Server(2)
+	pgURL, cleanupGoDB := sqlutils.PGUrl(
+		t, thirdServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(security.RootUser))
+	defer cleanupGoDB()
+	firstServerProto := testCluster.Server(0)
+
+	type testCase struct {
+		query         string
+		fingerprinted string
+		count         int
+		shouldRetry   bool
+	}
+
+	testCases := []testCase{
+		{query: `CREATE DATABASE roachblog`, count: 1},
+		{query: `SET database = roachblog`, count: 1},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1},
+		{
+			query:         `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+			count:         1,
+		},
+		{query: `SELECT * FROM posts`, count: 2},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+		},
+		{
+			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
+			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
+			shouldRetry:   true,
+			count:         1,
+		},
+	}
+
+	appNameToTestCase := make(map[string]testCase)
+
+	for i, tc := range testCases {
+		appName := fmt.Sprintf("app%d", i)
+		appNameToTestCase[appName] = tc
+
+		// Create a brand new connection for each app, so that we don't pollute
+		// transaction stats collection with `SET application_name` queries.
+		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
+			t.Fatal(err)
+		}
+		for c := 0; c < tc.count; c++ {
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	respAppNames := make(map[string]bool)
+	for _, respTransaction := range resp.Transactions {
+		appName := respTransaction.StatsData.App
+		tc, found := appNameToTestCase[appName]
+		if !found {
+			// Ignore internal queries, they aren't relevant to this test.
+			continue
+		}
+		respAppNames[appName] = true
+		stats := respTransaction.StatsData.Stats
+		if tc.count != int(stats.Count) {
+			t.Fatalf("app: %s, expected count %d, got %d", appName, tc.count, stats.Count)
+		}
+		if tc.shouldRetry && respTransaction.StatsData.Stats.MaxRetries == 0 {
+			t.Fatalf("app: %s, expected retries, got none\n", appName)
+		}
+
+		// Sanity check numeric stat values
+		if respTransaction.StatsData.Stats.CommitLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for commit latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.RetryLat.Mean <= 0 && tc.shouldRetry {
+			t.Fatalf("app: %s, expected retry latency mean to be non-zero as retries were involved\n", appName)
+		}
+		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
+			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
+		}
+	}
+
+	// Ensure we got transaction statistics for all the queries we sent.
+	for appName := range appNameToTestCase {
+		if _, found := respAppNames[appName]; !found {
+			t.Fatalf("app: %s did not appear in the response\n", appName)
 		}
 	}
 }

@@ -820,6 +820,16 @@ message StatementsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;
+
+  message ExtendedCollectedTransactionStatistics {
+    cockroach.sql.CollectedTransactionStatistics stats_data = 1 [(gogoproto.nullable) = false];
+    int32 node_id = 2 [(gogoproto.customname) = "NodeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  }
+
+  // Transactions is transaction-level statistics for the collection of
+  // statements in this response.
+  repeated ExtendedCollectedTransactionStatistics transactions = 5 [(gogoproto.nullable) = false];
 }
 
 message StatementDiagnosticsReport {
