@@ -585,7 +585,7 @@ func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
 		// pred's operator, then e is an exact match to pred and it should be
 		// removed from the remaining filters. For example, (a > b) and
 		// (b < a) both individually imply (a > b) with no remaining filters.
-		if e.Op() == pred.Op() || commutedOp(e.Op()) == pred.Op() {
+		if exactMatches != nil && (e.Op() == pred.Op() || commutedOp(e.Op()) == pred.Op()) {
 			exactMatches[e] = struct{}{}
 		}
 		return true, true
