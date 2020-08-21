@@ -1842,8 +1842,7 @@ full-join (cross)
  │    ├── columns: k:1!null
  │    └── key: (1)
  ├── scan xy
- └── filters
-      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ └── filters (true)
 
 norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k >= a.k
@@ -1854,8 +1853,7 @@ full-join (cross)
  │    ├── columns: k:1!null
  │    └── key: (1)
  ├── scan xy
- └── filters
-      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ └── filters (true)
 
 norm expect=(SimplifySameVarEqualities,SimplifyJoinFilters)
 SELECT a.k FROM a FULL OUTER JOIN xy ON a.k <= a.k
@@ -1866,8 +1864,7 @@ full-join (cross)
  │    ├── columns: k:1!null
  │    └── key: (1)
  ├── scan xy
- └── filters
-      └── k:1 IS DISTINCT FROM CAST(NULL AS INT8) [outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ └── filters (true)
 
 norm expect=SimplifySameVarEqualities
 SELECT k = k FROM a
