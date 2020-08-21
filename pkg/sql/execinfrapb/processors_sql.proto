@@ -139,6 +139,11 @@ message TableReaderSpec {
   // synthesize. These system columns will be placed at the end of the row
   // output by the TableReader, in the order specified.
   repeated sqlbase.SystemColumnKind system_columns = 13;
+
+  // Indicates virtual columns which may have a different type than the columns
+  // stored in the table descriptor. For example, the key column in an inverted
+  // index has a different type than the column it indexes in the base table.
+  repeated sqlbase.ColumnDescriptor virtual_columns = 14;
 }
 
 // IndexSkipTableReaderSpec is the specification for a table reader that

@@ -99,7 +99,12 @@ func makeScanColumnsConfig(table cat.Table, cols exec.TableColumnOrdinalSet) sca
 	for ord, ok := cols.Next(0); ok; ord, ok = cols.Next(ord + 1) {
 		col := table.Column(ord)
 		if col.Kind() == cat.Virtual {
+			typ := col.DatumType()
 			col = table.Column(col.InvertedSourceColumnOrdinal())
+			if colCfg.virtualColumns == nil {
+				colCfg.virtualColumns = make(map[tree.ColumnID]*types.T)
+			}
+			colCfg.virtualColumns[tree.ColumnID(col.ColID())] = typ
 		}
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(col.ColID()))
 	}

@@ -3444,6 +3444,31 @@ func (desc *Immutable) ColumnTypesWithMutations(mutations bool) []*types.T {
 	return types
 }
 
+// ColumnTypesWithMutationsAndVirtualCols returns the types of all columns,
+// optionally including mutation columns, which will be returned if the input
+// bool is true. If virtualCols is non-nil, substitutes the type of the virtual
+// column instead of the table column with the same ID.
+func (desc *Immutable) ColumnTypesWithMutationsAndVirtualCols(
+	mutations bool, virtualCols []*descpb.ColumnDescriptor,
+) []*types.T {
+	columns := desc.ColumnsWithMutations(mutations)
+	types := make([]*types.T, len(columns))
+	for i := range columns {
+		foundVirtual := false
+		for j := range virtualCols {
+			if columns[i].ID == virtualCols[j].ID {
+				types[i] = virtualCols[j].Type
+				foundVirtual = true
+				break
+			}
+		}
+		if !foundVirtual {
+			types[i] = columns[i].Type
+		}
+	}
+	return types
+}
+
 // ColumnsSelectors generates Select expressions for cols.
 func ColumnsSelectors(cols []descpb.ColumnDescriptor) tree.SelectExprs {
 	exprs := make(tree.SelectExprs, len(cols))

@@ -138,7 +138,7 @@ func NewColBatchScan(
 	// just seting the ID and Version in the spec or something like that and
 	// retrieving the hydrated Immutable from cache.
 	table := tabledesc.NewImmutable(spec.Table)
-	typs := table.ColumnTypesWithMutations(returnMutations)
+	typs := table.ColumnTypesWithMutationsAndVirtualCols(returnMutations, spec.VirtualColumns)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 	// Add all requested system columns to the output.
 	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
@@ -182,7 +182,7 @@ func NewColBatchScan(
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, &fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap,
 		spec.Reverse, neededColumns, spec.Visibility, spec.LockingStrength, spec.LockingWaitPolicy,
-		sysColDescs,
+		sysColDescs, spec.VirtualColumns,
 	); err != nil {
 		return nil, err
 	}
@@ -218,6 +218,7 @@ func initCRowFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumnDescs []descpb.ColumnDescriptor,
+	virtualColumns []*descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := tabledesc.NewImmutable(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
@@ -229,9 +230,25 @@ func initCRowFetcher(
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = immutDesc.ReadableColumns
 	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
+	if virtualColumns != nil {
+		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumnDescs))
+		copy(tempCols, cols)
+		for i := range tempCols {
+			for j := range virtualColumns {
+				if tempCols[i].ID == virtualColumns[j].ID {
+					tempCols[i] = *virtualColumns[j]
+					break
+				}
+			}
+		}
+		cols = tempCols
+		// Add on any requested system columns.
+		cols = append(cols, systemColumnDescs...)
+	} else {
+		// Add on any requested system columns. We slice cols to avoid modifying
+		// the underlying table descriptor.
+		cols = append(cols[:len(cols):len(cols)], systemColumnDescs...)
+	}
 	tableArgs := row.FetcherTableArgs{
 		Desc:             immutDesc,
 		Index:            index,

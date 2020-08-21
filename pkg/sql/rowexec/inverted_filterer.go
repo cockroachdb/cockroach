@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr"
@@ -60,6 +61,8 @@ type invertedFilterer struct {
 	keyRow rowenc.EncDatumRow
 	// Scratch space for constructing the output row.
 	outputRow rowenc.EncDatumRow
+
+	da rowenc.DatumAlloc
 }
 
 var _ execinfra.Processor = &invertedFilterer{}
@@ -205,7 +208,22 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
 	// Add to the evaluator.
-	ifr.invertedEval.addIndexRow(row[ifr.invertedColIdx].EncodedBytes(), keyIndex)
+	enc := row[ifr.invertedColIdx].EncodedBytes()
+	if len(enc) == 0 {
+		// If the input is from the vectorized engine, the encoded bytes may be
+		// empty.
+		if row[ifr.invertedColIdx].Datum == nil {
+			ifr.MoveToDraining(errors.New("no datum found"))
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		typ := row[ifr.invertedColIdx].Datum.ResolvedType()
+		enc, err = row[ifr.invertedColIdx].Encode(typ, &ifr.da, descpb.DatumEncoding_ASCENDING_KEY, nil)
+		if err != nil {
+			ifr.MoveToDraining(err)
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+	}
+	ifr.invertedEval.addIndexRow(enc, keyIndex)
 	return ifrReadingInput, nil
 }
 
