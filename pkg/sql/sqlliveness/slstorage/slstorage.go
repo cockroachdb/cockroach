@@ -208,6 +208,7 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		if live {
 			s.mu.liveSessions.Add(sid, expiration)
 		} else {
+			s.mu.deadSessions.Del(sid)
 			s.mu.deadSessions.Add(sid, nil)
 		}
 		return live, nil
@@ -286,6 +287,12 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	}
 }
 
+// TODO(ajwerner): find a way to utilize this table scan to update the
+// expirations stored in the in-memory cache or remove it altogether. As it
+// stand, this scan will run more frequently than sessions expire but it won't
+// propagate that fact to IsAlive. It seems like the lazy session deletion
+// which has been added should be sufficient to delete expired sessions which
+// matter. This would closer align with the behavior in node-liveness.
 func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	now := s.clock.Now()
 	row, err := s.ex.QueryRowEx(ctx, "delete-sessions", nil /* txn */, s.sd,
