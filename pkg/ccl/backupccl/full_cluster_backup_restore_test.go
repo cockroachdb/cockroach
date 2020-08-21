@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -69,7 +68,9 @@ FROM system.jobs
 	sqlDB.Exec(t, `ALTER TABLE defaultdb.foo CONFIGURE ZONE USING gc.ttlseconds = 45`)
 	sqlDB.Exec(t, `ALTER DATABASE data2 CONFIGURE ZONE USING gc.ttlseconds = 900`)
 	// Populate system.jobs.
-	// Note: this is not the backup under test, this just serves as a job which should appear in the restore.
+	// Note: this is not the backup under test, this just serves as a job which
+	// should appear in the restore.
+	// This job will eventually fail since it will run from a new cluster.
 	sqlDB.Exec(t, `BACKUP data.bank TO 'nodelocal://0/throwawayjob'`)
 	preBackupJobs := sqlDB.QueryStr(t, jobsQuery)
 	// Populate system.settings.
@@ -87,6 +88,9 @@ FROM system.jobs
 	sqlDB.Exec(t, `CREATE ROLE system_ops;`)
 	sqlDB.Exec(t, `GRANT CREATE, SELECT ON DATABASE data TO system_ops;`)
 	sqlDB.Exec(t, `GRANT system_ops TO maxroach1;`)
+
+	// Populate system.scheduled_jobs table.
+	sqlDB.Exec(t, `CREATE SCHEDULE FOR BACKUP data.bank INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS`, LocalFoo)
 
 	injectStats(t, sqlDB, "data.bank", "id")
 	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
@@ -135,6 +139,7 @@ FROM system.jobs
 			systemschema.UITable.Name,
 			systemschema.UsersTable.Name,
 			systemschema.ZonesTable.Name,
+			systemschema.ScheduledJobsTable.Name,
 		}
 
 		verificationQueries := make([]string, len(systemTablesToVerify))
@@ -206,26 +211,18 @@ FROM system.jobs
 	})
 
 	t.Run("ensure that tables can be created at the excepted ID", func(t *testing.T) {
-		maxID, err := strconv.Atoi(sqlDBRestore.QueryStr(t, "SELECT max(id) FROM system.namespace")[0][0])
-		if err != nil {
-			t.Fatal(err)
-		}
+		var maxID, dbID, tableID int
+		sqlDBRestore.QueryRow(t, "SELECT max(id) FROM system.namespace").Scan(&maxID)
 		dbName, tableName := "new_db", "new_table"
-		// N.B. We skip the database ID that was allocated too the temporary
-		// system table and all of the temporary system tables (1 + 8).
-		numIDsToSkip := 9
-		expectedDBID := maxID + numIDsToSkip + 1
-		expectedTableID := maxID + numIDsToSkip + 2
 		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 		sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s.%s (a int)", dbName, tableName))
-		sqlDBRestore.CheckQueryResults(
-			t, fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", dbName),
-			[][]string{{strconv.Itoa(expectedDBID)}},
-		)
-		sqlDBRestore.CheckQueryResults(
-			t, fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName),
-			[][]string{{strconv.Itoa(expectedTableID)}},
-		)
+		sqlDBRestore.QueryRow(t,
+			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", dbName)).Scan(&dbID)
+		require.True(t, dbID > maxID)
+		sqlDBRestore.QueryRow(t,
+			fmt.Sprintf("SELECT id FROM system.namespace WHERE name = '%s'", tableName)).Scan(&tableID)
+		require.True(t, tableID > maxID)
+		require.NotEqual(t, dbID, tableID)
 	})
 }
 
@@ -474,6 +471,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			{"jobs"},
 			{"locations"},
 			{"role_members"},
+			{"scheduled_jobs"},
 			{"settings"},
 			{"ui"},
 			{"users"},

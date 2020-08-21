@@ -80,6 +80,7 @@ var fullClusterSystemTables = []string{
 	systemschema.UITable.Name,
 	systemschema.CommentsTable.Name,
 	systemschema.JobsTable.Name,
+	systemschema.ScheduledJobsTable.Name,
 	// Table statistics are backed up in the backup descriptor for now.
 }
 
