@@ -93,9 +93,9 @@ func newTestHelperForTables(
 }
 
 // newScheduledJob is a helper to create scheduled job with helper environment.
-func (h *testHelper) newScheduledJob(t *testing.T, scheduleName, sql string) *ScheduledJob {
+func (h *testHelper) newScheduledJob(t *testing.T, scheduleLabel, sql string) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	j.SetScheduleName(scheduleName)
+	j.SetScheduleLabel(scheduleLabel)
 	any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: sql})
 	require.NoError(t, err)
 	j.SetExecutionDetails(InlineExecutorName, jobspb.ExecutionArguments{Args: any})
@@ -105,10 +105,10 @@ func (h *testHelper) newScheduledJob(t *testing.T, scheduleName, sql string) *Sc
 // newScheduledJobForExecutor is a helper to create scheduled job for the specified
 // executor and its args.
 func (h *testHelper) newScheduledJobForExecutor(
-	scheduleName, executorName string, executorArgs *types.Any,
+	scheduleLabel, executorName string, executorArgs *types.Any,
 ) *ScheduledJob {
 	j := NewScheduledJob(h.env)
-	j.SetScheduleName(scheduleName)
+	j.SetScheduleLabel(scheduleLabel)
 	j.SetExecutionDetails(executorName, jobspb.ExecutionArguments{Args: executorArgs})
 	return j
 }
@@ -150,8 +150,8 @@ func addFakeJob(t *testing.T, h *testHelper, scheduleID int64, status Status, tx
 	datums, err := h.cfg.InternalExecutor.QueryRowEx(context.Background(), "fake-job", txn,
 		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
 		fmt.Sprintf(`
-INSERT INTO %s (created_by_type, created_by_id, status, payload) 
-VALUES ($1, $2, $3, $4) 
+INSERT INTO %s (created_by_type, created_by_id, status, payload)
+VALUES ($1, $2, $3, $4)
 RETURNING id`,
 			h.env.SystemJobsTableName(),
 		),

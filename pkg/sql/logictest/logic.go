@@ -1344,6 +1344,31 @@ func (t *logicTest) setup(cfg testClusterConfig, serverArgs TestServerArgs) {
 		}
 		defer db.Close()
 		connsForClusterSettingChanges = append(connsForClusterSettingChanges, db)
+
+		// Increase tenant rate limits for faster tests.
+		conn := t.cluster.ServerConn(0)
+		for _, settingName := range []string{
+			"kv.tenant_rate_limiter.requests.rate_limit",
+			"kv.tenant_rate_limiter.request.burst_limit",
+		} {
+			if _, err := conn.Exec(
+				fmt.Sprintf("SET CLUSTER SETTING %s = %d", settingName, 100000),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, settingName := range []string{
+			"kv.tenant_rate_limiter.read_bytes.rate_limit",
+			"kv.tenant_rate_limiter.read_bytes.burst_limit",
+			"kv.tenant_rate_limiter.write_bytes.rate_limit",
+			"kv.tenant_rate_limiter.write_bytes.burst_limit",
+		} {
+			if _, err := conn.Exec(
+				fmt.Sprintf("SET CLUSTER SETTING %s = '1GB'", settingName),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	// Set cluster settings.
