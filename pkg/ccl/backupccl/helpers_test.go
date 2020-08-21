@@ -290,3 +290,53 @@ func injectStatsWithRowCount(
 	]'`, tableName, columnName, rowCount, rowCount))
 	return sqlDB.QueryStr(t, getStatsQuery(tableName))
 }
+
+// revisionTestCases is used to define a series of test cases to exercise
+// backup/restore with revision history.
+// It is used by testRevisionHistory.
+type revisionTestCases struct {
+	// The SQL to execute during this time revision.
+	sql string
+	// The assertions that should be true when restoring to this timestamp.
+	check func(t *testing.T)
+	// shouldBackup indicates that we should perform a backup after this
+	// revision.
+	shouldBackup bool
+
+	// Timestamp is used by the test harness. It populates it during
+	// backup and uses it during the restore stage.
+	timestamp string
+}
+
+// testRevisionHistory does 2 passes of the given test cases:
+// - The first pass it executes the specified SQL and optionally does a backup.
+// - The second pass, it restores each stage at the appropriate timestamp and
+// asserts that the state is as expected.
+func testRevisionHistory(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, testRevisions []revisionTestCases,
+) {
+	// First run the backup portion.
+	for i, revision := range testRevisions {
+		var ts string
+		sqlDB.Exec(t, revision.sql)
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts)
+		testRevisions[i].timestamp = ts
+
+		if revision.shouldBackup {
+			sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/rev-history-backup' WITH revision_history`)
+		}
+	}
+
+	// Then run the restore portion.
+	for i, revision := range testRevisions {
+		t.Run(fmt.Sprintf("ts%d", i), func(t *testing.T) {
+			sqlDB.Exec(t, "DROP DATABASE d")
+			sqlDB.Exec(t,
+				fmt.Sprintf(`
+		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
+		 AS OF SYSTEM TIME %s
+		`, revision.timestamp))
+			revision.check(t)
+		})
+	}
+}
