@@ -63,6 +63,10 @@ type descriptorResolver struct {
 	descByID map[descpb.ID]catalog.Descriptor
 	// Map: db name -> dbID
 	dbsByName map[string]descpb.ID
+	// TODO: Could also update objsByName to have an {ID,Name} struct but I'm not
+	//  a fan of requiring both whenever traversing objsByName.
+	// Map: dbID -> schema name -> schemaID
+	schemasByName map[descpb.ID]map[string]descpb.ID
 	// Map: dbID -> schema name -> obj name -> obj ID
 	objsByName map[descpb.ID]map[string]map[string]descpb.ID
 }
@@ -111,9 +115,10 @@ func (r *descriptorResolver) LookupObject(
 // known set of descriptors.
 func newDescriptorResolver(descs []catalog.Descriptor) (*descriptorResolver, error) {
 	r := &descriptorResolver{
-		descByID:   make(map[descpb.ID]catalog.Descriptor),
-		dbsByName:  make(map[string]descpb.ID),
-		objsByName: make(map[descpb.ID]map[string]map[string]descpb.ID),
+		descByID:      make(map[descpb.ID]catalog.Descriptor),
+		schemasByName: make(map[descpb.ID]map[string]descpb.ID),
+		dbsByName:     make(map[string]descpb.ID),
+		objsByName:    make(map[descpb.ID]map[string]map[string]descpb.ID),
 	}
 
 	// Iterate to find the databases first. We need that because we also
@@ -127,8 +132,10 @@ func newDescriptorResolver(descs []catalog.Descriptor) (*descriptorResolver, err
 			}
 			r.dbsByName[desc.GetName()] = desc.GetID()
 			r.objsByName[desc.GetID()] = make(map[string]map[string]descpb.ID)
+			r.schemasByName[desc.GetID()] = make(map[string]descpb.ID)
 			// Always add an entry for the public schema.
 			r.objsByName[desc.GetID()][tree.PublicSchema] = make(map[string]descpb.ID)
+			r.schemasByName[desc.GetID()][tree.PublicSchema] = keys.PublicSchemaID
 		}
 
 		// Incidentally, also remember all the descriptors by ID.
@@ -148,6 +155,13 @@ func newDescriptorResolver(descs []catalog.Descriptor) (*descriptorResolver, err
 			}
 			schemaMap[sc.GetName()] = make(map[string]descpb.ID)
 			r.objsByName[sc.GetParentID()] = schemaMap
+
+			schemaNameMap := r.schemasByName[sc.GetParentID()]
+			if schemaNameMap == nil {
+				schemaNameMap = make(map[string]descpb.ID)
+			}
+			schemaNameMap[sc.GetName()] = sc.GetID()
+			r.schemasByName[sc.GetParentID()] = schemaNameMap
 		}
 	}
 
@@ -232,9 +246,6 @@ func descriptorsMatchingTargets(
 	descriptors []catalog.Descriptor,
 	targets tree.TargetList,
 ) (descriptorsMatched, error) {
-	// TODO(dan): once CockroachDB supports schemas in addition to
-	// catalogs, then this method will need to support it.
-
 	ret := descriptorsMatched{}
 
 	resolver, err := newDescriptorResolver(descriptors)
@@ -263,10 +274,25 @@ func descriptorsMatchingTargets(
 
 	alreadyRequestedSchemas := make(map[descpb.ID]struct{})
 	maybeAddSchemaDesc := func(id descpb.ID) {
+		// Only add user defined schemas.
+		if id == keys.PublicSchemaID {
+			return
+		}
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			alreadyRequestedSchemas[id] = struct{}{}
 			ret.descs = append(ret.descs, resolver.descByID[id])
 		}
+	}
+	getSchemaIDByName := func(scName string, dbID descpb.ID) (descpb.ID, error) {
+		schemas, ok := resolver.schemasByName[dbID]
+		if !ok {
+			return 0, errors.Newf("database with ID %d not found", dbID)
+		}
+		schemaID, ok := schemas[scName]
+		if !ok {
+			return 0, errors.Newf("schema with name %s not found in DB %d", scName, dbID)
+		}
+		return schemaID, nil
 	}
 
 	alreadyRequestedTypes := make(map[descpb.ID]struct{})
@@ -339,11 +365,7 @@ func descriptorsMatchingTargets(
 				alreadyRequestedTables[tableDesc.GetID()] = struct{}{}
 				ret.descs = append(ret.descs, tableDesc)
 			}
-			// If this table is a member of a user defined schema, then request the
-			// user defined schema.
-			if tableDesc.GetParentSchemaID() != keys.PublicSchemaID {
-				maybeAddSchemaDesc(tableDesc.GetParentSchemaID())
-			}
+			maybeAddSchemaDesc(tableDesc.GetParentSchemaID())
 			// Get all the types used by this table.
 			typeIDs, err := tableDesc.GetAllReferencedTypeIDs(getTypeByID)
 			if err != nil {
@@ -383,7 +405,13 @@ func descriptorsMatchingTargets(
 
 	// Then process the database expansions.
 	for dbID := range alreadyExpandedDBs {
-		for _, schemas := range resolver.objsByName[dbID] {
+		for schemaName, schemas := range resolver.objsByName[dbID] {
+			schemaID, err := getSchemaIDByName(schemaName, dbID)
+			if err != nil {
+				return ret, err
+			}
+			maybeAddSchemaDesc(schemaID)
+
 			for _, id := range schemas {
 				desc := resolver.descByID[id]
 				switch desc := desc.(type) {

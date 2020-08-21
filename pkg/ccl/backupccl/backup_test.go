@@ -1478,6 +1478,7 @@ SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
+CREATE SCHEMA unused;
 CREATE SCHEMA sc;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
@@ -1501,6 +1502,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDBRestore.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDBRestore.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Tests restoring databases with user defined schemas.
@@ -1515,6 +1517,7 @@ SET experimental_enable_enums = true;
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
+CREATE SCHEMA unused;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
 CREATE TYPE sc.typ1 AS ENUM ('hello');
@@ -1535,6 +1538,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Test restoring tables with user defined schemas when restore schemas are
@@ -1697,6 +1701,7 @@ INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
 		sqlDB.Exec(t, `
 SET experimental_enable_enums = true;
 CREATE DATABASE d;
+CREATE TYPE d.unused AS ENUM ('day', 'week', 'year');
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
 CREATE TABLE d.t1 (x d.greeting);
