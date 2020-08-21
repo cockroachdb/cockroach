@@ -963,8 +963,29 @@ Square (left)                             1     1     0     0     4     4
 Square (right)                            1     1     0     0     4     4
 Square overlapping left and right square  1.1   1.1   0     0     4.2   4.2
 
-# Topology operators.
+# Unary predicates
+query TBB
+SELECT
+  dsc,
+  ST_IsEmpty(geom),
+  ST_IsCollection(geom)
+FROM geom_operators_test
+ORDER BY dsc
+----
+Empty GeometryCollection                  true   true
+Empty LineString                          true   false
+Empty Point                               true   false
+Faraway point                             false  false
+Line going through left and right square  false  false
+NULL                                      NULL   NULL
+Nested Geometry Collection                false  true
+Point middle of Left Square               false  false
+Point middle of Right Square              false  false
+Square (left)                             false  false
+Square (right)                            false  false
+Square overlapping left and right square  false  false
 
+# Topology operators
 query TTT
 SELECT
   a.dsc,
