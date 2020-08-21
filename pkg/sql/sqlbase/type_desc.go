@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -413,6 +414,11 @@ func (desc *ImmutableTypeDescriptor) Validate(
 				return errors.AssertionFailedf("duplicate enum member %q", desc.EnumMembers[i].LogicalRepresentation)
 			}
 			members[desc.EnumMembers[i].LogicalRepresentation] = struct{}{}
+		}
+
+		// Validate the Privileges of the descriptor.
+		if err := desc.Privileges.Validate(desc.ID, privilege.Type); err != nil {
+			return err
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.Alias == nil {

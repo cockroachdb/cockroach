@@ -467,10 +467,8 @@ func makeTxnCommitExplicitLocked(
 	// Construct a new batch with just an EndTxn request.
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: txn, CanForwardReadTimestamp: canFwdRTS}
-	et := roachpb.EndTxnRequest{Commit: true}
+	et := roachpb.EndTxnRequest{Commit: true, LockSpans: lockSpans}
 	et.Key = txn.Key
-	et.LockSpans = lockSpans
-	et.CanCommitAtHigherTimestamp = canFwdRTS
 	ba.Add(&et)
 
 	_, pErr := s.SendLocked(ctx, ba)

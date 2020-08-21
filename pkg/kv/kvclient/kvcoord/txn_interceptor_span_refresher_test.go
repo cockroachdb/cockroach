@@ -34,6 +34,7 @@ func makeMockTxnSpanRefresher() (txnSpanRefresher, *mockLockedSender) {
 		refreshFail:                   metric.NewCounter(metaRefreshFail),
 		refreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
 		refreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		refreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
 	}, mockSender
 }
 
@@ -250,14 +251,17 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.True(t, tc.expRefresh)
 
 				require.Len(t, ba.Requests, 2)
+				require.Equal(t, tc.expRefreshTS, ba.Txn.ReadTimestamp)
 				require.IsType(t, &roachpb.RefreshRequest{}, ba.Requests[0].GetInner())
 				require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[1].GetInner())
 
 				refReq := ba.Requests[0].GetRefresh()
 				require.Equal(t, getArgs.Span(), refReq.Span())
+				require.Equal(t, txn.ReadTimestamp, refReq.RefreshFrom)
 
 				refRngReq := ba.Requests[1].GetRefreshRange()
 				require.Equal(t, delRangeArgs.Span(), refRngReq.Span())
+				require.Equal(t, txn.ReadTimestamp, refRngReq.RefreshFrom)
 
 				br = ba.CreateReply()
 				br.Txn = ba.Txn
@@ -280,11 +284,13 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				require.Equal(t, tc.expRefreshTS, tsr.refreshedTimestamp)
 				require.Equal(t, int64(1), tsr.refreshSuccess.Count())
 				require.Equal(t, int64(0), tsr.refreshFail.Count())
+				require.Equal(t, int64(1), tsr.refreshAutoRetries.Count())
 			} else {
 				require.Nil(t, br)
 				require.NotNil(t, pErr)
 				require.Equal(t, ba.Txn.ReadTimestamp, tsr.refreshedTimestamp)
 				require.Equal(t, int64(0), tsr.refreshSuccess.Count())
+				require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
 				// Note that we don't check the tsr.refreshFail metric here as tests
 				// here expect the refresh to not be attempted, not to fail.
 			}
@@ -334,10 +340,12 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	onRefresh := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		refreshes++
 		require.Len(t, ba.Requests, 1)
+		require.Equal(t, txn.WriteTimestamp, ba.Txn.ReadTimestamp)
 		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
 
 		refReq := ba.Requests[0].GetRefreshRange()
 		require.Equal(t, scanArgs.Span(), refReq.Span())
+		require.Equal(t, txn.ReadTimestamp, refReq.RefreshFrom)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -362,6 +370,169 @@ func TestTxnSpanRefresherMaxRefreshAttempts(t *testing.T) {
 	exp := roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "")
 	require.Equal(t, exp, pErr.GetDetail())
 	require.Equal(t, tsr.knobs.MaxTxnRefreshAttempts, refreshes)
+}
+
+// TestTxnSpanRefresherPreemptiveRefresh tests that the txnSpanRefresher
+// performs a preemptive client-side refresh when doing so would be free or when
+// it observes a batch containing an EndTxn request that will necessarily throw
+// a serializable error.
+func TestTxnSpanRefresherPreemptiveRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tsr, mockSender := makeMockTxnSpanRefresher()
+
+	txn := makeTxnProto()
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+
+	// Push the txn so that it needs a refresh.
+	txn.WriteTimestamp = txn.WriteTimestamp.Add(1, 0)
+	origReadTs := txn.ReadTimestamp
+	pushedWriteTs := txn.WriteTimestamp
+
+	// Send an EndTxn request that will need a refresh to succeed. Because
+	// no refresh spans have been recorded, the preemptive refresh should be
+	// free, so the txnSpanRefresher should do so.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: &txn}
+	etArgs := roachpb.EndTxnRequest{Commit: true}
+	ba.Add(&etArgs)
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.CanForwardReadTimestamp)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		// The transaction should be refreshed.
+		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.WriteTimestamp)
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr := tsr.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, int64(1), tsr.refreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.refreshFail.Count())
+	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
+	require.True(t, tsr.refreshFootprint.empty())
+	require.False(t, tsr.refreshInvalid)
+
+	// Reset refreshedTimestamp to avoid confusing ourselves.
+	tsr.refreshedTimestamp = origReadTs
+
+	// Send a Scan request. Again, because a preemptive refresh would be free,
+	// the txnSpanRefresher should do so. NOTE: This inhibits a server-side
+	// refreshes when we issue EndTxn requests through the rest of this test.
+	ba.Requests = nil
+	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
+	ba.Add(&scanArgs)
+
+	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.True(t, ba.CanForwardReadTimestamp)
+		require.IsType(t, &roachpb.ScanRequest{}, ba.Requests[0].GetInner())
+
+		// The transaction should be refreshed.
+		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.WriteTimestamp)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+
+	br, pErr = tsr.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, int64(2), tsr.refreshSuccess.Count())
+	require.Equal(t, int64(0), tsr.refreshFail.Count())
+	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
+	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+	require.False(t, tsr.refreshInvalid)
+
+	// Reset refreshedTimestamp to avoid confusing ourselves.
+	tsr.refreshedTimestamp = origReadTs
+
+	// Now that we have accumulated refresh spans and refreshing is no longer a
+	// no-op, send an EndTxn request that will need a refresh to succeed. This
+	// should trigger a preemptive refresh. Try this twice. First, have the
+	// refresh fail, which should prevent the rest of the request from being
+	// issued. Second, have the refresh succeed, which should result in the
+	// batch being issued with the refreshed transaction.
+	ba.Requests = nil
+	ba.Add(&etArgs)
+
+	onRefresh := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+		refReq := ba.Requests[0].GetRefreshRange()
+		require.Equal(t, scanArgs.Span(), refReq.Span())
+		require.Equal(t, origReadTs, refReq.RefreshFrom)
+
+		return nil, roachpb.NewErrorf("encountered recently written key")
+	}
+	unexpected := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Fail(t, "unexpected")
+		return nil, nil
+	}
+	mockSender.ChainMockSend(onRefresh, unexpected)
+
+	br, pErr = tsr.SendLocked(ctx, ba)
+	require.Nil(t, br)
+	require.NotNil(t, pErr)
+	require.Regexp(t, `TransactionRetryError: retry txn \(RETRY_SERIALIZABLE - failed preemptive refresh\)`, pErr)
+	require.Equal(t, int64(2), tsr.refreshSuccess.Count())
+	require.Equal(t, int64(1), tsr.refreshFail.Count())
+	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
+	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+	require.False(t, tsr.refreshInvalid)
+
+	// Try again, but this time let the refresh succeed.
+	onRefresh = func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+		require.IsType(t, &roachpb.RefreshRangeRequest{}, ba.Requests[0].GetInner())
+
+		refReq := ba.Requests[0].GetRefreshRange()
+		require.Equal(t, scanArgs.Span(), refReq.Span())
+		require.Equal(t, origReadTs, refReq.RefreshFrom)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	}
+	onEndTxn := func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		require.False(t, ba.CanForwardReadTimestamp)
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+		// The transaction should be refreshed.
+		require.NotEqual(t, origReadTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.ReadTimestamp)
+		require.Equal(t, pushedWriteTs, ba.Txn.WriteTimestamp)
+
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	}
+	mockSender.ChainMockSend(onRefresh, onEndTxn, unexpected)
+
+	br, pErr = tsr.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, int64(3), tsr.refreshSuccess.Count())
+	require.Equal(t, int64(1), tsr.refreshFail.Count())
+	require.Equal(t, int64(0), tsr.refreshAutoRetries.Count())
+	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
+	require.False(t, tsr.refreshInvalid)
 }
 
 type singleRangeIterator struct{}
@@ -598,150 +769,6 @@ func TestTxnSpanRefresherAssignsCanForwardReadTimestamp(t *testing.T) {
 		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.CanForwardReadTimestamp)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	tsr.epochBumpedLocked()
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, []roachpb.Span(nil), tsr.refreshFootprint.asSlice())
-	require.False(t, tsr.refreshInvalid)
-}
-
-// TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp tests that the
-// txnSpanRefresher assigns the CanCommitAtHigherTimestamp flag on EndTxn
-// requests, along with the CanForwardReadTimestamp on Batch headers.
-func TestTxnSpanRefresherAssignsCanCommitAtHigherTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	tsr, mockSender := makeMockTxnSpanRefresher()
-
-	txn := makeTxnProto()
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
-
-	// Send an EndTxn request. Should set CanCommitAtHigherTimestamp and
-	// CanForwardReadTimestamp flags.
-	var ba roachpb.BatchRequest
-	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.EndTxnRequest{})
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
-
-		br := ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	br, pErr := tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Send an EndTxn request for a transaction with a fixed commit timestamp.
-	// Should NOT set CanCommitAtHigherTimestamp and CanForwardReadTimestamp
-	// flags.
-	txnFixed := txn.Clone()
-	txnFixed.CommitTimestampFixed = true
-	var baFixed roachpb.BatchRequest
-	baFixed.Header = roachpb.Header{Txn: txnFixed}
-	baFixed.Add(&roachpb.EndTxnRequest{})
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	br, pErr = tsr.SendLocked(ctx, baFixed)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Send a batch below the limit to collect refresh spans.
-	ba.Requests = nil
-	scanArgs := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}}
-	ba.Add(&scanArgs)
-
-	mockSender.Reset()
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-	require.Equal(t, []roachpb.Span{scanArgs.Span()}, tsr.refreshFootprint.asSlice())
-	require.False(t, tsr.refreshInvalid)
-
-	// Send another EndTxn request. Should NOT set CanCommitAtHigherTimestamp
-	// and CanForwardReadTimestamp flags.
-	ba.Requests = nil
-	ba.Add(&roachpb.EndTxnRequest{})
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Send another batch.
-	ba.Requests = nil
-	scanArgs2 := roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyC, EndKey: keyD}}
-	ba.Add(&scanArgs2)
-
-	mockSender.Reset()
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Send another EndTxn request. Still should NOT set
-	// CanCommitAtHigherTimestamp and CanForwardReadTimestamp flags.
-	ba.Requests = nil
-	ba.Add(&roachpb.EndTxnRequest{})
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.False(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.False(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		return br, nil
-	})
-
-	br, pErr = tsr.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
-	// Increment the transaction's epoch and send another EndTxn request. Should
-	// set CanCommitAtHigherTimestamp and CanForwardReadTimestamp flags.
-	ba.Requests = nil
-	ba.Add(&roachpb.EndTxnRequest{})
-
-	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 1)
-		require.True(t, ba.CanForwardReadTimestamp)
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[0].GetInner())
-		require.True(t, ba.Requests[0].GetEndTxn().CanCommitAtHigherTimestamp)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

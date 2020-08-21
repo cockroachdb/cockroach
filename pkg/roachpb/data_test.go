@@ -696,6 +696,17 @@ func TestTransactionRestart(t *testing.T) {
 	require.Equal(t, expTxn, txn)
 }
 
+func TestTransactionRefresh(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Refresh(makeTS(25, 1))
+
+	expTxn := nonZeroTxn
+	expTxn.WriteTimestamp = makeTS(25, 1)
+	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
+	require.Equal(t, expTxn, txn)
+}
+
 // TestTransactionRecordRoundtrips tests a few properties about Transaction
 // and TransactionRecord protos. Remember that the latter is wire compatible
 // with the former and contains a subset of its protos.

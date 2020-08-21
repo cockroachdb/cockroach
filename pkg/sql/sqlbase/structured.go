@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1983,7 +1984,7 @@ func (desc *ImmutableTableDescriptor) ValidateTable() error {
 	}
 
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return desc.Privileges.Validate(desc.GetID(), privilege.Table)
 }
 
 func (desc *ImmutableTableDescriptor) validateColumnFamilies(
