@@ -232,6 +232,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"JobCommand":        {fullName: "tree.JobCommand", passByVal: true},
 		"ScheduleCommand":   {fullName: "tree.ScheduleCommand", passByVal: true},
 		"IndexOrdinal":      {fullName: "cat.IndexOrdinal", passByVal: true},
+		"IndexOrdinals":     {fullName: "cat.IndexOrdinals", passByVal: true},
 		"ViewDeps":          {fullName: "opt.ViewDeps", passByVal: true},
 		"LockingItem":       {fullName: "tree.LockingItem", isPointer: true},
 		"MaterializeClause": {fullName: "tree.MaterializeClause", passByVal: true},
@@ -321,7 +322,7 @@ func (m *metadata) typeOf(e lang.Expr) *typeDef {
 func (m *metadata) lookupType(friendlyName string) *typeDef {
 	res, ok := m.types[friendlyName]
 	if !ok {
-		panic(fmt.Sprintf("%s is not registered as a valid type in metadata.go", friendlyName))
+		panic(fmt.Sprintf("%s is not registered as a valid type in optgen/metadata.go", friendlyName))
 	}
 	return res
 }

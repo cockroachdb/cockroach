@@ -280,7 +280,8 @@ UPSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── canary column: 8
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: pk:8
  │    ├── fetch columns: pk:8 p:9 q:10
  │    ├── insert-mapping:
  │    │    ├── column1:5 => pk:1
@@ -383,7 +384,8 @@ UPSERT INTO parent_multi(pk, p) VALUES (1, 10), (2, 20)
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── canary column: 8
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: pk:8
  │    ├── fetch columns: pk:8 p:9 q:10
  │    ├── insert-mapping:
  │    │    ├── column1:5 => pk:1
@@ -489,7 +491,8 @@ INSERT INTO parent_multi VALUES (1, 10, 10), (2, 20, 20) ON CONFLICT (p,q) DO UP
 root
  ├── upsert parent_multi
  │    ├── columns: <none>
- │    ├── canary column: 8
+ │    ├── arbiter indexes: secondary
+ │    ├── canary column: pk:8
  │    ├── fetch columns: pk:8 p:9 q:10
  │    ├── insert-mapping:
  │    │    ├── column1:5 => pk:1

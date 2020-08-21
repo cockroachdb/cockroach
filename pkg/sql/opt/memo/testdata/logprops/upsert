@@ -33,7 +33,8 @@ project
  ├── prune: (1-3)
  └── upsert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
-      ├── canary column: 15
+      ├── arbiter indexes: secondary
+      ├── canary column: rowid:15(int)
       ├── fetch columns: a:12(int) b:13(int) c:14(int) rowid:15(int)
       ├── insert-mapping:
       │    ├── x:6 => a:1
@@ -220,6 +221,7 @@ project
  ├── prune: (1-3)
  └── insert abc
       ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
+      ├── arbiter indexes: primary secondary secondary
       ├── insert-mapping:
       │    ├── x:6 => a:1
       │    ├── y:7 => b:2
@@ -443,7 +445,8 @@ project
  ├── prune: (19)
  ├── upsert abc
  │    ├── columns: a:1(int!null) b:2(int) c:3(int) rowid:4(int!null)
- │    ├── canary column: 13
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: rowid:13(int)
  │    ├── fetch columns: a:10(int) b:11(int) c:12(int) rowid:13(int)
  │    ├── insert-mapping:
  │    │    ├── column1:6 => a:1
@@ -590,7 +593,8 @@ UPDATE SET b=2
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 13
+ ├── arbiter indexes: secondary
+ ├── canary column: a:13(int)
  ├── fetch columns: a:13(int) b:14(int) c:15(int) rowid:16(int)
  ├── insert-mapping:
  │    ├── y:7 => a:1

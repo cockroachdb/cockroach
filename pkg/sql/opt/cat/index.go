@@ -18,6 +18,7 @@ import (
 
 // IndexOrdinal identifies an index (in the context of a Table).
 type IndexOrdinal = int
+type IndexOrdinals = []IndexOrdinal
 
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary

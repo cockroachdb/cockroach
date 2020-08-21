@@ -669,6 +669,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 ) {
 	// Determine the set of arbiter indexes to use to check for conflicts.
 	arbiterIndexes := mb.arbiterIndexes(conflictOrds, arbiterPredicate)
+	mb.arbiters = arbiterIndexes.Ordered()
 
 	insertColSet := mb.outScope.expr.Relational().OutputCols
 	insertColScope := mb.outScope.replace()
@@ -826,6 +827,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 ) {
 	// Determine the set of arbiter indexes to use to check for conflicts.
 	arbiterIndexes := mb.arbiterIndexes(conflictOrds, arbiterPredicate)
+	mb.arbiters = arbiterIndexes.Ordered()
 
 	// TODO(mgartner): Add support for multiple arbiter indexes, similar to
 	// buildInputForDoNothing.
