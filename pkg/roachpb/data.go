@@ -1430,7 +1430,7 @@ func PrepareTransactionForRetry(
 // PrepareTransactionForRefresh returns whether the transaction can be refreshed
 // to the specified timestamp to avoid a client-side transaction restart. If
 // true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and refreshed timestamp set appropriately.
+// commit timestamp and read timestamp set appropriately.
 func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
 	if txn.CommitTimestampFixed {
 		return false, nil
@@ -1440,17 +1440,18 @@ func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bo
 	return true, newTxn
 }
 
-// CanTransactionRefresh returns whether the transaction specified in the
-// supplied error can be retried at a refreshed timestamp to avoid a client-side
-// transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and refreshed timestamp set
-// appropriately.
-func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
-	txn := pErr.GetTxn()
-	if txn == nil {
+// CanTransactionRefresh returns whether the transaction can be retried at a
+// refreshed timestamp indicated by the supplied error. If true, returns a
+// cloned, updated Transaction object with the provisional commit timestamp and
+// read timestamp set appropriately.
+func CanTransactionRefresh(
+	ctx context.Context, txn *Transaction, pErr *Error,
+) (bool, *Transaction) {
+	errTxn := pErr.GetTxn()
+	if errTxn == nil {
 		return false, nil
 	}
-	timestamp := txn.WriteTimestamp
+	timestamp := errTxn.WriteTimestamp
 	switch err := pErr.GetDetail().(type) {
 	case *TransactionRetryError:
 		if err.Reason != RETRY_SERIALIZABLE && err.Reason != RETRY_WRITE_TOO_OLD {
@@ -1462,10 +1463,10 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 		// error, obviously the refresh will fail. It might be worth trying to
 		// detect these cases and save the futile attempt; we'd need to have access
 		// to the key that generated the error.
-		timestamp.Forward(writeTooOldRetryTimestamp(txn, err))
+		timestamp.Forward(writeTooOldRetryTimestamp(errTxn, err))
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(
-			readWithinUncertaintyIntervalRetryTimestamp(ctx, txn, err, pErr.OriginNode))
+			readWithinUncertaintyIntervalRetryTimestamp(ctx, errTxn, err, pErr.OriginNode))
 	default:
 		return false, nil
 	}

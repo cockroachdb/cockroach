@@ -297,7 +297,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error, maxRefreshAttempts int,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Check for an error which can be retried after updating spans.
-	canRefreshTxn, refreshTxn := roachpb.CanTransactionRefresh(ctx, pErr)
+	canRefreshTxn, refreshTxn := roachpb.CanTransactionRefresh(ctx, ba.Txn, pErr)
 	if !canRefreshTxn || !sr.canAutoRetry {
 		return nil, pErr
 	}
@@ -313,7 +313,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	// We've refreshed all of the read spans successfully and bumped
 	// ba.Txn's timestamps. Attempt the request again.
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
-	ba.UpdateTxn(refreshTxn)
+	ba.Txn = refreshTxn
 	sr.refreshAutoRetries.Inc(1)
 
 	// To prevent starvation of batches that are trying to commit, split off the
@@ -459,7 +459,7 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 	}
 
 	log.Eventf(ctx, "preemptive refresh succeeded")
-	ba.UpdateTxn(refreshTxn)
+	ba.Txn = refreshTxn
 	return ba, nil
 }
 
