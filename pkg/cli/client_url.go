@@ -352,7 +352,7 @@ func (cliCtx *cliContext) makeClientConnURL() (url.URL, error) {
 		if userName == "" {
 			userName = security.RootUser
 		}
-		sCtx := rpc.MakeSecurityContext(cliCtx.Config, roachpb.SystemTenantID)
+		sCtx := rpc.MakeSecurityContext(cliCtx.Config, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 		if err := sCtx.LoadSecurityOptions(
 			opts, userName,
 		); err != nil {

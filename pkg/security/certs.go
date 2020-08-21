@@ -158,7 +158,7 @@ func createCACertAndKey(
 	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
 	}
@@ -269,7 +269,7 @@ func CreateNodePair(
 	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func CreateUIPair(
 	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
 	}
@@ -390,7 +390,7 @@ func CreateClientPair(
 	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
 	}
@@ -471,7 +471,7 @@ func CreateTenantClientPair(
 	caKeyPath = os.ExpandEnv(caKeyPath)
 
 	// Create a certificate manager with "create dir if not exist".
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func CreateTenantClientPair(
 
 // WriteTenantClientPair writes a TenantClientPair into certsDir.
 func WriteTenantClientPair(certsDir string, cp *TenantClientPair, overwrite bool) error {
-	cm, err := NewCertificateManagerFirstRun(certsDir)
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
 	}
