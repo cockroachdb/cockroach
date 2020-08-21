@@ -548,7 +548,7 @@ func (h *crdbInstallHelper) generateClusterSettingCmd(nodeIdx int) string {
 		clusterSettingCmd = `cd ${HOME}/local/1 ; `
 	}
 
-	binary := cockroachNodeBinary(h.c, nodeIdx)
+	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
 	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "settings-initialized")
 	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, 1))
 
@@ -573,8 +573,7 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 
 	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx]), "cluster-bootstrapped")
 	url := h.r.NodeURL(h.c, "localhost", h.r.NodePort(h.c, nodes[nodeIdx]))
-	binary := cockroachNodeBinary(h.c, nodeIdx)
-
+	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
 			COCKROACH_CONNECT_TIMEOUT=0 %[2]s init --url %[3]s && touch %[1]s
