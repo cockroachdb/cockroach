@@ -52,7 +52,7 @@ type scheduledBackupEval struct {
 	isEnterpriseUser bool
 
 	// Schedule specific properties that get evaluated.
-	scheduleName         func() (string, error)
+	scheduleLabel        func() (string, error)
 	recurrence           func() (string, error)
 	fullBackupRecurrence func() (string, error)
 	scheduleOpts         func() (map[string]string, error)
@@ -259,15 +259,15 @@ func doCreateBackupSchedules(
 		return errors.Wrapf(err, "failed to dry run backup")
 	}
 
-	var fullScheduleName string
-	if eval.scheduleName != nil {
-		scheduleName, err := eval.scheduleName()
+	var scheduleLabel string
+	if eval.scheduleLabel != nil {
+		label, err := eval.scheduleLabel()
 		if err != nil {
 			return err
 		}
-		fullScheduleName = scheduleName
+		scheduleLabel = label
 	} else {
-		fullScheduleName = fmt.Sprintf("BACKUP %d", env.Now().Unix())
+		scheduleLabel = fmt.Sprintf("BACKUP %d", env.Now().Unix())
 	}
 
 	scheduleOptions, err := eval.scheduleOpts()
@@ -294,7 +294,7 @@ func doCreateBackupSchedules(
 		if incRecurrence != nil {
 			backupNode.AppendToLatest = true
 			inc, err := makeBackupSchedule(
-				env, p.User(), fullScheduleName+": INCREMENTAL",
+				env, p.User(), scheduleLabel,
 				incRecurrence, details, unpauseOnSuccessID, backupNode)
 
 			if err != nil {
@@ -316,7 +316,7 @@ func doCreateBackupSchedules(
 		backupNode.AppendToLatest = false
 		fullBackupStmt := tree.AsString(backupNode)
 		full, err := makeBackupSchedule(
-			env, p.User(), fullScheduleName,
+			env, p.User(), scheduleLabel,
 			fullRecurrence, details, unpauseOnSuccessID, backupNode)
 		if err != nil {
 			return err
@@ -344,14 +344,14 @@ func doCreateBackupSchedules(
 func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	owner string,
-	name string,
+	label string,
 	recurrence *scheduleRecurrence,
 	details jobspb.ScheduleDetails,
 	unpauseOnSuccess int64,
 	backupNode *tree.Backup,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
-	sj.SetScheduleName(name)
+	sj.SetScheduleLabel(label)
 	sj.SetOwner(owner)
 
 	// Prepare arguments for scheduled backup execution.
@@ -402,7 +402,7 @@ func emitSchedule(sj *jobs.ScheduledJob, backupStmt string, resultsCh chan<- tre
 
 	resultsCh <- tree.Datums{
 		tree.NewDInt(tree.DInt(sj.ScheduleID())),
-		tree.NewDString(sj.ScheduleName()),
+		tree.NewDString(sj.ScheduleLabel()),
 		tree.NewDString(status),
 		nextRun,
 		tree.NewDString(sj.ScheduleExpr()),
@@ -441,8 +441,8 @@ func makeScheduledBackupEval(
 	eval := &scheduledBackupEval{ScheduledBackup: schedule}
 	var err error
 
-	if schedule.ScheduleName != nil {
-		eval.scheduleName, err = p.TypeAsString(ctx, schedule.ScheduleName, scheduleBackupOp)
+	if schedule.ScheduleLabel != nil {
+		eval.scheduleLabel, err = p.TypeAsString(ctx, schedule.ScheduleLabel, scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}

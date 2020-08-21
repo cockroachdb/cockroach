@@ -10,11 +10,13 @@
 
 package main
 
-import "context"
+import (
+	"context"
+	"regexp"
+)
 
-// TODO(rafi): Once our fork is merged into the main repo, go back to using
-// latest release tag.
-//var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var supportedHibernateTag = "5.4.20"
 
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
@@ -42,19 +44,15 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): Once our fork is merged into the main repo, go back to
-		// fetching the latest tag. For now, always use the
-		// `HHH-13724-cockroachdb-dialects` branch, where we are building the
-		// dialect.
-		latestTag := "HHH-13724-cockroachdb-dialects"
-		//t.Status("cloning hibernate and installing prerequisites")
-		//latestTag, err := repeatGetLatestTag(
-		//	ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
-		//)
-		//if err != nil {
-		//	t.Fatal(err)
-		//}
-		//c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		t.Status("cloning hibernate and installing prerequisites")
+		latestTag, err := repeatGetLatestTag(
+			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("Latest Hibernate release is %s.", latestTag)
+		c.l.Printf("Supported Hibernate release is %s.", supportedHibernateTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -78,16 +76,13 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		// TODO(rafi): Switch back to using the main hibernate/hibernate-orm repo
-		// once the CockroachDB dialect is merged into it. For now, we are using
-		// a fork so we can make incremental progress on building the dialect.
 		if err := repeatGitCloneE(
 			ctx,
 			t.l,
 			c,
-			"https://github.com/cockroachdb/hibernate-orm.git",
+			"https://github.com/hibernate/hibernate-orm.git",
 			"/mnt/data1/hibernate",
-			latestTag,
+			supportedHibernateTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
@@ -172,7 +167,7 @@ func registerHibernate(r *testRegistry) {
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "hibernate" /* ormName */, output,
-			blocklistName, expectedFailures, nil /* ignorelist */, version, latestTag,
+			blocklistName, expectedFailures, nil /* ignorelist */, version, supportedHibernateTag,
 		)
 	}
 

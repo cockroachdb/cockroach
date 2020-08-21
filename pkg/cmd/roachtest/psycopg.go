@@ -94,7 +94,7 @@ func registerPsycopg(r *testRegistry) {
 			c,
 			node,
 			"checkout supported tag",
-			fmt.Sprintf(`cd /mnt/data1/psycopg/ && git checkout %s`, supportedPsycopgTag),
+			fmt.Sprintf(`cd /mnt/data1/psycopg/ && git fetch --depth=10000 && git checkout %s`, supportedPsycopgTag),
 		); err != nil {
 			t.Fatal(err)
 		}

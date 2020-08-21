@@ -2282,7 +2282,7 @@ create_schedule_for_backup_stmt:
   /*$10=*/cron_expr /*$11=*/opt_full_backup_clause /*$12=*/opt_with_schedule_options
   {
     $$.val = &tree.ScheduledBackup{
-      ScheduleName:     $3.expr(),
+      ScheduleLabel:    $3.expr(),
       Recurrence:       $10.expr(),
       FullBackup:       $11.fullBackupClause(),
       To:               $8.stringOrPlaceholderOptList(),

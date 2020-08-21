@@ -27,7 +27,7 @@ func (d *delegator) delegateShowSchedules(n *tree.ShowSchedules) (tree.Statement
 
 	columnExprs := []string{
 		"schedule_id as id",
-		"schedule_name as name",
+		"schedule_name as label",
 		"(CASE WHEN next_run IS NULL THEN 'PAUSED' ELSE 'ACTIVE' END) AS status",
 		"next_run",
 		"(CASE WHEN schedule_expr IS NULL THEN 'NEVER' ELSE schedule_expr END) as recurrence",
