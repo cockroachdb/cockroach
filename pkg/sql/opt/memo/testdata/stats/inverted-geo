@@ -174,13 +174,13 @@ project
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
       │    │              │    ├── tight: false
-      │    │              │    └── union spans: ["\x87\xff", "\x87\xff"]
+      │    │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── stats: [rows=7e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
-      │    │                   │    └── spans: ["\x87\xff", "\x87\xff"]
+      │    │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=7e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
@@ -394,13 +394,13 @@ project
       │    │              ├── columns: rowid:3(int!null)
       │    │              ├── inverted expression: /5
       │    │              │    ├── tight: false
-      │    │              │    └── union spans: ["\x87\xff", "\x87\xff"]
+      │    │              │    └── union spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │              ├── stats: [rows=7e-07]
       │    │              ├── key: (3)
       │    │              └── scan t@secondary
       │    │                   ├── columns: rowid:3(int!null) g_inverted_key:5(geometry!null)
       │    │                   ├── inverted constraint: /5/3
-      │    │                   │    └── spans: ["\x87\xff", "\x87\xff"]
+      │    │                   │    └── spans: ["\xfd\xff\xff\xff\xff\xff\xff\xff\xff", "\xfd\xff\xff\xff\xff\xff\xff\xff\xff"]
       │    │                   ├── stats: [rows=7e-07, distinct(3)=1.99999931e-07, null(3)=0, distinct(5)=7e-07, null(5)=0]
       │    │                   │   histogram(5)=
       │    │                   ├── key: (3)
@@ -470,7 +470,7 @@ select
  │         │    ├── tight: false
  │         │    └── union spans
  │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │         ├── stats: [rows=100]
  │         ├── key: (3)
@@ -479,7 +479,7 @@ select
  │              ├── inverted constraint: /5/3
  │              │    └── spans
  │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
- │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+ │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
  │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
  │              │   histogram(5)=  0           100            0            0
@@ -510,7 +510,7 @@ project
       │         │    ├── tight: false
       │         │    └── union spans
       │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+      │         │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │         │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── stats: [rows=100]
       │         ├── key: (3)
@@ -519,7 +519,7 @@ project
       │              ├── inverted constraint: /5/3
       │              │    └── spans
       │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
-      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12")
+      │              │         ├── ["\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=secondary
       │              ├── stats: [rows=100, distinct(3)=100, null(3)=0, distinct(5)=1, null(5)=0]
