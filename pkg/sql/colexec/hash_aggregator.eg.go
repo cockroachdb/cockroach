@@ -99,7 +99,5 @@ func (op *hashAggregator) populateEqChains(
 		sel = b.Selection()
 		eqChainsCount = populateEqChains_false(op, batchLength, sel, headIDToEqChainsID)
 	}
-	copy(op.ht.probeScratch.headID[:batchLength], zeroUint64Column)
-	copy(op.ht.probeScratch.differs[:batchLength], zeroBoolColumn)
 	return eqChainsCount, sel
 }
