@@ -12,6 +12,7 @@ package slstorage
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -32,12 +33,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// DefaultGCInterval specifies duration between attempts to delete extant
+// GCInterval specifies duration between attempts to delete extant
 // sessions that have expired.
-var DefaultGCInterval = settings.RegisterNonNegativeDurationSetting(
+var GCInterval = settings.RegisterNonNegativeDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	20*time.Second,
+)
+
+// GCJitter specifies the jitter fraction on the interval between attempts to
+// delete extant sessions that have expired.
+//
+// [(1-GCJitter) * GCInterval, (1+GCJitter) * GCInterval]
+var GCJitter = settings.RegisterValidatedFloatSetting(
+	"server.sqlliveness.gc_jitter",
+	"jitter fraction on the duration between attempts to delete extant sessions that have expired",
+	.15,
+	func(f float64) error {
+		if f < 0 || f > 1 {
+			return errors.Errorf("%f is not in [0, 1]", f)
+		}
+		return nil
+	},
 )
 
 // CacheSize is the size of the entries to store in the cache.
@@ -101,7 +118,10 @@ func NewTestingStorage(
 		},
 		newTimer: newTimer,
 		gcInterval: func() time.Duration {
-			return DefaultGCInterval.Get(&settings.SV)
+			baseInterval := GCInterval.Get(&settings.SV)
+			jitter := GCJitter.Get(&settings.SV)
+			frac := 1 + (2*rand.Float64()-1)*jitter
+			return time.Duration(frac * float64(baseInterval.Nanoseconds()))
 		},
 		metrics: makeMetrics(),
 	}
@@ -253,7 +273,7 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	defer cancel()
 	sqlliveness.WaitForActive(ctx, s.settings)
 	t := s.newTimer()
-	t.Reset(0)
+	t.Reset(s.gcInterval())
 	for {
 		select {
 		case <-ctx.Done():
