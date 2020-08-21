@@ -666,8 +666,12 @@ type ExecutorConfig struct {
 	LeaseManager      *lease.Manager
 	Clock             *hlc.Clock
 	DistSQLSrv        *distsql.ServerImpl
-	// StatusServer gives access to the Status service.
-	StatusServer            serverpb.OptionalStatusServer
+	// NodesStatusServer gives access to the NodesStatus service and is only
+	// available when running as a system tenant.
+	NodesStatusServer serverpb.OptionalNodesStatusServer
+	// SQLStatusServer gives access to a subset of the Status service and is
+	// available when not running as a system tenant.
+	SQLStatusServer         serverpb.SQLStatusServer
 	MetricsRecorder         nodeStatusGenerator
 	SessionRegistry         *SessionRegistry
 	SQLLivenessReader       sqlliveness.Reader
@@ -1304,8 +1308,11 @@ type registrySession interface {
 
 // CancelQuery looks up the associated query in the session registry and cancels it.
 func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
+	ctx := context.Background()
+	log.Infof(context.Background(), "canceling queryID %s for user %s", queryIDStr, username)
 	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
+		log.Infof(ctx, "got error", err)
 		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
 	}
 
@@ -1315,6 +1322,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	for _, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
+			log.Infof(ctx, "skipping session with user %s", session.user())
 			continue
 		}
 

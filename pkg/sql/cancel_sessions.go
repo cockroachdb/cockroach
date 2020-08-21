@@ -44,10 +44,6 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 		return true, nil
 	}
 
-	statusServer, err := params.extendedEvalCtx.StatusServer.OptionalErr(47895)
-	if err != nil {
-		return false, err
-	}
 	sessionIDString, ok := tree.AsDString(datum)
 	if !ok {
 		return false, errors.AssertionFailedf("%q: expected *DString, found %T", datum, datum)
@@ -67,7 +63,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 		Username:  params.SessionData().User,
 	}
 
-	response, err := statusServer.CancelSession(params.ctx, request)
+	response, err := params.extendedEvalCtx.SQLStatusServer.CancelSession(params.ctx, request)
 	if err != nil {
 		return false, err
 	}

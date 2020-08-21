@@ -25,7 +25,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 ) (*PlanningCtx, []roachpb.NodeID, error) {
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, true /* distribute */)
 
-	ss, err := execCfg.StatusServer.OptionalErr(47900)
+	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
 		return nil, nil, err
 	}
