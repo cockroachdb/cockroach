@@ -166,7 +166,7 @@ func (sr *txnSpanRefresher) SendLocked(
 	ba.CanForwardReadTimestamp = sr.canForwardReadTimestampWithoutRefresh(ba.Txn)
 	if rArgs, hasET := ba.GetArg(roachpb.EndTxn); hasET {
 		et := rArgs.(*roachpb.EndTxnRequest)
-		et.CanCommitAtHigherTimestamp = ba.CanForwardReadTimestamp
+		et.DeprecatedCanCommitAtHigherTimestamp = ba.CanForwardReadTimestamp
 	}
 
 	// Attempt a refresh before sending the batch.

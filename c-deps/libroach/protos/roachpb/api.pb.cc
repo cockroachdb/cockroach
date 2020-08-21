@@ -10352,7 +10352,7 @@ const int EndTxnRequest::kInternalCommitTriggerFieldNumber;
 const int EndTxnRequest::kLockSpansFieldNumber;
 const int EndTxnRequest::kInFlightWritesFieldNumber;
 const int EndTxnRequest::kRequire1PcFieldNumber;
-const int EndTxnRequest::kCanCommitAtHigherTimestampFieldNumber;
+const int EndTxnRequest::kDeprecatedCanCommitAtHigherTimestampFieldNumber;
 const int EndTxnRequest::kPoisonFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -10531,14 +10531,14 @@ bool EndTxnRequest::MergePartialFromCodedStream(
         break;
       }
 
-      // bool can_commit_at_higher_timestamp = 8;
+      // bool deprecated_can_commit_at_higher_timestamp = 8;
       case 8: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(64u /* 64 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
-                 input, &can_commit_at_higher_timestamp_)));
+                 input, &deprecated_can_commit_at_higher_timestamp_)));
         } else {
           goto handle_unusual;
         }
@@ -10630,9 +10630,9 @@ void EndTxnRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(6, this->require_1pc(), output);
   }
 
-  // bool can_commit_at_higher_timestamp = 8;
-  if (this->can_commit_at_higher_timestamp() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->can_commit_at_higher_timestamp(), output);
+  // bool deprecated_can_commit_at_higher_timestamp = 8;
+  if (this->deprecated_can_commit_at_higher_timestamp() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(8, this->deprecated_can_commit_at_higher_timestamp(), output);
   }
 
   // bool poison = 9;
@@ -10708,8 +10708,8 @@ size_t EndTxnRequest::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
-  // bool can_commit_at_higher_timestamp = 8;
-  if (this->can_commit_at_higher_timestamp() != 0) {
+  // bool deprecated_can_commit_at_higher_timestamp = 8;
+  if (this->deprecated_can_commit_at_higher_timestamp() != 0) {
     total_size += 1 + 1;
   }
 
@@ -10752,8 +10752,8 @@ void EndTxnRequest::MergeFrom(const EndTxnRequest& from) {
   if (from.require_1pc() != 0) {
     set_require_1pc(from.require_1pc());
   }
-  if (from.can_commit_at_higher_timestamp() != 0) {
-    set_can_commit_at_higher_timestamp(from.can_commit_at_higher_timestamp());
+  if (from.deprecated_can_commit_at_higher_timestamp() != 0) {
+    set_deprecated_can_commit_at_higher_timestamp(from.deprecated_can_commit_at_higher_timestamp());
   }
   if (from.poison() != 0) {
     set_poison(from.poison());
@@ -10784,7 +10784,7 @@ void EndTxnRequest::InternalSwap(EndTxnRequest* other) {
   swap(internal_commit_trigger_, other->internal_commit_trigger_);
   swap(commit_, other->commit_);
   swap(require_1pc_, other->require_1pc_);
-  swap(can_commit_at_higher_timestamp_, other->can_commit_at_higher_timestamp_);
+  swap(deprecated_can_commit_at_higher_timestamp_, other->deprecated_can_commit_at_higher_timestamp_);
   swap(poison_, other->poison_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
