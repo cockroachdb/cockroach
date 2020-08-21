@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -381,6 +382,10 @@ func runStart(cmd *cobra.Command, args []string, disableReplication bool) error 
 		ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[specIdx],
 	); err != nil {
 		return err
+	}
+
+	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
+		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
 
 	// Initialize the node's configuration from startup parameters.

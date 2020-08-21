@@ -243,6 +243,10 @@ func (hj *hashJoiner) Init() {
 		hashTableLoadFactor,
 		hj.spec.right.sourceTypes,
 		hj.spec.right.eqCols,
+		// Store all columns from the right source since we need to be able to
+		// export the full batches when falling back to the external hash
+		// joiner.
+		nil, /* colsToStore */
 		allowNullEquality,
 		hashTableFullBuildMode,
 		probeMode,
@@ -364,6 +368,18 @@ func (hj *hashJoiner) emitUnmatched() {
 	})
 }
 
+// hjInitialToCheck is a slice that contains all consequent integers in
+// [0, coldata.BatchSize()) range that can be used to initialize toCheck buffer
+// for most of the join types.
+var hjInitialToCheck []uint64
+
+func init() {
+	hjInitialToCheck = make([]uint64, coldata.BatchSize())
+	for i := range hjInitialToCheck {
+		hjInitialToCheck[i] = uint64(i)
+	}
+}
+
 // exec is a general prober that works with non-distinct build table equality
 // columns. It returns a Batch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
@@ -395,25 +411,24 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 
 			sel := batch.Selection()
 
+			// First, we compute the hash values for all tuples in the batch.
+			hj.ht.computeBuckets(
+				ctx, hj.ht.probeScratch.buckets, hj.ht.probeScratch.keys, batchSize, sel,
+			)
+			// Then, we initialize groupID with the initial hash buckets and
+			// toCheck with all applicable indices.
 			var nToCheck uint64
 			switch hj.spec.joinType {
 			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// The setup of probing for LEFT ANTI and EXCEPT ALL joins
 				// needs a special treatment in order to reuse the same "check"
 				// functions below.
-				//
-				// First, we compute the hash values for all tuples in the batch.
-				hj.ht.computeBuckets(
-					ctx, hj.ht.probeScratch.buckets, hj.ht.probeScratch.keys, batchSize, sel,
-				)
-				// Then, we iterate over all tuples to see whether there is at least
-				// one tuple in the hash table that has the same hash value.
-				for i := 0; i < batchSize; i++ {
-					if hj.ht.buildScratch.first[hj.ht.probeScratch.buckets[i]] != 0 {
+				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+					if hj.ht.buildScratch.first[bucket] != 0 {
 						// Non-zero "first" key indicates that there is a match of hashes
 						// and we need to include the current tuple to check whether it is
 						// an actual match.
-						hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[hj.ht.probeScratch.buckets[i]]
+						hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
 						hj.ht.probeScratch.toCheck[nToCheck] = uint64(i)
 						nToCheck++
 					}
@@ -426,14 +441,14 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				// included into the output.
 				copy(hj.ht.probeScratch.headID[:batchSize], zeroUint64Column)
 			default:
-				// Initialize groupID with the initial hash buckets and toCheck with all
-				// applicable indices.
-				hj.ht.lookupInitial(ctx, batchSize, sel)
+				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+					hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
+				}
+				copy(hj.ht.probeScratch.toCheck, hjInitialToCheck[:batchSize])
 				nToCheck = uint64(batchSize)
 			}
 
 			var nResults int
-
 			if hj.spec.rightDistinct {
 				for nToCheck > 0 {
 					// Continue searching along the hash table next chains for the corresponding

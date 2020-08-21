@@ -33,6 +33,9 @@ func NewUnorderedDistinct(
 		hashTableLoadFactor,
 		typs,
 		distinctCols,
+		// Store all columns from the source since the unordered distinct
+		// doesn't change the schema.
+		nil,  /* colsToStore */
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,

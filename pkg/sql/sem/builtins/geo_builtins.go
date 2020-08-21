@@ -4164,6 +4164,7 @@ func initGeoBuiltins() {
 	}{
 		{"geomfromewkt", "st_geomfromewkt"},
 		{"geomfromewkb", "st_geomfromewkb"},
+		{"st_coorddim", "st_ndims"},
 		{"st_geogfromtext", "st_geographyfromtext"},
 		{"st_geomfromtext", "st_geometryfromtext"},
 		{"st_numinteriorring", "st_numinteriorrings"},

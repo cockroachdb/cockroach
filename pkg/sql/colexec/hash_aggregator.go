@@ -153,6 +153,12 @@ func (op *hashAggregator) Init() {
 	op.scratch.eqChains = make([][]int, coldata.BatchSize())
 	op.scratch.intSlice = make([]int, coldata.BatchSize())
 	op.scratch.anotherIntSlice = make([]int, coldata.BatchSize())
+	// The hash table only needs to store the grouping columns to be able to
+	// perform the equality check.
+	colsToStore := make([]int, len(op.spec.GroupCols))
+	for i := range colsToStore {
+		colsToStore[i] = int(op.spec.GroupCols[i])
+	}
 	// This number was chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.25
@@ -161,6 +167,7 @@ func (op *hashAggregator) Init() {
 		hashTableLoadFactor,
 		op.inputTypes,
 		op.spec.GroupCols,
+		colsToStore,
 		true, /* allowNullEquality */
 		hashTableDistinctBuildMode,
 		hashTableDefaultProbeMode,
