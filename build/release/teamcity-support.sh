@@ -29,7 +29,7 @@ docker_login_with_google() {
 }
 
 docker_login() {
-  echo "${DOCKER_AUTH}" | docker login --username "${DOCKER_ID}" --password-stdin
+  echo "${DOCKER_ACCESS_TOKEN}" | docker login --username "${DOCKER_ID}" --password-stdin
 }
 
 configure_docker_creds() {
