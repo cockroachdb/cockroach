@@ -611,6 +611,7 @@ message AggregatorSpec {
     STDDEV_POP = 30;
     ST_MAKELINE = 31;
     ST_EXTENT = 32;
+    ST_UNION = 33;
   }
 
   enum Type {

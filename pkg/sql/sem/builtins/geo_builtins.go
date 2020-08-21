@@ -2973,24 +2973,6 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			tree.VolatilityImmutable,
 		),
 	),
-	"st_union": makeBuiltin(
-		defProps(),
-		geometryOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
-				union, err := geomfn.Union(a.Geometry, b.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(union), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the union of the given geometries as a single Geometry object.",
-				libraryUsage: usesGEOS,
-			},
-			tree.VolatilityImmutable,
-		),
-	),
 
 	//
 	// Transformations

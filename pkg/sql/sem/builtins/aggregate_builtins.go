@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -398,6 +400,26 @@ var aggregates = map[string]builtinDefinition{
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_union": makeBuiltin(
+		tree.FunctionProperties{
+			Class:                   tree.AggregateClass,
+			NullableArgs:            true,
+			AvailableOnPublicSchema: true,
+		},
+		makeAggOverload(
+			[]*types.T{types.Geometry},
+			types.Geometry,
+			func(
+				params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+			) tree.AggregateFunc {
+				return &stUnionAgg{}
+			},
+			infoBuilder{
+				info: "Applies a spatial union to the geometries provided.",
+			}.String(),
+			tree.VolatilityImmutable,
+		),
+	),
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
@@ -649,6 +671,66 @@ func (agg *stMakeLineAgg) Size() int64 {
 	return sizeOfSTMakeLineAggregate
 }
 
+type stUnionAgg struct {
+	srid geopb.SRID
+	// TODO(#geo): store the current union object in C memory, to avoid the EWKB round trips.
+	ewkb geopb.EWKB
+	set  bool
+}
+
+// Add implements the AggregateFunc interface.
+func (agg *stUnionAgg) Add(_ context.Context, firstArg tree.Datum, otherArgs ...tree.Datum) error {
+	if firstArg == tree.DNull {
+		return nil
+	}
+	geomArg := tree.MustBeDGeometry(firstArg)
+	if !agg.set {
+		agg.ewkb = geomArg.EWKB()
+		agg.set = true
+		agg.srid = geomArg.SRID()
+		return nil
+	}
+	if agg.srid != geomArg.SRID() {
+		c, err := geo.ParseGeometryFromEWKB(agg.ewkb)
+		if err != nil {
+			return err
+		}
+		return geo.NewMismatchingSRIDsError(geomArg.Geometry, c)
+	}
+	var err error
+	// TODO(#geo):We are allocating a slice for the result each time we
+	// call geos.Union in cStringToSafeGoBytes.
+	// We could change geos.Union to accept the existing slice.
+	agg.ewkb, err = geos.Union(agg.ewkb, geomArg.EWKB())
+	return err
+}
+
+// Result implements the AggregateFunc interface.
+func (agg *stUnionAgg) Result() (tree.Datum, error) {
+	if !agg.set {
+		return tree.DNull, nil
+	}
+	g, err := geo.ParseGeometryFromEWKB(agg.ewkb)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDGeometry(g), nil
+}
+
+// Reset implements the AggregateFunc interface.
+func (agg *stUnionAgg) Reset(context.Context) {
+	agg.ewkb = nil
+	agg.set = false
+}
+
+// Close implements the AggregateFunc interface.
+func (agg *stUnionAgg) Close(context.Context) {}
+
+// Size implements the AggregateFunc interface.
+func (agg *stUnionAgg) Size() int64 {
+	return sizeOfSTUnionAggregate
+}
+
 type stExtentAgg struct {
 	bbox *geo.CartesianBoundingBox
 }
@@ -739,6 +821,7 @@ var _ tree.AggregateFunc = &bitBitOrAggregate{}
 var _ tree.AggregateFunc = &percentileDiscAggregate{}
 var _ tree.AggregateFunc = &percentileContAggregate{}
 var _ tree.AggregateFunc = &stMakeLineAgg{}
+var _ tree.AggregateFunc = &stUnionAgg{}
 var _ tree.AggregateFunc = &stExtentAgg{}
 
 const sizeOfArrayAggregate = int64(unsafe.Sizeof(arrayAggregate{}))
@@ -779,6 +862,7 @@ const sizeOfBitBitOrAggregate = int64(unsafe.Sizeof(bitBitOrAggregate{}))
 const sizeOfPercentileDiscAggregate = int64(unsafe.Sizeof(percentileDiscAggregate{}))
 const sizeOfPercentileContAggregate = int64(unsafe.Sizeof(percentileContAggregate{}))
 const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
+const sizeOfSTUnionAggregate = int64(unsafe.Sizeof(stUnionAgg{}))
 const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
 
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
