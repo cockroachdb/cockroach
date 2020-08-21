@@ -57,7 +57,7 @@ func setPoint(lineString *geom.LineString, index int, point *geom.Point) (*geom.
 	hasNegIndex := index < 0
 
 	if index >= len(coords) || (hasNegIndex && index*-1 > len(coords)) {
-		return nil, errors.Newf("index %d out of range of lineString with %d coordinates", index, len(coords))
+		return nil, errors.Newf("index %d out of range of LineString with %d coordinates", index, len(coords))
 	}
 
 	if hasNegIndex {
@@ -65,6 +65,43 @@ func setPoint(lineString *geom.LineString, index int, point *geom.Point) (*geom.
 	}
 
 	coords[index].Set(point.Coords())
+
+	return lineString.SetCoords(coords)
+}
+
+// RemovePoint removes the point at the given index of lineString; index is 0-based.
+func RemovePoint(lineString *geo.Geometry, index int) (*geo.Geometry, error) {
+	g, err := lineString.AsGeomT()
+	if err != nil {
+		return nil, err
+	}
+
+	lineStringG, ok := g.(*geom.LineString)
+	if !ok {
+		e := geom.ErrUnsupportedType{Value: g}
+		return nil, errors.Wrap(e, "geometry to be modified must be a LineString")
+	}
+
+	if lineStringG.NumCoords() == 2 {
+		return nil, errors.Newf("cannot remove a point from a LineString with only two Points")
+	}
+
+	g, err = removePoint(lineStringG, index)
+	if err != nil {
+		return nil, err
+	}
+
+	return geo.NewGeometryFromGeomT(g)
+}
+
+func removePoint(lineString *geom.LineString, index int) (*geom.LineString, error) {
+	coords := lineString.Coords()
+
+	if index >= len(coords) || index < 0 {
+		return nil, errors.Newf("index %d out of range of LineString with %d coordinates", index, len(coords))
+	}
+
+	coords = append(coords[:index], coords[index+1:]...)
 
 	return lineString.SetCoords(coords)
 }
