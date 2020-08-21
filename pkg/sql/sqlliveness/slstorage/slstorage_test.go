@@ -95,12 +95,12 @@ func TestStorage(t *testing.T) {
 	t.Run("delete-update", func(t *testing.T) {
 		clock, timeSource, settings, stopper, storage := setup(t)
 		defer stopper.Stop(ctx)
+		slstorage.GCJitter.Override(&settings.SV, 0)
 		storage.Start(ctx)
 		metrics := storage.Metrics()
 
-		// GC will run right on startup and then will not run again until gc
-		// interval passes.
-		gcInterval := slstorage.DefaultGCInterval.Get(&settings.SV)
+		// GC will run some time after startup.
+		gcInterval := slstorage.GCInterval.Get(&settings.SV)
 		nextGC := timeSource.Now().Add(gcInterval)
 		testutils.SucceedsSoon(t, func() error {
 			timers := timeSource.Timers()
@@ -110,8 +110,7 @@ func TestStorage(t *testing.T) {
 			require.Equal(t, []time.Time{nextGC}, timers)
 			return nil
 		})
-		// Ensure that we saw the first gc run.
-		require.Equal(t, int64(1), metrics.SessionDeletionsRuns.Count())
+		require.Equal(t, int64(0), metrics.SessionDeletionsRuns.Count())
 
 		// Create two records which will expire before nextGC.
 		exp := clock.Now().Add(gcInterval.Nanoseconds()-1, 0)
@@ -166,7 +165,7 @@ func TestStorage(t *testing.T) {
 			return errors.Errorf("expected %v, saw %v", followingGC, timers[0])
 		})
 		// Ensure that we saw the second gc run and the deletion.
-		require.Equal(t, int64(2), metrics.SessionDeletionsRuns.Count())
+		require.Equal(t, int64(1), metrics.SessionDeletionsRuns.Count())
 		require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 
 		// Ensure that we now see the id1 as dead.
@@ -254,5 +253,37 @@ func TestStorage(t *testing.T) {
 			require.False(t, exists)
 			require.Equal(t, int64(1), metrics.WriteFailures.Count())
 		}
+	})
+	t.Run("test-jitter", func(t *testing.T) {
+		// We want to test that the GC runs a number of times but is jitterred.
+		_, timeSource, settings, stopper, storage := setup(t)
+		defer stopper.Stop(ctx)
+		storage.Start(ctx)
+
+		waitForGCTimer := func() (timer time.Time) {
+			testutils.SucceedsSoon(t, func() error {
+				timers := timeSource.Timers()
+				if len(timers) != 1 {
+					return errors.Errorf("expected 1 timer, saw %d", len(timers))
+				}
+				timer = timers[0]
+				return nil
+			})
+			return timer
+		}
+		const N = 10
+		for i := 0; i < N; i++ {
+			timer := waitForGCTimer()
+			timeSource.Advance(timer.Sub(timeSource.Now()))
+		}
+		jitter := slstorage.GCJitter.Get(&settings.SV)
+		interval := slstorage.GCInterval.Get(&settings.SV)
+		minTime := t0.Add(time.Duration((1 - jitter) * float64(interval.Nanoseconds()) * N))
+		maxTime := t0.Add(time.Duration((1 + jitter) * float64(interval.Nanoseconds()) * N))
+		noJitterTime := t0.Add(interval * N)
+		now := timeSource.Now()
+		require.Truef(t, now.After(minTime), "%v > %v", now, minTime)
+		require.Truef(t, now.Before(maxTime), "%v < %v", now, maxTime)
+		require.Truef(t, !now.Equal(noJitterTime), "%v != %v", now, noJitterTime)
 	})
 }
