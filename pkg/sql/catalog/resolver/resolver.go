@@ -60,7 +60,7 @@ func GetObjectNames(
 	txn *kv.Txn,
 	sc SchemaResolver,
 	codec keys.SQLCodec,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
 ) (res tree.TableNames, err error) {
@@ -165,7 +165,7 @@ func ResolveExistingObject(
 	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
-		_, isType := obj.(sqlbase.TypeDescriptor)
+		_, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
 		}
@@ -174,7 +174,7 @@ func ResolveExistingObject(
 		}
 		return obj.(*sqlbase.ImmutableTypeDescriptor), prefix, nil
 	case tree.TableObject:
-		table, ok := obj.(sqlbase.TableDescriptor)
+		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
 			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
 		}
@@ -234,7 +234,7 @@ func ResolveTargetObject(
 		return nil, prefix, err
 	}
 	scInfo := scMeta.(*catalog.ResolvedObjectPrefix)
-	if scInfo.Schema.Kind == sqlbase.SchemaVirtual {
+	if scInfo.Schema.Kind == catalog.SchemaVirtual {
 		return nil, prefix, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"schema cannot be modified: %q", tree.ErrString(&prefix))
 	}

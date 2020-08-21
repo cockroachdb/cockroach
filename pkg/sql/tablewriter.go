@@ -14,10 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -73,7 +73,7 @@ type tableWriter interface {
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
-	tableDesc() *sqlbase.ImmutableTableDescriptor
+	tableDesc() catalog.TableDescriptor
 
 	// close frees all resources held by the tableWriter.
 	close(context.Context)
@@ -99,7 +99,7 @@ type tableWriterBase struct {
 	// txn is the current KV transaction.
 	txn *kv.Txn
 	// desc is the descriptor of the table that we're writing.
-	desc *sqlbase.ImmutableTableDescriptor
+	desc catalog.TableDescriptor
 	// is autoCommit turned on.
 	autoCommit autoCommitOpt
 	// b is the current batch.
@@ -115,7 +115,7 @@ type tableWriterBase struct {
 	rows *rowcontainer.RowContainer
 }
 
-func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc *sqlbase.ImmutableTableDescriptor) {
+func (tb *tableWriterBase) init(txn *kv.Txn, tableDesc catalog.TableDescriptor) {
 	tb.txn = txn
 	tb.desc = tableDesc
 	tb.b = txn.NewBatch()

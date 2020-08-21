@@ -11,8 +11,8 @@
 package row
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -41,9 +41,7 @@ type PartialIndexUpdateHelper struct {
 // Meanwhile, partialIndexPutVals[3] evaluating to false indicates that the
 // third partial index should be ignored.
 func (pm *PartialIndexUpdateHelper) Init(
-	partialIndexPutVals tree.Datums,
-	partialIndexDelVals tree.Datums,
-	tabDesc *sqlbase.ImmutableTableDescriptor,
+	partialIndexPutVals tree.Datums, partialIndexDelVals tree.Datums, tabDesc catalog.TableDescriptor,
 ) error {
 	colIdx := 0
 	partialIndexOrds := tabDesc.PartialIndexOrds()

@@ -23,7 +23,7 @@ import (
 
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
-	tableDesc *descpb.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 	indexDesc *descpb.IndexDescriptor
 }
 
@@ -35,7 +35,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 		return nil, err
 	}
 
-	return &commentOnIndexNode{n: n, tableDesc: tableDesc.TableDesc(), indexDesc: indexDesc}, nil
+	return &commentOnIndexNode{n: n, tableDesc: tableDesc, indexDesc: indexDesc}, nil
 }
 
 func (n *commentOnIndexNode) startExec(params runParams) error {

@@ -319,7 +319,7 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.ID, len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc.GetID(), len(n.input))
 
 	return true, nil
 }

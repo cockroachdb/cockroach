@@ -88,7 +88,7 @@ type optSchema struct {
 	planner *planner
 
 	database *sqlbase.ImmutableDatabaseDescriptor
-	schema   sqlbase.ResolvedSchema
+	schema   catalog.ResolvedSchema
 
 	name cat.SchemaName
 }
@@ -96,7 +96,7 @@ type optSchema struct {
 // ID is part of the cat.Object interface.
 func (os *optSchema) ID() cat.StableID {
 	switch os.schema.Kind {
-	case sqlbase.SchemaUserDefined, sqlbase.SchemaTemporary:
+	case catalog.SchemaUserDefined, catalog.SchemaTemporary:
 		// User defined schemas and the temporary schema have real ID's, so use
 		// them here.
 		return cat.StableID(os.schema.ID)
@@ -136,9 +136,9 @@ func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceNa
 	)
 }
 
-func (os *optSchema) getDescriptorForPermissionsCheck() sqlbase.Descriptor {
+func (os *optSchema) getDescriptorForPermissionsCheck() catalog.Descriptor {
 	// If the schema is backed by a descriptor, then return it.
-	if os.schema.Kind == sqlbase.SchemaUserDefined {
+	if os.schema.Kind == catalog.SchemaUserDefined {
 		return os.schema.Desc
 	}
 	// Otherwise, just return the database descriptor.
@@ -180,7 +180,7 @@ func (oc *optCatalog) ResolveSchema(
 	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
-		database: prefix.Database,
+		database: prefix.Database.(*sqlbase.ImmutableDatabaseDescriptor),
 		schema:   prefix.Schema,
 		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
@@ -241,7 +241,7 @@ func (oc *optCatalog) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types
 	return oc.planner.ResolveTypeByOID(ctx, oid)
 }
 
-func getDescFromCatalogObjectForPermissions(o cat.Object) (sqlbase.Descriptor, error) {
+func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, error) {
 	switch t := o.(type) {
 	case *optSchema:
 		return t.getDescriptorForPermissionsCheck(), nil

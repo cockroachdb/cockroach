@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -44,9 +45,7 @@ func (f *singleKVFetcher) nextBatch(
 }
 
 // ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
-) error {
+func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
 	origPErr := b.MustPErr()
 	if origPErr.Index == nil {
 		return origPErr.GoError()
@@ -70,7 +69,7 @@ type KeyToDescTranslator interface {
 	// descriptor. An implementation can return (nil, false) if the translation
 	// failed because the key is not part of a table it was scanning, but is
 	// instead part of an interleaved relative (parent/sibling/child) table.
-	KeyToDesc(roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool)
+	KeyToDesc(roachpb.Key) (catalog.TableDescriptor, bool)
 }
 
 // ConvertFetchError attempts to a map key-value error generated during a
@@ -88,10 +87,7 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
 func NewUniquenessConstraintViolationError(
-	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
-	key roachpb.Key,
-	value *roachpb.Value,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key, value *roachpb.Value,
 ) error {
 	index, names, values, err := DecodeRowInfo(ctx, tableDesc, key, value, false)
 	if err != nil {
@@ -112,7 +108,7 @@ func NewUniquenessConstraintViolationError(
 // table descriptor corresponding to the key is unknown due to a table
 // interleaving.
 func NewLockNotAvailableError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, key roachpb.Key,
+	ctx context.Context, tableDesc catalog.TableDescriptor, key roachpb.Key,
 ) error {
 	if tableDesc == nil {
 		return pgerror.Newf(pgcode.LockNotAvailable,
@@ -129,7 +125,7 @@ func NewLockNotAvailableError(
 		"could not obtain lock on row (%s)=(%s) in %s@%s",
 		strings.Join(colNames, ","),
 		strings.Join(values, ","),
-		tableDesc.Name,
+		tableDesc.GetName(),
 		index.Name)
 }
 
@@ -138,7 +134,7 @@ func NewLockNotAvailableError(
 // and corresponding column names and values to the provided KV are returned.
 func DecodeRowInfo(
 	ctx context.Context,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	key roachpb.Key,
 	value *roachpb.Value,
 	allColumns bool,
@@ -163,10 +159,11 @@ func DecodeRowInfo(
 
 	colIDs := index.ColumnIDs
 	if allColumns {
-		if index.ID == tableDesc.PrimaryIndex.ID {
-			colIDs = make([]descpb.ColumnID, len(tableDesc.Columns))
-			for i := range tableDesc.Columns {
-				colIDs[i] = tableDesc.Columns[i].ID
+		if index.ID == tableDesc.GetPrimaryIndexID() {
+			publicColumns := tableDesc.GetPublicColumns()
+			colIDs = make([]descpb.ColumnID, len(publicColumns))
+			for i := range publicColumns {
+				colIDs[i] = publicColumns[i].ID
 			}
 		} else {
 			colIDs, _ = index.FullColumnIDs()
@@ -191,7 +188,7 @@ func DecodeRowInfo(
 		Desc:             tableDesc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
-		IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
 		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}

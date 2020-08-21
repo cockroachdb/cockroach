@@ -107,12 +107,7 @@ func (r *insertRun) initRowContainer(params runParams, columns sqlbase.ResultCol
 		r.resultRowBuffer[i] = tree.DNull
 	}
 
-	colIDToRetIndex := make(map[descpb.ColumnID]int)
-	cols := r.ti.tableDesc().Columns
-	for i := range cols {
-		colIDToRetIndex[cols[i].ID] = i
-	}
-
+	colIDToRetIndex := r.ti.tableDesc().ColumnIdxMap()
 	r.rowIdxToTabColIdx = make([]int, len(r.insertCols))
 	for i, col := range r.insertCols {
 		if idx, ok := colIDToRetIndex[col.ID]; !ok {
@@ -275,7 +270,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc().ID, n.run.ti.lastBatchSize)
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc().GetID(), n.run.ti.lastBatchSize)
 
 	return n.run.ti.lastBatchSize > 0, nil
 }

@@ -396,7 +396,7 @@ func drainNamesForDescriptor(
 	// can be reused henceforth.
 	var namesToReclaim []descpb.NameInfo
 	descIDs := []descpb.ID{desc.GetID()}
-	_, isSchema := desc.(sqlbase.SchemaDescriptor)
+	_, isSchema := desc.(catalog.SchemaDescriptor)
 	if isSchema {
 		descIDs = append(descIDs, desc.GetParentID())
 	}
@@ -484,7 +484,7 @@ func (sc *SchemaChanger) execLogTags() *logtags.Buffer {
 // to execute if the target descriptor is a table. It returns an error if this
 // schema changer needs to wait.
 func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descriptor) error {
-	if tableDesc, ok := desc.(sqlbase.TableDescriptor); ok {
+	if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
 		// TODO (lucy): Now that marking a schema change job as succeeded doesn't
 		// happen in the same transaction as removing mutations from a table
 		// descriptor, it seems possible for a job to be resumed after the mutation
@@ -594,7 +594,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		}
 		// Some descriptors should be deleted if they are in the DROP state.
 		switch desc.(type) {
-		case sqlbase.SchemaDescriptor, sqlbase.DatabaseDescriptor:
+		case catalog.SchemaDescriptor, catalog.DatabaseDescriptor:
 			if desc.Dropped() {
 				if err := sc.execCfg.DB.Del(ctx, sqlbase.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
 					return err
@@ -797,7 +797,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	if err != nil {
 		return err
 	}
-	if tblDesc, ok := desc.(sqlbase.TableDescriptor); ok && tblDesc.GetState() == descpb.TableDescriptor_ADD {
+	if tblDesc, ok := desc.(catalog.TableDescriptor); ok && tblDesc.GetState() == descpb.TableDescriptor_ADD {
 		// Delete the names in use by this descriptor.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return catalogkv.RemoveObjectNamespaceEntry(
@@ -966,13 +966,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+		referencedTypeIDs, err = desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 			desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, id,
 				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
 			if err != nil {
 				return nil, err
 			}
-			return desc.(sqlbase.TypeDescriptor), nil
+			return desc.(catalog.TypeDescriptor), nil
 		})
 		if err != nil {
 			return err
@@ -1226,7 +1226,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// type descriptors. If this table has been dropped in the mean time, then
 		// don't install any backreferences.
 		if !scTable.Dropped() {
-			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (sqlbase.TypeDescriptor, error) {
+			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 				return descs[id].(*sqlbase.MutableTypeDescriptor), nil
 			})
 			if err != nil {
@@ -1469,7 +1469,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 					}
 					backrefTable := backrefDesc.(*MutableTableDescriptor)
-					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable.TableDesc()); err != nil {
+					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable); err != nil {
 						return err
 					}
 				}

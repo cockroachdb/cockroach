@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -78,7 +79,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, tn *tree.TableName, desc sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc catalog.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -102,7 +103,7 @@ func ShowCreateView(
 // showComments prints out the COMMENT statements sufficient to populate a
 // table's comments, including its index and column comments.
 func showComments(
-	tn *tree.TableName, table sqlbase.TableDescriptor, tc *tableComments, buf *bytes.Buffer,
+	tn *tree.TableName, table catalog.TableDescriptor, tc *tableComments, buf *bytes.Buffer,
 ) error {
 	if tc == nil {
 		return nil
@@ -159,7 +160,7 @@ func showComments(
 func showForeignKeyConstraint(
 	buf *bytes.Buffer,
 	dbPrefix string,
-	originTable sqlbase.TableDescriptor,
+	originTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	lCtx simpleSchemaResolver,
 	searchPath sessiondata.SearchPath,
@@ -219,7 +220,7 @@ func showForeignKeyConstraint(
 // ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func ShowCreateSequence(
-	ctx context.Context, tn *tree.TableName, desc sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.TableName, desc catalog.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -241,7 +242,7 @@ func ShowCreateSequence(
 
 // showFamilyClause creates the FAMILY clauses for a CREATE statement, writing them
 // to tree.FmtCtx f
-func showFamilyClause(desc sqlbase.TableDescriptor, f *tree.FmtCtx) {
+func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range desc.GetFamilies() {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
@@ -306,7 +307,7 @@ func showCreateInterleave(
 func ShowCreatePartitioning(
 	a *sqlbase.DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	buf *bytes.Buffer,
@@ -404,7 +405,7 @@ func ShowCreatePartitioning(
 // showConstraintClause creates the CONSTRAINT clauses for a CREATE statement,
 // writing them to tree.FmtCtx f
 func showConstraintClause(
-	ctx context.Context, desc sqlbase.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
+	ctx context.Context, desc catalog.TableDescriptor, semaCtx *tree.SemaContext, f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
 		if e.Hidden {

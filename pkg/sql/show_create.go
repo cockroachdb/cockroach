@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +67,7 @@ func ShowCreateTable(
 	p PlanHookState,
 	tn *tree.TableName,
 	dbPrefix string,
-	desc sqlbase.TableDescriptor,
+	desc catalog.TableDescriptor,
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {

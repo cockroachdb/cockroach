@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -344,15 +345,15 @@ CREATE TABLE test.tt (x test.t);
 		t.Fatal(err)
 	}
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
-	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
-		var typeDesc sqlbase.TypeDescriptor
+	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
+		var typeDesc catalog.TypeDescriptor
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, id,
 				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
 			if err != nil {
 				return err
 			}
-			typeDesc = desc.(sqlbase.TypeDescriptor)
+			typeDesc = desc.(catalog.TypeDescriptor)
 			return nil
 		}); err != nil {
 			return tree.TypeName{}, nil, err

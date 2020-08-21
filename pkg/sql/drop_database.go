@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -184,7 +185,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	for _, schemaToDelete := range n.d.schemasToDelete {
 		// Drop any schemas that only have namespace entries -- public and any
 		// temporary schemas.
-		if schemaToDelete.Kind == sqlbase.SchemaTemporary || schemaToDelete.Kind == sqlbase.SchemaPublic {
+		if schemaToDelete.Kind == catalog.SchemaTemporary ||
+			schemaToDelete.Kind == catalog.SchemaPublic {
 			if err := catalogkv.RemoveSchemaNamespaceEntry(
 				ctx,
 				p.txn,

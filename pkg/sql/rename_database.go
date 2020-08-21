@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -142,7 +143,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			if objDesc == nil {
 				continue
 			}
-			tbDesc := objDesc.(sqlbase.TableDescriptor)
+			tbDesc := objDesc.(catalog.TableDescriptor)
 
 			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
 				dependentDesc, err := catalogkv.MustGetTableDescByID(ctx, p.txn, p.ExecCfg().Codec, dependedOn.ID)
@@ -236,7 +237,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 func isAllowedDependentDescInRenameDatabase(
 	ctx context.Context,
 	dependedOn *descpb.TableDescriptor_Reference,
-	tbDesc sqlbase.TableDescriptor,
+	tbDesc catalog.TableDescriptor,
 	dependentDesc *sqlbase.ImmutableTableDescriptor,
 	dbName string,
 ) (bool, string, error) {

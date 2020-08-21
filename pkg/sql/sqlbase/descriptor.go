@@ -15,42 +15,10 @@ import (
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// Descriptor is an interface to be shared by individual descriptor
-// types.
-type Descriptor interface {
-	tree.NameResolutionResult
-
-	GetID() descpb.ID
-	GetName() string
-	GetParentID() descpb.ID
-	GetParentSchemaID() descpb.ID
-
-	// Metadata for descriptor leasing.
-	GetVersion() descpb.DescriptorVersion
-	GetModificationTime() hlc.Timestamp
-	GetDrainingNames() []descpb.NameInfo
-
-	GetPrivileges() *descpb.PrivilegeDescriptor
-	TypeName() string
-	GetAuditMode() descpb.TableDescriptor_AuditMode
-
-	Adding() bool
-	// Note: Implementers of Dropped() should also update the implementation
-	// (*descpb.Descriptor).Dropped(). These implementations are not shared
-	// behind this interface.
-	Dropped() bool
-	Offline() bool
-	GetOfflineReason() string
-
-	// DescriptorProto prepares this descriptor for serialization.
-	DescriptorProto() *descpb.Descriptor
-}
 
 // GetDescriptorMetadata extracts metadata out of a raw descpb.Descriptor.
 func GetDescriptorMetadata(

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -72,7 +73,7 @@ func GenerateSubzoneSpans(
 	st *cluster.Settings,
 	clusterID uuid.UUID,
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	subzones []zonepb.Subzone,
 	hasNewSubzones bool,
 ) ([]zonepb.SubzoneSpan, error) {
@@ -99,7 +100,7 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	if err := tableDesc.ForeachIndex(sqlbase.IndexOpts{
+	if err := tableDesc.ForeachIndex(catalog.IndexOpts{
 		AddMutations: true,
 	}, func(idxDesc *descpb.IndexDescriptor, _ bool) error {
 		_, indexSubzoneExists := subzoneIndexByIndexID[idxDesc.ID]
@@ -174,7 +175,7 @@ func GenerateSubzoneSpans(
 func indexCoveringsForPartitioning(
 	a *sqlbase.DatumAlloc,
 	codec keys.SQLCodec,
-	tableDesc sqlbase.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	relevantPartitions map[string]int32,

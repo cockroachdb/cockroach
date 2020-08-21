@@ -14,28 +14,14 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by ImmutableDatabaseDescriptor.
-type DatabaseDescriptor interface {
-	Descriptor
-
-	// Note: Prior to user-defined schemas, databases were the schema meta for
-	// objects.
-	//
-	// TODO(ajwerner): Remove this in the 20.2 cycle as part of user-defined
-	// schemas.
-	tree.SchemaMeta
-	DatabaseDesc() *descpb.DatabaseDescriptor
-}
-
-var _ DatabaseDescriptor = (*ImmutableDatabaseDescriptor)(nil)
+var _ catalog.DatabaseDescriptor = (*ImmutableDatabaseDescriptor)(nil)
 
 // ImmutableDatabaseDescriptor wraps a database descriptor and provides methods
 // on it.
@@ -224,7 +210,7 @@ func (desc *MutableDatabaseDescriptor) OriginalVersion() descpb.DescriptorVersio
 }
 
 // Immutable implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) Immutable() Descriptor {
+func (desc *MutableDatabaseDescriptor) Immutable() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableDatabaseDescriptor(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))

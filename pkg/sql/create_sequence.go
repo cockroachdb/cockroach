@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -28,7 +29,7 @@ import (
 
 type createSequenceNode struct {
 	n      *tree.CreateSequence
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc catalog.DatabaseDescriptor
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
@@ -76,7 +77,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 func doCreateSequence(
 	params runParams,
 	context string,
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 	name *TableName,
 	persistence tree.Persistence,

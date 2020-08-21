@@ -53,9 +53,9 @@ var _ catalog.Accessor = &LogicalSchemaAccessor{}
 // GetSchema implements the Accessor interface.
 func (l *LogicalSchemaAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	if _, ok := l.vs.GetVirtualSchema(scName); ok {
-		return true, sqlbase.ResolvedSchema{Kind: sqlbase.SchemaVirtual, Name: scName}, nil
+		return true, catalog.ResolvedSchema{Kind: catalog.SchemaVirtual, Name: scName}, nil
 	}
 
 	// Fallthrough.
@@ -67,7 +67,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {

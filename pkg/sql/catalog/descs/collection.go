@@ -211,7 +211,7 @@ type Collection struct {
 	//
 	// TODO(ajwerner): This cache may be problematic in clusters with very large
 	// numbers of descriptors.
-	allDescriptors []sqlbase.Descriptor
+	allDescriptors []catalog.Descriptor
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
@@ -380,11 +380,11 @@ func (tc *Collection) getMutableObjectDescriptor(
 // otherwise falling back to a database lookup.
 func (tc *Collection) ResolveSchema(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{
-			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: tree.PublicSchema,
+		return true, catalog.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: catalog.SchemaPublic, Name: tree.PublicSchema,
 		}, nil
 	}
 
@@ -397,17 +397,17 @@ func (tc *Collection) ResolveSchema(
 	// First lookup the cache.
 	// TODO (SQLSchema): This should look into the lease manager.
 	if val, ok := tc.schemaCache.Load(key); ok {
-		return true, val.(sqlbase.ResolvedSchema), nil
+		return true, val.(catalog.ResolvedSchema), nil
 	}
 
 	// Next, try lookup the result from KV, storing and returning the value.
 	exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName)
 	if err != nil || !exists {
-		return exists, sqlbase.ResolvedSchema{}, err
+		return exists, catalog.ResolvedSchema{}, err
 	}
 
-	if resolved.Kind == sqlbase.SchemaUserDefined && resolved.Desc.Dropped() {
-		return false, sqlbase.ResolvedSchema{}, nil
+	if resolved.Kind == catalog.SchemaUserDefined && resolved.Desc.Dropped() {
+		return false, catalog.ResolvedSchema{}, nil
 	}
 
 	tc.schemaCache.Store(key, resolved)
@@ -864,10 +864,10 @@ func (tc *Collection) GetMutableSchemaDescriptorByID(
 // ResolveSchemaByID looks up a schema by ID.
 func (tc *Collection) ResolveSchemaByID(
 	ctx context.Context, txn *kv.Txn, schemaID descpb.ID,
-) (sqlbase.ResolvedSchema, error) {
+) (catalog.ResolvedSchema, error) {
 	if schemaID == keys.PublicSchemaID {
-		return sqlbase.ResolvedSchema{
-			Kind: sqlbase.SchemaPublic,
+		return catalog.ResolvedSchema{
+			Kind: catalog.SchemaPublic,
 			ID:   schemaID,
 			Name: tree.PublicSchema,
 		}, nil
@@ -876,8 +876,8 @@ func (tc *Collection) ResolveSchemaByID(
 	// We have already considered if the schemaID is PublicSchemaID,
 	// if the id appears in staticSchemaIDMap, it must map to a virtual schema.
 	if scName, ok := resolver.StaticSchemaIDMap[schemaID]; ok {
-		return sqlbase.ResolvedSchema{
-			Kind: sqlbase.SchemaVirtual,
+		return catalog.ResolvedSchema{
+			Kind: catalog.SchemaVirtual,
 			ID:   schemaID,
 			Name: scName,
 		}, nil
@@ -886,8 +886,8 @@ func (tc *Collection) ResolveSchemaByID(
 	// If this collection is attached to a session and the session has created
 	// a temporary schema, then check if the schema ID matches.
 	if tc.sessionData != nil && tc.sessionData.TemporarySchemaID == uint32(schemaID) {
-		return sqlbase.ResolvedSchema{
-			Kind: sqlbase.SchemaTemporary,
+		return catalog.ResolvedSchema{
+			Kind: catalog.SchemaTemporary,
 			ID:   schemaID,
 			Name: tc.sessionData.SearchPath.GetTemporarySchemaName(),
 		}, nil
@@ -897,16 +897,16 @@ func (tc *Collection) ResolveSchemaByID(
 	desc, err := tc.getDescriptorVersionByID(
 		ctx, txn, schemaID, tree.CommonLookupFlags{Required: true}, true /* setTxnDeadline */)
 	if err != nil {
-		return sqlbase.ResolvedSchema{}, err
+		return catalog.ResolvedSchema{}, err
 	}
 
 	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
 	if !ok {
-		return sqlbase.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
+		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
 	}
 
-	return sqlbase.ResolvedSchema{
-		Kind: sqlbase.SchemaUserDefined,
+	return catalog.ResolvedSchema{
+		Kind: catalog.SchemaUserDefined,
 		ID:   schemaID,
 		Desc: schemaDesc,
 		Name: schemaDesc.Name,
@@ -918,14 +918,14 @@ func (tc *Collection) ResolveSchemaByID(
 // TableDescriptor that was passed in. It ensures that ImmutableTableDescriptors
 // are not modified during the process of metadata installation.
 func (tc *Collection) hydrateTypesInTableDesc(
-	ctx context.Context, txn *kv.Txn, desc sqlbase.TableDescriptor,
-) (sqlbase.TableDescriptor, error) {
+	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
+) (catalog.TableDescriptor, error) {
 	switch t := desc.(type) {
 	case *sqlbase.MutableTableDescriptor:
 		// It is safe to hydrate directly into MutableTableDescriptor since it is
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
-		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 			desc, err := tc.GetMutableTypeVersionByID(ctx, txn, id)
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -957,7 +957,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		//  make a copy. However, we could avoid hitting the cache if any of the
 		//  user defined types have been modified in this transaction.
 
-		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 			desc, err := tc.GetTypeVersionByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
 			if err != nil {
 				return tree.TypeName{}, nil, err
@@ -1059,7 +1059,7 @@ func (tc *Collection) WaitForCacheToDropDatabasesDeprecated(ctx context.Context)
 // tables.
 func (tc *Collection) HasUncommittedTables() bool {
 	for _, desc := range tc.uncommittedDescriptors {
-		if _, isTable := desc.immutable.(sqlbase.TableDescriptor); isTable {
+		if _, isTable := desc.immutable.(catalog.TableDescriptor); isTable {
 			return true
 		}
 	}
@@ -1070,7 +1070,7 @@ func (tc *Collection) HasUncommittedTables() bool {
 // types.
 func (tc *Collection) HasUncommittedTypes() bool {
 	for _, desc := range tc.uncommittedDescriptors {
-		if _, isType := desc.immutable.(sqlbase.TypeDescriptor); isType {
+		if _, isType := desc.immutable.(catalog.TypeDescriptor); isType {
 			return true
 		}
 	}
@@ -1327,7 +1327,7 @@ func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) catalog.Mutable
 // before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]sqlbase.Descriptor, error) {
+) ([]catalog.Descriptor, error) {
 	if tc.allDescriptors == nil {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
@@ -1354,7 +1354,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Since we just scanned all the descriptors, we already have everything
 			// we need to hydrate our types. Set up an accessor for the type hydration
 			// method to look into the scanned set of descriptors.
-			typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+			typeLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 				typDesc := typDescs[id]
 				dbDesc := dbDescs[typDesc.ParentID]
 				// We don't use the collection's ResolveSchemaByID method here because
@@ -1569,7 +1569,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 // GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
-) (tree.TypeName, sqlbase.TypeDescriptor, error) {
+) (tree.TypeName, catalog.TypeDescriptor, error) {
 	desc, err := dt.descriptors.getDescriptorVersionByID(
 		ctx,
 		dt.txn,

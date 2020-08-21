@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	// and really all of the leasable descriptor types which includes its initial
 	// DescriptorMeta. This refactoring precedes the actual adoption of
 	// DescriptorMeta.
-	var descriptors []sqlbase.Descriptor
+	var descriptors []catalog.Descriptor
 	{
 		// Make shorthand type names for syntactic sugar.
 		type scDesc = descpb.SchemaDescriptor
@@ -65,7 +66,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		toOid := sqlbase.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"
 		typeArrExpr := "'hello'::@100016 = 'hello'::@100016"
-		descriptors = []sqlbase.Descriptor{
+		descriptors = []catalog.Descriptor{
 			mkDB(0, "system"),
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
 			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),

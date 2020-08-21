@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -303,9 +304,7 @@ func EncodeColumns(
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(
-	desc *ImmutableTableDescriptor, columnIDs []descpb.ColumnID,
-) ([]*types.T, error) {
+func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) ([]*types.T, error) {
 	types := make([]*types.T, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
@@ -317,17 +316,13 @@ func GetColumnTypes(
 	return types, nil
 }
 
-// TableLookupFn is used to resolve a table from an ID, particularly when
-// getting constraint info.
-type TableLookupFn func(descpb.ID) (TableDescriptor, error)
-
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *ImmutableTableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn protoGetter, codec keys.SQLCodec,
+	ctx context.Context, txn catalog.ProtoGetter, codec keys.SQLCodec,
 ) (map[string]descpb.ConstraintDetail, error) {
-	var tableLookup TableLookupFn
+	var tableLookup catalog.TableLookupFn
 	if txn != nil {
-		tableLookup = func(id descpb.ID) (TableDescriptor, error) {
+		tableLookup = func(id descpb.ID) (catalog.TableDescriptor, error) {
 			raw, err := getTableDescFromID(ctx, txn, codec, id)
 			if err != nil {
 				return nil, err
@@ -341,7 +336,7 @@ func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 // GetConstraintInfoWithLookup returns a summary of all constraints on the
 // table using the provided function to fetch a TableDescriptor from an ID.
 func (desc *ImmutableTableDescriptor) GetConstraintInfoWithLookup(
-	tableLookup TableLookupFn,
+	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(tableLookup)
 }
@@ -356,7 +351,7 @@ func (desc *ImmutableTableDescriptor) CheckUniqueConstraints() error {
 // if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
 func (desc *ImmutableTableDescriptor) collectConstraintInfo(
-	tableLookup TableLookupFn,
+	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	info := make(map[string]descpb.ConstraintDetail)
 
@@ -468,7 +463,7 @@ func (desc *ImmutableTableDescriptor) collectConstraintInfo(
 // FindFKReferencedIndex finds the first index in the supplied referencedTable
 // that can satisfy a foreign key of the supplied column ids.
 func FindFKReferencedIndex(
-	referencedTable TableDescriptor, referencedColIDs descpb.ColumnIDs,
+	referencedTable catalog.TableDescriptor, referencedColIDs descpb.ColumnIDs,
 ) (*descpb.IndexDescriptor, error) {
 	// Search for a unique index on the referenced table that matches our foreign
 	// key columns.
@@ -494,7 +489,7 @@ func FindFKReferencedIndex(
 // FindFKOriginIndex finds the first index in the supplied originTable
 // that can satisfy an outgoing foreign key of the supplied column ids.
 func FindFKOriginIndex(
-	originTable TableDescriptor, originColIDs descpb.ColumnIDs,
+	originTable catalog.TableDescriptor, originColIDs descpb.ColumnIDs,
 ) (*descpb.IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.

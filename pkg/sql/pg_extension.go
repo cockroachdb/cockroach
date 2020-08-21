@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +48,7 @@ func postgisColumnsTablePopulator(
 			p,
 			dbContext,
 			hideVirtual,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table sqlbase.TableDescriptor) error {
+			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsPhysicalTable() {
 					return nil
 				}

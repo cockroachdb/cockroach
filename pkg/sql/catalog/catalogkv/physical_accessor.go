@@ -43,7 +43,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	codec keys.SQLCodec,
 	name string,
 	flags tree.DatabaseLookupFlags,
-) (desc sqlbase.DatabaseDescriptor, err error) {
+) (desc catalog.DatabaseDescriptor, err error) {
 	if name == sqlbase.SystemDatabaseName {
 		if flags.RequireMutable {
 			return sqlbase.NewMutableExistingDatabaseDescriptor(
@@ -68,7 +68,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	if err != nil {
 		return nil, err
 	}
-	db, ok := untypedDesc.(sqlbase.DatabaseDescriptor)
+	db, ok := untypedDesc.(catalog.DatabaseDescriptor)
 	if !ok {
 		return nil, nil
 	}
@@ -78,37 +78,37 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 // GetSchema implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetSchema(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
-) (bool, sqlbase.ResolvedSchema, error) {
+) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if scName == tree.PublicSchema {
-		return true, sqlbase.ResolvedSchema{
-			ID: keys.PublicSchemaID, Kind: sqlbase.SchemaPublic, Name: scName,
+		return true, catalog.ResolvedSchema{
+			ID: keys.PublicSchemaID, Kind: catalog.SchemaPublic, Name: scName,
 		}, nil
 	}
 
 	// Lookup the schema ID.
 	exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, scName)
 	if err != nil || !exists {
-		return exists, sqlbase.ResolvedSchema{}, err
+		return exists, catalog.ResolvedSchema{}, err
 	}
 
 	// The temporary schema doesn't have a descriptor, only a namespace entry.
 	// Note that just performing this string check on the schema name is safe
 	// because no user defined schemas can have the prefix "pg_".
 	if strings.HasPrefix(scName, sessiondata.PgTempSchemaName) {
-		return true, sqlbase.ResolvedSchema{
-			ID: schemaID, Kind: sqlbase.SchemaTemporary, Name: scName,
+		return true, catalog.ResolvedSchema{
+			ID: schemaID, Kind: catalog.SchemaTemporary, Name: scName,
 		}, nil
 	}
 
 	// Get the descriptor from disk.
 	sc, err := MustGetSchemaDescByID(ctx, txn, codec, schemaID)
 	if err != nil {
-		return false, sqlbase.ResolvedSchema{}, err
+		return false, catalog.ResolvedSchema{}, err
 	}
-	return true, sqlbase.ResolvedSchema{
+	return true, catalog.ResolvedSchema{
 		ID:   sc.GetID(),
-		Kind: sqlbase.SchemaUserDefined,
+		Kind: catalog.SchemaUserDefined,
 		Desc: sc,
 		Name: scName,
 	}, nil
@@ -119,7 +119,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	dbDesc sqlbase.DatabaseDescriptor,
+	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
@@ -262,7 +262,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 	switch desc := desc.(type) {
-	case sqlbase.TableDescriptor:
+	case catalog.TableDescriptor:
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
 		acceptableStates := map[descpb.TableDescriptor_State]bool{
@@ -286,7 +286,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			}
 		}
 		return nil, nil
-	case sqlbase.TypeDescriptor:
+	case catalog.TypeDescriptor:
 		if desc.Dropped() {
 			return nil, nil
 		}
