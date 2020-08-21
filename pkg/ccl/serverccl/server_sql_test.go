@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
@@ -111,7 +112,7 @@ func TestTenantHTTP(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Run("prometheus", func(t *testing.T) {
-		resp, err := http.Get("http://" + httpAddr + "/_status/vars")
+		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/_status/vars")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -120,7 +121,7 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "sql_ddl_started_count_internal")
 	})
 	t.Run("pprof", func(t *testing.T) {
-		resp, err := http.Get("http://" + httpAddr + "/debug/pprof/goroutine?debug=2")
+		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/debug/pprof/goroutine?debug=2")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
