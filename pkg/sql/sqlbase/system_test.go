@@ -15,12 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShouldSplitAtDesc(t *testing.T) {
-	for inner, should := range map[Descriptor]bool{
+	for inner, should := range map[catalog.Descriptor]bool{
 		NewImmutableTableDescriptor(descpb.TableDescriptor{}):                                              true,
 		NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}):                           false,
 		NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}): true,

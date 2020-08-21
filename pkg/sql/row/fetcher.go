@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,7 +57,7 @@ type tableInfo struct {
 	// Used to determine whether a key retrieved belongs to the span we
 	// want to scan.
 	spans            roachpb.Spans
-	desc             *sqlbase.ImmutableTableDescriptor
+	desc             catalog.TableDescriptor
 	index            *descpb.IndexDescriptor
 	isSecondaryIndex bool
 	indexColumnDirs  []descpb.IndexDescriptor_Direction
@@ -139,7 +140,7 @@ type FetcherTableArgs struct {
 	// This is irrelevant if Fetcher is initialize with only one
 	// table.
 	Spans            roachpb.Spans
-	Desc             *sqlbase.ImmutableTableDescriptor
+	Desc             catalog.TableDescriptor
 	Index            *descpb.IndexDescriptor
 	ColIdxMap        map[descpb.ColumnID]int
 	IsSecondaryIndex bool
@@ -714,7 +715,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// them when processing the index. The difference with unique secondary indexes
 		// is that the extra columns are not always there, and are used to unique-ify
 		// the index key, rather than provide the primary key column values.
-		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique && len(rf.currentTable.desc.Families) != 1 {
+		if foundNull && rf.currentTable.isSecondaryIndex && rf.currentTable.index.Unique && len(rf.currentTable.desc.GetFamilies()) != 1 {
 			for range rf.currentTable.index.ExtraColumnIDs {
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
@@ -726,7 +727,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		}
 
 		switch {
-		case len(rf.currentTable.desc.Families) == 1:
+		case len(rf.currentTable.desc.GetFamilies()) == 1:
 			// If we only have one family, we know that there is only 1 k/v pair per row.
 			rowDone = true
 		case !unchangedPrefix:
@@ -852,7 +853,7 @@ func (rf *Fetcher) ReadIndexKey(
 
 // KeyToDesc implements the KeyToDescTranslator interface. The implementation is
 // used by ConvertFetchError.
-func (rf *Fetcher) KeyToDesc(key roachpb.Key) (*sqlbase.ImmutableTableDescriptor, bool) {
+func (rf *Fetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
 	if rf.currentTable != nil && len(key) < rf.currentTable.knownPrefixLength {
 		return nil, false
 	}
@@ -873,7 +874,7 @@ func (rf *Fetcher) processKV(
 	if rf.traceKV {
 		prettyKey = fmt.Sprintf(
 			"/%s/%s%s",
-			table.desc.Name,
+			table.desc.GetName(),
 			table.index.Name,
 			rf.prettyEncDatums(table.keyValTypes, table.keyVals),
 		)
@@ -929,7 +930,7 @@ func (rf *Fetcher) processKV(
 	}
 
 	// For covering secondary indexes, allow for decoding as a primary key.
-	if table.index.GetEncodingType(table.desc.PrimaryIndex.ID) == descpb.PrimaryIndexEncoding &&
+	if table.index.GetEncodingType(table.desc.GetPrimaryIndexID()) == descpb.PrimaryIndexEncoding &&
 		len(rf.keyRemainingBytes) > 0 {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
@@ -1184,7 +1185,7 @@ func (rf *Fetcher) NextRow(
 	ctx context.Context,
 ) (
 	row sqlbase.EncDatumRow,
-	table sqlbase.TableDescriptor,
+	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	err error,
 ) {
@@ -1228,7 +1229,7 @@ func (rf *Fetcher) NextRow(
 // (relevant when more than one table is specified during initialization).
 func (rf *Fetcher) NextRowDecoded(
 	ctx context.Context,
-) (datums tree.Datums, table sqlbase.TableDescriptor, index *descpb.IndexDescriptor, err error) {
+) (datums tree.Datums, table catalog.TableDescriptor, index *descpb.IndexDescriptor, err error) {
 	row, table, index, err := rf.NextRow(ctx)
 	if err != nil {
 		err = scrub.UnwrapScrubError(err)
@@ -1324,16 +1325,16 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
 	colIDToColumn := make(map[descpb.ColumnID]*descpb.ColumnDescriptor)
-	for i := range table.desc.Columns {
-		col := &table.desc.Columns[i]
+	_ = table.desc.ForeachPublicColumn(func(col *descpb.ColumnDescriptor) error {
 		colIDToColumn[col.ID] = col
-	}
+		return nil
+	})
 
-	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.Indexes}
+	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.GetPublicNonPrimaryIndexes()}
 
-	for i := range table.desc.Families {
+	return table.desc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		var lastColID descpb.ColumnID
-		familyID := table.desc.Families[i].ID
+		familyID := family.ID
 		familySortedColumnIDs, ok := rh.sortedColumnFamily(familyID)
 		if !ok {
 			return errors.AssertionFailedf("invalid family sorted column id map for family %d", familyID)
@@ -1373,8 +1374,8 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 					col.Name, colIDDiff, rf.kv.Key, rowVal.EncodedString(), result))
 			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // checkSecondaryIndexDatumEncodings will run a round-trip encoding
@@ -1486,7 +1487,7 @@ func (rf *Fetcher) finalizeRow() error {
 				}
 				err := errors.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-					table.desc.Name, table.cols[i].Name, table.index.Name,
+					table.desc.GetName(), table.cols[i].Name, table.index.Name,
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ","))
 
 				if rf.isCheck {

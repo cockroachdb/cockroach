@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -25,7 +26,7 @@ import (
 type rowHelper struct {
 	Codec keys.SQLCodec
 
-	TableDesc *sqlbase.ImmutableTableDescriptor
+	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
 	Indexes      []descpb.IndexDescriptor
 	indexEntries []sqlbase.IndexEntry
@@ -41,13 +42,13 @@ type rowHelper struct {
 }
 
 func newRowHelper(
-	codec keys.SQLCodec, desc *sqlbase.ImmutableTableDescriptor, indexes []descpb.IndexDescriptor,
+	codec keys.SQLCodec, desc catalog.TableDescriptor, indexes []descpb.IndexDescriptor,
 ) rowHelper {
 	rh := rowHelper{Codec: codec, TableDesc: desc, Indexes: indexes}
 
 	// Pre-compute the encoding directions of the index key values for
 	// pretty-printing in traces.
-	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(&rh.TableDesc.PrimaryIndex)
+	rh.primIndexValDirs = sqlbase.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
 
 	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
 	for i := range rh.Indexes {
@@ -84,10 +85,10 @@ func (rh *rowHelper) encodePrimaryIndex(
 ) (primaryIndexKey []byte, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.Codec, rh.TableDesc,
-			rh.TableDesc.PrimaryIndex.ID)
+			rh.TableDesc.GetPrimaryIndexID())
 	}
 	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
-		rh.TableDesc, &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
+		rh.TableDesc, rh.TableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	return primaryIndexKey, err
 }
 
@@ -138,7 +139,7 @@ func (rh *rowHelper) skipColumnInPK(
 ) (bool, error) {
 	if rh.primaryIndexCols == nil {
 		rh.primaryIndexCols = make(map[descpb.ColumnID]struct{})
-		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
+		for _, colID := range rh.TableDesc.GetPrimaryIndex().ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
 	}
@@ -157,13 +158,14 @@ func (rh *rowHelper) skipColumnInPK(
 
 func (rh *rowHelper) sortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, len(rh.TableDesc.Families))
-		for i := range rh.TableDesc.Families {
-			family := &rh.TableDesc.Families[i]
-			colIDs := append([]descpb.ColumnID(nil), family.ColumnIDs...)
+		rh.sortedColumnFamilies = make(map[descpb.FamilyID][]descpb.ColumnID, rh.TableDesc.NumFamilies())
+
+		_ = rh.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+			colIDs := append([]descpb.ColumnID{}, family.ColumnIDs...)
 			sort.Sort(descpb.ColumnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
-		}
+			return nil
+		})
 	}
 	colIDs, ok := rh.sortedColumnFamilies[famID]
 	return colIDs, ok

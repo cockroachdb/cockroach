@@ -13,6 +13,7 @@ package schemaexpr
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -78,7 +79,7 @@ func dequalifyColumnRefs(
 // human-readable form.
 func FormatColumnForDisplay(
 	ctx context.Context,
-	tbl sqlbase.TableDescriptor,
+	tbl catalog.TableDescriptor,
 	desc *descpb.ColumnDescriptor,
 	semaCtx *tree.SemaContext,
 ) (string, error) {
@@ -232,7 +233,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // If the expression references a column that does not exist in the table
 // descriptor, replaceColumnVars errs with pgcode.UndefinedColumn.
 func replaceColumnVars(
-	desc sqlbase.TableDescriptor, rootExpr tree.Expr,
+	desc catalog.TableDescriptor, rootExpr tree.Expr,
 ) (tree.Expr, sqlbase.TableColSet, error) {
 	var colIDs sqlbase.TableColSet
 

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,7 +37,7 @@ import (
 )
 
 // DescriptorInterfaces is a sortable list of DescriptorInterfaces.
-type DescriptorInterfaces []Descriptor
+type DescriptorInterfaces []catalog.Descriptor
 
 func (d DescriptorInterfaces) Len() int           { return len(d) }
 func (d DescriptorInterfaces) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
@@ -174,11 +175,11 @@ func NewMutableExistingTableDescriptor(tbl descpb.TableDescriptor) *MutableTable
 // MutableTableDescriptor and potentially perform post-serialization upgrades.
 //
 // If skipFKsWithMissingTable is true, the foreign key representation upgrade
-// may not fully complete if the other table cannot be found in the protoGetter
+// may not fully complete if the other table cannot be found in the ProtoGetter
 // but no error will be returned.
 func NewFilledInMutableExistingTableDescriptor(
 	ctx context.Context,
-	protoGetter protoGetter,
+	protoGetter catalog.ProtoGetter,
 	codec keys.SQLCodec,
 	skipFKsWithMissingTable bool,
 	tbl *descpb.TableDescriptor,
@@ -283,7 +284,10 @@ func NewImmutableTableDescriptor(tbl descpb.TableDescriptor) *ImmutableTableDesc
 // NewFilledInImmutableTableDescriptor will construct an
 // ImmutableTableDescriptor and potentially perform post-serialization upgrades.
 func NewFilledInImmutableTableDescriptor(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, tbl *descpb.TableDescriptor,
+	ctx context.Context,
+	protoGetter catalog.ProtoGetter,
+	codec keys.SQLCodec,
+	tbl *descpb.TableDescriptor,
 ) (*ImmutableTableDescriptor, error) {
 	desc, err := makeFilledInImmutableTableDescriptor(ctx, protoGetter, codec, tbl,
 		false /* skipFKsWithMissingTable */)
@@ -313,7 +317,7 @@ type PostDeserializationTableDescriptorChanges struct {
 
 func makeFilledInImmutableTableDescriptor(
 	ctx context.Context,
-	protoGetter protoGetter,
+	protoGetter catalog.ProtoGetter,
 	codec keys.SQLCodec,
 	tbl *descpb.TableDescriptor,
 	skipFKsWithMissingTable bool,
@@ -327,15 +331,6 @@ func makeFilledInImmutableTableDescriptor(
 	return desc, nil
 }
 
-// protoGetter is a sub-interface of client.Txn that can fetch protobufs in a
-// transaction.
-type protoGetter interface {
-	// GetProtoTs retrieves a protoutil.Message that's stored at key, storing it
-	// into the input msg parameter. If the key doesn't exist, the input proto
-	// will be reset.
-	GetProtoTs(ctx context.Context, key interface{}, msg protoutil.Message) (hlc.Timestamp, error)
-}
-
 // getTableDescFromID retrieves the table descriptor for the table
 // ID passed in using an existing proto getter. Returns an error if the
 // descriptor doesn't exist or if it exists and is not a table.
@@ -346,7 +341,7 @@ type protoGetter interface {
 // higher-level abstraction for dealing with retrieving descriptors by ID
 // for validation and upgrading FKs.
 func getTableDescFromID(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id descpb.ID,
+	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
 ) (*descpb.TableDescriptor, error) {
 	table, err := getTableDescFromIDRaw(ctx, protoGetter, codec, id)
 	if err != nil {
@@ -367,7 +362,7 @@ func getTableDescFromID(
 // migrations and is *required* before ordinary presentation to other code. This
 // method is for internal use only and shouldn't get exposed.
 func getTableDescFromIDRaw(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec, id descpb.ID,
+	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
 ) (*descpb.TableDescriptor, error) {
 	desc := &descpb.Descriptor{}
 	descKey := MakeDescMetadataKey(codec, id)
@@ -628,7 +623,7 @@ func (desc *ImmutableTableDescriptor) ForeachPublicColumn(
 func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
 	f func(*descpb.IndexDescriptor) error,
 ) error {
-	if err := desc.ForeachIndex(IndexOpts{AddMutations: true}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
+	if err := desc.ForeachIndex(catalog.IndexOpts{AddMutations: true}, func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error {
 		return f(idxDesc)
 	}); err != nil {
 		return err
@@ -638,7 +633,7 @@ func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
 
 // ForeachIndex runs a function on the set of indexes as specified by opts.
 func (desc *ImmutableTableDescriptor) ForeachIndex(
-	opts IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
+	opts catalog.IndexOpts, f func(idxDesc *descpb.IndexDescriptor, isPrimary bool) error,
 ) error {
 	if desc.IsPhysicalTable() || opts.NonPhysicalPrimaryIndex {
 		if err := f(&desc.PrimaryIndex, true /* isPrimary */); err != nil {
@@ -706,6 +701,24 @@ func (desc *ImmutableTableDescriptor) ForeachInboundFK(
 	return nil
 }
 
+// NumFamilies returns the number of column families in the descriptor.
+func (desc *ImmutableTableDescriptor) NumFamilies() int {
+	return len(desc.Families)
+}
+
+// ForeachFamily calls f for every column family key in desc until an
+// error is returned.
+func (desc *ImmutableTableDescriptor) ForeachFamily(
+	f func(family *descpb.ColumnFamilyDescriptor) error,
+) error {
+	for i := range desc.Families {
+		if err := f(&desc.Families[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "fam_%d", familyID)
@@ -721,7 +734,7 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
 	ctx context.Context,
-	protoGetter protoGetter,
+	protoGetter catalog.ProtoGetter,
 	codec keys.SQLCodec,
 	desc *descpb.TableDescriptor,
 	skipFKsWithNoMatchingTable bool,
@@ -739,13 +752,13 @@ func maybeFillInDescriptor(
 	return changes, nil
 }
 
-// MapProtoGetter is a protoGetter that has a hard-coded map of keys to proto
+// MapProtoGetter is a ProtoGetter that has a hard-coded map of keys to proto
 // messages.
 type MapProtoGetter struct {
 	Protos map[interface{}]protoutil.Message
 }
 
-// getProto implements the protoGetter interface.
+// getProto implements the ProtoGetter interface.
 func (m MapProtoGetter) getProto(
 	ctx context.Context, key interface{}, msg protoutil.Message,
 ) error {
@@ -762,7 +775,7 @@ func (m MapProtoGetter) getProto(
 	return nil
 }
 
-// GetProtoTs implements the protoGetter interface.
+// GetProtoTs implements the ProtoGetter interface.
 func (m MapProtoGetter) GetProtoTs(
 	ctx context.Context, key interface{}, msg protoutil.Message,
 ) (hlc.Timestamp, error) {
@@ -810,7 +823,7 @@ func TableHasDeprecatedForeignKeyRepresentation(desc *descpb.TableDescriptor) bo
 // should get reworked but we're leaving this here for now for simplicity.
 func maybeUpgradeForeignKeyRepresentation(
 	ctx context.Context,
-	protoGetter protoGetter,
+	protoGetter catalog.ProtoGetter,
 	codec keys.SQLCodec,
 	skipFKsWithNoMatchingTable bool,
 	desc *descpb.TableDescriptor,
@@ -851,7 +864,7 @@ func maybeUpgradeForeignKeyRepresentation(
 // ImmutableTableDescriptor rather than a regular TableDescriptor.
 func maybeUpgradeForeignKeyRepOnIndex(
 	ctx context.Context,
-	protoGetter protoGetter,
+	protoGetter catalog.ProtoGetter,
 	codec keys.SQLCodec,
 	otherUnupgradedTables map[descpb.ID]*descpb.TableDescriptor,
 	desc *descpb.TableDescriptor,
@@ -1044,7 +1057,7 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 // ForEachExprStringInTableDesc runs a closure for each expression string
 // within a TableDescriptor. The closure takes in a string pointer so that
 // it can mutate the TableDescriptor if desired.
-func ForEachExprStringInTableDesc(descI TableDescriptor, f func(expr *string) error) error {
+func ForEachExprStringInTableDesc(descI catalog.TableDescriptor, f func(expr *string) error) error {
 	desc, ok := descI.(*ImmutableTableDescriptor)
 	if !ok {
 		mut, ok := descI.(*MutableTableDescriptor)
@@ -1127,7 +1140,7 @@ func ForEachExprStringInTableDesc(descI TableDescriptor, f func(expr *string) er
 // this table references. It takes in a function that returns the TypeDescriptor
 // with the desired ID.
 func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
-	getType func(descpb.ID) (TypeDescriptor, error),
+	getType func(descpb.ID) (catalog.TypeDescriptor, error),
 ) (descpb.IDs, error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
@@ -1579,7 +1592,7 @@ func (desc *MutableTableDescriptor) OriginalVersion() descpb.DescriptorVersion {
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
 func (desc *ImmutableTableDescriptor) Validate(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec,
+	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec,
 ) error {
 	err := desc.ValidateTable()
 	if err != nil {
@@ -1597,7 +1610,7 @@ func (desc *ImmutableTableDescriptor) Validate(
 // TODO(ajwerner): pass in a higher-level interface for retrieving descriptors
 // by ID and stop using the raw transaction to look up descriptors.
 func (desc *ImmutableTableDescriptor) validateCrossReferences(
-	ctx context.Context, protoGetter protoGetter, codec keys.SQLCodec,
+	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec,
 ) error {
 	// Check that parent DB exists.
 	{
@@ -1742,7 +1755,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 	// Validate the all types present in the descriptor exist. typeMap caches
 	// accesses to TypeDescriptors, and is wrapped by getType.
 	typeMap := make(map[descpb.ID]*ImmutableTypeDescriptor)
-	getType := func(id descpb.ID) (TypeDescriptor, error) {
+	getType := func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		if typeDesc, ok := typeMap[id]; ok {
 			return typeDesc, nil
 		}
@@ -3672,11 +3685,11 @@ func (desc *ImmutableTableDescriptor) ColumnTypes() []*types.T {
 // ColumnsWithMutations returns all column descriptors, optionally including
 // mutation columns.
 func (desc *ImmutableTableDescriptor) ColumnsWithMutations(
-	mutations bool,
+	includeMutations bool,
 ) []descpb.ColumnDescriptor {
 	n := len(desc.Columns)
 	columns := desc.Columns[:n:n] // immutable on append
-	if mutations {
+	if includeMutations {
 		for i := range desc.Mutations {
 			if col := desc.Mutations[i].GetColumn(); col != nil {
 				columns = append(columns, *col)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -38,7 +39,7 @@ import (
 
 // min and max are inclusive bounds on the root table's ID.
 // If min and/or max is -1, then no bound is used for that endpoint.
-func makeSpanWithRootBound(desc sqlbase.TableDescriptor, min int, max int) roachpb.Span {
+func makeSpanWithRootBound(desc catalog.TableDescriptor, min int, max int) roachpb.Span {
 	keyPrefix := sqlbase.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc, desc.GetPrimaryIndexID())
 
 	startKey := roachpb.Key(append([]byte(nil), keyPrefix...))

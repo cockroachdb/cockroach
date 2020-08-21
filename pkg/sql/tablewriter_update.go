@@ -14,9 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // tableUpdater handles writing kvs and forming table rows for updates.
@@ -58,7 +58,7 @@ func (tu *tableUpdater) rowForUpdate(
 }
 
 // tableDesc is part of the tableWriter interface.
-func (tu *tableUpdater) tableDesc() *sqlbase.ImmutableTableDescriptor {
+func (tu *tableUpdater) tableDesc() catalog.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
 

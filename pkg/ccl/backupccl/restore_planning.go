@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -154,7 +155,7 @@ func allocateDescriptorRewrites(
 	schemasByID map[descpb.ID]*sqlbase.MutableSchemaDescriptor,
 	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
 	typesByID map[descpb.ID]*sqlbase.MutableTypeDescriptor,
-	restoreDBs []sqlbase.DatabaseDescriptor,
+	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts tree.RestoreOptions,
 	intoDB string,
@@ -167,7 +168,7 @@ func allocateDescriptorRewrites(
 		renaming = true
 	}
 
-	restoreDBNames := make(map[string]sqlbase.DatabaseDescriptor, len(restoreDBs))
+	restoreDBNames := make(map[string]catalog.DatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
 		restoreDBNames[db.GetName()] = db
 	}
@@ -604,7 +605,7 @@ func allocateDescriptorRewrites(
 	// full cluster restore this should only include the system tables that need
 	// to be remapped to the temporary table. All other tables in a full cluster
 	// backup should have the same ID as they do in the backup.
-	descriptorsToRemap := make([]sqlbase.Descriptor, 0, len(tablesByID))
+	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
 			if table.ParentID == sqlbase.SystemDB.GetID() {

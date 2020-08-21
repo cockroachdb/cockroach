@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,7 +76,7 @@ func (n *unsplitNode) Close(ctx context.Context) {
 type unsplitAllNode struct {
 	optColumnsSlot
 
-	tableDesc *descpb.TableDescriptor
+	tableDesc catalog.TableDescriptor
 	index     *descpb.IndexDescriptor
 	run       unsplitAllRun
 }
@@ -97,20 +98,20 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 			database_name=$1 AND table_name=$2 AND index_name=$3 AND split_enforced_until IS NOT NULL
 	`
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, n.tableDesc.ParentID,
+		params.ctx, params.p.txn, params.ExecCfg().Codec, n.tableDesc.GetParentID(),
 	)
 	if err != nil {
 		return err
 	}
 	indexName := ""
-	if n.index.ID != n.tableDesc.PrimaryIndex.ID {
+	if n.index.ID != n.tableDesc.GetPrimaryIndexID() {
 		indexName = n.index.Name
 	}
 	ranges, err := params.p.ExtendedEvalContext().InternalExecutor.(*InternalExecutor).QueryEx(
 		params.ctx, "split points query", params.p.txn, sqlbase.InternalExecutorSessionDataOverride{},
 		statement,
 		dbDesc.GetName(),
-		n.tableDesc.Name,
+		n.tableDesc.GetName(),
 		indexName,
 	)
 	if err != nil {
