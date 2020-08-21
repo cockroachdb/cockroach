@@ -311,9 +311,9 @@ func (ij *invertedJoiner) generateSpan(enc []byte) (roachpb.Span, error) {
 	return span, err
 }
 
-func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) (roachpb.Spans, error) {
-	var spans []roachpb.Span
-	for _, span := range invertedSpans {
+func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) ([]roachpb.Span, error) {
+	spans := make([]roachpb.Span, len(invertedSpans))
+	for i, span := range invertedSpans {
 		startSpan, err := ij.generateSpan(span.Start)
 		if err != nil {
 			return nil, err
@@ -324,7 +324,7 @@ func (ij *invertedJoiner) generateSpans(invertedSpans []invertedSpan) (roachpb.S
 			return nil, err
 		}
 		startSpan.EndKey = endSpan.Key
-		spans = append(spans, startSpan)
+		spans[i] = startSpan
 	}
 	return spans, nil
 }
