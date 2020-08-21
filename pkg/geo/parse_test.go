@@ -11,9 +11,11 @@
 package geo
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/pierrre/geohash"
 	"github.com/stretchr/testify/require"
 )
 
@@ -586,6 +588,86 @@ func TestParseGeography(t *testing.T) {
 				require.Equal(t, tc.expected, g)
 				require.Equal(t, tc.expected.SRID(), g.spatialObject.SRID)
 			}
+		})
+	}
+}
+
+func TestParseHash(t *testing.T) {
+	testCases := []struct {
+		h        string
+		p        int
+		expected geohash.Box
+	}{
+		{"123", 2, geohash.Box{
+			Lat: geohash.Range{
+				Min: -90,
+				Max: -84.375,
+			},
+			Lon: geohash.Range{
+				Min: -123.75,
+				Max: -112.5,
+			},
+		}},
+		{"123", 3, geohash.Box{
+			Lat: geohash.Range{
+				Min: -88.59375,
+				Max: -87.1875,
+			},
+			Lon: geohash.Range{
+				Min: -122.34375,
+				Max: -120.9375,
+			},
+		}},
+		{"123", 4, geohash.Box{
+			Lat: geohash.Range{
+				Min: -88.59375,
+				Max: -87.1875,
+			},
+			Lon: geohash.Range{
+				Min: -122.34375,
+				Max: -120.9375,
+			},
+		}},
+		{"123", -1, geohash.Box{
+			Lat: geohash.Range{
+				Min: -88.59375,
+				Max: -87.1875,
+			},
+			Lon: geohash.Range{
+				Min: -122.34375,
+				Max: -120.9375,
+			},
+		}},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s[:%d]", tc.h, tc.p), func(t *testing.T) {
+			ret, err := parseGeoHash(tc.h, tc.p)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+
+	errorCases := []struct {
+		h   string
+		p   int
+		err string
+	}{
+		{
+			"",
+			10,
+			"length of GeoHash must be greater than 0",
+		},
+		{
+			"-",
+			10,
+			`geohash decode '-': invalid character at index 0`,
+		},
+	}
+	for _, tc := range errorCases {
+		t.Run(fmt.Sprintf("%s[:%d]", tc.h, tc.p), func(t *testing.T) {
+			_, err := parseGeoHash(tc.h, tc.p)
+			require.Error(t, err)
+			require.EqualError(t, err, tc.err)
 		})
 	}
 }
