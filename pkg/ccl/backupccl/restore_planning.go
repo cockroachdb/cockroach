@@ -1036,9 +1036,10 @@ func restoreJobDescription(
 	kmsURIs []string,
 ) (string, error) {
 	r := &tree.Restore{
-		AsOf:    restore.AsOf,
-		Targets: restore.Targets,
-		From:    make([]tree.StringOrPlaceholderOptList, len(restore.From)),
+		DescriptorCoverage: restore.DescriptorCoverage,
+		AsOf:               restore.AsOf,
+		Targets:            restore.Targets,
+		From:               make([]tree.StringOrPlaceholderOptList, len(restore.From)),
 	}
 
 	var options tree.RestoreOptions
