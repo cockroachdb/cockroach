@@ -31,7 +31,11 @@ release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET:-binaries.cockroachdb.com}"
   google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS"
-  dockerhub_repository="docker.io/cockroachdb/cockroach"
+  if [[ -z "${PRE_RELEASE}" ]] ; then
+    dockerhub_repository="docker.io/cockroachdb/cockroach"
+  else
+    dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
+  fi
   gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
   s3_download_hostname="${bucket}"
   git_repo_for_tag="cockroachdb/cockroach"
