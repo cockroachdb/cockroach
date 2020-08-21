@@ -46,7 +46,7 @@ func (v *validator) validate(compiled *lang.CompiledExpr) []error {
 		for _, field := range define.Fields {
 			typ := md.typeOf(field)
 			if typ == nil {
-				format := "%s is not registered as a valid type in metadata.go"
+				format := "%s is not registered as a valid type in optgen/metadata.go"
 				v.addErrorf(field.Source(), format, field.Type)
 				continue
 			}

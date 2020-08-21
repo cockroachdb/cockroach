@@ -726,6 +726,7 @@ ON CONFLICT (c1) DO NOTHING
 ----
 insert nullablecols
  ├── columns: <none>
+ ├── arbiter indexes: secondary
  ├── insert-mapping:
  │    ├── i:7 => c1:1
  │    ├── i:7 => c2:2
@@ -785,7 +786,8 @@ ON CONFLICT (c1) DO UPDATE SET c3=1
 ----
 upsert nullablecols
  ├── columns: <none>
- ├── canary column: 21
+ ├── arbiter indexes: secondary
+ ├── canary column: rowid:21
  ├── fetch columns: c1:18 c2:19 c3:20 rowid:21
  ├── insert-mapping:
  │    ├── i:7 => c1:1
@@ -1002,6 +1004,7 @@ ON CONFLICT (x) DO NOTHING
 ----
 insert xy
  ├── columns: <none>
+ ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── y:5 => x:1
  │    └── column7:7 => y:2
@@ -1055,7 +1058,8 @@ ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
  ├── columns: <none>
- ├── canary column: 8
+ ├── arbiter indexes: primary
+ ├── canary column: x:8
  ├── fetch columns: x:8 y:9
  ├── insert-mapping:
  │    ├── y:5 => x:1
@@ -1110,6 +1114,7 @@ ON CONFLICT (x) DO NOTHING
 ----
 insert xy
  ├── columns: <none>
+ ├── arbiter indexes: primary
  ├── insert-mapping:
  │    ├── y:5 => x:1
  │    └── column7:7 => y:2
@@ -1158,7 +1163,8 @@ ON CONFLICT (x) DO UPDATE SET y=1
 ----
 upsert xy
  ├── columns: <none>
- ├── canary column: 8
+ ├── arbiter indexes: primary
+ ├── canary column: x:8
  ├── fetch columns: x:8 y:9
  ├── insert-mapping:
  │    ├── y:5 => x:1
@@ -1214,7 +1220,8 @@ ON CONFLICT (a, b, c) DO UPDATE SET a=1
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 11
+ ├── arbiter indexes: primary
+ ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13
  ├── insert-mapping:
  │    ├── "?column?":9 => a:1
@@ -1264,7 +1271,8 @@ ON CONFLICT (a, b, c) DO UPDATE SET c=2
 ----
 upsert abc
  ├── columns: <none>
- ├── canary column: 10
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
  ├── fetch columns: a:10 b:11 c:12
  ├── insert-mapping:
  │    ├── "?column?":9 => a:1
@@ -1735,6 +1743,7 @@ ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: si_idx
  ├── insert-mapping:
  │    ├── "?column?":13 => k:1
  │    ├── i:8 => i:2
@@ -1843,7 +1852,8 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.1
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 20
+ ├── arbiter indexes: si_idx
+ ├── canary column: s:20
  ├── fetch columns: k:17 i:18 f:19 s:20 j:21
  ├── insert-mapping:
  │    ├── "?column?":13 => k:1
@@ -2186,6 +2196,7 @@ ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: si_idx
  ├── insert-mapping:
  │    ├── column1:7 => k:1
  │    ├── column3:9 => i:2
@@ -2235,7 +2246,8 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 15
+ ├── arbiter indexes: si_idx
+ ├── canary column: s:15
  ├── fetch columns: k:12 i:13 f:14 s:15 j:16
  ├── insert-mapping:
  │    ├── column1:7 => k:1
@@ -2285,7 +2297,8 @@ ON CONFLICT (s, i) DO UPDATE SET f=1.0
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 15
+ ├── arbiter indexes: si_idx
+ ├── canary column: s:15
  ├── fetch columns: k:12 i:13 f:14 s:15 j:16
  ├── insert-mapping:
  │    ├── column1:7 => k:1
@@ -2352,6 +2365,7 @@ ON CONFLICT DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: primary si_idx fi_idx
  ├── insert-mapping:
  │    ├── column1:7 => k:1
  │    ├── column3:9 => i:2
@@ -2435,6 +2449,7 @@ ON CONFLICT DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: primary si_idx fi_idx
  ├── insert-mapping:
  │    ├── column1:7 => k:1
  │    ├── column10:10 => i:2
@@ -2544,6 +2559,7 @@ ON CONFLICT DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: primary si_idx fi_idx
  ├── insert-mapping:
  │    ├── column1:7 => k:1
  │    ├── column3:9 => i:2
@@ -2655,6 +2671,7 @@ ON CONFLICT (s, i) DO NOTHING
 ----
 insert a
  ├── columns: <none>
+ ├── arbiter indexes: si_idx
  ├── insert-mapping:
  │    ├── i:8 => k:1
  │    ├── i:8 => i:2
