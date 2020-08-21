@@ -708,7 +708,7 @@ func (s stmtList) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s stmtList) Less(i, j int) bool {
-	return s[i].stmt < s[j].stmt
+	return s[i].anonymizedStmt < s[j].anonymizedStmt
 }
 
 var crdbInternalStmtStatsTable = virtualSchemaTable{
@@ -783,20 +783,21 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
 				anonymized := tree.DNull
-				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.stmt)
+				anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stmtKey.anonymizedStmt)
 				if ok {
 					anonymized = tree.NewDString(anonStr)
 				}
 
-				s := appStats.getStatsForStmtWithKey(stmtKey, true /* createIfNonexistent */)
+				stmtID := constructStatementIDFromStmtKey(stmtKey)
+				s := appStats.getStatsForStmtWithKey(stmtKey, stmtID, true /* createIfNonexistent */)
 
-				s.Lock()
+				s.mu.Lock()
 				errString := tree.DNull
-				if s.data.SensitiveInfo.LastErr != "" {
-					errString = tree.NewDString(s.data.SensitiveInfo.LastErr)
+				if s.mu.data.SensitiveInfo.LastErr != "" {
+					errString = tree.NewDString(s.mu.data.SensitiveInfo.LastErr)
 				}
 				var flags string
-				if s.distSQLUsed {
+				if s.mu.distSQLUsed {
 					flags = "+"
 				}
 				if stmtKey.failed {
@@ -806,31 +807,31 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDInt(tree.DInt(nodeID)),
 					tree.NewDString(appName),
 					tree.NewDString(flags),
-					tree.NewDString(stmtKey.stmt),
+					tree.NewDString(stmtKey.anonymizedStmt),
 					anonymized,
-					tree.NewDInt(tree.DInt(s.data.Count)),
-					tree.NewDInt(tree.DInt(s.data.FirstAttemptCount)),
-					tree.NewDInt(tree.DInt(s.data.MaxRetries)),
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),
+					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
 					errString,
-					tree.NewDFloat(tree.DFloat(s.data.NumRows.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.NumRows.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.ParseLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.ParseLat.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.PlanLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.PlanLat.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.RunLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.RunLat.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.BytesRead.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.BytesRead.GetVariance(s.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.data.RowsRead.Mean)),
-					tree.NewDFloat(tree.DFloat(s.data.RowsRead.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.GetVariance(s.mu.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.Mean)),
+					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.GetVariance(s.mu.data.Count))),
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
-				s.Unlock()
+				s.mu.Unlock()
 				if err != nil {
 					return err
 				}
@@ -878,7 +879,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		for _, appName := range appNames {
 			appStats := sqlStats.getStatsForApplication(appName)
-			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txns.getStats()
+			txnCount, txnTimeAvg, txnTimeVar, committedCount, implicitCount := appStats.txnCounts.getStats()
 			err := addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),

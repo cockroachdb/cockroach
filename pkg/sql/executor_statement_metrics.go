@@ -39,13 +39,19 @@ const (
 	sessionInit sessionPhase = iota
 
 	// Executor phases.
-	sessionQueryReceived    // Query is received.
-	sessionStartParse       // Parse starts.
-	sessionEndParse         // Parse ends.
-	plannerStartLogicalPlan // Planning starts.
-	plannerEndLogicalPlan   // Planning ends.
-	plannerStartExecStmt    // Execution starts.
-	plannerEndExecStmt      // Execution ends.
+	sessionQueryReceived                  // Query is received.
+	sessionStartParse                     // Parse starts.
+	sessionEndParse                       // Parse ends.
+	plannerStartLogicalPlan               // Planning starts.
+	plannerEndLogicalPlan                 // Planning ends.
+	plannerStartExecStmt                  // Execution starts.
+	plannerEndExecStmt                    // Execution ends.
+	sessionTransactionReceived            // Transaction is received.
+	sessionFirstStartExecTransaction      // Transaction is started for the first time.
+	sessionMostRecentStartExecTransaction // Transaction is started for the most recent time.
+	sessionEndExecTransaction             // Transaction is committed/rolled back.
+	sessionStartTransactionCommit         // Transaction `COMMIT` starts.
+	sessionEndTransactionCommit           // Transaction `COMMIT` ends.
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -77,6 +83,18 @@ func (p *phaseTimes) getPlanningLatency() time.Duration {
 // getParsingLatency returns the time it takes for a query to be parsed.
 func (p *phaseTimes) getParsingLatency() time.Duration {
 	return p[sessionEndParse].Sub(p[sessionStartParse])
+}
+
+func (p *phaseTimes) getTransactionRetryLatency() time.Duration {
+	return p[sessionMostRecentStartExecTransaction].Sub(p[sessionFirstStartExecTransaction])
+}
+
+func (p *phaseTimes) getTransactionServiceLatency() time.Duration {
+	return p[sessionEndExecTransaction].Sub(p[sessionTransactionReceived])
+}
+
+func (p *phaseTimes) getCommitLatency() time.Duration {
+	return p[sessionEndTransactionCommit].Sub(p[sessionStartTransactionCommit])
 }
 
 // EngineMetrics groups a set of SQL metrics.
@@ -158,12 +176,17 @@ func (ex *connExecutor) recordStatementSummary(
 		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
-	ex.statsCollector.recordStatement(
+	stmtID := ex.statsCollector.recordStatement(
 		stmt, planner.curPlan.planForStats,
 		flags.IsDistributed(), flags.IsSet(planFlagVectorized),
 		flags.IsSet(planFlagImplicitTxn), automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead, stats,
 	)
+
+	// Save the statementID as part of the statements executed in the current txn
+	// as well.
+	ex.extraTxnState.transactionStatementIDs = append(
+		ex.extraTxnState.transactionStatementIDs, stmtID)
 
 	if log.V(2) {
 		// ages since significant epochs

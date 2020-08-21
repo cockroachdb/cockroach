@@ -2239,7 +2239,8 @@ func newSQLStatsCollector(
 }
 
 // recordStatement records stats for one statement. samplePlanDescription can
-// be nil, as these are only sampled periodically per unique fingerprint.
+// be nil, as these are only sampled periodically per unique fingerprint. It
+// returns the statement ID of the recorded statement.
 func (s *sqlStatsCollector) recordStatement(
 	stmt *Statement,
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
@@ -2251,17 +2252,28 @@ func (s *sqlStatsCollector) recordStatement(
 	err error,
 	parseLat, planLat, runLat, svcLat, ovhLat float64,
 	stats topLevelQueryStats,
-) {
-	s.appStats.recordStatement(
+) roachpb.StmtID {
+	return s.appStats.recordStatement(
 		stmt, samplePlanDescription, distSQLUsed, vectorized, implicitTxn,
 		automaticRetryCount, numRows, err, parseLat, planLat, runLat, svcLat,
 		ovhLat, stats,
 	)
 }
 
-// recordTransaction records stats for one transaction.
-func (s *sqlStatsCollector) recordTransaction(txnTimeSec float64, ev txnEvent, implicit bool) {
-	s.appStats.recordTransaction(txnTimeSec, ev, implicit)
+// recordTransaction records statistics for one transaction.
+func (s *sqlStatsCollector) recordTransaction(
+	key txnKey,
+	txnTimeSec float64,
+	ev txnEvent,
+	implicit bool,
+	retryCount int,
+	statementIDs []roachpb.StmtID,
+	serviceLat time.Duration,
+	retryLat time.Duration,
+	commitLat time.Duration,
+) {
+	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
+	s.appStats.recordTransaction(key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat)
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {
