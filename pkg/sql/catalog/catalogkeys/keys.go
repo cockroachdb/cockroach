@@ -187,7 +187,7 @@ func NewPublicTableKey(parentID descpb.ID, name string) TableKey {
 	return TableKey{parentID: parentID, parentSchemaID: keys.PublicSchemaID, name: name}
 }
 
-// NewTableKey returns a new TableKey
+// NewTableKey returns a new TableKey.
 func NewTableKey(parentID descpb.ID, parentSchemaID descpb.ID, name string) TableKey {
 	return TableKey{parentID: parentID, parentSchemaID: parentSchemaID, name: name}
 }
@@ -234,7 +234,7 @@ type DeprecatedTableKey struct {
 	name     string
 }
 
-// NewDeprecatedTableKey returns a new DeprecatedTableKey
+// NewDeprecatedTableKey returns a new DeprecatedTableKey.
 func NewDeprecatedTableKey(parentID descpb.ID, name string) DeprecatedTableKey {
 	return DeprecatedTableKey{parentID, name}
 }
@@ -254,7 +254,7 @@ type DeprecatedDatabaseKey struct {
 	name string
 }
 
-// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey
+// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey.
 func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
 	return DeprecatedDatabaseKey{name: name}
 }
