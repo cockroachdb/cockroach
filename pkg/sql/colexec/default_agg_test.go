@@ -147,7 +147,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				runTestsWithTyps(t, []tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, unorderedVerifier,
 					func(input []colexecbase.Operator) (colexecbase.Operator, error) {
 						return agg.new(
-							testAllocator, input[0], tc.typs, tc.spec, &evalCtx,
+							testAllocator, testMemAcc, input[0], tc.typs, tc.spec, &evalCtx,
 							constructors, constArguments, outputTypes, false, /* isScalar */
 						)
 					})
