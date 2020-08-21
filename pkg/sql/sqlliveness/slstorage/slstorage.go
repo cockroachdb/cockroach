@@ -15,10 +15,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,10 +57,12 @@ type Storage struct {
 	stopper    *stop.Stopper
 	clock      *hlc.Clock
 	db         *kv.DB
-	ex         tree.InternalExecutor
+	ex         sqlutil.InternalExecutor
 	metrics    Metrics
 	gcInterval func() time.Duration
 	g          singleflight.Group
+	sd         sqlbase.InternalExecutorSessionDataOverride
+	newTimer   func() timeutil.TimerI
 
 	mu struct {
 		syncutil.RWMutex
@@ -73,13 +78,16 @@ type Storage struct {
 	}
 }
 
-// NewStorage creates a new storage struct.
-func NewStorage(
+// NewTestingStorage constructs a new storage with control for the database
+// in which the `sqlliveness` table should exist.
+func NewTestingStorage(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *kv.DB,
-	ie tree.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	settings *cluster.Settings,
+	database string,
+	newTimer func() timeutil.TimerI,
 ) *Storage {
 	s := &Storage{
 		settings: settings,
@@ -87,6 +95,11 @@ func NewStorage(
 		clock:    clock,
 		db:       db,
 		ex:       ie,
+		sd: sqlbase.InternalExecutorSessionDataOverride{
+			User:     security.NodeUser,
+			Database: database,
+		},
+		newTimer: newTimer,
 		gcInterval: func() time.Duration {
 			return DefaultGCInterval.Get(&settings.SV)
 		},
@@ -101,6 +114,18 @@ func NewStorage(
 	s.mu.liveSessions = cache.NewUnorderedCache(cacheConfig)
 	s.mu.deadSessions = cache.NewUnorderedCache(cacheConfig)
 	return s
+}
+
+// NewStorage creates a new storage struct.
+func NewStorage(
+	stopper *stop.Stopper,
+	clock *hlc.Clock,
+	db *kv.DB,
+	ie sqlutil.InternalExecutor,
+	settings *cluster.Settings,
+) *Storage {
+	return NewTestingStorage(stopper, clock, db, ie, settings, "system",
+		timeutil.DefaultTimeSource{}.NewTimer)
 }
 
 // Metrics returns the associated metrics struct.
@@ -123,8 +148,6 @@ func (s *Storage) Start(ctx context.Context) {
 // true, the session may no longer be alive, but if it returns false, the
 // session definitely is not alive.
 func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive bool, err error) {
-	// TODO(ajwerner): consider creating a zero-allocation cache key by converting
-	// the bytes to a string using unsafe.
 	s.mu.RLock()
 	if _, ok := s.mu.deadSessions.Get(sid); ok {
 		s.mu.RUnlock()
@@ -185,9 +208,9 @@ func (s *Storage) fetchSession(
 ) (alive bool, expiration hlc.Timestamp, err error) {
 	var row tree.Datums
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		row, err = s.ex.QueryRow(
-			ctx, "expire-single-session", txn, `
-SELECT expiration FROM system.sqlliveness WHERE session_id = $1`, sid.UnsafeBytes(),
+		row, err = s.ex.QueryRowEx(
+			ctx, "expire-single-session", txn, s.sd, `
+SELECT expiration FROM sqlliveness WHERE session_id = $1`, sid.UnsafeBytes(),
 		)
 		return errors.Wrapf(err, "Could not query session id: %s", sid)
 	}); err != nil {
@@ -209,28 +232,26 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 	sqlliveness.WaitForActive(ctx, s.settings)
-	t := timeutil.NewTimer()
+	t := s.newTimer()
 	t.Reset(0)
 	for {
-		if t.Read {
-			t.Reset(s.gcInterval())
-		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
-			t.Read = true
+		case <-t.Ch():
+			t.MarkRead()
 			s.deleteExpiredSessions(ctx)
+			t.Reset(s.gcInterval())
 		}
 	}
 }
 
 func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	now := s.clock.Now()
-	row, err := s.ex.QueryRow(ctx, "delete-sessions", nil, /* txn */
+	row, err := s.ex.QueryRowEx(ctx, "delete-sessions", nil /* txn */, s.sd,
 		`
   WITH deleted_sessions AS (
-                            DELETE FROM system.sqlliveness
+                            DELETE FROM sqlliveness
                                   WHERE expiration < $1
                               RETURNING session_id
                         )
@@ -261,9 +282,9 @@ func (s *Storage) Insert(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (err error) {
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := s.ex.QueryRow(
-			ctx, "insert-session", txn,
-			`INSERT INTO system.sqlliveness VALUES ($1, $2)`,
+		_, err := s.ex.QueryRowEx(
+			ctx, "insert-session", txn, s.sd,
+			`INSERT INTO sqlliveness VALUES ($1, $2)`,
 			sid.UnsafeBytes(), tree.TimestampToDecimalDatum(expiration),
 		)
 		return err
@@ -282,9 +303,9 @@ func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, err error) {
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		data, err := s.ex.QueryRow(
-			ctx, "update-session", txn, `
-UPDATE system.sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
+		data, err := s.ex.QueryRowEx(
+			ctx, "update-session", txn, s.sd, `
+UPDATE sqlliveness SET expiration = $1 WHERE session_id = $2 RETURNING session_id`,
 			tree.TimestampToDecimalDatum(expiration), sid.UnsafeBytes(),
 		)
 		if err != nil {
