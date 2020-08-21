@@ -310,12 +310,28 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 		return nil, pErr
 	}
 
+	// We've refreshed all of the read spans successfully and bumped
+	// ba.Txn's timestamps. Attempt the request again.
 	log.Eventf(ctx, "refresh succeeded; retrying original request")
 	ba.UpdateTxn(refreshTxn)
 	sr.refreshAutoRetries.Inc(1)
 
-	// We've refreshed all of the read spans successfully and bumped
-	// ba.Txn's timestamps. Attempt the request again.
+	// To prevent starvation of batches that are trying to commit, split off the
+	// EndTxn request into its own batch on auto-retries. This avoids starvation
+	// in two ways. First, it helps ensure that we lay down intents if any of
+	// the other requests in the batch are writes. Second, it ensures that if
+	// any writes are getting pushed due to contention with reads or due to the
+	// closed timestamp, they will still succeed and allow the batch to make
+	// forward progress. Without this, each retry attempt may get pushed because
+	// of writes in the batch and then rejected wholesale when the EndTxn tries
+	// to evaluate the pushed batch. When split, the writes will be pushed but
+	// succeed, the transaction will be refreshed, and the EndTxn will succeed.
+	args, hasET := ba.GetArg(roachpb.EndTxn)
+	if len(ba.Requests) > 1 && hasET && !args.(*roachpb.EndTxnRequest).Require1PC {
+		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
+		return sr.splitEndTxnAndRetrySend(ctx, ba)
+	}
+
 	retryBr, retryErr := sr.sendLockedWithRefreshAttempts(ctx, ba, maxRefreshAttempts-1)
 	if retryErr != nil {
 		log.VEventf(ctx, 2, "retry failed with %s", retryErr)
@@ -324,6 +340,45 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 
 	log.VEventf(ctx, 2, "retry successful @%s", retryBr.Txn.ReadTimestamp)
 	return retryBr, nil
+}
+
+// splitEndTxnAndRetrySend splits the batch in two, with a prefix containing all
+// requests up to but not including the EndTxn request and a suffix containing
+// only the EndTxn request. It then issues the two partial batches in order,
+// stitching their results back together at the end.
+func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	// NOTE: call back into SendLocked with each partial batch, not into
+	// sendLockedWithRefreshAttempts. This ensures that we properly set
+	// CanForwardReadTimestamp on each partial batch and that we provide
+	// the EndTxn batch with a chance to perform a preemptive refresh.
+
+	// Issue a batch up to but not including the EndTxn request.
+	etIdx := len(ba.Requests) - 1
+	baPrefix := ba
+	baPrefix.Requests = ba.Requests[:etIdx]
+	brPrefix, pErr := sr.SendLocked(ctx, baPrefix)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	// Issue a batch containing only the EndTxn request.
+	baSuffix := ba
+	baSuffix.Requests = ba.Requests[etIdx:]
+	baSuffix.Txn = brPrefix.Txn
+	brSuffix, pErr := sr.SendLocked(ctx, baSuffix)
+	if pErr != nil {
+		return nil, pErr
+	}
+
+	// Combine the responses.
+	br := brPrefix
+	br.Responses = append(br.Responses, roachpb.ResponseUnion{})
+	if err := br.Combine(brSuffix, []int{etIdx}); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+	return br, nil
 }
 
 // maybeRefreshPreemptively attempts to refresh a transaction's read timestamp
