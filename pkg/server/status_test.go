@@ -287,7 +287,8 @@ func TestStatusEngineStatsJson(t *testing.T) {
 		t.Fatal(errors.Errorf("expected one engine stats, got: %v", engineStats))
 	}
 
-	if engineStats.Stats[0].EngineType == enginepb.EngineTypePebble {
+	if engineStats.Stats[0].EngineType == enginepb.EngineTypePebble ||
+		engineStats.Stats[0].EngineType == enginepb.EngineTypeDefault {
 		// Pebble does not have RocksDB style TickersAnd Histogram.
 		return
 	}

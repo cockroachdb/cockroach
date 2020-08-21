@@ -160,10 +160,9 @@ type hashTable struct {
 	// by the prober.
 	visited []bool
 
-	// vals stores the union of the equality and output columns of the build
-	// table. A key tuple is defined as the elements in each row of vals that
-	// makes up the equality columns. The ID of a key at any index of vals is
-	// index + 1.
+	// vals stores columns of the build source that are specified in
+	// colsToStore in the constructor. The ID of a tuple at any index of vals
+	// is index + 1.
 	vals *appendOnlyBufferedBatch
 	// keyCols stores the indices of vals which are key columns.
 	keyCols []uint32
@@ -196,11 +195,16 @@ var _ resetter = &hashTable{}
 // choose the number that works well for the corresponding use case. 1.0 could
 // be used as the initial default value, and most likely the best value will be
 // in [0.1, 10.0] range.
+// - colsToStore indicates the positions of columns to actually store in this
+// batch. All columns are stored if colsToStore is nil, but when it is non-nil,
+// then columns with positions not present in colsToStore will remain
+// zero-capacity vectors in vals.
 func newHashTable(
 	allocator *colmem.Allocator,
 	loadFactor float64,
 	sourceTypes []*types.T,
 	eqCols []uint32,
+	colsToStore []int,
 	allowNullEquality bool,
 	buildMode hashTableBuildMode,
 	probeMode hashTableProbeMode,
@@ -243,7 +247,7 @@ func newHashTable(
 			differs: make([]bool, coldata.BatchSize()),
 		},
 
-		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes),
+		vals:              newAppendOnlyBufferedBatch(allocator, sourceTypes, colsToStore),
 		keyCols:           eqCols,
 		numBuckets:        initialNumHashBuckets,
 		loadFactor:        loadFactor,
@@ -568,17 +572,6 @@ func (ht *hashTable) maybeAllocateSameAndVisited() {
 	// Since keyID = 0 is reserved for end of list, it can be marked as visited
 	// at the beginning.
 	ht.visited[0] = true
-}
-
-// lookupInitial finds the corresponding hash table buckets for the equality
-// column of the batch and stores the results in groupID. It also initializes
-// toCheck with all indices in the range [0, batchSize).
-func (ht *hashTable) lookupInitial(ctx context.Context, batchSize int, sel []int) {
-	ht.computeBuckets(ctx, ht.probeScratch.buckets, ht.probeScratch.keys, batchSize, sel)
-	for i := 0; i < batchSize; i++ {
-		ht.probeScratch.groupID[i] = ht.buildScratch.first[ht.probeScratch.buckets[i]]
-		ht.probeScratch.toCheck[i] = uint64(i)
-	}
 }
 
 // findNext determines the id of the next key inside the groupID buckets for

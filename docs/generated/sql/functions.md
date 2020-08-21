@@ -1099,6 +1099,8 @@ from the given Geometry.</p>
 <tr><td><a name="st_convexhull"></a><code>st_convexhull(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry that represents the Convex Hull of the given geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
+<tr><td><a name="st_coorddim"></a><code>st_coorddim(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of coordinate dimensions of a given Geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_coveredby"></a><code>st_coveredby(geography_a: geography, geography_b: geography) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no point in geography_a is outside geography_b.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>

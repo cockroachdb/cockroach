@@ -122,16 +122,26 @@ func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
 // initial zero capacity and could grow arbitrarily large with append() method.
 // It is intended to be used by the operators that need to buffer unknown
 // number of tuples.
+// colsToStore indicates the positions of columns to actually store in this
+// batch. All columns are stored if colsToStore is nil, but when it is non-nil,
+// then columns with positions not present in colsToStore will remain
+// zero-capacity vectors.
 // TODO(yuzefovich): consider whether it is beneficial to start out with
 // non-zero capacity.
 func newAppendOnlyBufferedBatch(
-	allocator *colmem.Allocator, typs []*types.T,
+	allocator *colmem.Allocator, typs []*types.T, colsToStore []int,
 ) *appendOnlyBufferedBatch {
+	if colsToStore == nil {
+		colsToStore = make([]int, len(typs))
+		for i := range colsToStore {
+			colsToStore[i] = i
+		}
+	}
 	batch := allocator.NewMemBatchWithFixedCapacity(typs, 0 /* capacity */)
 	return &appendOnlyBufferedBatch{
-		Batch:   batch,
-		colVecs: batch.ColVecs(),
-		typs:    typs,
+		Batch:       batch,
+		colVecs:     batch.ColVecs(),
+		colsToStore: colsToStore,
 	}
 }
 
@@ -149,9 +159,9 @@ func newAppendOnlyBufferedBatch(
 type appendOnlyBufferedBatch struct {
 	coldata.Batch
 
-	length  int
-	colVecs []coldata.Vec
-	typs    []*types.T
+	length      int
+	colVecs     []coldata.Vec
+	colsToStore []int
 }
 
 var _ coldata.Batch = &appendOnlyBufferedBatch{}
@@ -185,10 +195,10 @@ func (b *appendOnlyBufferedBatch) ReplaceCol(coldata.Vec, int) {
 // into b.
 // NOTE: this does *not* perform memory accounting.
 func (b *appendOnlyBufferedBatch) append(batch coldata.Batch, startIdx, endIdx int) {
-	for i, colVec := range b.colVecs {
-		colVec.Append(
+	for _, colIdx := range b.colsToStore {
+		b.colVecs[colIdx].Append(
 			coldata.SliceArgs{
-				Src:         batch.ColVec(i),
+				Src:         batch.ColVec(colIdx),
 				Sel:         batch.Selection(),
 				DestIdx:     b.length,
 				SrcStartIdx: startIdx,

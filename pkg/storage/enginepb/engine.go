@@ -20,6 +20,8 @@ func (e *EngineType) String() string {
 	switch *e {
 	case EngineTypeRocksDB:
 		return "rocksdb"
+	case EngineTypeDefault:
+		return "default"
 	case EngineTypePebble:
 		return "pebble"
 	case EngineTypeTeePebbleRocksDB:
@@ -31,6 +33,8 @@ func (e *EngineType) String() string {
 // Set implements the pflag.Value interface.
 func (e *EngineType) Set(s string) error {
 	switch s {
+	case "default":
+		*e = EngineTypeDefault
 	case "rocksdb":
 		*e = EngineTypeRocksDB
 	case "pebble":

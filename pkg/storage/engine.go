@@ -568,6 +568,8 @@ func NewEngine(
 		}
 
 		return NewTee(ctx, rocksDB, pebbleDB), nil
+	case enginepb.EngineTypeDefault:
+		fallthrough
 	case enginepb.EngineTypePebble:
 		pebbleConfig := PebbleConfig{
 			StorageConfig: storageConfig,
