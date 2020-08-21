@@ -17,6 +17,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIsClosed(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected bool
+	}{
+		{"POINT EMPTY", false},
+		{"POINT(1 1)", true},
+		{"LINESTRING EMPTY", false},
+		{"LINESTRING(1 1, 2 2)", false},
+		{"LINESTRING(1 1, 2 2, 1 1)", true},
+		{"LINESTRING(1 1, 1 2, 2 2, 2 1, 1 1)", true},
+		{"POLYGON EMPTY", false},
+		{"POLYGON((0 0, 1 0, 1 1, 0 0))", true},
+		{"MULTIPOINT EMPTY", false},
+		{"MULTIPOINT((1 1), (2 2))", true},
+		{"MULTILINESTRING EMPTY", false},
+		{"MULTILINESTRING((1 1, 3 3), (1 1, 2 2, 1 1))", false},
+		{"MULTILINESTRING((1 1, 3 3, 1 1), (1 1, 2 2, 1 1))", true},
+		{"MULTIPOLYGON EMPTY", false},
+		{"MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)), ((0 0, 0 1, 1 0, 0 0)))", true},
+		{"GEOMETRYCOLLECTION EMPTY", false},
+		{"GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 1 1))", false},
+		{"GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 1 1, 0 0))", true},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION EMPTY)", false},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 1 1)))", false},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 1 1, 0 0)))", true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := IsClosed(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
 func TestIsCollection(t *testing.T) {
 	testCases := []struct {
 		wkt      string
@@ -79,6 +118,109 @@ func TestIsEmpty(t *testing.T) {
 			g, err := geo.ParseGeometry(tc.wkt)
 			require.NoError(t, err)
 			ret, err := IsEmpty(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
+func TestIsRing(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected bool
+	}{
+		{"LINESTRING EMPTY", false},
+		{"LINESTRING(1 1, 2 2)", false},
+		{"LINESTRING(1 1, 2 2, 1 1)", false},
+		{"LINESTRING(1 1, 2 2, 2 1, 1 2, 1 1)", false},
+		{"LINESTRING(1 1, 1 2, 2 2, 2 1, 1 1)", true},
+		// Empty non-linestring geometries shouldn't error, to follow PostGIS behavior.
+		{"POINT EMPTY", false},
+		{"POLYGON EMPTY", false},
+		{"MULTILINESTRING EMPTY", false},
+		{"MULTIPOINT EMPTY", false},
+		{"MULTIPOLYGON EMPTY", false},
+		{"GEOMETRYCOLLECTION EMPTY", false},
+	}
+
+	errorTestCases := []struct {
+		wkt string
+	}{
+		{"POINT(1 1)"},
+		{"POLYGON((0 0, 1 0, 1 1, 0 0))"},
+		{"MULTIPOINT((1 1), (2 2))"},
+		{"MULTILINESTRING((1 1, 2 2), (2 1, 1 2))"},
+		{"MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)), ((0 0, 0 1, 1 0, 0 0)))"},
+		{"GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 2 2))"},
+		{"GEOMETRYCOLLECTION(LINESTRING(0 0, 1 1), LINESTRING(0 1, 1 0))"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := IsRing(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+
+	t.Run("errors on non-linestring", func(t *testing.T) {
+		for _, tc := range errorTestCases {
+			t.Run(tc.wkt, func(t *testing.T) {
+				g, err := geo.ParseGeometry(tc.wkt)
+				require.NoError(t, err)
+				_, err = IsRing(g)
+				require.Error(t, err)
+			})
+		}
+	})
+}
+
+func TestIsSimple(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected bool
+	}{
+		{"POINT EMPTY", true},
+		{"POINT(1 1)", true},
+		{"LINESTRING EMPTY", true},
+		{"LINESTRING(1 1, 2 2)", true},
+		{"LINESTRING(1 1, 2 2, 1 1)", false},
+		{"LINESTRING(1 1, 1 2, 2 2, 2 1, 1 1)", true},
+		{"LINESTRING(1 1, 2 2, 2 1, 1 2)", false},
+		{"POLYGON EMPTY", true},
+		{"POLYGON((0 0, 1 0, 1 1, 0 0))", true},
+		{"POLYGON((0 0, 1 1, 1 0, 0 1, 0 0))", false},
+		{"MULTIPOINT EMPTY", true},
+		{"MULTIPOINT((1 1), (1 1))", false},
+		{"MULTIPOINT((1 1), (2 2))", true},
+		{"MULTILINESTRING EMPTY", true},
+		{"MULTILINESTRING((1 1, 2 2), (2 1, 1 2))", false},
+		{"MULTILINESTRING((1 1, 2 2), (0 0, 3 3))", false},
+		{"MULTILINESTRING((1 1, 2 2), (3 3, 4 4))", true},
+		{"MULTIPOLYGON EMPTY", true},
+		// The next two test cases appear to be wrong, since the polygons overlap,
+		// but this is returned by GEOS and matches PostGIS behavior.
+		{"MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)), ((0 0, 0 1, 1 0, 0 0)))", true},
+		{"MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)), ((0 0, 1 0, 1 1, 0 0)))", true},
+		{"MULTIPOLYGON(((0 0, 1 0, 1 1, 0 0)), ((2 2, 2 3, 3 3, 2 2)))", true},
+		{"MULTIPOLYGON(((0 0, 1 1, 1 0, 0 1, 0 0)), ((2 2, 2 3, 3 3, 2 2)))", false},
+		{"GEOMETRYCOLLECTION EMPTY", true},
+		{"GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 2 2))", true},
+		{"GEOMETRYCOLLECTION(LINESTRING(0 0, 1 1), LINESTRING(0 1, 1 0))", true},
+		{"GEOMETRYCOLLECTION(LINESTRING(0 0, 1 1, 0 0), LINESTRING(0 1, 1 0))", false},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION EMPTY)", true},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 2 2)))", true},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING(0 0, 1 1), LINESTRING(0 1, 1 0)))", true},
+		{"GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(LINESTRING(0 0, 1 1, 0 0), LINESTRING(0 1, 1 0)))", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := IsSimple(g)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, ret)
 		})
