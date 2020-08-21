@@ -1872,6 +1872,7 @@ SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
 USE d;
+CREATE SCHEMA unused;
 CREATE SCHEMA sc;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
@@ -1895,6 +1896,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDBRestore.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDBRestore.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Tests restoring databases with user defined schemas.
@@ -1909,6 +1911,7 @@ SET experimental_enable_enums = true;
 CREATE DATABASE d;
 USE d;
 CREATE SCHEMA sc;
+CREATE SCHEMA unused;
 CREATE TABLE sc.tb1 (x INT);
 INSERT INTO sc.tb1 VALUES (1);
 CREATE TYPE sc.typ1 AS ENUM ('hello');
@@ -1929,6 +1932,7 @@ INSERT INTO sc.tb2 VALUES ('hello');
 
 		// We shouldn't be able to create a new schema with the same name.
 		sqlDB.ExpectErr(t, `pq: schema "sc" already exists`, `USE d; CREATE SCHEMA sc`)
+		sqlDB.ExpectErr(t, `pq: schema "unused" already exists`, `USE d; CREATE SCHEMA unused`)
 	})
 
 	// Test restoring tables with user defined schemas when restore schemas are
@@ -2103,11 +2107,10 @@ func TestBackupRestoreUserDefinedTypes(t *testing.T) {
 SET experimental_enable_enums = true;
 
 CREATE DATABASE d;
+CREATE TYPE d.unused AS ENUM ('lonely');
 CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
 CREATE TABLE d.t1 (x d.farewell);
 INSERT INTO d.t1 VALUES ('bye'), ('cya');
-CREATE TABLE d.plain (x int);
-INSERT INTO d.plain VALUES (1), (2);
 `)
 		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts1)
 
@@ -2150,6 +2153,8 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 `, ts1))
 			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
 				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
+			sqlDB.ExpectErr(t, `pq: type "d.public.unused" already exists`,
+				`CREATE TYPE d.unused AS ENUM ('some_enum')`)
 			sqlDB.Exec(t, `SELECT 'bye'::d.farewell; SELECT 'cya'::d.public.farewell;`)
 			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
 				`SELECT 'another'::d.farewell;`)
