@@ -567,6 +567,7 @@ func backupPlanHook(
 
 		var tables []catalog.TableDescriptor
 		statsFiles := make(map[descpb.ID]string)
+		// TODO(pbardea): Let's check the privs for UDTs and UDSs here.
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
 			case catalog.DatabaseDescriptor:
