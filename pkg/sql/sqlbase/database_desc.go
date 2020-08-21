@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -185,7 +186,7 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 	descpb.MaybeFixPrivileges(desc.GetID(), desc.Privileges)
 
 	// Validate the privilege descriptor.
-	return desc.Privileges.Validate(desc.GetID())
+	return desc.Privileges.Validate(desc.GetID(), privilege.Database)
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.

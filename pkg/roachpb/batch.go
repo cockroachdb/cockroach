@@ -593,6 +593,9 @@ func (ba BatchRequest) String() string {
 	if ba.WaitPolicy != lock.WaitPolicy_Block {
 		str = append(str, fmt.Sprintf("[wait-policy: %s]", ba.WaitPolicy))
 	}
+	if ba.CanForwardReadTimestamp {
+		str = append(str, "[can-forward-ts]")
+	}
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
@@ -605,8 +608,8 @@ func (ba BatchRequest) String() string {
 		req := arg.GetInner()
 		if et, ok := req.(*EndTxnRequest); ok {
 			h := req.Header()
-			str = append(str, fmt.Sprintf("%s(commit:%t tsflex:%t) [%s] ",
-				req.Method(), et.Commit, et.CanCommitAtHigherTimestamp, h.Key))
+			str = append(str, fmt.Sprintf("%s(commit:%t) [%s] ",
+				req.Method(), et.Commit, h.Key))
 		} else {
 			h := req.Header()
 			var s string
@@ -634,7 +637,7 @@ func (ba BatchRequest) ValidateForEvaluation() error {
 		return errors.AssertionFailedf("EndTxn request without transaction")
 	}
 	if ba.Txn != nil {
-		if ba.Txn.WriteTooOld && (ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp)) {
+		if ba.Txn.WriteTooOld && ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
 			return errors.AssertionFailedf("WriteTooOld set but no offset in timestamps. txn: %s", ba.Txn)
 		}
 	}

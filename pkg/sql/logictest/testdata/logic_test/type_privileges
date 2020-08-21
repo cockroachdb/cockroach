@@ -8,8 +8,14 @@ user root
 
 statement ok
 GRANT CREATE, DROP ON DATABASE test TO testuser;
+
+statement ok
 CREATE TYPE test AS ENUM ('hello');
+
+statement ok
 CREATE TABLE for_view(x test);
+
+statement ok
 GRANT SELECT on for_view TO testuser;
 
 # Ensure a user without explicit privileges can use the type if it is
@@ -116,4 +122,3 @@ ALTER TYPE test RENAME to test1
 # testuser should be able to drop the type now.
 statement ok
 DROP TYPE test1
-

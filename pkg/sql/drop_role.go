@@ -95,6 +95,23 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		userNames[normalizedUsername] = make([]objectAndType, 0)
 	}
 
+	// Non-admin users cannot drop admins.
+	hasAdmin, err := params.p.HasAdminRole(params.ctx)
+	if err != nil {
+		return err
+	}
+	if !hasAdmin {
+		for i := range names {
+			targetIsAdmin, err := params.p.UserHasAdminRole(params.ctx, names[i])
+			if err != nil {
+				return err
+			}
+			if targetIsAdmin {
+				return pgerror.New(pgcode.InsufficientPrivilege, "must be superuser to drop superusers")
+			}
+		}
+	}
+
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	defer f.Close()
 

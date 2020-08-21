@@ -485,69 +485,74 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		withSeq(&roachpb.PutRequest{}, 1),
 		withSeq(&roachpb.EndTxnRequest{Commit: true}, 2),
 	)
-	txnReqsNoRefresh := makeReqs(
-		withSeq(&roachpb.PutRequest{}, 1),
-		withSeq(&roachpb.EndTxnRequest{Commit: true, CanCommitAtHigherTimestamp: true}, 2),
-	)
 	txnReqsRequire1PC := makeReqs(
 		withSeq(&roachpb.PutRequest{}, 1),
 		withSeq(&roachpb.EndTxnRequest{Commit: true, Require1PC: true}, 2),
 	)
 
 	testCases := []struct {
-		ru          []roachpb.RequestUnion
-		isTxn       bool
-		isRestarted bool
-		// isWTO implies isTSOff.
-		isWTO   bool
-		isTSOff bool
-		exp1PC  bool
+		ru           []roachpb.RequestUnion
+		isNonTxn     bool
+		canForwardTS bool
+		isRestarted  bool
+		isWTO        bool // isWTO implies isTSOff
+		isTSOff      bool
+		exp1PC       bool
 	}{
-		{ru: noReqs, isTxn: false, exp1PC: false},
-		{ru: noReqs, isTxn: true, exp1PC: false},
-		{ru: getReq, isTxn: true, exp1PC: false},
-		{ru: putReq, isTxn: true, exp1PC: false},
-		{ru: etReq, isTxn: true, exp1PC: true},
-		{ru: etReq, isTxn: true, isTSOff: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isRestarted: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: etReq, isTxn: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqs[:1], isTxn: true, exp1PC: false},
-		{ru: txnReqs[1:], isTxn: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, exp1PC: true},
-		{ru: txnReqs, isTxn: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isRestarted: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqs, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsNoRefresh[:1], isTxn: true, exp1PC: false},
-		{ru: txnReqsNoRefresh[1:], isTxn: true, exp1PC: false},
-		{ru: txnReqsNoRefresh, isTxn: true, exp1PC: true},
-		{ru: txnReqsNoRefresh, isTxn: true, isTSOff: true, exp1PC: true},
-		{ru: txnReqsNoRefresh, isTxn: true, isWTO: true, exp1PC: true},
-		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, exp1PC: false},
-		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqsNoRefresh, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsRequire1PC[:1], isTxn: true, exp1PC: false},
-		{ru: txnReqsRequire1PC[1:], isTxn: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, exp1PC: true},
-		{ru: txnReqsRequire1PC, isTxn: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, isWTO: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, exp1PC: true},
-		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isTSOff: true, exp1PC: false},
-		{ru: txnReqsRequire1PC, isTxn: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: noReqs, isNonTxn: true, exp1PC: false},
+		{ru: noReqs, exp1PC: false},
+		{ru: getReq, exp1PC: false},
+		{ru: putReq, exp1PC: false},
+		{ru: etReq, exp1PC: true},
+		{ru: etReq, isTSOff: true, exp1PC: false},
+		{ru: etReq, isWTO: true, exp1PC: false},
+		{ru: etReq, isRestarted: true, exp1PC: false},
+		{ru: etReq, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, canForwardTS: true, exp1PC: true},
+		{ru: etReq, canForwardTS: true, isTSOff: true, exp1PC: true},
+		{ru: etReq, canForwardTS: true, isWTO: true, exp1PC: true},
+		{ru: etReq, canForwardTS: true, isRestarted: true, exp1PC: false},
+		{ru: etReq, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, canForwardTS: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs[:1], exp1PC: false},
+		{ru: txnReqs[1:], exp1PC: false},
+		{ru: txnReqs, exp1PC: true},
+		{ru: txnReqs, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isWTO: true, exp1PC: false},
+		{ru: txnReqs, isRestarted: true, exp1PC: false},
+		{ru: txnReqs, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqs[:1], canForwardTS: true, exp1PC: false},
+		{ru: txnReqs[1:], canForwardTS: true, exp1PC: false},
+		{ru: txnReqs, canForwardTS: true, exp1PC: true},
+		{ru: txnReqs, canForwardTS: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqs, canForwardTS: true, isWTO: true, exp1PC: true},
+		{ru: txnReqs, canForwardTS: true, isRestarted: true, exp1PC: false},
+		{ru: txnReqs, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, canForwardTS: true, isRestarted: true, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC[:1], exp1PC: false},
+		{ru: txnReqsRequire1PC[1:], exp1PC: false},
+		{ru: txnReqsRequire1PC, exp1PC: true},
+		{ru: txnReqsRequire1PC, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isWTO: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isRestarted: true, exp1PC: true},
+		{ru: txnReqsRequire1PC, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isRestarted: true, isWTO: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
 		t.Run(
-			fmt.Sprintf("%d:isTxn:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
-				i, c.isTxn, c.isRestarted, c.isWTO, c.isTSOff),
+			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
+				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isWTO, c.isTSOff),
 			func(t *testing.T) {
 				ba := roachpb.BatchRequest{Requests: c.ru}
-				if c.isTxn {
+				if !c.isNonTxn {
 					ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, clock)
+					if c.canForwardTS {
+						ba.CanForwardReadTimestamp = true
+					}
 					if c.isRestarted {
 						ba.Txn.Restart(-1, 0, clock.Now())
 					}
@@ -4458,15 +4463,15 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
-	testutils.RunTrueAndFalse(t, "CanCommitAtHigherTimestamp", func(t *testing.T, noPriorReads bool) {
+	testutils.RunTrueAndFalse(t, "CanForwardReadTimestamp", func(t *testing.T, noPriorReads bool) {
 		key := roachpb.Key("a")
 		txn := newTransaction("test", key, 1, tc.Clock())
 
 		// Send a batch with put & end txn.
 		var ba roachpb.BatchRequest
+		ba.CanForwardReadTimestamp = noPriorReads
 		put := putArgs(key, []byte("value"))
 		et, _ := endTxnArgs(txn, true)
-		et.CanCommitAtHigherTimestamp = noPriorReads
 		et.LockSpans = []roachpb.Span{{Key: key, EndKey: nil}}
 		ba.Header = roachpb.Header{Txn: txn}
 		ba.Add(&put)
@@ -10148,7 +10153,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 		},
 		// 1PC serializable transaction will fail instead of retrying if
-		// EndTxnRequest.CanCommitAtHigherTimestamp is not true.
+		// BatchRequest.CanForwardReadTimestamp is not true.
 		{
 			name: "no serverside-refresh of write too old on 1PC txn and refresh spans",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -10175,13 +10180,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("e", ts.Prev())
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				// NOTE: setting CanCommitAtHigherTimestamp without
-				// CanForwardReadTimestamp simulates the kinds of batches we
-				// might see in a mixed-version cluster. All new versions will
-				// keep the two flags in-sync.
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -10197,10 +10198,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				expTS = ts.Next()
 				ba.Txn = newTxn("e", ts.Prev())
-				ba.CanForwardReadTimestamp = true
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -10231,13 +10231,13 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 				ba = roachpb.BatchRequest{}
 				ba.Txn = txn
+				// Indicate local retry is possible, even though we don't currently take
+				// advantage of this.
+				ba.CanForwardReadTimestamp = true
 				cput := cPutArgs(roachpb.Key("e1"), []byte("cput"), []byte("put"))
 				ba.Add(&cput)
 				assignSeqNumsForReqs(ba.Txn, &cput)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				// Indicate local retry is possible, even though we don't currently take
-				// advantage of this.
-				et.CanCommitAtHigherTimestamp = true
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
@@ -10291,13 +10291,13 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				// We're going to execute before any of the writes in setupFn.
 				ts.Logical = 0
 				ba.Txn = newTxn("ga1", ts)
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				for i := 1; i <= 3; i++ {
 					cput := cPutArgs(roachpb.Key(fmt.Sprintf("ga%d", i)), []byte("cput"), []byte("put"))
 					ba.Add(&cput)
 					assignSeqNumsForReqs(ba.Txn, &cput)
 				}
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &et)
 				return
@@ -10326,10 +10326,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				expTS = ts.Next()
 				ba = roachpb.BatchRequest{}
 				ba.Txn = txn
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
 				ba.Add(&cput)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -10344,11 +10344,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
 				ba.Txn = newTxn("a", ts.Prev())
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				expTS = ts.Next()
 				cput := putArgs(ba.Txn.Key, []byte("put"))
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.Require1PC = true                 // don't allow this to bypass the 1PC optimization
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
+				et.Require1PC = true // don't allow this to bypass the 1PC optimization
 				ba.Add(&cput, &et)
 				assignSeqNumsForReqs(ba.Txn, &cput, &et)
 				return
@@ -10397,10 +10397,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				expTS = ts.Next()
 				ba = roachpb.BatchRequest{}
 				ba.Txn = txn
+				ba.CanForwardReadTimestamp = true // necessary to indicate serverside-refresh is possible
 				put2 := putArgs(ba.Txn.Key, []byte("newput"))
 				ba.Add(&put2)
 				et, _ := endTxnArgs(ba.Txn, true /* commit */)
-				et.CanCommitAtHigherTimestamp = true // necessary to indicate serverside-refresh is possible
 				ba.Add(&et)
 				assignSeqNumsForReqs(ba.Txn, &put2, &et)
 				return

@@ -1010,10 +1010,9 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// Issue the end txn command.
 		req := roachpb.EndTxnRequest{
-			RequestHeader:              roachpb.RequestHeader{Key: txn.Key},
-			Commit:                     true,
-			CanCommitAtHigherTimestamp: true,
-			LockSpans:                  intents,
+			RequestHeader: roachpb.RequestHeader{Key: txn.Key},
+			Commit:        true,
+			LockSpans:     intents,
 		}
 		var resp roachpb.EndTxnResponse
 		if _, err := EndTxn(ctx, batch, CommandArgs{

@@ -155,7 +155,7 @@ func TestUserFileUpload(t *testing.T) {
 }
 
 func checkListedFiles(t *testing.T, c cliTest, uri string, expectedFiles []string) {
-	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "ls", uri})
+	cliOutput, err := c.RunWithCaptureArgs([]string{"userfile", "list", uri})
 	require.NoError(t, err)
 	cliOutput = strings.TrimSpace(cliOutput)
 

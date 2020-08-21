@@ -1300,7 +1300,7 @@ CREATE TABLE information_schema.user_privileges (
 				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{security.RootUser, security.AdminRole} {
 					grantee := tree.NewDString(u)
-					for _, p := range privilege.DBSchemaTablePrivileges.SortedNames() {
+					for _, p := range privilege.DBTablePrivileges.SortedNames() {
 						if err := addRow(
 							grantee,            // grantee
 							dbNameStr,          // table_catalog

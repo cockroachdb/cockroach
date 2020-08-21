@@ -43,15 +43,16 @@ Uploads a file to the user scoped file storage using a SQL connection.
 }
 
 var userFileListCmd = &cobra.Command{
-	Use:   "ls <file|dir glob>",
+	Use:   "list <file|dir glob>",
 	Short: "list files matching the provided pattern",
 	Long: `
 Lists the files stored in the user scoped file storage which match the provided pattern,
 using a SQL connection. If no pattern is provided, all files in the specified
 (or default, if unspecified) user scoped file storage will be listed.
 `,
-	Args: cobra.MinimumNArgs(0),
-	RunE: maybeShoutError(runUserFileList),
+	Args:    cobra.MinimumNArgs(0),
+	RunE:    maybeShoutError(runUserFileList),
+	Aliases: []string{"ls"},
 }
 
 var userFileDeleteCmd = &cobra.Command{
@@ -63,8 +64,9 @@ using a SQL connection. If passed pattern '*', all files in the specified
 (or default, if unspecified) user scoped file storage will be deleted. Deletions are not
 atomic, and all deletions prior to the first failure will occur. 
 `,
-	Args: cobra.MinimumNArgs(1),
-	RunE: maybeShoutError(runUserFileDelete),
+	Args:    cobra.MinimumNArgs(1),
+	RunE:    maybeShoutError(runUserFileDelete),
+	Aliases: []string{"rm"},
 }
 
 func runUserFileDelete(cmd *cobra.Command, args []string) error {

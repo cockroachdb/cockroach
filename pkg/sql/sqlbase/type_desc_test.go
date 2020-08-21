@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -225,27 +227,40 @@ func TestValidateTypeDesc(t *testing.T) {
 	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Schema{}}, 101)
 	writeDesc(&descpb.Descriptor{Union: &descpb.Descriptor_Type{}}, 102)
 
+	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUser)
+	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUser)
+	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
+	invalidPrivileges.Grant("foo", privilege.List{privilege.SELECT})
+	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
 	testData := []struct {
 		err  string
 		desc descpb.TypeDescriptor
 	}{
 		{
 			`empty type name`,
-			descpb.TypeDescriptor{},
+			descpb.TypeDescriptor{
+				Privileges: defaultPrivileges,
+			},
 		},
 		{
 			`invalid ID 0`,
-			descpb.TypeDescriptor{Name: "t"},
+			descpb.TypeDescriptor{
+				Name:       "t",
+				Privileges: defaultPrivileges,
+			},
 		},
 		{
 			`invalid parentID 0`,
-			descpb.TypeDescriptor{Name: "t", ID: 1},
+			descpb.TypeDescriptor{
+				Name: "t", ID: typeDescID,
+				Privileges: defaultPrivileges,
+			},
 		},
 		{
 			`enum members are not sorted [{[2] a ALL} {[1] b ALL}]`,
 			descpb.TypeDescriptor{
 				Name:     "t",
-				ID:       1,
+				ID:       typeDescID,
 				ParentID: 1,
 				Kind:     descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
@@ -258,13 +273,14 @@ func TestValidateTypeDesc(t *testing.T) {
 						PhysicalRepresentation: []byte{1},
 					},
 				},
+				Privileges: defaultPrivileges,
 			},
 		},
 		{
 			`duplicate enum physical rep [1]`,
 			descpb.TypeDescriptor{
 				Name:     "t",
-				ID:       1,
+				ID:       typeDescID,
 				ParentID: 1,
 				Kind:     descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
@@ -277,13 +293,14 @@ func TestValidateTypeDesc(t *testing.T) {
 						PhysicalRepresentation: []byte{1},
 					},
 				},
+				Privileges: defaultPrivileges,
 			},
 		},
 		{
 			`duplicate enum member "a"`,
 			descpb.TypeDescriptor{
 				Name:     "t",
-				ID:       1,
+				ID:       typeDescID,
 				ParentID: 1,
 				Kind:     descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
@@ -296,59 +313,77 @@ func TestValidateTypeDesc(t *testing.T) {
 						PhysicalRepresentation: []byte{2},
 					},
 				},
+				Privileges: defaultPrivileges,
 			},
 		},
 		{
 			`ALIAS type desc has nil alias type`,
 			descpb.TypeDescriptor{
-				Name:     "t",
-				ID:       1,
-				ParentID: 1,
-				Kind:     descpb.TypeDescriptor_ALIAS,
+				Name:       "t",
+				ID:         typeDescID,
+				ParentID:   1,
+				Kind:       descpb.TypeDescriptor_ALIAS,
+				Privileges: defaultPrivileges,
 			},
 		},
 		{
 			`parentID 500 does not exist`,
 			descpb.TypeDescriptor{
-				Name:     "t",
-				ID:       1,
-				ParentID: 500,
-				Kind:     descpb.TypeDescriptor_ALIAS,
-				Alias:    types.Int,
+				Name:       "t",
+				ID:         typeDescID,
+				ParentID:   500,
+				Kind:       descpb.TypeDescriptor_ALIAS,
+				Alias:      types.Int,
+				Privileges: defaultPrivileges,
 			},
 		},
 		{
 			`parentSchemaID 500 does not exist`,
 			descpb.TypeDescriptor{
 				Name:           "t",
-				ID:             1,
+				ID:             typeDescID,
 				ParentID:       100,
 				ParentSchemaID: 500,
 				Kind:           descpb.TypeDescriptor_ALIAS,
 				Alias:          types.Int,
+				Privileges:     defaultPrivileges,
 			},
 		},
 		{
 			"arrayTypeID 500 does not exist",
 			descpb.TypeDescriptor{
 				Name:           "t",
-				ID:             1,
+				ID:             typeDescID,
 				ParentID:       100,
 				ParentSchemaID: 101,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:    500,
+				Privileges:     defaultPrivileges,
 			},
 		},
 		{
 			"referencing descriptor 500 does not exist",
 			descpb.TypeDescriptor{
 				Name:                     "t",
-				ID:                       1,
+				ID:                       typeDescID,
 				ParentID:                 100,
 				ParentSchemaID:           101,
 				Kind:                     descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:              102,
 				ReferencingDescriptorIDs: []descpb.ID{500},
+				Privileges:               defaultPrivileges,
+			},
+		},
+		{
+			"user foo must not have SELECT privileges on system type with ID=50",
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       100,
+				ParentSchemaID: 101,
+				Kind:           descpb.TypeDescriptor_ENUM,
+				ArrayTypeID:    102,
+				Privileges:     invalidPrivileges,
 			},
 		},
 	}

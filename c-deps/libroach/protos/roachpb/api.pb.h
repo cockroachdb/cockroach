@@ -4421,12 +4421,6 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   bool require_1pc() const;
   void set_require_1pc(bool value);
 
-  // bool can_commit_at_higher_timestamp = 8;
-  void clear_can_commit_at_higher_timestamp();
-  static const int kCanCommitAtHigherTimestampFieldNumber = 8;
-  bool can_commit_at_higher_timestamp() const;
-  void set_can_commit_at_higher_timestamp(bool value);
-
   // bool poison = 9;
   void clear_poison();
   static const int kPoisonFieldNumber = 9;
@@ -4444,7 +4438,6 @@ class EndTxnRequest : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::roachpb::InternalCommitTrigger* internal_commit_trigger_;
   bool commit_;
   bool require_1pc_;
-  bool can_commit_at_higher_timestamp_;
   bool poison_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fapi_2eproto::TableStruct;
@@ -20818,20 +20811,6 @@ inline void EndTxnRequest::set_require_1pc(bool value) {
   
   require_1pc_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.require_1pc)
-}
-
-// bool can_commit_at_higher_timestamp = 8;
-inline void EndTxnRequest::clear_can_commit_at_higher_timestamp() {
-  can_commit_at_higher_timestamp_ = false;
-}
-inline bool EndTxnRequest::can_commit_at_higher_timestamp() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.EndTxnRequest.can_commit_at_higher_timestamp)
-  return can_commit_at_higher_timestamp_;
-}
-inline void EndTxnRequest::set_can_commit_at_higher_timestamp(bool value) {
-  
-  can_commit_at_higher_timestamp_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.EndTxnRequest.can_commit_at_higher_timestamp)
 }
 
 // bool poison = 9;

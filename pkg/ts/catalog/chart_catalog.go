@@ -925,6 +925,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"txn.refresh.memory_limit_exceeded"},
 			},
 			{
+				Title:   "Auto-Retries",
+				Metrics: []string{"txn.refresh.auto_retries"},
+			},
+			{
 				Title: "Commits",
 				Metrics: []string{
 					"txn.commits",

@@ -562,26 +562,15 @@ func canDoServersideRetry(
 	deadline *hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
+		if !ba.CanForwardReadTimestamp {
+			return false
+		}
 		if deadline != nil {
 			log.Fatal(ctx, "deadline passed for transactional request")
 		}
-		canFwdRTS := ba.CanForwardReadTimestamp
 		if etArg, ok := ba.GetArg(roachpb.EndTxn); ok {
-			// If the request provided an EndTxn request, also check its
-			// CanCommitAtHigherTimestamp flag. This ensures that we're backwards
-			// compatable and gives us a chance to make sure that these flags are
-			// in-sync until the CanCommitAtHigherTimestamp is migrated away.
 			et := etArg.(*roachpb.EndTxnRequest)
-			canFwdCTS := batcheval.CanForwardCommitTimestampWithoutRefresh(ba.Txn, et)
-			if canFwdRTS && !canFwdCTS {
-				log.Fatalf(ctx, "unexpected mismatch between Batch.CanForwardReadTimestamp "+
-					"(%+v) and EndTxn.CanCommitAtHigherTimestamp (%+v)", ba, et)
-			}
-			canFwdRTS = canFwdCTS
 			deadline = et.Deadline
-		}
-		if !canFwdRTS {
-			return false
 		}
 	}
 	var newTimestamp hlc.Timestamp

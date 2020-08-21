@@ -28,6 +28,7 @@ type TxnMetrics struct {
 	RefreshFail                   *metric.Counter
 	RefreshFailWithCondensedSpans *metric.Counter
 	RefreshMemoryLimitExceeded    *metric.Counter
+	RefreshAutoRetries            *metric.Counter
 
 	Durations *metric.Histogram
 
@@ -71,14 +72,18 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRefreshSuccess = metric.Metadata{
-		Name:        "txn.refresh.success",
-		Help:        "Number of successful refreshes",
+		Name: "txn.refresh.success",
+		Help: "Number of successful transaction refreshes. A refresh may be " +
+			"preemptive or reactive. A reactive refresh is performed after a " +
+			"request throws an error because a refresh is needed for it to " +
+			"succeed. In these cases, the request will be re-issued as an " +
+			"auto-retry (see txn.refresh.auto_retries) after the refresh succeeds.",
 		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRefreshFail = metric.Metadata{
 		Name:        "txn.refresh.fail",
-		Help:        "Number of failed refreshes",
+		Help:        "Number of failed transaction refreshes",
 		Measurement: "Refreshes",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -97,6 +102,12 @@ var (
 		Help: "Number of transaction which exceed the refresh span bytes limit, causing " +
 			"their read spans to be condensed",
 		Measurement: "Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRefreshAutoRetries = metric.Metadata{
+		Name:        "txn.refresh.auto_retries",
+		Help:        "Number of request retries after successful refreshes",
+		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDurationsHistograms = metric.Metadata{
@@ -196,10 +207,11 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits:                       metric.NewCounter(metaCommitsRates),
 		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
 		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
+		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshFail:                   metric.NewCounter(metaRefreshFail),
 		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
-		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
 		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),

@@ -640,17 +640,6 @@ func splitBatchAndCheckForRefreshSpans(
 		}()
 		if hasRefreshSpans {
 			ba.CanForwardReadTimestamp = false
-
-			// If the final part contains an EndTxn request, unset its
-			// CanCommitAtHigherTimestamp flag as well.
-			lastPart := parts[len(parts)-1]
-			if et := lastPart[len(lastPart)-1].GetEndTxn(); et != nil {
-				etCopy := *et
-				etCopy.CanCommitAtHigherTimestamp = false
-				lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
-				lastPart[len(lastPart)-1].MustSetInner(&etCopy)
-				parts[len(parts)-1] = lastPart
-			}
 		}
 	}
 	return parts
@@ -673,18 +662,6 @@ func unsetCanForwardReadTimestampFlag(ctx context.Context, ba *roachpb.BatchRequ
 		if roachpb.NeedsRefresh(req.GetInner()) {
 			// Unset the flag.
 			ba.CanForwardReadTimestamp = false
-
-			// We would need to also unset the CanCommitAtHigherTimestamp flag
-			// on any EndTxn request in the batch, but it turns out that because
-			// we call this function when a batch is split across ranges, we'd
-			// already have bailed if the EndTxn wasn't a parallel commit — and
-			// if it was a parallel commit then we must not have any requests
-			// that need to refresh (see txnCommitter.canCommitInParallel).
-			// Assert this for our own sanity.
-			if _, ok := ba.GetArg(roachpb.EndTxn); ok {
-				log.Fatalf(ctx, "batch unexpected contained requests "+
-					"that need to refresh and an EndTxn request: %s", ba.String())
-			}
 			return
 		}
 	}
