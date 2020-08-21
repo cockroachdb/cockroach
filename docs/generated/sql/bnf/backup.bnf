@@ -1,5 +1,7 @@
 backup_stmt ::=
-	'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' string_or_placeholder_opt_list as_of_clause opt_with_backup_options
+	'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' sconst_or_placeholder 'IN' string_or_placeholder_opt_list as_of_clause opt_with_backup_options
+	| 'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' sconst_or_placeholder 'IN' string_or_placeholder_opt_list  opt_with_backup_options
+	| 'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' string_or_placeholder_opt_list as_of_clause opt_with_backup_options
 	| 'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' string_or_placeholder_opt_list  opt_with_backup_options
 	| 'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' 'LATEST' 'IN' string_or_placeholder_opt_list as_of_clause opt_with_backup_options
 	| 'BACKUP' opt_backup_( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' 'LATEST' 'IN' string_or_placeholder_opt_list  opt_with_backup_options

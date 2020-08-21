@@ -54,6 +54,11 @@ type Backup struct {
 	Options            BackupOptions
 	Nested             bool
 	AppendToLatest     bool
+	// Subdir may be set by the parser when the SQL query is of the form
+	// `BACKUP INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir
+	// was not explicitly specified by the user, then this will be set during
+	// BACKUP planning once the destination has been resolved.
+	Subdir Expr
 }
 
 var _ Statement = &Backup{}
@@ -67,7 +72,10 @@ func (node *Backup) Format(ctx *FmtCtx) {
 	}
 	if node.Nested {
 		ctx.WriteString("INTO ")
-		if node.AppendToLatest {
+		if node.Subdir != nil {
+			ctx.FormatNode(node.Subdir)
+			ctx.WriteString(" IN ")
+		} else if node.AppendToLatest {
 			ctx.WriteString("LATEST IN ")
 		}
 	} else {

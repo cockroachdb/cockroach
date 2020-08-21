@@ -302,11 +302,29 @@ func resolveOptionsForBackupJobDescription(
 }
 
 func backupJobDescription(
-	p sql.PlanHookState, backup *tree.Backup, to []string, incrementalFrom []string, kmsURIs []string,
+	p sql.PlanHookState,
+	backup *tree.Backup,
+	to []string,
+	incrementalFrom []string,
+	kmsURIs []string,
+	resolvedSubdir string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
 		Targets: backup.Targets,
+		Nested:  backup.Nested,
+	}
+
+	// We set Subdir to the directory resolved during BACKUP planning.
+	//
+	// - For `BACKUP INTO 'subdir' IN...` this would be the specified subdir
+	// (with a single / prefix).
+	// - For `BACKUP INTO LATEST...` this would be the sub-directory pointed to by
+	// LATEST, where we are appending an incremental BACKUP.
+	// - For `BACKUP INTO x` this would be the sub-directory we have selected to
+	// write the BACKUP to.
+	if b.Nested {
+		b.Subdir = tree.NewDString(resolvedSubdir)
 	}
 
 	for _, t := range to {
@@ -420,6 +438,15 @@ func backupPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
+	var err error
+	subdirFn := func() (string, error) { return "", nil }
+	if backupStmt.Subdir != nil {
+		subdirFn, err = p.TypeAsString(ctx, backupStmt.Subdir, "BACKUP")
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	toFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.To), "BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -492,6 +519,11 @@ func backupPlanHook(
 			}
 			isEnterprise = true
 			return nil
+		}
+
+		subdir, err := subdirFn()
+		if err != nil {
+			return err
 		}
 
 		to, err := toFn()
@@ -583,8 +615,9 @@ func backupPlanHook(
 
 		// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 		// backupDestination struct.
-		collectionURI, defaultURI, urisByLocalityKV, prevs, err := resolveDest(ctx, p, backupStmt,
-			defaultURI, urisByLocalityKV, makeCloudStorage, endTime, to, incrementalFrom)
+		collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
+			resolveDest(ctx, p, backupStmt, defaultURI, urisByLocalityKV, makeCloudStorage, endTime,
+				to, incrementalFrom, subdir)
 		if err != nil {
 			return err
 		}
@@ -792,7 +825,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs)
+		description, err := backupJobDescription(p, backupStmt.Backup, to, incrementalFrom, encryptionParams.kmsURIs, resolvedSubdir)
 		if err != nil {
 			return err
 		}

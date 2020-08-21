@@ -12,6 +12,7 @@ import (
 	"context"
 	"io/ioutil"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -72,9 +73,11 @@ func resolveDest(
 	endTime hlc.Timestamp,
 	to []string,
 	incrementalFrom []string,
+	subdir string,
 ) (
 	string, /* collectionURI */
 	string, /* defaultURI */
+	string, /* chosenSuffix */
 	map[string]string, /* urisByLocalityKV */
 	[]string, /* prevBackupURIs */
 	error,
@@ -88,14 +91,14 @@ func resolveDest(
 
 	if backupStmt.Nested {
 		collectionURI, chosenSuffix, err = resolveBackupCollection(ctx, p, defaultURI, backupStmt,
-			makeCloudStorage, endTime)
+			makeCloudStorage, endTime, subdir)
 		if err != nil {
-			return "", "", nil, nil, err
+			return "", "", "", nil, nil, err
 		}
 
 		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, chosenSuffix)
 		if err != nil {
-			return "", "", nil, nil, err
+			return "", "", "", nil, nil, err
 		}
 	}
 
@@ -104,12 +107,12 @@ func resolveDest(
 	} else {
 		defaultStore, err := makeCloudStorage(ctx, defaultURI, p.User())
 		if err != nil {
-			return "", "", nil, nil, err
+			return "", "", "", nil, nil, err
 		}
 		defer defaultStore.Close()
 		exists, err := containsManifest(ctx, defaultStore)
 		if err != nil {
-			return "", "", nil, nil, err
+			return "", "", "", nil, nil, err
 		}
 		if exists {
 			// The backup in the auto-append directory is the full backup.
@@ -119,7 +122,7 @@ func resolveDest(
 				prevBackupURIs = append(prevBackupURIs, defaultURI+"/"+prior)
 			}
 			if err != nil {
-				return "", "", nil, nil, errors.Wrap(err, "finding previous backups")
+				return "", "", "", nil, nil, errors.Wrap(err, "finding previous backups")
 			}
 
 			// Pick a piece-specific suffix and update the destination path(s).
@@ -127,12 +130,12 @@ func resolveDest(
 			partName = path.Join(chosenSuffix, partName)
 			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
 			if err != nil {
-				return "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
+				return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 			}
 		}
 	}
 
-	return collectionURI, defaultURI, urisByLocalityKV, prevBackupURIs, nil
+	return collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 }
 
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
@@ -227,6 +230,7 @@ func resolveBackupCollection(
 	backupStmt *annotatedBackupStatement,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	endTime hlc.Timestamp,
+	subdir string,
 ) (string, string, error) {
 	var chosenSuffix string
 	collectionURI := defaultURI
@@ -251,6 +255,10 @@ func resolveBackupCollection(
 			return "", "", errors.Errorf("malformed LATEST file")
 		}
 		chosenSuffix = string(latest)
+	} else if subdir != "" {
+		// User has specified a subdir via `BACKUP INTO 'subdir' IN...`.
+		chosenSuffix = strings.TrimPrefix(subdir, "/")
+		chosenSuffix = "/" + chosenSuffix
 	} else {
 		chosenSuffix = endTime.GoTime().Format(dateBasedFolderName)
 	}
