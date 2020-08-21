@@ -102,6 +102,8 @@ type CertificateManager struct {
 	tenantIdentifier uint64
 	CertsLocator
 
+	tlsSettings TLSSettings
+
 	// The metrics struct is initialized at init time and metrics do their
 	// own locking.
 	certMetrics CertificateMetrics
@@ -150,7 +152,9 @@ type CertificateMetrics struct {
 	TenantClientExpiration   *metric.Gauge
 }
 
-func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager {
+func makeCertificateManager(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) *CertificateManager {
 	var o cmOptions
 	for _, fn := range opts {
 		fn(&o)
@@ -159,6 +163,7 @@ func makeCertificateManager(certsDir string, opts ...Option) *CertificateManager
 	return &CertificateManager{
 		CertsLocator:     MakeCertsLocator(certsDir),
 		tenantIdentifier: o.tenantIdentifier,
+		tlsSettings:      tlsSettings,
 		certMetrics: CertificateMetrics{
 			CAExpiration:             metric.NewGauge(metaCAExpiration),
 			ClientCAExpiration:       metric.NewGauge(metaClientCAExpiration),
@@ -191,8 +196,10 @@ func ForTenant(tenantIdentifier uint64) Option {
 }
 
 // NewCertificateManager creates a new certificate manager.
-func NewCertificateManager(certsDir string, opts ...Option) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir, opts...)
+func NewCertificateManager(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, tlsSettings, opts...)
 	return cm, cm.LoadCertificates()
 }
 
@@ -200,8 +207,10 @@ func NewCertificateManager(certsDir string, opts ...Option) (*CertificateManager
 // The certsDir is created if it does not exist.
 // This should only be called when generating certificates, the server has
 // no business creating the certs directory.
-func NewCertificateManagerFirstRun(certsDir string, opts ...Option) (*CertificateManager, error) {
-	cm := makeCertificateManager(certsDir, opts...)
+func NewCertificateManagerFirstRun(
+	certsDir string, tlsSettings TLSSettings, opts ...Option,
+) (*CertificateManager, error) {
+	cm := makeCertificateManager(certsDir, tlsSettings, opts...)
 	if err := NewCertificateLoader(cm.certsDir).MaybeCreateCertsDir(); err != nil {
 		return nil, err
 	}
@@ -630,6 +639,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	}
 
 	cfg, err := newServerTLSConfig(
+		cm.tlsSettings,
 		nodeCert.FileContents,
 		nodeCert.KeyFileContents,
 		ca.FileContents,
@@ -675,6 +685,7 @@ func (cm *CertificateManager) getEmbeddedUIServerTLSConfig(
 	}
 
 	cfg, err := newUIServerTLSConfig(
+		cm.tlsSettings,
 		uiCert.FileContents,
 		uiCert.KeyFileContents)
 	if err != nil {
@@ -820,6 +831,7 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 	}
 
 	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
 		tenantClientCert.FileContents,
 		tenantClientCert.KeyFileContents,
 		ca.FileContents)
@@ -851,6 +863,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 		}
 
 		cfg, err := newClientTLSConfig(
+			cm.tlsSettings,
 			clientCert.FileContents,
 			clientCert.KeyFileContents,
 			ca.FileContents)
@@ -873,6 +886,7 @@ func (cm *CertificateManager) GetClientTLSConfig(user string) (*tls.Config, erro
 	}
 
 	cfg, err := newClientTLSConfig(
+		cm.tlsSettings,
 		clientCert.FileContents,
 		clientCert.KeyFileContents,
 		ca.FileContents)
@@ -897,7 +911,7 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	cfg, err := newUIClientTLSConfig(uiCA.FileContents)
+	cfg, err := newUIClientTLSConfig(cm.tlsSettings, uiCA.FileContents)
 	if err != nil {
 		return nil, err
 	}

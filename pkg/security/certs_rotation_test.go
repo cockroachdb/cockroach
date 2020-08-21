@@ -100,7 +100,7 @@ func TestRotateCerts(t *testing.T) {
 	// Test client with the same certs.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	firstSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	firstSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	firstClient, err := firstSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -132,7 +132,7 @@ func TestRotateCerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 
-	secondSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	secondSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	secondClient, err := secondSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -201,7 +201,7 @@ func TestRotateCerts(t *testing.T) {
 	// This is HTTP and succeeds because we do not ask for or verify client certificates.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	thirdSCtx := rpc.MakeSecurityContext(clientContext, roachpb.SystemTenantID)
+	thirdSCtx := rpc.MakeSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
 	thirdClient, err := thirdSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)

@@ -27,7 +27,7 @@ import (
 
 func TestManagerWithEmbedded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cm, err := security.NewCertificateManager("test_certs")
+	cm, err := security.NewCertificateManager("test_certs", security.CommandTLSSettings{})
 	if err != nil {
 		t.Error(err)
 	}
@@ -104,11 +104,11 @@ func TestManagerWithPrincipalMap(t *testing.T) {
 		require.NoError(t, security.SetCertPrincipalMap(strings.Split(s, ",")))
 	}
 	newCertificateManager := func() error {
-		_, err := security.NewCertificateManager(certsDir)
+		_, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 		return err
 	}
 	loadUserCert := func(user string) error {
-		cm, err := security.NewCertificateManager(certsDir)
+		cm, err := security.NewCertificateManager(certsDir, security.CommandTLSSettings{})
 		if err != nil {
 			return err
 		}
