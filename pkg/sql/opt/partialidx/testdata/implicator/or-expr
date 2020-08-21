@@ -239,6 +239,14 @@ predtest vars=(bool, bool, bool)
 ----
 false
 
+predtest vars=(int, int, int, int)
+@1 > @2 OR @3 > @4
+=>
+@2 < @1 OR @4 < @3
+----
+true
+└── remaining filters: (@1 > @2) OR (@3 > @4)
+
 # Combination conjunction and disjunction filters
 
 predtest vars=(int)
