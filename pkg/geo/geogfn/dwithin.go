@@ -25,7 +25,7 @@ func DWithin(
 	b *geo.Geography,
 	distance float64,
 	useSphereOrSpheroid UseSphereOrSpheroid,
-	exclusive geo.FnExclusivity,
+	exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
 		return false, geo.NewMismatchingSRIDsError(a, b)
@@ -67,12 +67,12 @@ func DWithin(
 		bRegions,
 		a.BoundingRect().Intersects(b.BoundingRect()),
 		distance,
-		exclusive,
+		exclusivity,
 	)
 	if err != nil {
 		return false, err
 	}
-	if exclusive {
+	if exclusivity == geo.FnExclusive {
 		return maybeClosestDistance < distance, nil
 	}
 	return maybeClosestDistance <= distance, nil

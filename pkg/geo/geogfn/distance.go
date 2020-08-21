@@ -177,10 +177,10 @@ func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Poi
 }
 
 // distanceGeographyRegions calculates the distance between two sets of regions.
-// If exclusive is false, it will quit if it finds a distance that is less than
-// or equal to stopAfter. Otherwise, it will quit if a distance less than
-// stopAfter is found. It is not guaranteed to find the absolute minimum
-// distance if stopAfter > 0.
+// If inclusive, it will quit if it finds a distance that is less than or equal
+// to stopAfter. Otherwise, it will quit if a distance less than stopAfter is
+// found. It is not guaranteed to find the absolute minimum distance if
+// stopAfter > 0.
 //
 // !!! SURPRISING BEHAVIOR WARNING FOR SPHEROIDS !!!
 // PostGIS evaluates the distance between spheroid regions by computing the min of
@@ -201,7 +201,7 @@ func distanceGeographyRegions(
 	bRegions []s2.Region,
 	boundingBoxIntersects bool,
 	stopAfter float64,
-	exclusive geo.FnExclusivity,
+	exclusivity geo.FnExclusivity,
 ) (float64, error) {
 	minDistance := math.MaxFloat64
 	for _, aRegion := range aRegions {
@@ -214,7 +214,7 @@ func distanceGeographyRegions(
 				spheroid,
 				useSphereOrSpheroid,
 				stopAfter,
-				exclusive,
+				exclusivity,
 			)
 			bGeodist, err := regionToGeodistShape(bRegion)
 			if err != nil {
@@ -248,7 +248,7 @@ type geographyMinDistanceUpdater struct {
 	minEdge             s2.Edge
 	minD                s1.ChordAngle
 	stopAfter           s1.ChordAngle
-	exclusive           geo.FnExclusivity
+	exclusivity         geo.FnExclusivity
 }
 
 var _ geodist.DistanceUpdater = (*geographyMinDistanceUpdater)(nil)
@@ -259,7 +259,7 @@ func newGeographyMinDistanceUpdater(
 	spheroid *geographiclib.Spheroid,
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	stopAfter float64,
-	exclusive geo.FnExclusivity,
+	exclusivity geo.FnExclusivity,
 ) *geographyMinDistanceUpdater {
 	multiplier := 1.0
 	if useSphereOrSpheroid == UseSpheroid {
@@ -274,7 +274,7 @@ func newGeographyMinDistanceUpdater(
 		minD:                math.MaxFloat64,
 		useSphereOrSpheroid: useSphereOrSpheroid,
 		stopAfter:           stopAfterChordAngle,
-		exclusive:           exclusive,
+		exclusivity:         exclusivity,
 	}
 }
 
@@ -302,7 +302,8 @@ func (u *geographyMinDistanceUpdater) Update(aPoint geodist.Point, bPoint geodis
 		// If we have a threshold, determine if we can stop early.
 		// If the sphere distance is within range of the stopAfter, we can
 		// definitively say we've reach the close enough point.
-		if (!u.exclusive && u.minD <= u.stopAfter) || (u.exclusive && u.minD < u.stopAfter) {
+		if (u.exclusivity == geo.FnInclusive && u.minD <= u.stopAfter) ||
+			(u.exclusivity == geo.FnExclusive && u.minD < u.stopAfter) {
 			return true
 		}
 	}
