@@ -959,7 +959,8 @@ func TestLintClusterSettingNames(t *testing.T) {
 			if strings.ToLower(desc[0:1]) != desc[0:1] {
 				t.Errorf("%s: description %q must not start with capital", varName, desc)
 			}
-			if strings.Contains(desc, ". ") != (desc[len(desc)-1] == '.') {
+			if sType != "e" && strings.Contains(desc, ". ") != (desc[len(desc)-1] == '.') {
+				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
 				t.Errorf("%s: description %q must end with period if and only if it contains a secondary sentence", varName, desc)
 			}
 		}

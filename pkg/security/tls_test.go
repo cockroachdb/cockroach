@@ -22,7 +22,7 @@ import (
 
 func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir)
+	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{})
 	require.NoError(t, err)
 	config, err := cm.GetServerTLSConfig()
 	require.NoError(t, err)
