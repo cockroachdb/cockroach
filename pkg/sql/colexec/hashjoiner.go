@@ -369,12 +369,12 @@ func (hj *hashJoiner) emitUnmatched() {
 }
 
 // hjInitialToCheck is a slice that contains all consequent integers in
-// [0, coldata.BatchSize()) range that can be used to initialize toCheck buffer
+// [0, coldata.MaxBatchSize) range that can be used to initialize toCheck buffer
 // for most of the join types.
 var hjInitialToCheck []uint64
 
 func init() {
-	hjInitialToCheck = make([]uint64, coldata.BatchSize())
+	hjInitialToCheck = make([]uint64, coldata.MaxBatchSize)
 	for i := range hjInitialToCheck {
 		hjInitialToCheck[i] = uint64(i)
 	}

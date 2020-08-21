@@ -1308,6 +1308,10 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_iscollection"></a><code>st_iscollection(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is of a collection type (including multi-types).</p>
+</span></td></tr>
+<tr><td><a name="st_isempty"></a><code>st_isempty(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is empty.</p>
+</span></td></tr>
 <tr><td><a name="st_isvalid"></a><code>st_isvalid(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is valid as defined by the OGC spec.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td></tr>
