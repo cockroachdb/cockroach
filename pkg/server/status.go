@@ -123,11 +123,103 @@ func propagateGatewayMetadata(ctx context.Context) context.Context {
 	return ctx
 }
 
+// baseStatusServer implements functionality shared by the tenantStatusServer
+// and the full statusServer.
+type baseStatusServer struct {
+	log.AmbientContext
+	privilegeChecker *adminPrivilegeChecker
+	sessionRegistry  *sql.SessionRegistry
+	st               *cluster.Settings
+}
+
+// getLocalSessions returns a list of local sessions on this node. Note that the
+// NodeID field is unset.
+func (b *baseStatusServer) getLocalSessions(
+	ctx context.Context, req *serverpb.ListSessionsRequest,
+) ([]serverpb.Session, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+
+	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !debug.GatewayRemoteAllowed(ctx, b.st) {
+		return nil, remoteDebuggingErr
+	}
+
+	if !isAdmin {
+		// For non-superusers, requests with an empty username is
+		// implicitly a request for the client's own sessions.
+		if req.Username == "" {
+			req.Username = sessionUser
+		}
+
+		// Non-superusers are not allowed to query sessions others than their own.
+		if sessionUser != req.Username {
+			return nil, grpcstatus.Errorf(
+				codes.PermissionDenied,
+				"client user %q does not have permission to view sessions from user %q",
+				sessionUser, req.Username)
+		}
+	}
+
+	// The empty username means "all sessions".
+	showAll := req.Username == ""
+
+	registry := b.sessionRegistry
+	sessions := registry.SerializeAll()
+	userSessions := make([]serverpb.Session, 0, len(sessions))
+
+	for _, session := range sessions {
+		if req.Username != session.Username && !showAll {
+			continue
+		}
+
+		userSessions = append(userSessions, session)
+	}
+	return userSessions, nil
+}
+
+func (b *baseStatusServer) checkCancelPrivilege(ctx context.Context, username string) error {
+	sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !isAdmin && sessionUser != username {
+		// A user can only cancel their own resources.
+		return errInsufficientPrivilege
+	}
+
+	return nil
+}
+
+// cancelLocalQuery cancels a query on this node and returns whether the
+// cancellation was successful.
+func (b *baseStatusServer) cancelLocalQuery(
+	ctx context.Context, req *serverpb.CancelQueryRequest,
+) (bool, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+	return b.sessionRegistry.CancelQuery(req.QueryID, req.Username)
+}
+
+// cancelLocalSession cancels a session on this node and returns whether the
+// cancellation was successful.
+func (b *baseStatusServer) cancelLocalSession(
+	ctx context.Context, req *serverpb.CancelSessionRequest,
+) (bool, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = b.AnnotateCtx(ctx)
+	return b.sessionRegistry.CancelSession(req.SessionID, req.Username)
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
-	log.AmbientContext
+	*baseStatusServer
 
-	st                       *cluster.Settings
 	cfg                      *base.Config
 	admin                    *adminServer
 	db                       *kv.DB
@@ -138,7 +230,6 @@ type statusServer struct {
 	rpcCtx                   *rpc.Context
 	stores                   *kvserver.Stores
 	stopper                  *stop.Stopper
-	sessionRegistry          *sql.SessionRegistry
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
@@ -174,8 +265,12 @@ func newStatusServer(
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
-		AmbientContext:   ambient,
-		st:               st,
+		baseStatusServer: &baseStatusServer{
+			AmbientContext:   ambient,
+			privilegeChecker: adminServer.adminPrivilegeChecker,
+			sessionRegistry:  sessionRegistry,
+			st:               st,
+		},
 		cfg:              cfg,
 		admin:            adminServer,
 		db:               db,
@@ -186,7 +281,6 @@ func newStatusServer(
 		rpcCtx:           rpcCtx,
 		stores:           stores,
 		stopper:          stopper,
-		sessionRegistry:  sessionRegistry,
 		internalExecutor: internalExecutor,
 	}
 
@@ -251,7 +345,7 @@ func (s *statusServer) Gossip(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -281,7 +375,7 @@ func (s *statusServer) EngineStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -331,7 +425,7 @@ func (s *statusServer) Allocator(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -445,7 +539,7 @@ func (s *statusServer) AllocatorRange(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -539,7 +633,7 @@ func (s *statusServer) Certificates(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -659,7 +753,7 @@ func (s *statusServer) Details(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -698,7 +792,7 @@ func (s *statusServer) GetFiles(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -774,7 +868,7 @@ func (s *statusServer) LogFilesList(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -804,7 +898,7 @@ func (s *statusServer) LogFile(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -897,7 +991,7 @@ func (s *statusServer) Logs(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -982,7 +1076,7 @@ func (s *statusServer) Stacks(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1030,7 +1124,7 @@ func (s *statusServer) Profile(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1212,7 +1306,7 @@ func (s *statusServer) RaftDebug(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1317,7 +1411,7 @@ func (s *statusServer) Ranges(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1480,7 +1574,7 @@ func (s *statusServer) HotRanges(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1570,7 +1664,7 @@ func (s *statusServer) Range(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1623,51 +1717,14 @@ func (s *statusServer) Range(
 func (s *statusServer) ListLocalSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
-
-	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
+	sessions, err := s.getLocalSessions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-
-	if !debug.GatewayRemoteAllowed(ctx, s.st) {
-		return nil, remoteDebuggingErr
+	for i := range sessions {
+		sessions[i].NodeID = s.gossip.NodeID.Get()
 	}
-
-	if !isAdmin {
-		// For non-superusers, requests with an empty username is
-		// implicitly a request for the client's own sessions.
-		if req.Username == "" {
-			req.Username = sessionUser
-		}
-
-		// Non-superusers are not allowed to query sessions others than their own.
-		if sessionUser != req.Username {
-			return nil, grpcstatus.Errorf(
-				codes.PermissionDenied,
-				"client user %q does not have permission to view sessions from user %q",
-				sessionUser, req.Username)
-		}
-	}
-
-	// The empty username means "all sessions".
-	showAll := req.Username == ""
-
-	registry := s.sessionRegistry
-	sessions := registry.SerializeAll()
-	userSessions := make([]serverpb.Session, 0, len(sessions))
-
-	for _, session := range sessions {
-		if req.Username != session.Username && !showAll {
-			continue
-		}
-
-		session.NodeID = s.gossip.NodeID.Get()
-		userSessions = append(userSessions, session)
-	}
-
-	return &serverpb.ListSessionsResponse{Sessions: userSessions}, nil
+	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
 // iterateNodes iterates nodeFn over all non-removed nodes concurrently.
@@ -1757,7 +1814,7 @@ func (s *statusServer) ListSessions(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, _, err := s.admin.getUserAndRole(ctx); err != nil {
+	if _, _, err := s.privilegeChecker.getUserAndRole(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1799,19 +1856,11 @@ func (s *statusServer) ListSessions(
 func (s *statusServer) CancelSession(
 	ctx context.Context, req *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
-	ctx = s.AnnotateCtx(ctx)
-	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
-	if err != nil {
+	if err := s.checkCancelPrivilege(ctx, req.Username); err != nil {
 		return nil, err
 	}
 
-	if !isAdmin && sessionUser != req.Username {
-		// A user can only cancel their own sessions.
-		return nil, errInsufficientPrivilege
-	}
-
 	nodeID, local, err := s.parseNodeID(req.NodeId)
-
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -1825,13 +1874,10 @@ func (s *statusServer) CancelSession(
 	}
 
 	output := &serverpb.CancelSessionResponse{}
-	canceled, err := s.sessionRegistry.CancelSession(req.SessionID, req.Username)
-
+	output.Canceled, err = s.cancelLocalSession(ctx, req)
 	if err != nil {
 		output.Error = err.Error()
 	}
-
-	output.Canceled = canceled
 	return output, nil
 }
 
@@ -1840,25 +1886,18 @@ func (s *statusServer) CancelSession(
 func (s *statusServer) CancelQuery(
 	ctx context.Context, req *serverpb.CancelQueryRequest,
 ) (*serverpb.CancelQueryResponse, error) {
-	sessionUser, isAdmin, err := s.admin.getUserAndRole(ctx)
-	if err != nil {
+	if err := s.checkCancelPrivilege(ctx, req.Username); err != nil {
 		return nil, err
 	}
 
-	if !isAdmin && sessionUser != req.Username {
-		// A user can only cancel their own queries.
-		return nil, errInsufficientPrivilege
-	}
-
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
-
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
-
 	if !local {
+		// This request needs to be forwarded to another node.
+		ctx = propagateGatewayMetadata(ctx)
+		ctx = s.AnnotateCtx(ctx)
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
@@ -1867,13 +1906,10 @@ func (s *statusServer) CancelQuery(
 	}
 
 	output := &serverpb.CancelQueryResponse{}
-	canceled, err := s.sessionRegistry.CancelQuery(req.QueryID, req.Username)
-
+	output.Canceled, err = s.cancelLocalQuery(ctx, req)
 	if err != nil {
 		output.Error = err.Error()
 	}
-
-	output.Canceled = canceled
 	return output, nil
 }
 
@@ -1885,7 +1921,7 @@ func (s *statusServer) SpanStats(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1949,7 +1985,7 @@ func (s *statusServer) Stores(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2096,7 +2132,7 @@ func (s *statusServer) JobRegistryStatus(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2132,7 +2168,7 @@ func (s *statusServer) JobStatus(
 ) (*serverpb.JobStatusResponse, error) {
 	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
 
