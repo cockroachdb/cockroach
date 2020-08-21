@@ -2180,6 +2180,28 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	),
 
 	//
+	// Unary predicates
+	//
+	"st_iscollection": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			geomfn.IsCollection,
+			infoBuilder{
+				info: "Returns whether the geometry is of a collection type (including multi-types).",
+			},
+		),
+	),
+	"st_isempty": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			geomfn.IsEmpty,
+			infoBuilder{
+				info: "Returns whether the geometry is empty.",
+			},
+		),
+	),
+
+	//
 	// Binary functions
 	//
 	"st_azimuth": makeBuiltin(
@@ -3998,6 +4020,25 @@ func geometryOverload1(
 	}
 }
 
+// geometryOverload1UnaryPredicate hides the boilerplate for builtins
+// operating on one geometry wrapping a unary predicate.
+func geometryOverload1UnaryPredicate(
+	f func(*geo.Geometry) (bool, error), ib infoBuilder,
+) tree.Overload {
+	return geometryOverload1(
+		func(_ *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+			ret, err := f(g.Geometry)
+			if err != nil {
+				return nil, err
+			}
+			return tree.MakeDBool(tree.DBool(ret)), nil
+		},
+		types.Bool,
+		ib,
+		tree.VolatilityImmutable,
+	)
+}
+
 // geometryOverload2 hides the boilerplate for builtins operating on two geometries.
 func geometryOverload2(
 	f func(*tree.EvalContext, *tree.DGeometry, *tree.DGeometry) (tree.Datum, error),
@@ -4021,8 +4062,8 @@ func geometryOverload2(
 	}
 }
 
-// geometryOverload2 hides the boilerplate for builtins operating on two geometries
-// and the overlap wraps a binary predicate.
+// geometryOverload2BinaryPredicate hides the boilerplate for builtins
+// operating on two geometries and the overlap wraps a binary predicate.
 func geometryOverload2BinaryPredicate(
 	f func(*geo.Geometry, *geo.Geometry) (bool, error), ib infoBuilder,
 ) tree.Overload {
