@@ -555,13 +555,26 @@ func TestDFullyWithin(t *testing.T) {
 				tc.expectedMaxDistance * 2,
 			} {
 				t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-					dfullywithin, err := DFullyWithin(a, b, val)
+					dfullywithin, err := DFullyWithin(a, b, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dfullywithin)
 
-					dfullywithin, err = DFullyWithin(a, b, val)
+					dfullywithin, err = DFullyWithin(b, a, val, geo.FnInclusive)
 					require.NoError(t, err)
 					require.Equal(t, expected, dfullywithin)
+				})
+				t.Run(fmt.Sprintf("dfullywithinexclusive:%f", val), func(t *testing.T) {
+					exclusiveExpected := expected
+					if val == tc.expectedMaxDistance {
+						exclusiveExpected = false
+					}
+					dfullywithin, err := DFullyWithin(a, b, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dfullywithin)
+
+					dfullywithin, err = DFullyWithin(b, a, val, geo.FnExclusive)
+					require.NoError(t, err)
+					require.Equal(t, exclusiveExpected, dfullywithin)
 				})
 			}
 
@@ -572,11 +585,20 @@ func TestDFullyWithin(t *testing.T) {
 			} {
 				if val > 0 {
 					t.Run(fmt.Sprintf("dfullywithin:%f", val), func(t *testing.T) {
-						dfullywithin, err := DFullyWithin(a, b, val)
+						dfullywithin, err := DFullyWithin(a, b, val, geo.FnInclusive)
 						require.NoError(t, err)
 						require.False(t, dfullywithin)
 
-						dfullywithin, err = DFullyWithin(a, b, val)
+						dfullywithin, err = DFullyWithin(b, a, val, geo.FnInclusive)
+						require.NoError(t, err)
+						require.False(t, dfullywithin)
+					})
+					t.Run(fmt.Sprintf("dfullywithinexclusive:%f", val), func(t *testing.T) {
+						dfullywithin, err := DFullyWithin(a, b, val, geo.FnExclusive)
+						require.NoError(t, err)
+						require.False(t, dfullywithin)
+
+						dfullywithin, err = DFullyWithin(b, a, val, geo.FnExclusive)
 						require.NoError(t, err)
 						require.False(t, dfullywithin)
 					})
