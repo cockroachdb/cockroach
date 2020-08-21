@@ -1837,7 +1837,7 @@
   revision = "63859f3815cb436d25749575cb14aef1153e5634"
 
 [[projects]]
-  digest = "1:768c35ec83dd17029060ea581d6ca9fdcaef473ec87e93e4bb750949035f6070"
+  digest = "1:edd2eebbf5528c464337a1831c0eeb2ebc9ac015223ee5f89457ba6ac97abeef"
   name = "google.golang.org/api"
   packages = [
     "gensupport",
@@ -1852,8 +1852,8 @@
     "transport/http/internal/propagation",
   ]
   pruneopts = "UT"
-  revision = "19e022d8cf43ce81f046bae8cc18c5397cc7732f"
-  version = "v0.1.0"
+  revision = "c09e1094624e83069fd785fd1699a2ae58730e90"
+  source = "https://github.com/cockroachdb/google-api-go-client"
 
 [[projects]]
   digest = "1:7bc25c2efff76b31f146caf630c617be9b666c6164f0632050466fbec0500125"

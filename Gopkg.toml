@@ -60,6 +60,11 @@ ignored = [
   name = "github.com/getsentry/raven-go"
   source = "https://github.com/cockroachdb/raven-go"
 
+[[constraint]]
+  name = "google.golang.org/api"
+  source = "https://github.com/cockroachdb/google-api-go-client"
+  revision = "c09e1094624e83069fd785fd1699a2ae58730e90"
+
 # Used for benchmarks, should be recent.
 [[constraint]]
   name = "github.com/go-sql-driver/mysql"
