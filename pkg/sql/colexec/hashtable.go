@@ -97,9 +97,6 @@ type hashTableProbeBuffer struct {
 
 	// keys stores the equality columns on the probe table for a single batch.
 	keys []coldata.Vec
-	// buckets is used to store the computed hash value of each key in a single
-	// batch.
-	buckets []uint64
 
 	// groupID stores the keyID that maps to the joining rows of the build table.
 	// The ith element of groupID stores the keyID of the build table that
@@ -240,7 +237,6 @@ func newHashTable(
 
 		probeScratch: hashTableProbeBuffer{
 			keys:    make([]coldata.Vec, len(eqCols)),
-			buckets: make([]uint64, coldata.BatchSize()),
 			groupID: make([]uint64, coldata.BatchSize()),
 			headID:  make([]uint64, coldata.BatchSize()),
 			toCheck: make([]uint64, coldata.BatchSize()),
@@ -261,10 +257,21 @@ func newHashTable(
 		ht.probeScratch.next = make([]uint64, coldata.BatchSize()+1)
 		ht.buildScratch.next = make([]uint64, 1, coldata.BatchSize()+1)
 		ht.probeScratch.hashBuffer = make([]uint64, coldata.BatchSize())
-		ht.probeScratch.distinct = make([]bool, coldata.BatchSize())
 	}
 
 	return ht
+}
+
+// hashTableInitialToCheck is a slice that contains all consequent integers in
+// [0, coldata.MaxBatchSize) range that can be used to initialize toCheck buffer
+// for most of the join types.
+var hashTableInitialToCheck []uint64
+
+func init() {
+	hashTableInitialToCheck = make([]uint64, coldata.MaxBatchSize)
+	for i := range hashTableInitialToCheck {
+		hashTableInitialToCheck[i] = uint64(i)
+	}
 }
 
 // shouldResize returns whether the hash table storing numTuples should be
@@ -284,9 +291,11 @@ func (ht *hashTable) accountForConstSlices() {
 		return
 	}
 	const sizeOfBool = int64(unsafe.Sizeof(true))
-	internalMemUsed := sizeOfUint64 * int64(cap(ht.probeScratch.buckets)+
-		cap(ht.probeScratch.groupID)+cap(ht.probeScratch.headID)+cap(ht.probeScratch.toCheck))
-	internalMemUsed += sizeOfBool * int64(cap(ht.probeScratch.differs)+cap(ht.probeScratch.distinct))
+	internalMemUsed := sizeOfUint64 * int64(cap(ht.probeScratch.groupID)+cap(ht.probeScratch.headID)+cap(ht.probeScratch.toCheck))
+	// Note that ht.probeScratch.distinct will grow dynamically, up to
+	// coldata.BatchSize() in size, so we account for the maximum possible
+	// length.
+	internalMemUsed += sizeOfBool * int64(cap(ht.probeScratch.differs)+coldata.BatchSize())
 	ht.allocator.AdjustMemoryUsage(internalMemUsed)
 	ht.internalMemHelper.constSlicesAreAccountedFor = true
 }
@@ -410,10 +419,10 @@ func (ht *hashTable) findBuckets(
 	nToCheck := uint64(batch.Length())
 	sel := batch.Selection()
 
-	for i := uint64(0); i < nToCheck; i++ {
-		ht.probeScratch.groupID[i] = first[ht.probeScratch.hashBuffer[i]]
-		ht.probeScratch.toCheck[i] = i
+	for i, hash := range ht.probeScratch.hashBuffer[:nToCheck] {
+		ht.probeScratch.groupID[i] = first[hash]
 	}
+	copy(ht.probeScratch.toCheck, hashTableInitialToCheck[:nToCheck])
 
 	for nToCheck > 0 {
 		// Continue searching for the build table matching keys while the toCheck
@@ -593,7 +602,7 @@ func (ht *hashTable) checkBuildForDistinct(
 	if probeSel == nil {
 		colexecerror.InternalError("invalid selection vector")
 	}
-	copy(ht.probeScratch.distinct, zeroBoolColumn)
+	ht.probeScratch.distinct = maybeAllocateBoolArray(ht.probeScratch.distinct, int(nToCheck))
 
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
@@ -624,7 +633,7 @@ func (ht *hashTable) checkBuildForAggregation(
 	if probeSel == nil {
 		colexecerror.InternalError("invalid selection vector")
 	}
-	copy(ht.probeScratch.distinct, zeroBoolColumn)
+	ht.probeScratch.distinct = maybeAllocateBoolArray(ht.probeScratch.distinct, int(nToCheck))
 
 	ht.checkColsForDistinctTuples(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
@@ -662,14 +671,11 @@ func (ht *hashTable) reset(_ context.Context) {
 	ht.vals.SetLength(0)
 	// ht.probeScratch.next, ht.same and ht.visited are reset separately before
 	// they are used (these slices are not used in all of the code paths).
-	// ht.probeScratch.buckets doesn't need to be reset because buckets are
-	// always initialized when computing the hash.
 	copy(ht.probeScratch.groupID, zeroUint64Column)
 	// ht.probeScratch.toCheck doesn't need to be reset because it is populated
 	// manually every time before checking the columns.
 	copy(ht.probeScratch.headID, zeroUint64Column)
 	copy(ht.probeScratch.differs, zeroBoolColumn)
-	copy(ht.probeScratch.distinct, zeroBoolColumn)
 	if ht.buildMode == hashTableDistinctBuildMode && cap(ht.buildScratch.next) > 0 {
 		// In "distinct" build mode, ht.buildScratch.next is populated
 		// iteratively, whenever we find tuples that we haven't seen before. In

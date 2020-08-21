@@ -203,6 +203,9 @@ type hashJoiner struct {
 		// that were unmatched are emitted during the emitUnmatched phase.
 		buildRowMatched []bool
 
+		// buckets is used to store the computed hash value of each key in a single
+		// probe batch.
+		buckets []uint64
 		// prevBatch, if not nil, indicates that the previous probe input batch has
 		// not been fully processed.
 		prevBatch coldata.Batch
@@ -368,18 +371,6 @@ func (hj *hashJoiner) emitUnmatched() {
 	})
 }
 
-// hjInitialToCheck is a slice that contains all consequent integers in
-// [0, coldata.MaxBatchSize) range that can be used to initialize toCheck buffer
-// for most of the join types.
-var hjInitialToCheck []uint64
-
-func init() {
-	hjInitialToCheck = make([]uint64, coldata.MaxBatchSize)
-	for i := range hjInitialToCheck {
-		hjInitialToCheck[i] = uint64(i)
-	}
-}
-
 // exec is a general prober that works with non-distinct build table equality
 // columns. It returns a Batch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
@@ -412,8 +403,16 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			sel := batch.Selection()
 
 			// First, we compute the hash values for all tuples in the batch.
+			if cap(hj.probeState.buckets) < batchSize {
+				hj.probeState.buckets = make([]uint64, batchSize)
+			} else {
+				// Note that we don't need to clear old values from buckets
+				// because the correct values will be populated in
+				// computeBuckets.
+				hj.probeState.buckets = hj.probeState.buckets[:batchSize]
+			}
 			hj.ht.computeBuckets(
-				ctx, hj.ht.probeScratch.buckets, hj.ht.probeScratch.keys, batchSize, sel,
+				ctx, hj.probeState.buckets, hj.ht.probeScratch.keys, batchSize, sel,
 			)
 			// Then, we initialize groupID with the initial hash buckets and
 			// toCheck with all applicable indices.
@@ -423,7 +422,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				// The setup of probing for LEFT ANTI and EXCEPT ALL joins
 				// needs a special treatment in order to reuse the same "check"
 				// functions below.
-				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+				for i, bucket := range hj.probeState.buckets[:batchSize] {
 					if hj.ht.buildScratch.first[bucket] != 0 {
 						// Non-zero "first" key indicates that there is a match of hashes
 						// and we need to include the current tuple to check whether it is
@@ -441,10 +440,10 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				// included into the output.
 				copy(hj.ht.probeScratch.headID[:batchSize], zeroUint64Column)
 			default:
-				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+				for i, bucket := range hj.probeState.buckets[:batchSize] {
 					hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
 				}
-				copy(hj.ht.probeScratch.toCheck, hjInitialToCheck[:batchSize])
+				copy(hj.ht.probeScratch.toCheck, hashTableInitialToCheck[:batchSize])
 				nToCheck = uint64(batchSize)
 			}
 
