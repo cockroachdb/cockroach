@@ -1414,7 +1414,7 @@ func PrepareTransactionForRetry(
 		// the restart.
 	case *WriteTooOldError:
 		// Increase the timestamp to the ts at which we've actually written.
-		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(&txn, tErr))
+		txn.WriteTimestamp.Forward(writeTooOldRetryTimestamp(tErr))
 	default:
 		log.Fatalf(ctx, "invalid retryable err (%T): %s", pErr.GetDetail(), pErr)
 	}
@@ -1430,7 +1430,7 @@ func PrepareTransactionForRetry(
 // PrepareTransactionForRefresh returns whether the transaction can be refreshed
 // to the specified timestamp to avoid a client-side transaction restart. If
 // true, returns a cloned, updated Transaction object with the provisional
-// commit timestamp and refreshed timestamp set appropriately.
+// commit timestamp and read timestamp set appropriately.
 func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bool, *Transaction) {
 	if txn.CommitTimestampFixed {
 		return false, nil
@@ -1443,8 +1443,7 @@ func PrepareTransactionForRefresh(txn *Transaction, timestamp hlc.Timestamp) (bo
 // CanTransactionRefresh returns whether the transaction specified in the
 // supplied error can be retried at a refreshed timestamp to avoid a client-side
 // transaction restart. If true, returns a cloned, updated Transaction object
-// with the provisional commit timestamp and refreshed timestamp set
-// appropriately.
+// with the provisional commit timestamp and read timestamp set appropriately.
 func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction) {
 	txn := pErr.GetTxn()
 	if txn == nil {
@@ -1462,7 +1461,7 @@ func CanTransactionRefresh(ctx context.Context, pErr *Error) (bool, *Transaction
 		// error, obviously the refresh will fail. It might be worth trying to
 		// detect these cases and save the futile attempt; we'd need to have access
 		// to the key that generated the error.
-		timestamp.Forward(writeTooOldRetryTimestamp(txn, err))
+		timestamp.Forward(writeTooOldRetryTimestamp(err))
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(
 			readWithinUncertaintyIntervalRetryTimestamp(ctx, txn, err, pErr.OriginNode))
@@ -1490,7 +1489,7 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 	return ts
 }
 
-func writeTooOldRetryTimestamp(txn *Transaction, err *WriteTooOldError) hlc.Timestamp {
+func writeTooOldRetryTimestamp(err *WriteTooOldError) hlc.Timestamp {
 	return err.ActualTimestamp
 }
 

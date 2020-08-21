@@ -271,7 +271,6 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
 		bumpedTxn.WriteTooOld = false
-		bumpedTxn.ReadTimestamp = bumpedTxn.WriteTimestamp
 		pErr = roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionRetryError(roachpb.RETRY_WRITE_TOO_OLD,
 				"WriteTooOld flag converted to WriteTooOldError"),
@@ -301,8 +300,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	if !canRefreshTxn || !sr.canAutoRetry {
 		return nil, pErr
 	}
-	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
-		ba, refreshTxn.ReadTimestamp, pErr)
+	log.VEventf(ctx, 2, "trying to refresh to %s because of %s", refreshTxn.ReadTimestamp, pErr)
 
 	// Try updating the txn spans so we can retry.
 	if ok := sr.tryUpdatingTxnSpans(ctx, refreshTxn); !ok {
