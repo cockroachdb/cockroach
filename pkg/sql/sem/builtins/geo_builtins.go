@@ -2547,7 +2547,7 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units inclusive. " +
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
@@ -3997,7 +3997,7 @@ Bottom Left.`,
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units exclusive. " +
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
@@ -4573,9 +4573,9 @@ func stAsGeoJSONFromTuple(
 	return tree.NewDString(string(marshalledIndent)), nil
 }
 
-func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
+func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 	exclusivityStr := ", inclusive."
-	if exclusive {
+	if exclusivity == geo.FnExclusive {
 		exclusivityStr = ", exclusive."
 	}
 	return makeBuiltin(
@@ -4591,7 +4591,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusive)
+				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusivity)
 				if err != nil {
 					return nil, err
 				}
@@ -4614,7 +4614,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				a := args[0].(*tree.DGeography)
 				b := args[1].(*tree.DGeography)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid, exclusive)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid, exclusivity)
 				if err != nil {
 					return nil, err
 				}
@@ -4642,7 +4642,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				dist := args[2].(*tree.DFloat)
 				useSpheroid := args[3].(*tree.DBool)
 
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid), exclusive)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid), exclusivity)
 				if err != nil {
 					return nil, err
 				}

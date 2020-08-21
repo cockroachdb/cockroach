@@ -256,10 +256,7 @@
 # operators (e.g. '<' vs '<=').
 [FoldCmpSTDistanceLeft, Normalize]
 (Ge | Gt | Le | Lt
-    $left:(Function
-        $args:*
-        $private:(FunctionPrivate "st_distance")
-    )
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
     $right:*
 )
 =>
@@ -269,10 +266,32 @@
 [FoldCmpSTDistanceRight, Normalize]
 (Ge | Gt | Le | Lt
     $left:*
-    $right:(Function
-        $args:*
-        $private:(FunctionPrivate "st_distance")
-    )
+    (Function $args:* $private:(FunctionPrivate "st_distance"))
 )
 =>
 (MakeSTDWithinRight (OpName) $args $left)
+
+# FoldCmpSTMaxDistanceLeft is a variant of FoldCmpSTDistanceLeft that matches
+# ST_MaxDistance instead of ST_Distance.
+[FoldCmpSTMaxDistanceLeft, Normalize]
+(Ge | Gt | Le | Lt
+    (Function
+        $args:*
+        $private:(FunctionPrivate "st_maxdistance")
+    )
+    $right:*
+)
+=>
+(MakeSTDFullyWithinLeft (OpName) $args $right)
+
+# FoldCmpSTMaxDistanceRight mirrors FoldCmpSTMaxDistanceLeft.
+[FoldCmpSTMaxDistanceRight, Normalize]
+(Ge | Gt | Le | Lt
+    $left:*
+    (Function
+        $args:*
+        $private:(FunctionPrivate "st_maxdistance")
+    )
+)
+=>
+(MakeSTDFullyWithinRight (OpName) $args $left)
