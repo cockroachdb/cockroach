@@ -59,6 +59,7 @@ type copyMachine struct {
 	resultColumns sqlbase.ResultColumns
 	format        tree.CopyFormat
 	delimiter     byte
+	forceNotNull  bool
 	// textDelim is delimiter converted to a []byte so that we don't have to do that per row.
 	textDelim   []byte
 	null        string
@@ -607,7 +608,7 @@ func (c *copyMachine) readTextTuple(ctx context.Context, line []byte) error {
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
 		s := string(part)
-		if s == c.null {
+		if !c.forceNotNull && s == c.null {
 			exprs[i] = tree.DNull
 			continue
 		}

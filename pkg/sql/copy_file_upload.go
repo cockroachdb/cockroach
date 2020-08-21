@@ -139,6 +139,7 @@ func newFileUploadMachine(
 	c.format = tree.CopyFormatText
 	c.null = `\N`
 	c.delimiter = '\t'
+	c.forceNotNull = true
 	return
 }
 
