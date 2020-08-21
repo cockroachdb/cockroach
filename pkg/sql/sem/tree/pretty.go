@@ -1958,7 +1958,10 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 		items = append(items, node.Targets.docRow(p))
 	}
 	if node.Nested {
-		if node.AppendToLatest {
+		if node.Subdir != nil {
+			items = append(items, p.row("INTO ", p.Doc(node.Subdir)))
+			items = append(items, p.row(" IN ", p.Doc(&node.To)))
+		} else if node.AppendToLatest {
 			items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
 		} else {
 			items = append(items, p.row("INTO", p.Doc(&node.To)))
