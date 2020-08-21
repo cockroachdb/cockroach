@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TestWrapNumbersAsSafe tests the wrapNumbersAsSafe through ReportablesToSafeError.
@@ -45,33 +46,24 @@ func TestWrapNumbersAsSafe(t *testing.T) {
 	}
 
 	wrapNumbersAsSafe(reportables...)
-	const format = "some reportables"
-	err := errors.WithSafeDetails(leafErr{}, format, reportables...)
+	const format = "some reportables" +
+		" %v %v %v %v %v" +
+		" %v %v %v %v %v" +
+		" %v %v" +
+		" %v %v"
+	err := errors.Newf(format, reportables...)
 
-	const expected = `kvserver.leafErr: <redacted>
-*safedetails.withSafeDetails: format: "some reportables"
-  (more details:)
-  -- arg 1: 4294967295
-  -- arg 2: 255
-  -- arg 3: 65535
-  -- arg 4: 4294967295
-  -- arg 5: 18446744073709551615
-  -- arg 6: 2147483647
-  -- arg 7: 127
-  -- arg 8: 32767
-  -- arg 9: 2147483647
-  -- arg 10: 9223372036854775807
-  -- arg 11: 3.4028235e+38
-  -- arg 12: 1.7976931348623157e+308
-  -- arg 13: string:<redacted>
-  -- arg 14: string:<redacted>`
+	// rm is the redaction mark, what remains after redaction when
+	// the redaction markers are removed.
+	rm := string(redact.RedactableBytes(redact.RedactedMarker()).StripMarkers())
 
-	if redacted := errors.Redact(err); expected != redacted {
-		t.Fatalf("expected error to be:\n%s\n\nbut was:\n%s", expected, redacted)
+	expected := `some reportables` +
+		` 4294967295 255 65535 4294967295 18446744073709551615` +
+		` 2147483647 127 32767 2147483647 9223372036854775807` +
+		` 3.4028235e+38 1.7976931348623157e+308 ` +
+		rm + ` ` + rm
+
+	if redacted := redact.Sprint(err).Redact().StripMarkers(); expected != redacted {
+		t.Errorf("expected short error string to be:\n%s\n\nbut was:\n%s", expected, redacted)
 	}
-
 }
-
-type leafErr struct{}
-
-func (leafErr) Error() string { return "error" }

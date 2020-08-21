@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-
-	"github.com/cockroachdb/errors"
 )
 
 // StmtID is the type of a Statement ID.
@@ -81,7 +79,10 @@ func AddNumericStats(a, b NumericStat, countA, countB int64) NumericStat {
 // reg cluster.
 func (si SensitiveInfo) GetScrubbedCopy() SensitiveInfo {
 	output := SensitiveInfo{}
-	output.LastErr = errors.Redact(si.LastErr)
+	// TODO(knz): This should really use si.LastErrorRedacted, however
+	// this does not exist yet.
+	// See: https://github.com/cockroachdb/cockroach/issues/53191
+	output.LastErr = "<redacted>"
 	// Not copying over MostRecentPlanDescription until we have an algorithm to scrub plan nodes.
 	return output
 }
