@@ -259,7 +259,7 @@ func newInvertedJoiner(
 		flowCtx, &fetcher, &ij.desc, int(spec.IndexIdx), ij.colIdxMap, false, /* reverse */
 		allIndexCols, false /* isCheck */, &ij.alloc, execinfra.ScanVisibilityPublic,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
-		nil, /* systemColumns */
+		nil /* systemColumns */, nil, /* virtualColumns */
 	)
 	if err != nil {
 		return nil, err

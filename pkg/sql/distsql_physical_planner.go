@@ -954,6 +954,16 @@ func initTableReaderSpec(
 		Spans:         s.Spans[:0],
 		SystemColumns: n.systemColumns,
 	}
+	if n.colCfg.virtualColumns != nil {
+		s.VirtualColumns = make([]*descpb.ColumnDescriptor, len(n.colCfg.virtualColumns))
+		idx := 0
+		for i := range n.cols {
+			if _, ok := n.colCfg.virtualColumns[tree.ColumnID(n.cols[i].ID)]; ok {
+				s.VirtualColumns[idx] = n.cols[i]
+				idx++
+			}
+		}
+	}
 	indexIdx, err := getIndexIdx(n.index, n.desc)
 	if err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
@@ -1241,20 +1251,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	}
 
 	returnMutations := info.scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic
-	var typs []*types.T
-	if returnMutations {
-		typs = make([]*types.T, 0, len(info.desc.Columns)+len(info.desc.MutationColumns()))
-	} else {
-		typs = make([]*types.T, 0, len(info.desc.Columns))
-	}
-	for i := range info.desc.Columns {
-		typs = append(typs, info.desc.Columns[i].Type)
-	}
-	if returnMutations {
-		for _, col := range info.desc.MutationColumns() {
-			typs = append(typs, col.Type)
-		}
-	}
+	typs := info.desc.ColumnTypesWithMutationsAndVirtualCols(returnMutations, info.spec.VirtualColumns)
 	// Append all system column types to the output.
 	for _, kind := range info.systemColumns {
 		typs = append(typs, colinfo.GetSystemColumnTypeForKind(kind))

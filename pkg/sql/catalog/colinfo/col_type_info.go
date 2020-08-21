@@ -155,3 +155,19 @@ func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) (
 	}
 	return types, nil
 }
+
+// GetColumnTypesFromColDescs returns the types of the columns with the given IDs.
+func GetColumnTypesFromColDescs(
+	cols []descpb.ColumnDescriptor, columnIDs []descpb.ColumnID,
+) ([]*types.T, error) {
+	types := make([]*types.T, len(columnIDs))
+	for i, id := range columnIDs {
+		for j := range cols {
+			if id == cols[j].ID {
+				types[i] = cols[j].Type
+				break
+			}
+		}
+	}
+	return types, nil
+}

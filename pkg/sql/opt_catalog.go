@@ -723,6 +723,11 @@ func newOptTable(
 			// read data directly into a DBytes (i.e., don't call
 			// encoding.DecodeBytesAscending).
 			typ := ot.Column(invertedSourceColOrdinal).DatumType()
+			switch typ.Family() {
+			case types.GeometryFamily, types.GeographyFamily:
+				typ = types.Int
+			}
+
 			virtualCol.InitVirtual(
 				virtualColOrd,
 				tree.Name(string(ot.Column(invertedSourceColOrdinal).ColName())+"_inverted_key"),

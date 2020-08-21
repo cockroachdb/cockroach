@@ -442,7 +442,7 @@ func (rf *cFetcher) Init(
 	}
 
 	// Prepare our index key vals slice.
-	table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs)
+	table.keyValTypes, err = colinfo.GetColumnTypesFromColDescs(colDescriptors, indexColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -452,7 +452,9 @@ func (rf *cFetcher) Init(
 		// Primary indexes only contain ascendingly-encoded
 		// values. If this ever changes, we'll probably have to
 		// figure out the directions here too.
-		table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+		table.extraTypes, err = colinfo.GetColumnTypesFromColDescs(
+			colDescriptors, table.index.ExtraColumnIDs,
+		)
 		nExtraColumns := len(table.index.ExtraColumnIDs)
 		if cap(table.extraValColOrdinals) >= nExtraColumns {
 			table.extraValColOrdinals = table.extraValColOrdinals[:nExtraColumns]

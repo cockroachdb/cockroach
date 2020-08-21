@@ -92,7 +92,7 @@ func newTableReader(
 
 	tableDesc := tabledesc.NewImmutableTableDescriptor(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
+	resultTypes := tableDesc.ColumnTypesWithMutationsAndVirtualCols(returnMutations, spec.VirtualColumns)
 	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)
 	// Add all requested system columns to the output.
 	sysColTypes, sysColDescs, err := colinfo.GetSystemColumnTypesAndDescriptors(spec.SystemColumns)
@@ -142,6 +142,7 @@ func newTableReader(
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		sysColDescs,
+		spec.VirtualColumns,
 	); err != nil {
 		return nil, err
 	}

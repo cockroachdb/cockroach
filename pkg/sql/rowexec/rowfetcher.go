@@ -69,6 +69,7 @@ func initRowFetcher(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumns []descpb.ColumnDescriptor,
+	virtualColumns []*descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
@@ -79,9 +80,25 @@ func initRowFetcher(
 	if scanVisibility == execinfra.ScanVisibilityPublicAndNotPublic {
 		cols = desc.ReadableColumns
 	}
-	// Add on any requested system columns. We slice cols to avoid modifying
-	// the underlying table descriptor.
-	cols = append(cols[:len(cols):len(cols)], systemColumns...)
+	if virtualColumns != nil {
+		tempCols := make([]descpb.ColumnDescriptor, len(cols), len(cols)+len(systemColumns))
+		copy(tempCols, cols)
+		for i := range tempCols {
+			for j := range virtualColumns {
+				if tempCols[i].ID == virtualColumns[j].ID {
+					tempCols[i] = *virtualColumns[j]
+					break
+				}
+			}
+		}
+		cols = tempCols
+		// Add on any requested system columns.
+		cols = append(cols, systemColumns...)
+	} else {
+		// Add on any requested system columns. We slice cols to avoid modifying
+		// the underlying table descriptor.
+		cols = append(cols[:len(cols):len(cols)], systemColumns...)
+	}
 	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
