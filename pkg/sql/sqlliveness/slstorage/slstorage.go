@@ -37,7 +37,7 @@ import (
 var DefaultGCInterval = settings.RegisterNonNegativeDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
-	time.Second,
+	20*time.Second,
 )
 
 // CacheSize is the size of the entries to store in the cache.
@@ -154,31 +154,32 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 		s.metrics.IsAliveCacheHits.Inc(1)
 		return false, nil
 	}
+	var prevExpiration hlc.Timestamp
 	if expiration, ok := s.mu.liveSessions.Get(sid); ok {
 		expiration := expiration.(hlc.Timestamp)
-		// The record exists but is expired. If we returned that the session was
-		// alive regardless of the expiration then we'd never update the cache.
-		//
-		// TODO(ajwerner): Utilize a rangefeed for the session state to update
-		// cache entries and always rely on the currently cached value. This
-		// approach may lead to lots of request in the period of time when a
-		// session is expired but has not yet been removed. Alternatively, this
-		// code could trigger deleteSessionsLoop or could use some other mechanism
-		// to wait for deleteSessionsLoop.
+		// The record exists and is valid.
 		if s.clock.Now().Less(expiration) {
 			s.mu.RUnlock()
 			s.metrics.IsAliveCacheHits.Inc(1)
 			return true, nil
 		}
+		// The record exists in the cache but seems expired according to our clock.
+		// If we returned that the session was alive regardless of the expiration
+		// then we'd never update the cache. Go fetch the session and pass in the
+		// current view of the expiration. If the expiration has not changed, then
+		// the session is expired and should be deleted. If it has, get the new
+		// expiration for the cache.
+		prevExpiration = expiration
 	}
 
-	// Launch singleflight to go read from the database. If it is found, we
-	// can add it and its expiration to the liveSessions cache. If it isn't
-	// found, we know it's dead and we can add that to the deadSessions cache.
+	// Launch singleflight to go read from the database and maybe delete the
+	// entry. If it is found, we can add it and its expiration to the liveSessions
+	// cache. If it isn't found, we know it's dead and we can add that to the
+	// deadSessions cache.
 	resChan, _ := s.g.DoChan(string(sid), func() (interface{}, error) {
 		// store the result underneath the singleflight to avoid the need
 		// for additional synchronization.
-		live, expiration, err := s.fetchSession(ctx, sid)
+		live, expiration, err := s.deleteOrFetchSession(ctx, sid, prevExpiration)
 		if err != nil {
 			return nil, err
 		}
@@ -200,31 +201,50 @@ func (s *Storage) IsAlive(ctx context.Context, sid sqlliveness.SessionID) (alive
 	return res.Val.(bool), nil
 }
 
-// fetchSessions returns whether the query session currently exists by reading
-// from the database. If the record exists, the associated expiration will be
-// returned.
-func (s *Storage) fetchSession(
-	ctx context.Context, sid sqlliveness.SessionID,
+// deleteOrFetchSession returns whether the query session currently exists by
+// reading from the database. If passed expiration is non-zero and the existing
+// record has the same expiration, the record will be deleted and false will
+// be returning, indicating that it no longer exists. If the record exists and
+// has a differring expiration timestamp, true and the associated expiration
+// will be returned.
+func (s *Storage) deleteOrFetchSession(
+	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
 ) (alive bool, expiration hlc.Timestamp, err error) {
-	var row tree.Datums
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		row, err = s.ex.QueryRowEx(
-			ctx, "expire-single-session", txn, s.sd, `
-SELECT expiration FROM sqlliveness WHERE session_id = $1`, sid.UnsafeBytes(),
-		)
-		return errors.Wrapf(err, "could not query session id: %s", sid)
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+
+		row, err := s.ex.QueryRowEx(ctx, "fetch-single-session", txn, s.sd, `
+SELECT expiration FROM sqlliveness WHERE session_id = $1
+`, sid.UnsafeBytes())
+		if err != nil {
+			return err
+		}
+
+		// The session is not alive.
+		if row == nil {
+			return nil
+		}
+
+		// The session is alive if the read expiration differs from prevExpiration.
+		expiration, err = tree.DecimalToHLC(&row[0].(*tree.DDecimal).Decimal)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse expiration for session")
+		}
+		if !expiration.Equal(prevExpiration) {
+			alive = true
+			return nil
+		}
+
+		// The session is expired and needs to be deleted.
+		expiration = hlc.Timestamp{}
+		_, err = s.ex.ExecEx(ctx, "delete-expired-session", txn, s.sd, `
+DELETE FROM sqlliveness WHERE session_id = $1
+`, sid.UnsafeBytes())
+		return err
 	}); err != nil {
-		return false, hlc.Timestamp{}, err
+		return false, hlc.Timestamp{}, errors.Wrapf(err,
+			"could not query session id: %s", sid)
 	}
-	if row == nil {
-		return false, hlc.Timestamp{}, nil
-	}
-	ts := row[0].(*tree.DDecimal)
-	exp, err := tree.DecimalToHLC(&ts.Decimal)
-	if err != nil {
-		return false, hlc.Timestamp{}, errors.Wrapf(err, "failed to parse expiration for session")
-	}
-	return true, exp, nil
+	return alive, expiration, nil
 }
 
 // deleteSessionsLoop is launched in start and periodically deletes sessions.

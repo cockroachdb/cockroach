@@ -210,4 +210,49 @@ func TestStorage(t *testing.T) {
 			require.Equal(t, int64(3), metrics.IsAliveCacheHits.Count())
 		}
 	})
+	t.Run("delete-expired-on-is-alive", func(t *testing.T) {
+		clock, timeSource, _, stopper, storage := setup(t)
+		defer stopper.Stop(ctx)
+
+		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
+		const id = "asdf"
+		metrics := storage.Metrics()
+
+		{
+			require.NoError(t, storage.Insert(ctx, id, exp))
+			require.Equal(t, int64(1), metrics.WriteSuccesses.Count())
+		}
+		{
+			isAlive, err := storage.IsAlive(ctx, id)
+			require.NoError(t, err)
+			require.True(t, isAlive)
+			require.Equal(t, int64(1), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+		}
+		// Advance to the point where the session is expired.
+		timeSource.Advance(time.Second + time.Nanosecond)
+		// Ensure that we discover it is no longer alive.
+		{
+			isAlive, err := storage.IsAlive(ctx, id)
+			require.NoError(t, err)
+			require.False(t, isAlive)
+			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(0), metrics.IsAliveCacheHits.Count())
+		}
+		// Ensure that the fact that it is no longer alive is cached.
+		{
+			isAlive, err := storage.IsAlive(ctx, id)
+			require.NoError(t, err)
+			require.False(t, isAlive)
+			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(1), metrics.IsAliveCacheHits.Count())
+		}
+		// Ensure it cannot be updated.
+		{
+			exists, err := storage.Update(ctx, id, exp.Add(time.Second.Nanoseconds(), 0))
+			require.NoError(t, err)
+			require.False(t, exists)
+			require.Equal(t, int64(1), metrics.WriteFailures.Count())
+		}
+	})
 }
