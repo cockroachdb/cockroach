@@ -112,6 +112,6 @@ func TestExpiredLicenseLanguage(t *testing.T) {
 		"January 1, 1970. If you're interested in getting a new license, please contact " +
 		"subscriptions@cockroachlabs.com and we can help you out."
 	if err == nil || err.Error() != expected {
-		t.Fatalf("expected err %q, got %v", expected, err)
+		t.Fatalf("expected err:\n%s\ngot:\n%v", expected, err)
 	}
 }

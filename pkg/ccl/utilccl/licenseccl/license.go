@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // LicensePrefix is a prefix on license strings to make them easily recognized.
@@ -73,7 +74,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 	// suddenly throwing errors at them.
 	if l.ValidUntilUnixSec > 0 && l.Type != License_Enterprise {
 		if expiration := timeutil.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
-			licensePrefix := ""
+			licensePrefix := redact.SafeString("")
 			switch l.Type {
 			case License_NonCommercial:
 				licensePrefix = "non-commercial "

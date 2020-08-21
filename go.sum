@@ -144,8 +144,9 @@ github.com/cockroachdb/datadriven v1.0.0 h1:uhZrAfEayBecH2w2tZmhe20HJ7hDvrrA4x2B
 github.com/cockroachdb/datadriven v1.0.0/go.mod h1:5Ib8Meh+jk1RlHIXej6Pzevx/NLlNvQB9pmSBZErGA4=
 github.com/cockroachdb/errors v1.2.4 h1:Lap807SXTH5tri2TivECb/4abUkMZC9zRoLarvcKDqs=
 github.com/cockroachdb/errors v1.2.4/go.mod h1:rQD95gz6FARkaKkQXUksEje/d9a6wBJoCr5oaCLELYA=
-github.com/cockroachdb/errors v1.6.1 h1:GqOx5BYPdco9HPaoUuy8W53kZsSEbPu5P/d4WLhanmM=
 github.com/cockroachdb/errors v1.6.1/go.mod h1:tm6FTP5G81vwJ5lC0SizQo374JNCOPrHyXGitRJoDqM=
+github.com/cockroachdb/errors v1.7.3 h1:3Vx4uIENFw44XbZe4Gnp/Soh4PlSowP7DaDu7INSKzE=
+github.com/cockroachdb/errors v1.7.3/go.mod h1:pKPbzdh8tCRjLCJUFHEoRjfhT8HvwyW2cxImC+zVlMM=
 github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955 h1:1ELogBFqZl2Cj/Rn0wWAU4z2/ghBlHzhXDlbT8RlrKU=
 github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955/go.mod h1:Vshs83p1UXI6fjU8eWVgqXeewFxRDP1fNVF5PHiSBm0=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
