@@ -2662,30 +2662,31 @@ Square (right)                            POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))
 
 # basic metadata
-query TTTIIII
+query TTTIIIII
 SELECT
   a.dsc,
   GeometryType(a.geom),
   ST_GeometryType(a.geom),
   ST_NDims(a.geom),
+  ST_CoordDim(a.geom),
   ST_Dimension(a.geom),
   ST_NPoints(a.geom),
   ST_NumGeometries(a.geom)
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  GeometryCollection  ST_GeometryCollection  0     0     0     0
-Empty LineString                          LineString          ST_LineString          2     1     0     0
-Empty Point                               Point               ST_Point               2     0     0     0
-Faraway point                             Point               ST_Point               2     0     1     1
-Line going through left and right square  LineString          ST_LineString          2     1     2     1
-NULL                                      NULL                NULL                   NULL  NULL  NULL  NULL
-Nested Geometry Collection                GeometryCollection  ST_GeometryCollection  2     0     1     1
-Point middle of Left Square               Point               ST_Point               2     0     1     1
-Point middle of Right Square              Point               ST_Point               2     0     1     1
-Square (left)                             Polygon             ST_Polygon             2     2     5     1
-Square (right)                            Polygon             ST_Polygon             2     2     5     1
-Square overlapping left and right square  Polygon             ST_Polygon             2     2     5     1
+Empty GeometryCollection                  GeometryCollection  ST_GeometryCollection  0     0     0     0     0
+Empty LineString                          LineString          ST_LineString          2     2     1     0     0
+Empty Point                               Point               ST_Point               2     2     0     0     0
+Faraway point                             Point               ST_Point               2     2     0     1     1
+Line going through left and right square  LineString          ST_LineString          2     2     1     2     1
+NULL                                      NULL                NULL                   NULL  NULL  NULL  NULL  NULL
+Nested Geometry Collection                GeometryCollection  ST_GeometryCollection  2     2     0     1     1
+Point middle of Left Square               Point               ST_Point               2     2     0     1     1
+Point middle of Right Square              Point               ST_Point               2     2     0     1     1
+Square (left)                             Polygon             ST_Polygon             2     2     2     5     1
+Square (right)                            Polygon             ST_Polygon             2     2     2     5     1
+Square overlapping left and right square  Polygon             ST_Polygon             2     2     2     5     1
 
 query TTTT
 SELECT
