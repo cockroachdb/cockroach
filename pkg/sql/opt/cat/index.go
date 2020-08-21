@@ -19,6 +19,9 @@ import (
 // IndexOrdinal identifies an index (in the context of a Table).
 type IndexOrdinal = int
 
+// IndexOrdinals identifies a list of indexes (in the context of a Table).
+type IndexOrdinals = []IndexOrdinal
+
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
 // index, even if it meant adding a hidden unique rowid column.

@@ -141,6 +141,11 @@ define MutationPrivate {
     # overwrites an existing row.
     CanaryCol ColumnID
 
+    # Arbiters is used only with the Insert and Upsert operators. It identifies
+    # the unique indexes used to detect conflicts for UPSERT and INSERT ON
+    # CONFLICT statements.
+    Arbiters IndexOrdinals
+
     # ReturnCols are the set of columns returned by the mutation operator when
     # the RETURNING clause has been specified. By default, the return columns
     # include all columns in the table, including hidden columns, but not

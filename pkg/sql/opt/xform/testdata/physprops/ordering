@@ -1787,7 +1787,8 @@ sort
       ├── volatile, mutations
       ├── upsert abc
       │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
-      │    ├── canary column: 9
+      │    ├── arbiter indexes: primary
+      │    ├── canary column: abc.a:9
       │    ├── fetch columns: abc.a:9 abc.b:10 abc.c:11
       │    ├── insert-mapping:
       │    │    ├── x:5 => abc.a:1

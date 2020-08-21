@@ -2068,7 +2068,8 @@ INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1
 ----
 upsert a
  ├── columns: <none>
- ├── canary column: 10
+ ├── arbiter indexes: primary
+ ├── canary column: k:10
  ├── fetch columns: k:10 i:11 f:12 s:13
  ├── insert-mapping:
  │    ├── column1:6 => k:1
@@ -2119,7 +2120,8 @@ INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1 RET
 ----
 upsert a
  ├── columns: k:1!null i:2 f:3 s:4
- ├── canary column: 10
+ ├── arbiter indexes: primary
+ ├── canary column: k:10
  ├── fetch columns: k:10 i:11 f:12 s:13
  ├── insert-mapping:
  │    ├── column1:6 => k:1
@@ -2179,7 +2181,8 @@ UPSERT INTO family (a, b) VALUES (1, 2)
 ----
 upsert "family"
  ├── columns: <none>
- ├── canary column: 10
+ ├── arbiter indexes: primary
+ ├── canary column: a:10
  ├── fetch columns: a:10 b:11
  ├── insert-mapping:
  │    ├── column1:7 => a:1
@@ -2227,7 +2230,8 @@ project
  ├── fd: ()-->(5)
  └── upsert "family"
       ├── columns: a:1!null e:5
-      ├── canary column: 12
+      ├── arbiter indexes: primary
+      ├── canary column: a:12
       ├── fetch columns: a:12 c:14 d:15 e:16
       ├── insert-mapping:
       │    ├── column1:7 => a:1
@@ -2285,7 +2289,8 @@ INSERT INTO family VALUES (1, 2, 3, 4) ON CONFLICT (a) DO UPDATE SET d=10
 ----
 upsert "family"
  ├── columns: <none>
- ├── canary column: 12
+ ├── arbiter indexes: primary
+ ├── canary column: a:12
  ├── fetch columns: a:12 c:14 d:15
  ├── insert-mapping:
  │    ├── column1:7 => a:1
@@ -2335,7 +2340,8 @@ INSERT INTO mutation VALUES (1, 2, 3) ON CONFLICT (a) DO UPDATE SET b=10
 ----
 upsert mutation
  ├── columns: <none>
- ├── canary column: 11
+ ├── arbiter indexes: primary
+ ├── canary column: a:11
  ├── fetch columns: a:11 b:12 c:13 d:14 e:15
  ├── insert-mapping:
  │    ├── column1:7 => a:1
@@ -2677,7 +2683,8 @@ project
  ├── fd: ()-->(1-3)
  └── upsert returning_test
       ├── columns: a:1 b:2 c:3 rowid:8!null
-      ├── canary column: 22
+      ├── arbiter indexes: secondary
+      ├── canary column: rowid:22
       ├── fetch columns: a:15 b:16 c:17 rowid:22
       ├── insert-mapping:
       │    ├── column1:10 => a:1
@@ -2774,7 +2781,8 @@ project
  ├── fd: ()-->(1-4)
  └── upsert returning_test
       ├── columns: a:1!null b:2!null c:3!null d:4 rowid:8!null
-      ├── canary column: 22
+      ├── arbiter indexes: primary
+      ├── canary column: rowid:22
       ├── fetch columns: a:15 b:16 c:17 d:18 rowid:22
       ├── insert-mapping:
       │    ├── column1:10 => a:1

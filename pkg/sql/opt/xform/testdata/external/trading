@@ -1260,7 +1260,8 @@ VALUES (1, FALSE, '2020-03-01', 'the-account', 'the-customer', '70F03EB1-4F58-4C
 ----
 upsert transactions
  ├── columns: <none>
- ├── canary column: 16
+ ├── arbiter indexes: transactionsprimarykey
+ ├── canary column: dealerid:16
  ├── fetch columns: dealerid:16 isbuy:17 date:18 accountname:19 customername:20 operationid:21 version:22
  ├── insert-mapping:
  │    ├── column1:9 => dealerid:1
@@ -1315,7 +1316,8 @@ FROM updates
 ----
 upsert transactiondetails
  ├── columns: <none>
- ├── canary column: 22
+ ├── arbiter indexes: detailsprimarykey
+ ├── canary column: transactiondetails.dealerid:22
  ├── fetch columns: transactiondetails.dealerid:22 transactiondetails.isbuy:23 transactiondate:24 cardid:25 quantity:26 transactiondetails.sellprice:27 transactiondetails.buyprice:28 transactiondetails.version:29
  ├── insert-mapping:
  │    ├── "?column?":12 => transactiondetails.dealerid:2

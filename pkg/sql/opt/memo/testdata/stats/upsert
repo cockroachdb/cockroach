@@ -95,7 +95,8 @@ with &1
  ├── fd: ()-->(20)
  ├── upsert xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float)
- │    ├── canary column: 11
+ │    ├── arbiter indexes: primary
+ │    ├── canary column: xyz.x:11(string)
  │    ├── fetch columns: xyz.x:11(string) xyz.y:12(int) xyz.z:13(float)
  │    ├── insert-mapping:
  │    │    ├── b:6 => xyz.x:1
@@ -245,7 +246,8 @@ ON CONFLICT (v) DO UPDATE SET v=1
 ----
 upsert uv
  ├── columns: <none>
- ├── canary column: 10
+ ├── arbiter indexes: secondary
+ ├── canary column: u:10(int)
  ├── fetch columns: u:10(int) v:11(int)
  ├── insert-mapping:
  │    ├── column9:9 => u:1
@@ -328,7 +330,8 @@ ON CONFLICT (n, o) DO UPDATE SET o = 5
 ----
 upsert mno
  ├── columns: <none>
- ├── canary column: 9
+ ├── arbiter indexes: secondary
+ ├── canary column: m:9(int)
  ├── fetch columns: m:9(int) n:10(int) o:11(int)
  ├── insert-mapping:
  │    ├── m:5 => m:1
