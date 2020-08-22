@@ -438,7 +438,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := store.ListFiles(ctx, "/*/*/BACKUP")
+		res, err := store.ListFiles(ctx, "/*/*/*/BACKUP")
 		if err != nil {
 			return err
 		}
