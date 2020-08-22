@@ -63,8 +63,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			return typedesc.NewImmutableTypeDescriptor(desc)
 		}
-		mkSchema := func(desc scDesc) *schemadesc.ImmutableSchemaDescriptor {
-			return schemadesc.NewImmutableSchemaDescriptor(desc)
+		mkSchema := func(desc scDesc) *schemadesc.Immutable {
+			return schemadesc.NewImmutable(desc)
 		}
 		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"

@@ -805,7 +805,7 @@ func createImportingDescriptors(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var schemas []*schemadesc.MutableSchemaDescriptor
+	var schemas []*schemadesc.Mutable
 	var types []*typedesc.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
@@ -881,7 +881,7 @@ func createImportingDescriptors(
 	}
 
 	// Collect all schemas that are going to be restored.
-	var schemasToWrite []*schemadesc.MutableSchemaDescriptor
+	var schemasToWrite []*schemadesc.Mutable
 	var writtenSchemas []catalog.SchemaDescriptor
 	for i := range schemas {
 		sc := schemas[i]

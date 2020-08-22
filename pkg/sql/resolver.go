@@ -554,7 +554,7 @@ type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor
-	schemaDescs map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor
+	schemaDescs map[descpb.ID]*schemadesc.Immutable
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.ImmutableTypeDescriptor
@@ -582,7 +582,7 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Type:
 			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
 		case *descpb.Descriptor_Schema:
-			descs[i] = schemadesc.NewImmutableSchemaDescriptor(*t.Schema)
+			descs[i] = schemadesc.NewImmutable(*t.Schema)
 		}
 	}
 	return newInternalLookupCtx(descs, prefix)
@@ -593,7 +593,7 @@ func newInternalLookupCtx(
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
-	schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
+	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
 	var tbIDs, typIDs, dbIDs []descpb.ID
@@ -618,7 +618,7 @@ func newInternalLookupCtx(
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
-		case *schemadesc.ImmutableSchemaDescriptor:
+		case *schemadesc.Immutable:
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
@@ -653,9 +653,7 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 	return tb, nil
 }
 
-func (l *internalLookupCtx) getSchemaByID(
-	id descpb.ID,
-) (*schemadesc.ImmutableSchemaDescriptor, error) {
+func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
@@ -829,6 +827,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 
 type simpleSchemaResolver interface {
 	getDatabaseByID(id descpb.ID) (*dbdesc.ImmutableDatabaseDescriptor, error)
-	getSchemaByID(id descpb.ID) (*schemadesc.ImmutableSchemaDescriptor, error)
+	getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

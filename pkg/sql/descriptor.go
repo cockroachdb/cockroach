@@ -179,7 +179,7 @@ func (p *planner) createDescriptorWithID(
 				return err
 			}
 		}
-	case *schemadesc.MutableSchemaDescriptor:
+	case *schemadesc.Mutable:
 		// TODO (lucy): Call AddUncommittedDescriptor when we're ready.
 	default:
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)

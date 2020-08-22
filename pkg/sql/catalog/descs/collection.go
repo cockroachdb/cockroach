@@ -855,15 +855,15 @@ func (tc *Collection) getMutableDescriptorByID(
 	return desc.(catalog.MutableDescriptor), nil
 }
 
-// GetMutableSchemaDescriptorByID gets a MutableSchemaDescriptor by ID.
+// GetMutableSchemaDescriptorByID gets a Mutable by ID.
 func (tc *Collection) GetMutableSchemaDescriptorByID(
 	ctx context.Context, scID descpb.ID, txn *kv.Txn,
-) (*schemadesc.MutableSchemaDescriptor, error) {
+) (*schemadesc.Mutable, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, scID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*schemadesc.MutableSchemaDescriptor), nil
+	return desc.(*schemadesc.Mutable), nil
 }
 
 // ResolveSchemaByID looks up a schema by ID.
@@ -905,7 +905,7 @@ func (tc *Collection) ResolveSchemaByID(
 		return catalog.ResolvedSchema{}, err
 	}
 
-	schemaDesc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
+	schemaDesc, ok := desc.(*schemadesc.Immutable)
 	if !ok {
 		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
 	}
@@ -1342,14 +1342,14 @@ func (tc *Collection) GetAllDescriptors(
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
-		schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
+		schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
 			case *typedesc.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
-			case *schemadesc.ImmutableSchemaDescriptor:
+			case *schemadesc.Immutable:
 				schemaDescs[desc.GetID()] = desc
 			}
 		}
