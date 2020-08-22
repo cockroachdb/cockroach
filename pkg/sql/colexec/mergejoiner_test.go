@@ -1520,6 +1520,20 @@ var mjTestCases = []*joinTestCase{
 			{nil, 23918},
 		},
 	},
+	{
+		description:       "LEFT ANTI join when right eq cols are key",
+		joinType:          descpb.LeftAntiJoin,
+		leftTypes:         []*types.T{types.Int},
+		rightTypes:        []*types.T{types.Int},
+		leftTuples:        tuples{{0}, {0}, {1}, {2}},
+		rightTuples:       tuples{{0}, {2}},
+		leftEqCols:        []uint32{0},
+		rightEqCols:       []uint32{0},
+		leftOutCols:       []uint32{0},
+		rightOutCols:      []uint32{},
+		rightEqColsAreKey: true,
+		expected:          tuples{{1}},
+	},
 }
 
 func TestMergeJoiner(t *testing.T) {
