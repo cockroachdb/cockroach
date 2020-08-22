@@ -282,19 +282,23 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	keyLocking := f.getKeyLockingStrength()
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
+		scanUnions := make([]roachpb.RequestUnion_ReverseScan, len(f.spans))
 		for i := range f.spans {
 			scans[i].SetSpan(f.spans[i])
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].KeyLocking = keyLocking
-			ba.Requests[i].MustSetInner(&scans[i])
+			scanUnions[i].ReverseScan = &scans[i]
+			ba.Requests[i].Value = &scanUnions[i]
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
+		scanUnions := make([]roachpb.RequestUnion_Scan, len(f.spans))
 		for i := range f.spans {
 			scans[i].SetSpan(f.spans[i])
 			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].KeyLocking = keyLocking
-			ba.Requests[i].MustSetInner(&scans[i])
+			scanUnions[i].Scan = &scans[i]
+			ba.Requests[i].Value = &scanUnions[i]
 		}
 	}
 	if cap(f.requestSpans) < len(f.spans) {
