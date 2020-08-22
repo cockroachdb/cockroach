@@ -806,7 +806,7 @@ func createImportingDescriptors(
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	var schemas []*schemadesc.Mutable
-	var types []*typedesc.MutableTypeDescriptor
+	var types []*typedesc.Mutable
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
@@ -829,7 +829,7 @@ func createImportingDescriptors(
 		case catalog.SchemaDescriptor:
 			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
-			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
+			types = append(types, typedesc.NewCreatedMutable(*desc.TypeDesc()))
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -862,7 +862,7 @@ func createImportingDescriptors(
 	// For each type, we might be writing the type in the backup, or we could be
 	// remapping to an existing type descriptor. Split up the descriptors into
 	// these two groups.
-	var typesToWrite []*typedesc.MutableTypeDescriptor
+	var typesToWrite []*typedesc.Mutable
 	existingTypeIDs := make(map[descpb.ID]struct{})
 	for i := range types {
 		typ := types[i]
@@ -948,7 +948,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc := desc.(*typedesc.MutableTypeDescriptor)
+					typDesc := desc.(*typedesc.Mutable)
 					typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := catalogkv.WriteDescToBatch(
 						ctx,

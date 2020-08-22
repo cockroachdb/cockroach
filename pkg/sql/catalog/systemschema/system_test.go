@@ -30,7 +30,7 @@ func TestShouldSplitAtDesc(t *testing.T) {
 		tabledesc.NewImmutable(descpb.TableDescriptor{ViewQuery: "SELECT"}):                           false,
 		tabledesc.NewImmutable(descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}): true,
 		dbdesc.NewInitialDatabaseDescriptor(42, "db", security.AdminRole):                             false,
-		typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                             false,
+		typedesc.NewCreatedMutable(descpb.TypeDescriptor{}):                                           false,
 		schemadesc.NewImmutable(descpb.SchemaDescriptor{}):                                            false,
 	} {
 		var rawDesc roachpb.Value

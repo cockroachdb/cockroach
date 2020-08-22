@@ -67,10 +67,10 @@ func TestingGetMutableExistingTableDescriptor(
 // This function should be moved wherever TestingGetTableDescriptor is moved.
 func TestingGetTypeDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) *typedesc.ImmutableTypeDescriptor {
+) *typedesc.Immutable {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TypeObject, false /* mutable */, database, object,
-	).(*typedesc.ImmutableTypeDescriptor)
+	).(*typedesc.Immutable)
 	if !ok {
 		return nil
 	}

@@ -37,7 +37,7 @@ func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
 	databaseID descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
-	typesToDrop []*typedesc.MutableTypeDescriptor,
+	typesToDrop []*typedesc.Mutable,
 	jobDesc string,
 ) error {
 	// TODO (lucy): This should probably be deleting the queued jobs for all the

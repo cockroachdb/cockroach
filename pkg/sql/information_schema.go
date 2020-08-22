@@ -1579,7 +1579,7 @@ func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext *dbdesc.ImmutableDatabaseDescriptor,
-	fn func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typ *typedesc.ImmutableTypeDescriptor) error,
+	fn func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typ *typedesc.Immutable) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
