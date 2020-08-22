@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -30,7 +31,7 @@ import (
 
 type renameDatabaseNode struct {
 	n       *tree.RenameDatabase
-	dbDesc  *sqlbase.MutableDatabaseDescriptor
+	dbDesc  *dbdesc.MutableDatabaseDescriptor
 	newName string
 }
 

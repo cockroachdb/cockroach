@@ -30,6 +30,7 @@ func (g *execExplainGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.write("package explain\n\n")
 
 	g.w.nestIndent("import (\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/cat\"\n")
@@ -37,7 +38,6 @@ func (g *execExplainGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/exec\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedexpr\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sqlbase\"\n")
 	g.w.unnest(")\n")
 
 	g.genExplainFactory()

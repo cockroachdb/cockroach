@@ -18,10 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -63,10 +64,10 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 
 	const numRows = 10
 	const numCols = 1
-	rows := sqlbase.MakeIntRows(numRows, numCols)
+	rows := rowenc.MakeIntRows(numRows, numCols)
 	storedEqColumns := columns{0}
-	types := sqlbase.OneIntCol
-	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	types := rowenc.OneIntCol
+	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
 	err = rc.Init(
@@ -229,7 +230,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				sqlbase.OneIntCol, row, rows[counter], &evalCtx, &sqlbase.DatumAlloc{}, ordering,
+				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -254,7 +255,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				sqlbase.OneIntCol, row, rows[counter], &evalCtx, &sqlbase.DatumAlloc{}, ordering,
+				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -308,7 +309,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				sqlbase.OneIntCol, row, rows[counter], &evalCtx, &sqlbase.DatumAlloc{}, ordering,
+				rowenc.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -368,10 +369,10 @@ func TestHashDiskBackedRowContainerPreservesMatchesAndMarks(t *testing.T) {
 	const numRowsInBucket = 4
 	const numRows = 12
 	const numCols = 2
-	rows := sqlbase.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
+	rows := rowenc.MakeRepeatedIntRows(numRowsInBucket, numRows, numCols)
 	storedEqColumns := columns{0}
 	types := []*types.T{types.Int, types.Int}
-	ordering := sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
+	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	rc := NewHashDiskBackedRowContainer(nil, &evalCtx, memoryMonitor, diskMonitor, tempEngine)
 	err = rc.Init(

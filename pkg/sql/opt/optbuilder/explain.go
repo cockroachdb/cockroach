@@ -12,11 +12,11 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
@@ -30,14 +30,14 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	b.popWithFrame(stmtScope)
 	outScope = inScope.push()
 
-	var cols sqlbase.ResultColumns
+	var cols colinfo.ResultColumns
 	switch explain.Mode {
 	case tree.ExplainPlan:
 		telemetry.Inc(sqltelemetry.ExplainPlanUseCounter)
 		if explain.Flags[tree.ExplainFlagVerbose] || explain.Flags[tree.ExplainFlagTypes] {
-			cols = sqlbase.ExplainPlanVerboseColumns
+			cols = colinfo.ExplainPlanVerboseColumns
 		} else {
-			cols = sqlbase.ExplainPlanColumns
+			cols = colinfo.ExplainPlanColumns
 		}
 
 	case tree.ExplainDistSQL:
@@ -51,7 +51,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 			panic(pgerror.Newf(pgcode.FeatureNotSupported,
 				"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 		}
-		cols = sqlbase.ExplainDistSQLColumns
+		cols = colinfo.ExplainDistSQLColumns
 
 	case tree.ExplainOpt:
 		if explain.Flags[tree.ExplainFlagVerbose] {
@@ -59,11 +59,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		} else {
 			telemetry.Inc(sqltelemetry.ExplainOptUseCounter)
 		}
-		cols = sqlbase.ExplainOptColumns
+		cols = colinfo.ExplainOptColumns
 
 	case tree.ExplainVec:
 		telemetry.Inc(sqltelemetry.ExplainVecUseCounter)
-		cols = sqlbase.ExplainVecColumns
+		cols = colinfo.ExplainVecColumns
 
 	default:
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,

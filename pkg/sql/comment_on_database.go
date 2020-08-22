@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -22,7 +23,7 @@ import (
 
 type commentOnDatabaseNode struct {
 	n      *tree.CommentOnDatabase
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor
+	dbDesc *dbdesc.ImmutableDatabaseDescriptor
 }
 
 // CommentOnDatabase add comment on a database.

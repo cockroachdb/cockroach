@@ -14,6 +14,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -21,7 +22,7 @@ import (
 // resolveNames walks the provided expression and resolves all names
 // using the tableInfo and iVarHelper.
 func (p *planner) resolveNames(
-	expr tree.Expr, source *sqlbase.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
+	expr tree.Expr, source *colinfo.DataSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) (tree.Expr, error) {
 	if expr == nil {
 		return nil, nil

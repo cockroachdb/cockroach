@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -276,7 +278,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if queryTimedOut {
 				res.SetError(sqlbase.QueryTimeoutError)
 			} else {
-				res.SetError(sqlbase.QueryCanceledError)
+				res.SetError(cancelchecker.QueryCanceledError)
 			}
 		}
 	}
@@ -598,7 +600,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = &stmt
-	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	p.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
@@ -863,7 +865,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
-	var cols sqlbase.ResultColumns
+	var cols colinfo.ResultColumns
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
 	}
@@ -1267,7 +1269,7 @@ func (ex *connExecutor) runObserverStatement(
 func (ex *connExecutor) runShowSyntax(
 	ctx context.Context, stmt string, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ShowSyntaxColumns)
+	res.SetColumns(ctx, colinfo.ShowSyntaxColumns)
 	var commErr error
 	parser.RunShowSyntax(ctx, stmt,
 		func(ctx context.Context, field, msg string) {
@@ -1286,7 +1288,7 @@ func (ex *connExecutor) runShowSyntax(
 func (ex *connExecutor) runShowTransactionState(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
@@ -1295,7 +1297,7 @@ func (ex *connExecutor) runShowTransactionState(
 func (ex *connExecutor) runShowLastQueryStatistics(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, sqlbase.ShowLastQueryStatisticsColumns)
+	res.SetColumns(ctx, colinfo.ShowLastQueryStatisticsColumns)
 
 	phaseTimes := &ex.statsCollector.previousPhaseTimes
 	runLat := phaseTimes.getRunLatency().Seconds()

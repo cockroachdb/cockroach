@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -55,12 +55,12 @@ func TestSQLTypesIntegration(t *testing.T) {
 		},
 	}
 
-	var da sqlbase.DatumAlloc
+	var da rowenc.DatumAlloc
 	rng, _ := randutil.NewPseudoRand()
 	typesToTest := 20
 
 	for i := 0; i < typesToTest; i++ {
-		typ := sqlbase.RandType(rng)
+		typ := rowenc.RandType(rng)
 		for _, numRows := range []int{
 			// A few interesting sizes.
 			1,
@@ -68,10 +68,10 @@ func TestSQLTypesIntegration(t *testing.T) {
 			coldata.BatchSize(),
 			coldata.BatchSize() + 1,
 		} {
-			rows := make(sqlbase.EncDatumRows, numRows)
+			rows := make(rowenc.EncDatumRows, numRows)
 			for i := 0; i < numRows; i++ {
-				rows[i] = make(sqlbase.EncDatumRow, 1)
-				rows[i][0] = sqlbase.DatumToEncDatum(typ, sqlbase.RandDatum(rng, typ, true /* nullOk */))
+				rows[i] = make(rowenc.EncDatumRow, 1)
+				rows[i][0] = rowenc.DatumToEncDatum(typ, rowenc.RandDatum(rng, typ, true /* nullOk */))
 			}
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)

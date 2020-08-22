@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -58,7 +59,7 @@ func runTestFlow(
 	srv serverutils.TestServerInterface,
 	txn *kv.Txn,
 	procs ...execinfrapb.ProcessorSpec,
-) sqlbase.EncDatumRows {
+) rowenc.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsql.ServerImpl)
 
 	leafInputState := txn.GetLeafTxnInputState(context.Background())
@@ -87,7 +88,7 @@ func runTestFlow(
 		t.Errorf("output not closed")
 	}
 
-	var res sqlbase.EncDatumRows
+	var res rowenc.EncDatumRows
 	for {
 		row, meta := rowBuf.Next()
 		if meta != nil {
@@ -131,11 +132,11 @@ func checkDistAggregationInfo(
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = sqlbase.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = sqlbase.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].Span.EndKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -427,13 +428,13 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, types.Int, true),
+				rowenc.RandDatum(rng, types.Int, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, types.Decimal, false),
-				sqlbase.RandDatum(rng, types.Decimal, true),
-				sqlbase.RandDatum(rng, types.Float, false),
-				sqlbase.RandDatum(rng, types.Float, true),
+				rowenc.RandDatum(rng, types.Decimal, false),
+				rowenc.RandDatum(rng, types.Decimal, true),
+				rowenc.RandDatum(rng, types.Float, false),
+				rowenc.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

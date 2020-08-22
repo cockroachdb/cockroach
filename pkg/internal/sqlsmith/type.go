@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -41,7 +41,7 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 		typ = s.randType()
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.AnyFamily {
-			typ = sqlbase.RandArrayContentsType(s.rnd)
+			typ = rowenc.RandArrayContentsType(s.rnd)
 		}
 	}
 	return typ
@@ -54,17 +54,17 @@ func (s *Smither) randScalarType() *types.T {
 	if s.types != nil {
 		scalarTypes = s.types.scalarTypes
 	}
-	return sqlbase.RandTypeFromSlice(s.rnd, scalarTypes)
+	return rowenc.RandTypeFromSlice(s.rnd, scalarTypes)
 }
 
 func (s *Smither) randType() *types.T {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	seedTypes := sqlbase.SeedTypes
+	seedTypes := rowenc.SeedTypes
 	if s.types != nil {
 		seedTypes = s.types.seedTypes
 	}
-	return sqlbase.RandTypeFromSlice(s.rnd, seedTypes)
+	return rowenc.RandTypeFromSlice(s.rnd, seedTypes)
 }
 
 func (s *Smither) makeDesiredTypes() []*types.T {

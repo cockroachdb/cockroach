@@ -15,16 +15,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -225,7 +228,7 @@ type zigzagJoiner struct {
 	joinerBase
 
 	evalCtx       *tree.EvalContext
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 
 	// numTables stored the number of tables involved in the join.
 	numTables int
@@ -239,9 +242,9 @@ type zigzagJoiner struct {
 
 	// Base row stores the that the algorithm is compared against and is updated
 	// with every change of side.
-	baseRow sqlbase.EncDatumRow
+	baseRow rowenc.EncDatumRow
 
-	rowAlloc sqlbase.EncDatumRowAlloc
+	rowAlloc rowenc.EncDatumRowAlloc
 
 	// TODO(andrei): get rid of this field and move the actions it gates into the
 	// Start() method.
@@ -270,7 +273,7 @@ func newZigzagJoiner(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.ZigzagJoinerSpec,
-	fixedValues []sqlbase.EncDatumRow,
+	fixedValues []rowenc.EncDatumRow,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
@@ -339,11 +342,11 @@ func newZigzagJoiner(
 // ValuesSpec (i.e. the way fixed values are encoded in the ZigzagJoinSpec).
 func valuesSpecToEncDatum(
 	valuesSpec *execinfrapb.ValuesCoreSpec,
-) (res []sqlbase.EncDatum, err error) {
-	res = make([]sqlbase.EncDatum, len(valuesSpec.Columns))
+) (res []rowenc.EncDatum, err error) {
+	res = make([]rowenc.EncDatum, len(valuesSpec.Columns))
 	rem := valuesSpec.RawBytes[0]
 	for i, colInfo := range valuesSpec.Columns {
-		res[i], rem, err = sqlbase.EncDatumFromBuffer(colInfo.Type, colInfo.Encoding, rem)
+		res[i], rem, err = rowenc.EncDatumFromBuffer(colInfo.Type, colInfo.Encoding, rem)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +358,7 @@ func valuesSpecToEncDatum(
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.FlowCtx.NewEvalCtx()
-	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	z.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
 	return ctx
 }
@@ -364,7 +367,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
-	alloc      *sqlbase.DatumAlloc
+	alloc      *rowenc.DatumAlloc
 	table      *sqlbase.ImmutableTableDescriptor
 	index      *descpb.IndexDescriptor
 	indexTypes []*types.T
@@ -372,13 +375,13 @@ type zigzagJoinerInfo struct {
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
-	container sqlbase.EncDatumRowContainer
+	container rowenc.EncDatumRowContainer
 
 	// eqColumns is the ordinal positions of the equality columns.
 	eqColumns []uint32
 
 	// Prefix of the index key that has fixed values.
-	fixedValues sqlbase.EncDatumRow
+	fixedValues rowenc.EncDatumRow
 
 	// The current key being fetched by this side.
 	key roachpb.Key
@@ -407,7 +410,7 @@ func (z *zigzagJoiner) setupInfo(
 	z.side = side
 	info := z.infos[side]
 
-	info.alloc = &sqlbase.DatumAlloc{}
+	info.alloc = &rowenc.DatumAlloc{}
 	info.table = &tables[side]
 	info.eqColumns = spec.EqColumns[side].Columns
 	indexOrdinal := spec.IndexOrdinals[side]
@@ -471,7 +474,7 @@ func (z *zigzagJoiner) setupInfo(
 		return err
 	}
 
-	info.prefix = sqlbase.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.ID)
+	info.prefix = rowenc.MakeIndexKeyPrefix(flowCtx.Codec(), info.table, info.index.ID)
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
@@ -521,16 +524,16 @@ func findColumnID(s []descpb.ColumnID, t descpb.ColumnID) int {
 
 // Fetches the first row from the current rowFetcher that does not have any of
 // the equality columns set to null.
-func (z *zigzagJoiner) fetchRow(ctx context.Context) (sqlbase.EncDatumRow, error) {
+func (z *zigzagJoiner) fetchRow(ctx context.Context) (rowenc.EncDatumRow, error) {
 	return z.fetchRowFromSide(ctx, z.side)
 }
 
 func (z *zigzagJoiner) fetchRowFromSide(
 	ctx context.Context, side int,
-) (fetchedRow sqlbase.EncDatumRow, err error) {
+) (fetchedRow rowenc.EncDatumRow, err error) {
 	// Keep fetching until a row is found that does not have null in an equality
 	// column.
-	hasNull := func(row sqlbase.EncDatumRow) bool {
+	hasNull := func(row rowenc.EncDatumRow) bool {
 		for _, c := range z.infos[side].eqColumns {
 			if row[c].IsNull() {
 				return true
@@ -552,9 +555,9 @@ func (z *zigzagJoiner) fetchRowFromSide(
 
 // Return the datums from the equality columns from a given non-empty row
 // from the specified side.
-func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbase.EncDatumRow {
+func (z *zigzagJoiner) extractEqDatums(row rowenc.EncDatumRow, side int) rowenc.EncDatumRow {
 	eqCols := z.infos[side].eqColumns
-	eqDatums := make(sqlbase.EncDatumRow, len(eqCols))
+	eqDatums := make(rowenc.EncDatumRow, len(eqCols))
 	for i, col := range eqCols {
 		eqDatums[i] = row[col]
 	}
@@ -564,7 +567,7 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 // Generates a Key for an inverted index from the passed datums and side
 // info. Used by produceKeyFromBaseRow.
 func (z *zigzagJoiner) produceInvertedIndexKey(
-	info *zigzagJoinerInfo, datums sqlbase.EncDatumRow,
+	info *zigzagJoinerInfo, datums rowenc.EncDatumRow,
 ) (roachpb.Span, error) {
 	// For inverted indexes, the JSON field (first column in the index) is
 	// encoded a little differently. We need to explicitly call
@@ -591,7 +594,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		}
 	}
 
-	keys, err := sqlbase.EncodeInvertedIndexKeys(
+	keys, err := rowenc.EncodeInvertedIndexKeys(
 		info.index,
 		colMap,
 		decodedDatums,
@@ -605,7 +608,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	}
 
 	// Append remaining (non-JSON) datums to the key.
-	keyBytes, _, err := sqlbase.EncodeColumns(
+	keyBytes, _, err := rowenc.EncodeColumns(
 		info.index.ExtraColumnIDs[:len(datums)-1],
 		info.indexDirs[1:],
 		colMap,
@@ -647,8 +650,8 @@ func (zi *zigzagJoinerInfo) eqColTypes() []*types.T {
 }
 
 // Returns the ordering of the equality columns.
-func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
-	ordering := make(sqlbase.ColumnOrdering, len(zi.eqColumns))
+func (zi *zigzagJoinerInfo) eqOrdering() (colinfo.ColumnOrdering, error) {
+	ordering := make(colinfo.ColumnOrdering, len(zi.eqColumns))
 	for i := range zi.eqColumns {
 		colID := zi.table.Columns[zi.eqColumns[i]].ID
 		// Search the index columns, then the primary keys to find an ordering for
@@ -668,7 +671,7 @@ func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
 		} else {
 			return nil, errors.New("ordering of equality column not found in index or primary key")
 		}
-		ordering[i] = sqlbase.ColumnOrderInfo{ColIdx: i, Direction: direction}
+		ordering[i] = colinfo.ColumnOrderInfo{ColIdx: i, Direction: direction}
 	}
 	return ordering, nil
 }
@@ -676,7 +679,7 @@ func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
 // matchBase compares the equality columns of the given row to `z.baseRow`,
 // which is the previously fetched row. Returns whether or not the rows match
 // on the equality columns. The given row is from the specified `side`.
-func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, error) {
+func (z *zigzagJoiner) matchBase(curRow rowenc.EncDatumRow, side int) (bool, error) {
 	if len(curRow) == 0 {
 		return false, nil
 	}
@@ -691,7 +694,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 	}
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &sqlbase.DatumAlloc{}
+	da := &rowenc.DatumAlloc{}
 	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
@@ -704,7 +707,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 // Since this is called after the side has been incremented, it produces the
 // cartesian product of the previous side's container and the side before that
 // one.
-func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
+func (z *zigzagJoiner) emitFromContainers() (rowenc.EncDatumRow, error) {
 	right := z.prevSide()
 	left := z.sideBefore(right)
 	for !z.infos[right].container.IsEmpty() {
@@ -741,7 +744,7 @@ func (z *zigzagJoiner) emitFromContainers() (sqlbase.EncDatumRow, error) {
 // at a time.
 func (z *zigzagJoiner) nextRow(
 	ctx context.Context, txn *kv.Txn,
-) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+) (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for {
 		if err := z.cancelChecker.Check(); err != nil {
 			return nil, &execinfrapb.ProducerMetadata{Err: err}
@@ -840,7 +843,7 @@ func (z *zigzagJoiner) nextRow(
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
-			da := &sqlbase.DatumAlloc{}
+			da := &rowenc.DatumAlloc{}
 			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.FlowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
@@ -887,9 +890,9 @@ func (z *zigzagJoiner) sideBefore(side int) int {
 // Returns the first row that doesn't match.
 func (z *zigzagJoiner) collectAllMatches(
 	ctx context.Context, side int,
-) (sqlbase.EncDatumRow, error) {
+) (rowenc.EncDatumRow, error) {
 	matched := true
-	var row sqlbase.EncDatumRow
+	var row rowenc.EncDatumRow
 	for matched {
 		var err error
 		fetchedRow, err := z.fetchRowFromSide(ctx, side)
@@ -910,7 +913,7 @@ func (z *zigzagJoiner) collectAllMatches(
 }
 
 // Next is part of the RowSource interface.
-func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	txn := z.FlowCtx.Txn
 
 	if !z.started {

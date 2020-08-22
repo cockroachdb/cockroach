@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // joinNode is a planNode whose rows are the result of an inner or
@@ -34,12 +34,12 @@ type joinNode struct {
 	// on the equality columns (or a subset of them). The column indices refer to
 	// equality columns: a ColIdx of i refers to left column
 	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
-	mergeJoinOrdering sqlbase.ColumnOrdering
+	mergeJoinOrdering colinfo.ColumnOrdering
 
 	reqOrdering ReqOrdering
 
 	// columns contains the metadata for the results of this node.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 }
 
 func (p *planner) makeJoinNode(

@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -524,7 +525,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	fr := NewFlowRegistry(0)
 	wg := sync.WaitGroup{}
 	rc := &execinfra.RowChannel{}
-	rc.InitWithBufSizeAndNumSenders(sqlbase.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+	rc.InitWithBufSizeAndNumSenders(rowenc.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 	inboundStreams := map[execinfrapb.StreamID]*InboundStreamInfo{
 		0: {
 			receiver:  RowInboundStreamHandler{rc},
@@ -556,10 +557,10 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// occurred.
 	pushChan := make(chan *execinfrapb.ProducerMetadata)
 	rc := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{
-			OnPush: func(_ sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
+			OnPush: func(_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
 				pushChan <- meta
 				<-pushChan
 			},
@@ -650,7 +651,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 	// flow canceled error.
 
 	_, meta := right.Next()
-	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
+	if !errors.Is(meta.Err, cancelchecker.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 
@@ -659,7 +660,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 
 	_, _ = left.Next()
 	_, meta = left.Next()
-	if !errors.Is(meta.Err, sqlbase.QueryCanceledError) {
+	if !errors.Is(meta.Err, cancelchecker.QueryCanceledError) {
 		t.Fatal("expected query canceled, found", meta.Err)
 	}
 }

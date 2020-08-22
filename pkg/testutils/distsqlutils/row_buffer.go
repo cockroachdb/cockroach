@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -26,7 +26,7 @@ import (
 // BufferedRecord represents a row or metadata record that has been buffered
 // inside a RowBuffer.
 type BufferedRecord struct {
-	row  sqlbase.EncDatumRow
+	row  rowenc.EncDatumRow
 	Meta *execinfrapb.ProducerMetadata
 }
 
@@ -77,13 +77,13 @@ type RowBufferArgs struct {
 	// OnNext, if specified, is called as the first thing in the Next() method.
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
-	OnNext func(*RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
+	OnNext func(*RowBuffer) (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 	// OnPush, if specified, is called as the first thing in the Push() method.
-	OnPush func(sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata)
+	OnPush func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
-func NewRowBuffer(types []*types.T, rows sqlbase.EncDatumRows, hooks RowBufferArgs) *RowBuffer {
+func NewRowBuffer(types []*types.T, rows rowenc.EncDatumRows, hooks RowBufferArgs) *RowBuffer {
 	if types == nil {
 		panic("types required")
 	}
@@ -98,7 +98,7 @@ func NewRowBuffer(types []*types.T, rows sqlbase.EncDatumRows, hooks RowBufferAr
 
 // Push is part of the RowReceiver interface.
 func (rb *RowBuffer) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if rb.args.OnPush != nil {
 		rb.args.OnPush(row, meta)
@@ -110,7 +110,7 @@ func (rb *RowBuffer) Push(
 	}
 	// We mimic the behavior of RowChannel.
 	storeRow := func() {
-		rowCopy := append(sqlbase.EncDatumRow(nil), row...)
+		rowCopy := append(rowenc.EncDatumRow(nil), row...)
 		rb.Mu.Records = append(rb.Mu.Records, BufferedRecord{row: rowCopy, Meta: meta})
 	}
 	status := execinfra.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
@@ -169,7 +169,7 @@ func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
 //
 // There's no synchronization here with Push(). The assumption is that these
 // two methods are not called concurrently.
-func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (rb *RowBuffer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if rb.args.OnNext != nil {
 		row, meta := rb.args.OnNext(rb)
 		if row != nil || meta != nil {
@@ -209,7 +209,7 @@ func (rb *RowBuffer) ConsumerClosed() {
 
 // NextNoMeta is a version of Next which fails the test if
 // it encounters any metadata.
-func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
+func (rb *RowBuffer) NextNoMeta(tb testing.TB) rowenc.EncDatumRow {
 	row, meta := rb.Next()
 	if meta != nil {
 		tb.Fatalf("unexpected metadata: %v", meta)
@@ -219,8 +219,8 @@ func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
 
 // GetRowsNoMeta returns the rows in the buffer; it fails the test if it
 // encounters any metadata.
-func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
-	var res sqlbase.EncDatumRows
+func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) rowenc.EncDatumRows {
+	var res rowenc.EncDatumRows
 	for {
 		row := rb.NextNoMeta(t)
 		if row == nil {

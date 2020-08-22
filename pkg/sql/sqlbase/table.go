@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/text/language"
 )
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
@@ -84,51 +83,6 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-// ValidateColumnDefType returns an error if the type of a column definition is
-// not valid. It is checked when a column is created or altered.
-func ValidateColumnDefType(t *types.T) error {
-	switch t.Family() {
-	case types.StringFamily, types.CollatedStringFamily:
-		if t.Family() == types.CollatedStringFamily {
-			if _, err := language.Parse(t.Locale()); err != nil {
-				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
-			}
-		}
-
-	case types.DecimalFamily:
-		switch {
-		case t.Precision() == 0 && t.Scale() > 0:
-			// TODO (seif): Find right range for error message.
-			return errors.New("invalid NUMERIC precision 0")
-		case t.Precision() < t.Scale():
-			return fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				t.Scale(), t.Precision())
-		}
-
-	case types.ArrayFamily:
-		if t.ArrayContents().Family() == types.ArrayFamily {
-			// Nested arrays are not supported as a column type.
-			return errors.Errorf("nested array unsupported as column type: %s", t.String())
-		}
-		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
-			return err
-		}
-		return ValidateColumnDefType(t.ArrayContents())
-
-	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
-		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
-		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
-		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily:
-		// These types are OK.
-
-	default:
-		return pgerror.Newf(pgcode.InvalidTableDefinition,
-			"value type %s cannot be used for table columns", t.String())
-	}
-
-	return nil
-}
-
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
@@ -175,7 +129,7 @@ func MakeColumnDefDescs(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err := ValidateColumnDefType(resType); err != nil {
+	if err := colinfo.ValidateColumnDefType(resType); err != nil {
 		return nil, nil, nil, err
 	}
 	col.Type = resType
@@ -274,60 +228,14 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
-// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
-// appends directly to keyPrefix.
-func EncodeColumns(
-	columnIDs []descpb.ColumnID,
-	directions directions,
-	colMap map[descpb.ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
-) (key []byte, containsNull bool, err error) {
-	key = keyPrefix
-	for colIdx, id := range columnIDs {
-		val := findColumnValue(id, colMap, values)
-		if val == tree.DNull {
-			containsNull = true
-		}
-
-		dir, err := directions.get(colIdx)
-		if err != nil {
-			return nil, containsNull, err
-		}
-
-		if key, err = EncodeTableKey(key, val, dir); err != nil {
-			return nil, containsNull, err
-		}
-	}
-	return key, containsNull, nil
-}
-
-// GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc catalog.TableDescriptor, columnIDs []descpb.ColumnID) ([]*types.T, error) {
-	types := make([]*types.T, len(columnIDs))
-	for i, id := range columnIDs {
-		col, err := desc.FindActiveColumnByID(id)
-		if err != nil {
-			return nil, err
-		}
-		types[i] = col.Type
-	}
-	return types, nil
-}
-
 // GetConstraintInfo returns a summary of all constraints on the table.
 func (desc *ImmutableTableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn catalog.ProtoGetter, codec keys.SQLCodec,
+	ctx context.Context, dg catalog.DescGetter,
 ) (map[string]descpb.ConstraintDetail, error) {
 	var tableLookup catalog.TableLookupFn
-	if txn != nil {
+	if dg != nil {
 		tableLookup = func(id descpb.ID) (catalog.TableDescriptor, error) {
-			raw, err := getTableDescFromID(ctx, txn, codec, id)
-			if err != nil {
-				return nil, err
-			}
-			return NewImmutableTableDescriptor(*raw), nil
+			return catalog.GetTableDescFromID(ctx, dg, id)
 		}
 	}
 	return desc.collectConstraintInfo(tableLookup)

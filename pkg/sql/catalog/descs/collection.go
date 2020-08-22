@@ -25,9 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/database"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -215,7 +218,7 @@ type Collection struct {
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*sqlbase.ImmutableDatabaseDescriptor
+	allDatabaseDescriptors []*dbdesc.ImmutableDatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -243,7 +246,7 @@ type Collection struct {
 // GetMutableDatabaseDescriptor returns a mutable database descriptor.
 func (tc *Collection) GetMutableDatabaseDescriptor(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (*sqlbase.MutableDatabaseDescriptor, error) {
+) (*dbdesc.MutableDatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "reading mutable descriptor on '%s'", name)
 	}
@@ -266,7 +269,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 				}
 				return nil, nil
 			}
-			return sqlbase.NewMutableExistingDatabaseDescriptor(*desc.DatabaseDesc()), nil
+			return dbdesc.NewMutableExistingDatabaseDescriptor(*desc.DatabaseDesc()), nil
 		}
 	} else {
 		if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
@@ -274,7 +277,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 		); refuseFurtherLookup || err != nil {
 			return nil, err
 		} else if mut := desc.mutable; mut != nil {
-			db, ok := mut.(*sqlbase.MutableDatabaseDescriptor)
+			db, ok := mut.(*dbdesc.MutableDatabaseDescriptor)
 			if !ok {
 				return nil, nil
 			}
@@ -288,7 +291,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 	if err != nil || db == nil {
 		return nil, err
 	}
-	mutDesc, ok := db.(*sqlbase.MutableDatabaseDescriptor)
+	mutDesc, ok := db.(*dbdesc.MutableDatabaseDescriptor)
 	if !ok {
 		// TODO (lucy): Here and elsewhere in the Collection, we return a nil
 		// descriptor with a nil error if the type cast doesn't succeed, regardless
@@ -429,18 +432,18 @@ func (tc *Collection) ResolveSchema(
 // unifying once we also have support for schemas.
 func (tc *Collection) GetDatabaseVersion(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	if tc.databaseLeasingUnsupported {
 		return tc.getDatabaseVersionDeprecated(ctx, txn, name, flags)
 	}
 
-	readFromStore := func() (*sqlbase.ImmutableDatabaseDescriptor, error) {
+	readFromStore := func() (*dbdesc.ImmutableDatabaseDescriptor, error) {
 		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
 		desc, err := phyAccessor.GetDatabaseDesc(ctx, txn, tc.codec(), name, flags)
 		if err != nil || desc == nil {
 			return nil, err
 		}
-		return desc.(*sqlbase.ImmutableDatabaseDescriptor), nil
+		return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
 	}
 
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
@@ -452,7 +455,7 @@ func (tc *Collection) GetDatabaseVersion(
 		return nil, err
 	} else if immut := desc.immutable; immut != nil {
 		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
-		db, ok := immut.(*sqlbase.ImmutableDatabaseDescriptor)
+		db, ok := immut.(*dbdesc.ImmutableDatabaseDescriptor)
 		if !ok {
 			if flags.Required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
@@ -463,7 +466,7 @@ func (tc *Collection) GetDatabaseVersion(
 	}
 
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		name == sqlbase.SystemDatabaseName
+		name == systemschema.SystemDatabaseName
 	if avoidCache {
 		return readFromStore()
 	}
@@ -474,7 +477,7 @@ func (tc *Collection) GetDatabaseVersion(
 	// transaction.
 	if desc := tc.leasedDescriptors.getByName(keys.RootNamespaceID, keys.RootNamespaceID, name); desc != nil {
 		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-		db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+		db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 		if !ok {
 			if flags.Required {
 				return nil, sqlbase.NewUndefinedDatabaseError(name)
@@ -491,14 +494,14 @@ func (tc *Collection) GetDatabaseVersion(
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
 		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return readFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
 		return nil, err
 	}
-	db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+	db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedDatabaseError(name)
@@ -526,11 +529,11 @@ func (tc *Collection) GetDatabaseVersion(
 // otherwise. Only relevant prior to the 20.2 version upgrade.
 func (tc *Collection) getDatabaseVersionDeprecated(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	// Note that this logic is almost the same as that of the former
 	// CachedPhysicalAccessor implementation in 20.1.
 
-	isSystemDB := name == sqlbase.SystemDatabaseName
+	isSystemDB := name == systemschema.SystemDatabaseName
 	if !(flags.AvoidCached || isSystemDB || lease.TestingTableLeasesAreDisabled()) {
 		refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseIDDeprecated(name, flags.Required)
 		if refuseFurtherLookup || err != nil {
@@ -567,7 +570,7 @@ func (tc *Collection) getDatabaseVersionDeprecated(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.ImmutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
 }
 
 // GetTableVersion returns a table descriptor with a version suitable for
@@ -646,7 +649,7 @@ func (tc *Collection) getObjectVersion(
 	// system.users. For now we're sticking to disabling caching of
 	// all system descriptors except the role-members-desc.
 	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled() ||
-		(name.Catalog() == sqlbase.SystemDatabaseName && name.Object() != sqlbase.RoleMembersTable.Name)
+		(name.Catalog() == systemschema.SystemDatabaseName && name.Object() != systemschema.RoleMembersTable.Name)
 
 	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
 		dbID,
@@ -688,7 +691,7 @@ func (tc *Collection) getObjectVersion(
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
 		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return readObjectFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
@@ -715,19 +718,19 @@ func (tc *Collection) getObjectVersion(
 // transaction. See GetDatabaseVersion.
 func (tc *Collection) GetDatabaseVersionByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (*sqlbase.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	if tc.databaseLeasingUnsupported {
 		return tc.deprecatedDatabaseCache().GetDatabaseDescByID(ctx, txn, dbID)
 	}
 
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 		}
 		return nil, err
 	}
-	db, ok := desc.(*sqlbase.ImmutableDatabaseDescriptor)
+	db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 	if !ok {
 		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
@@ -740,7 +743,7 @@ func (tc *Collection) GetTableVersionByID(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlbase.NewUndefinedRelationError(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
@@ -943,7 +946,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			return name, desc, nil
 		}
 
-		return desc, sqlbase.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), sqlbase.TypeLookupFunc(getType))
+		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
 	case *sqlbase.ImmutableTableDescriptor:
 		// ImmutableTableDescriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
@@ -977,7 +980,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 
 		// Make a copy of the underlying descriptor before hydration.
 		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
-		if err := sqlbase.HydrateTypesInTableDescriptor(ctx, descBase, sqlbase.TypeLookupFunc(getType)); err != nil {
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, typedesc.TypeLookupFunc(getType)); err != nil {
 			return nil, err
 		}
 		return sqlbase.NewImmutableTableDescriptor(*descBase), nil
@@ -1134,12 +1137,12 @@ func (tc *Collection) GetUncommittedTables() (tables []*sqlbase.ImmutableTableDe
 // for accessing types.
 func (tc *Collection) GetMutableTypeDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*sqlbase.MutableTypeDescriptor, error) {
+) (*typedesc.MutableTypeDescriptor, error) {
 	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	mutDesc, ok := desc.(*sqlbase.MutableTypeDescriptor)
+	mutDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedTypeError(tn)
@@ -1153,23 +1156,23 @@ func (tc *Collection) GetMutableTypeDescriptor(
 // but for accessing types.
 func (tc *Collection) GetMutableTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
-) (*sqlbase.MutableTypeDescriptor, error) {
+) (*typedesc.MutableTypeDescriptor, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, typeID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.MutableTypeDescriptor), nil
+	return desc.(*typedesc.MutableTypeDescriptor), nil
 }
 
 // GetTypeVersion is the equivalent of GetTableVersion but for accessing types.
 func (tc *Collection) GetTypeVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTypeDescriptor, error) {
+) (*typedesc.ImmutableTypeDescriptor, error) {
 	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
 			return nil, sqlbase.NewUndefinedTypeError(tn)
@@ -1183,16 +1186,16 @@ func (tc *Collection) GetTypeVersion(
 // types.
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTypeDescriptor, error) {
+) (*typedesc.ImmutableTypeDescriptor, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
 				pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
 		}
 		return nil, err
 	}
-	typ, ok := desc.(*sqlbase.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		return nil, pgerror.Newf(
 			pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
@@ -1335,14 +1338,14 @@ func (tc *Collection) GetAllDescriptors(
 		}
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
-		dbDescs := make(map[descpb.ID]*sqlbase.ImmutableDatabaseDescriptor)
-		typDescs := make(map[descpb.ID]*sqlbase.ImmutableTypeDescriptor)
+		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
+		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
 		schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
-			case *sqlbase.ImmutableDatabaseDescriptor:
+			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
-			case *sqlbase.ImmutableTypeDescriptor:
+			case *typedesc.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
 			case *sqlbase.ImmutableSchemaDescriptor:
 				schemaDescs[desc.GetID()] = desc
@@ -1375,10 +1378,10 @@ func (tc *Collection) GetAllDescriptors(
 			for i := range descs {
 				desc := descs[i]
 				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
-					if err := sqlbase.HydrateTypesInTableDescriptor(
+					if err := typedesc.HydrateTypesInTableDescriptor(
 						ctx,
 						tblDesc.TableDesc(),
-						sqlbase.TypeLookupFunc(typeLookup),
+						typedesc.TypeLookupFunc(typeLookup),
 					); err != nil {
 						// If we ran into an error hydrating the types, that means that we
 						// have some sort of corrupted descriptor state. Rather than disable
@@ -1400,7 +1403,7 @@ func (tc *Collection) GetAllDescriptors(
 // in the database cache, if necessary.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*sqlbase.ImmutableDatabaseDescriptor, error) {
+) ([]*dbdesc.ImmutableDatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {
@@ -1559,7 +1562,7 @@ func (dt *DistSQLTypeResolver) ResolveType(
 func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.UserDefinedTypeOIDToID(oid))
+	name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(oid))
 	if err != nil {
 		return nil, err
 	}
@@ -1581,14 +1584,14 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*sqlbase.ImmutableTypeDescriptor), nil
+	return name, desc.(*typedesc.ImmutableTypeDescriptor), nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
 func (dt *DistSQLTypeResolver) HydrateTypeSlice(ctx context.Context, typs []*types.T) error {
 	for _, t := range typs {
 		if t.UserDefined() {
-			name, desc, err := dt.GetTypeDescriptor(ctx, sqlbase.GetTypeDescID(t))
+			name, desc, err := dt.GetTypeDescriptor(ctx, typedesc.GetTypeDescID(t))
 			if err != nil {
 				return err
 			}

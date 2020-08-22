@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -153,9 +153,9 @@ INSERT INTO perm_table VALUES (3, 4);
 
 	// Simulate 19.2 -> 20.1 upgrade by placing perm_table and perm_sequence in
 	// the old namespace table.
-	deprecatedTbKey := sqlbase.NewDeprecatedTableKey(
+	deprecatedTbKey := catalogkeys.NewDeprecatedTableKey(
 		namesToID["defaultdb"], "perm_table").Key(keys.SystemSQLCodec)
-	deprecatedSeqKey := sqlbase.NewDeprecatedTableKey(
+	deprecatedSeqKey := catalogkeys.NewDeprecatedTableKey(
 		namesToID["defaultdb"], "perm_sequence").Key(keys.SystemSQLCodec)
 	err = kvDB.CPut(ctx, deprecatedTbKey, namesToID["perm_table"], nil)
 	require.NoError(t, err)

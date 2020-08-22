@@ -76,11 +76,11 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 		}
 		return db, err
 	}
-	typ, err := a.tc.GetDatabaseVersion(ctx, txn, name, flags)
-	if typ == nil {
+	db, err := a.tc.GetDatabaseVersion(ctx, txn, name, flags)
+	if db == nil {
 		return nil, err
 	}
-	return typ, err
+	return db, err
 }
 
 // GetSchema implements the Accessor interface.

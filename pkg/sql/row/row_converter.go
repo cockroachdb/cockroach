@@ -14,7 +14,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -88,7 +90,7 @@ func GenerateInsertRow(
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
-	rowContainerForComputedVals *sqlbase.RowIndexedVarContainer,
+	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -165,7 +167,7 @@ func GenerateInsertRow(
 
 	// Ensure that the values honor the specified column widths.
 	for i := 0; i < len(insertCols); i++ {
-		outVal, err := sqlbase.AdjustValueToColumnType(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
+		outVal, err := colinfo.AdjustValueToColumnType(insertCols[i].Type, rowVals[i], &insertCols[i].Name)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +215,7 @@ type DatumRowConverter struct {
 	VisibleColTypes       []*types.T
 	computedExprs         []tree.TypedExpr
 	defaultCache          []tree.TypedExpr
-	computedIVarContainer sqlbase.RowIndexedVarContainer
+	computedIVarContainer schemaexpr.RowIndexedVarContainer
 
 	// FractionFn is used to set the progress header in KVBatches.
 	CompletedRowFn func() int64
@@ -251,7 +253,7 @@ func NewDatumRowConverter(
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetColDescriptors, err = sqlbase.ProcessTargetColumns(tableDesc, targetColNames,
+		if targetColDescriptors, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
@@ -277,9 +279,9 @@ func NewDatumRowConverter(
 	relevantColumns := func(col *descpb.ColumnDescriptor) bool {
 		return col.HasDefault() || col.IsComputed()
 	}
-	cols := sqlbase.ProcessColumnSet(
+	cols := schemaexpr.ProcessColumnSet(
 		targetColDescriptors, tableDesc, relevantColumns)
-	defaultExprs, err := sqlbase.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -290,7 +292,7 @@ func NewDatumRowConverter(
 		evalCtx.Codec,
 		tableDesc,
 		cols,
-		&sqlbase.DatumAlloc{},
+		&rowenc.DatumAlloc{},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
@@ -381,7 +383,7 @@ func NewDatumRowConverter(
 		return nil, errors.Wrapf(err, "error evaluating computed expression for IMPORT INTO")
 	}
 
-	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
+	c.computedIVarContainer = schemaexpr.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
 		Cols:    tableDesc.Columns,
 	}

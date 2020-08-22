@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -67,7 +67,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 	}
 
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, sqlbase.AlterTableSplitColumns)
+	b.synthesizeResultColumns(outScope, colinfo.AlterTableSplitColumns)
 	outScope.expr = b.factory.ConstructAlterTableSplit(
 		inputScope.expr.(memo.RelExpr),
 		expiration,
@@ -99,7 +99,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 	b.DisableMemoReuse = true
 
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, sqlbase.AlterTableUnsplitColumns)
+	b.synthesizeResultColumns(outScope, colinfo.AlterTableUnsplitColumns)
 	private := &memo.AlterTableSplitPrivate{
 		Table:   b.factory.Metadata().AddTable(table, &tn),
 		Index:   index.Ordinal(),
@@ -149,7 +149,7 @@ func (b *Builder) buildAlterTableRelocate(
 	b.DisableMemoReuse = true
 
 	outScope = inScope.push()
-	b.synthesizeResultColumns(outScope, sqlbase.AlterTableRelocateColumns)
+	b.synthesizeResultColumns(outScope, colinfo.AlterTableRelocateColumns)
 
 	// Calculate the desired types for the input expression. It is OK if it
 	// returns fewer columns (the relevant prefix is used).

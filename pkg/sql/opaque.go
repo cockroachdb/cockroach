@@ -14,26 +14,26 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/errors"
 )
 
 type opaqueMetadata struct {
 	info    string
 	plan    planNode
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 }
 
 var _ opt.OpaqueMetadata = &opaqueMetadata{}
 
 func (o *opaqueMetadata) ImplementsOpaqueMetadata()      {}
 func (o *opaqueMetadata) String() string                 { return o.info }
-func (o *opaqueMetadata) Columns() sqlbase.ResultColumns { return o.columns }
+func (o *opaqueMetadata) Columns() colinfo.ResultColumns { return o.columns }
 
 func buildOpaque(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, stmt tree.Statement,

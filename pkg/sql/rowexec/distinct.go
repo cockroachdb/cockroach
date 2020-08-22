@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -37,13 +37,13 @@ type distinct struct {
 	input            execinfra.RowSource
 	types            []*types.T
 	haveLastGroupKey bool
-	lastGroupKey     sqlbase.EncDatumRow
+	lastGroupKey     rowenc.EncDatumRow
 	arena            stringarena.Arena
 	seen             map[string]struct{}
 	orderedCols      []uint32
 	distinctCols     util.FastIntSet
 	memAcc           mon.BoundAccount
-	datumAlloc       sqlbase.DatumAlloc
+	datumAlloc       rowenc.DatumAlloc
 	scratch          []byte
 	nullsAreDistinct bool
 	nullCount        uint32
@@ -168,7 +168,7 @@ func (d *sortedDistinct) Start(ctx context.Context) context.Context {
 	return d.StartInternal(ctx, sortedDistinctProcName)
 }
 
-func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
+func (d *distinct) matchLastGroupKey(row rowenc.EncDatumRow) (bool, error) {
 	if !d.haveLastGroupKey {
 		return false, nil
 	}
@@ -192,7 +192,7 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 
 // encode appends the encoding of non-ordered columns, which we use as a key in
 // our 'seen' set.
-func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, error) {
+func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, error) {
 	var err error
 	foundNull := false
 	for i, datum := range row {
@@ -233,7 +233,7 @@ func (d *distinct) close() {
 }
 
 // Next is part of the RowSource interface.
-func (d *distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
@@ -315,7 +315,7 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
 //
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
-func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (d *sortedDistinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for d.State == execinfra.StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {

@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -232,7 +234,7 @@ func (p *planner) getSchemaIDForCreate(
 // the desired object exists.
 func getTableCreateParams(
 	params runParams, dbID descpb.ID, persistence tree.Persistence, tableName *tree.TableName,
-) (tKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+) (tKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a table which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
@@ -265,7 +267,7 @@ func getTableCreateParams(
 		if err != nil {
 			return nil, 0, err
 		}
-		tKey = sqlbase.NewTableKey(dbID, schemaID, tableName.Table())
+		tKey = catalogkeys.NewTableKey(dbID, schemaID, tableName.Table())
 	} else {
 		// Otherwise, find the ID of the schema to create the table within.
 		var err error
@@ -358,7 +360,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
-	var asCols sqlbase.ResultColumns
+	var asCols colinfo.ResultColumns
 	var desc *sqlbase.MutableTableDescriptor
 	var affected map[descpb.ID]*sqlbase.MutableTableDescriptor
 	// creationTime is initialized to a zero value and populated at read time.
@@ -447,7 +449,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.ExecCfg().Codec); err != nil {
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
+	if err := desc.Validate(params.ctx, dg); err != nil {
 		return err
 	}
 
@@ -809,7 +812,7 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil, evalCtx.Codec)
+	constraintInfo, err := tbl.GetConstraintInfo(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -1219,7 +1222,7 @@ func newTableDescIfAs(
 	p *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
 	creationTime hlc.Timestamp,
-	resultColumns []sqlbase.ResultColumn,
+	resultColumns []colinfo.ResultColumn,
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
 ) (desc *sqlbase.MutableTableDescriptor, err error) {
@@ -1438,8 +1441,8 @@ func NewTableDesc(
 
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		n.Table, sqlbase.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		n.Table, colinfo.ResultColumnsFromColDescs(desc.GetID(), desc.Columns),
 	)
 
 	for i := range desc.Columns {

@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +57,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*sqlbase.MutableDatabaseDescriptor, bool, error) {
+) (*dbdesc.MutableDatabaseDescriptor, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -81,7 +84,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := sqlbase.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
+	desc := dbdesc.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -90,7 +93,7 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaNamespaceEntry(ctx, sqlbase.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
+		if err := p.createSchemaNamespaceEntry(ctx, catalogkeys.NewPublicSchemaKey(id).Key(p.ExecCfg().Codec), keys.PublicSchemaID); err != nil {
 			return nil, true, err
 		}
 	}
@@ -147,8 +150,9 @@ func (p *planner) createDescriptorWithID(
 	}
 	isTable := false
 	switch desc := mutDesc.(type) {
-	case *sqlbase.MutableTypeDescriptor:
-		if err := desc.Validate(ctx, p.txn, p.ExecCfg().Codec); err != nil {
+	case *typedesc.MutableTypeDescriptor:
+		dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
+		if err := desc.Validate(ctx, dg); err != nil {
 			return err
 		}
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
@@ -162,7 +166,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *sqlbase.MutableDatabaseDescriptor:
+	case *dbdesc.MutableDatabaseDescriptor:
 		if err := desc.Validate(); err != nil {
 			return err
 		}
@@ -186,7 +190,7 @@ func (p *planner) createDescriptorWithID(
 		// Queue a schema change job to eventually make the table public.
 		if err := p.createOrUpdateSchemaChangeJob(
 			ctx,
-			mutDesc.(*MutableTableDescriptor),
+			mutDesc.(*sqlbase.MutableTableDescriptor),
 			jobDesc,
 			descpb.InvalidMutationID); err != nil {
 			return err

@@ -9,13 +9,13 @@
 package utilccl
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // BulkJobExecutionResultHeader is the header for various job commands
 // (BACKUP, RESTORE, IMPORT, etc) stmt results.
-var BulkJobExecutionResultHeader = sqlbase.ResultColumns{
+var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 	{Name: "status", Typ: types.String},
 	{Name: "fraction_completed", Typ: types.Float},
@@ -26,6 +26,6 @@ var BulkJobExecutionResultHeader = sqlbase.ResultColumns{
 
 // DetachedJobExecutionResultHeader is a the header for various job commands when
 // job executes in detached mode (i.e. the caller doesn't wait for job completion).
-var DetachedJobExecutionResultHeader = sqlbase.ResultColumns{
+var DetachedJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 }

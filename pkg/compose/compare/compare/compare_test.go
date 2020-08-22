@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -65,16 +65,16 @@ func TestCompare(t *testing.T) {
 	configs := map[string]testConfig{
 		"postgres": {
 			setup:         sqlsmith.Setups["rand-tables"],
-			setupMutators: []sqlbase.Mutator{mutations.PostgresCreateTableMutator},
+			setupMutators: []rowenc.Mutator{mutations.PostgresCreateTableMutator},
 			opts:          []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []sqlbase.Mutator{},
+					mutators: []rowenc.Mutator{},
 				},
 				{
 					name:     "postgres",
-					mutators: []sqlbase.Mutator{mutations.PostgresMutator},
+					mutators: []rowenc.Mutator{mutations.PostgresMutator},
 				},
 			},
 		},
@@ -84,11 +84,11 @@ func TestCompare(t *testing.T) {
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []sqlbase.Mutator{},
+					mutators: []rowenc.Mutator{},
 				},
 				{
 					name: "cockroach2",
-					mutators: []sqlbase.Mutator{
+					mutators: []rowenc.Mutator{
 						mutations.StatisticsMutator,
 						mutations.ForeignKeyMutator,
 						mutations.ColumnFamilyMutator,
@@ -170,10 +170,10 @@ type testConfig struct {
 	opts          []sqlsmith.SmitherOption
 	conns         []testConn
 	setup         sqlsmith.Setup
-	setupMutators []sqlbase.Mutator
+	setupMutators []rowenc.Mutator
 }
 
 type testConn struct {
 	name     string
-	mutators []sqlbase.Mutator
+	mutators []rowenc.Mutator
 }

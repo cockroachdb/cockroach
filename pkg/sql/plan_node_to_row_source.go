@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -39,7 +39,7 @@ type planNodeToRowSource struct {
 	firstNotWrapped planNode
 
 	// run time state machine values
-	row sqlbase.EncDatumRow
+	row rowenc.EncDatumRow
 }
 
 func makePlanNodeToRowSource(
@@ -54,7 +54,7 @@ func makePlanNodeToRowSource(
 	} else {
 		typs = getTypesFromResultColumns(planColumns(source))
 	}
-	row := make(sqlbase.EncDatumRow, len(typs))
+	row := make(rowenc.EncDatumRow, len(typs))
 
 	return &planNodeToRowSource{
 		node:        source,
@@ -135,7 +135,7 @@ func (p *planNodeToRowSource) InternalClose() bool {
 	return p.ProcessorBase.InternalClose()
 }
 
-func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if p.State == execinfra.StateRunning && p.fastPath {
 		var count int
 		// If our node is a "fast path node", it means that we're set up to just
@@ -171,7 +171,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 		p.MoveToDraining(nil /* err */)
 		// Return the row count the only way we can: as a single-column row with
 		// the count inside.
-		return sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
+		return rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(count))}}, nil
 	}
 
 	for p.State == execinfra.StateRunning {
@@ -183,7 +183,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *execinfrapb.Producer
 
 		for i, datum := range p.node.Values() {
 			if datum != nil {
-				p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+				p.row[i] = rowenc.DatumToEncDatum(p.outputTypes[i], datum)
 			}
 		}
 		// ProcessRow here is required to deal with projections, which won't be

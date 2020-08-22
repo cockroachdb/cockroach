@@ -14,10 +14,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // rowSourceToPlanNode wraps a RowSource and presents it as a PlanNode. It must
@@ -31,11 +32,11 @@ type rowSourceToPlanNode struct {
 	// planned for.
 	originalPlanNode planNode
 
-	planCols sqlbase.ResultColumns
+	planCols colinfo.ResultColumns
 
 	// Temporary variables
-	row      sqlbase.EncDatumRow
-	da       sqlbase.DatumAlloc
+	row      rowenc.EncDatumRow
+	da       rowenc.DatumAlloc
 	datumRow tree.Datums
 }
 
@@ -50,7 +51,7 @@ var _ planNode = &rowSourceToPlanNode{}
 func makeRowSourceToPlanNode(
 	s execinfra.RowSource,
 	forwarder metadataForwarder,
-	planCols sqlbase.ResultColumns,
+	planCols colinfo.ResultColumns,
 	originalPlanNode planNode,
 ) *rowSourceToPlanNode {
 	row := make(tree.Datums, len(planCols))

@@ -15,11 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -117,7 +117,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
-		func(db *sqlbase.ImmutableDatabaseDescriptor) error {
+		func(db *dbdesc.ImmutableDatabaseDescriptor) error {
 			if _, ok := userNames[db.GetPrivileges().Owner]; ok {
 				userNames[db.GetPrivileges().Owner] = append(
 					userNames[db.GetPrivileges().Owner],

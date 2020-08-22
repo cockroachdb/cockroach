@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -244,7 +244,7 @@ func createTestStoreWithoutStart(
 		t.Fatal(err)
 	}
 	var splits []roachpb.RKey
-	kvs, tableSplits := sqlbase.MakeMetadataSchema(
+	kvs, tableSplits := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
 	).GetInitialValues()
 	if opts.createSystemRanges {
@@ -466,7 +466,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 
 		// Bootstrap the system ranges.
 		var splits []roachpb.RKey
-		kvs, tableSplits := sqlbase.MakeMetadataSchema(
+		kvs, tableSplits := bootstrap.MakeMetadataSchema(
 			keys.SystemSQLCodec, cfg.DefaultZoneConfig, cfg.DefaultSystemZoneConfig,
 		).GetInitialValues()
 		splits = config.StaticSplits()

@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -422,7 +424,8 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn, p.ExecCfg().Codec)
+	dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
+	constraints, err := tableDesc.GetConstraintInfo(ctx, dg)
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +472,7 @@ func createConstraintCheckOperations(
 func scrubRunDistSQL(
 	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []*types.T,
 ) (*rowcontainer.RowContainer, error) {
-	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
+	ci := colinfo.ColTypeInfoFromColTypes(columnTypes)
 	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
 	rows := rowcontainer.NewRowContainer(acc, ci)
 	rowResultWriter := NewRowResultWriter(rows)

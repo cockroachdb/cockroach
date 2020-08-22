@@ -17,9 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -57,8 +58,8 @@ type aggregatorBase struct {
 	inputTypes   []*types.T
 	funcs        []*aggregateFuncHolder
 	outputTypes  []*types.T
-	datumAlloc   sqlbase.DatumAlloc
-	rowAlloc     sqlbase.EncDatumRowAlloc
+	datumAlloc   rowenc.DatumAlloc
+	rowAlloc     rowenc.EncDatumRowAlloc
 
 	bucketsAcc  mon.BoundAccount
 	aggFuncsAcc mon.BoundAccount
@@ -71,12 +72,12 @@ type aggregatorBase struct {
 	orderedGroupCols []uint32
 	aggregations     []execinfrapb.AggregatorSpec_Aggregation
 
-	lastOrdGroupCols sqlbase.EncDatumRow
+	lastOrdGroupCols rowenc.EncDatumRow
 	arena            stringarena.Arena
-	row              sqlbase.EncDatumRow
+	row              rowenc.EncDatumRow
 	scratch          []byte
 
-	cancelChecker *sqlbase.CancelChecker
+	cancelChecker *cancelchecker.CancelChecker
 }
 
 // init initializes the aggregatorBase.
@@ -106,7 +107,7 @@ func (ag *aggregatorBase) init(
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
 	ag.outputTypes = make([]*types.T, len(spec.Aggregations))
-	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
+	ag.row = make(rowenc.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
 	ag.aggFuncsAcc = memMonitor.MakeBoundAccount()
@@ -365,7 +366,7 @@ func (ag *orderedAggregator) Start(ctx context.Context) context.Context {
 func (ag *aggregatorBase) start(ctx context.Context, procName string) context.Context {
 	ag.input.Start(ctx)
 	ctx = ag.StartInternal(ctx, procName)
-	ag.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	ag.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	ag.runningState = aggAccumulating
 	return ctx
 }
@@ -416,7 +417,7 @@ func (ag *orderedAggregator) close() {
 // matchLastOrdGroupCols takes a row and matches it with the row stored by
 // lastOrdGroupCols. It returns true if the two rows are equal on the grouping
 // columns, and false otherwise.
-func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, error) {
+func (ag *aggregatorBase) matchLastOrdGroupCols(row rowenc.EncDatumRow) (bool, error) {
 	for _, colIdx := range ag.orderedGroupCols {
 		res, err := ag.lastOrdGroupCols[colIdx].Compare(
 			ag.inputTypes[colIdx], &ag.datumAlloc, ag.EvalCtx, &row[colIdx],
@@ -434,7 +435,7 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 // accumulation.
 func (ag *hashAggregator) accumulateRows() (
 	aggregatorState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	for {
@@ -503,7 +504,7 @@ func (ag *hashAggregator) accumulateRows() (
 // accumulation.
 func (ag *orderedAggregator) accumulateRows() (
 	aggregatorState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	for {
@@ -559,8 +560,9 @@ func (ag *orderedAggregator) accumulateRows() (
 // bucket. The bucket is closed.
 func (ag *aggregatorBase) getAggResults(
 	bucket aggregateFuncs,
-) (aggregatorState, sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+) (aggregatorState, rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	defer bucket.close(ag.Ctx)
+
 	for i, b := range bucket {
 		result, err := b.Result()
 		if err != nil {
@@ -571,7 +573,7 @@ func (ag *aggregatorBase) getAggResults(
 			// We can't encode nil into an EncDatum, so we represent it with DNull.
 			result = tree.DNull
 		}
-		ag.row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
+		ag.row[i] = rowenc.DatumToEncDatum(ag.outputTypes[i], result)
 	}
 
 	if outRow := ag.ProcessRowHelper(ag.row); outRow != nil {
@@ -589,7 +591,7 @@ func (ag *aggregatorBase) getAggResults(
 // ProcOutputHelper filtered the current row out.
 func (ag *hashAggregator) emitRow() (
 	aggregatorState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	if len(ag.bucketsIter) == 0 {
@@ -665,7 +667,7 @@ func (ag *hashAggregator) emitRow() (
 // ProcOutputHelper filtered a the current row out.
 func (ag *orderedAggregator) emitRow() (
 	aggregatorState,
-	sqlbase.EncDatumRow,
+	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
 	if ag.bucket == nil {
@@ -709,9 +711,9 @@ func (ag *orderedAggregator) emitRow() (
 }
 
 // Next is part of the RowSource interface.
-func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ag *hashAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
@@ -731,9 +733,9 @@ func (ag *hashAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMeta
 }
 
 // Next is part of the RowSource interface.
-func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (ag *orderedAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for ag.State == execinfra.StateRunning {
-		var row sqlbase.EncDatumRow
+		var row rowenc.EncDatumRow
 		var meta *execinfrapb.ProducerMetadata
 		switch ag.runningState {
 		case aggAccumulating:
@@ -765,7 +767,7 @@ func (ag *orderedAggregator) ConsumerClosed() {
 }
 
 func (ag *aggregatorBase) accumulateRowIntoBucket(
-	row sqlbase.EncDatumRow, groupKey []byte, bucket aggregateFuncs,
+	row rowenc.EncDatumRow, groupKey []byte, bucket aggregateFuncs,
 ) error {
 	var err error
 	// Feed the func holders for this bucket the non-grouping datums.
@@ -828,7 +830,7 @@ func (ag *aggregatorBase) accumulateRowIntoBucket(
 
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
-func (ag *hashAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
+func (ag *hashAggregator) accumulateRow(row rowenc.EncDatumRow) error {
 	if err := ag.cancelChecker.Check(); err != nil {
 		return err
 	}
@@ -867,7 +869,7 @@ func (ag *hashAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 
 // accumulateRow accumulates a single row, returning an error if accumulation
 // failed for any reason.
-func (ag *orderedAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
+func (ag *orderedAggregator) accumulateRow(row rowenc.EncDatumRow) error {
 	if err := ag.cancelChecker.Check(); err != nil {
 		return err
 	}
@@ -916,13 +918,13 @@ func (ag *aggregatorBase) newAggregateFuncHolder(
 // row in the group.
 func (a *aggregateFuncHolder) isDistinct(
 	ctx context.Context,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 	prefix []byte,
 	firstArg tree.Datum,
 	otherArgs tree.Datums,
 ) (bool, error) {
 	// Allocate one EncDatum that will be reused when encoding every argument.
-	ed := sqlbase.EncDatum{Datum: firstArg}
+	ed := rowenc.EncDatum{Datum: firstArg}
 	encoded, err := ed.Fingerprint(firstArg.ResolvedType(), alloc, prefix)
 	if err != nil {
 		return false, err
@@ -953,7 +955,7 @@ func (a *aggregateFuncHolder) isDistinct(
 // encode returns the encoding for the grouping columns, this is then used as
 // our group key to determine which bucket to add to.
 func (ag *aggregatorBase) encode(
-	appendTo []byte, row sqlbase.EncDatumRow,
+	appendTo []byte, row rowenc.EncDatumRow,
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
 		appendTo, err = row[colIdx].Fingerprint(

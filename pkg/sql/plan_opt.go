@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -88,7 +88,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		if len(p.semaCtx.Placeholders.Types) != 0 {
 			return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
 		}
-		stmt.Prepared.Columns = sqlbase.ExplainAnalyzeDebugColumns
+		stmt.Prepared.Columns = colinfo.ExplainAnalyzeDebugColumns
 		return opc.flags, nil
 	}
 
@@ -130,7 +130,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 
 	md := memo.Metadata()
 	physical := memo.RootProps()
-	resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
+	resultCols := make(colinfo.ResultColumns, len(physical.Presentation))
 	for i, col := range physical.Presentation {
 		colMeta := md.ColumnMeta(col.ID)
 		resultCols[i].Name = col.Alias

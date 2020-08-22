@@ -17,12 +17,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -700,7 +700,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 			composite := false
 			for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
 				typ := mem.Metadata().ColumnMeta(i).Type
-				if sqlbase.HasCompositeKeyEncoding(typ) {
+				if colinfo.HasCompositeKeyEncoding(typ) {
 					composite = true
 					break
 				}

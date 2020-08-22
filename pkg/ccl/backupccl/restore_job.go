@@ -25,8 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -294,7 +298,7 @@ func WriteDescriptors(
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				if mut, ok := desc.(*sqlbase.MutableDatabaseDescriptor); ok {
+				if mut, ok := desc.(*dbdesc.MutableDatabaseDescriptor); ok {
 					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 				} else {
 					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
@@ -326,7 +330,7 @@ func WriteDescriptors(
 			); err != nil {
 				return err
 			}
-			skey := sqlbase.NewSchemaKey(sc.GetParentID(), sc.GetName())
+			skey := catalogkeys.NewSchemaKey(sc.GetParentID(), sc.GetName())
 			b.CPut(skey.Key(keys.SystemSQLCodec), sc.GetID(), nil)
 		}
 
@@ -409,9 +413,9 @@ func WriteDescriptors(
 			}
 			return err
 		}
-
+		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, keys.SystemSQLCodec)
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn, keys.SystemSQLCodec); err != nil {
+			if err := table.Validate(ctx, dg); err != nil {
 				return errors.Wrapf(err,
 					"validate table %d", errors.Safe(table.GetID()))
 			}
@@ -659,9 +663,7 @@ func loadBackupSQLDescs(
 	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
 	// writing old-style descs in RestoreDetails (unless a job persists across
 	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupManifests(
-		ctx, backupManifests, p.ExecCfg().Codec, true, /* skipFKsWithNoMatchingTable */
-	); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true); err != nil {
 		return nil, BackupManifest{}, nil, err
 	}
 
@@ -803,7 +805,7 @@ func createImportingDescriptors(
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	var schemas []*sqlbase.MutableSchemaDescriptor
-	var types []*sqlbase.MutableTypeDescriptor
+	var types []*typedesc.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
@@ -819,14 +821,14 @@ func createImportingDescriptors(
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				rewriteDesc := sqlbase.NewInitialDatabaseDescriptorWithPrivileges(
+				rewriteDesc := dbdesc.NewInitialDatabaseDescriptorWithPrivileges(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
 		case catalog.SchemaDescriptor:
 			schemas = append(schemas, sqlbase.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
-			types = append(types, sqlbase.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
+			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -836,7 +838,7 @@ func createImportingDescriptors(
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, sqlbase.NewInitialDatabaseDescriptor(
+		databases = append(databases, dbdesc.NewInitialDatabaseDescriptor(
 			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
 	}
 
@@ -859,7 +861,7 @@ func createImportingDescriptors(
 	// For each type, we might be writing the type in the backup, or we could be
 	// remapping to an existing type descriptor. Split up the descriptors into
 	// these two groups.
-	var typesToWrite []*sqlbase.MutableTypeDescriptor
+	var typesToWrite []*typedesc.MutableTypeDescriptor
 	existingTypeIDs := make(map[descpb.ID]struct{})
 	for i := range types {
 		typ := types[i]
@@ -945,7 +947,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc := desc.(*sqlbase.MutableTypeDescriptor)
+					typDesc := desc.(*typedesc.MutableTypeDescriptor)
 					typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := catalogkv.WriteDescToBatch(
 						ctx,
@@ -1190,7 +1192,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 				return errors.Wrap(err, "validating table descriptor has not changed")
 			}
 			b.CPut(
-				sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
+				catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
 				existingDescVal,
 			)
@@ -1313,7 +1315,7 @@ func (r *restoreResumer) dropDescriptors(
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel")
 		}
 		b.CPut(
-			sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
+			catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableToDrop.ID),
 			tableToDrop.DescriptorProto(),
 			existingDescVal,
 		)
@@ -1335,7 +1337,7 @@ func (r *restoreResumer) dropDescriptors(
 		); err != nil {
 			return err
 		}
-		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
 	// Drop any schema descriptors that this restore created.
@@ -1352,7 +1354,7 @@ func (r *restoreResumer) dropDescriptors(
 		); err != nil {
 			return err
 		}
-		b.Del(sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
 	}
 
 	// Queue a GC job.
@@ -1395,9 +1397,9 @@ func (r *restoreResumer) dropDescriptors(
 		}
 
 		if isDBEmpty {
-			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
+			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
 			b.Del(descKey)
-			b.Del(sqlbase.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
+			b.Del(catalogkeys.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
 		}
 	}
 	if err := txn.Run(ctx, b); err != nil {
@@ -1418,7 +1420,7 @@ func (r *restoreResumer) restoreSystemTables(ctx context.Context, db *kv.DB) err
 			stmtDebugName := fmt.Sprintf("restore-system-systemTable-%s", systemTable)
 			// Don't clear the jobs table as to not delete the jobs that are performing
 			// the restore.
-			if systemTable != sqlbase.JobsTable.Name {
+			if systemTable != systemschema.JobsTable.Name {
 				deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true;", systemTable)
 				_, err = executor.Exec(ctx, stmtDebugName+"-data-deletion", txn, deleteQuery)
 				if err != nil {

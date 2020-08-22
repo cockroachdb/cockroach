@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -32,10 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -483,7 +484,7 @@ type DistSQLReceiver struct {
 
 	row    tree.Datums
 	status execinfra.ConsumerStatus
-	alloc  sqlbase.DatumAlloc
+	alloc  rowenc.DatumAlloc
 	closed bool
 
 	rangeCache *kvcoord.RangeDescriptorCache
@@ -640,7 +641,7 @@ func (r *DistSQLReceiver) SetError(err error) {
 
 // Push is part of the RowReceiver interface.
 func (r *DistSQLReceiver) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	if meta != nil {
 		if meta.LeafTxnFinalState != nil {
@@ -884,13 +885,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
-	var typ sqlbase.ColTypeInfo
+	var typ colinfo.ColTypeInfo
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
-		typ = sqlbase.ColTypeInfoFromColTypes([]*types.T{})
+		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
-		typ = sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
 	}
 	rows = rowcontainer.NewRowContainer(subqueryMemAccount, typ)
 	defer rows.Close(ctx)

@@ -24,8 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -95,8 +100,8 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 	ctx := tree.NewFmtCtx(tree.FmtSerializable)
 	ctx.SetIndexedTypeFormat(func(ctx *tree.FmtCtx, ref *tree.OIDTypeReference) {
 		newRef := ref
-		if rw, ok := rewrites[sqlbase.UserDefinedTypeOIDToID(ref.OID)]; ok {
-			newRef = &tree.OIDTypeReference{OID: sqlbase.TypeIDToOID(rw.ID)}
+		if rw, ok := rewrites[typedesc.UserDefinedTypeOIDToID(ref.OID)]; ok {
+			newRef = &tree.OIDTypeReference{OID: typedesc.TypeIDToOID(rw.ID)}
 		}
 		ctx.WriteString(newRef.SQLString())
 	})
@@ -151,10 +156,10 @@ func maybeFilterMissingViews(
 func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*sqlbase.MutableDatabaseDescriptor,
+	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
 	schemasByID map[descpb.ID]*sqlbase.MutableSchemaDescriptor,
 	tablesByID map[descpb.ID]*sqlbase.MutableTableDescriptor,
-	typesByID map[descpb.ID]*sqlbase.MutableTypeDescriptor,
+	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts tree.RestoreOptions,
@@ -206,11 +211,11 @@ func allocateDescriptorRewrites(
 			// Ensure that all referenced types are present.
 			if col.Type.UserDefined() {
 				// TODO (rohany): This can be turned into an option later.
-				if _, ok := typesByID[sqlbase.GetTypeDescID(col.Type)]; !ok {
+				if _, ok := typesByID[typedesc.GetTypeDescID(col.Type)]; !ok {
 					return nil, errors.Errorf(
 						"cannot restore table %q without referenced type %d",
 						table.Name,
-						sqlbase.GetTypeDescID(col.Type),
+						typedesc.GetTypeDescID(col.Type),
 					)
 				}
 			}
@@ -380,27 +385,27 @@ func allocateDescriptorRewrites(
 			var targetDB string
 			if renaming {
 				targetDB = overrideDB
-			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < sqlbase.MaxDefaultDescriptorID {
+			} else if descriptorCoverage == tree.AllDescriptors && table.ParentID < catalogkeys.MaxDefaultDescriptorID {
 				// This is a table that is in a database that already existed at
 				// cluster creation time.
-				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.DefaultDatabaseName)
+				defaultDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.DefaultDatabaseName)
 				if err != nil {
 					return err
 				}
-				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, sqlbase.PgDatabaseName)
+				postgresDBID, err := lookupDatabaseID(ctx, txn, p.ExecCfg().Codec, catalogkeys.PgDatabaseName)
 				if err != nil {
 					return err
 				}
 
-				if table.ParentID == sqlbase.SystemDB.GetID() {
+				if table.ParentID == systemschema.SystemDB.GetID() {
 					// For full cluster backups, put the system tables in the temporary
 					// system table.
 					targetDB = restoreTempSystemDB
 					descriptorRewrites[table.ID] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 				} else if table.ParentID == defaultDBID {
-					targetDB = sqlbase.DefaultDatabaseName
+					targetDB = catalogkeys.DefaultDatabaseName
 				} else if table.ParentID == postgresDBID {
-					targetDB = sqlbase.PgDatabaseName
+					targetDB = catalogkeys.PgDatabaseName
 				}
 			} else {
 				database, ok := databasesByID[table.ParentID]
@@ -534,7 +539,7 @@ func allocateDescriptorRewrites(
 						return err
 					}
 					// If the collided object isn't a type, then error out.
-					existingType, isType := desc.(*sqlbase.ImmutableTypeDescriptor)
+					existingType, isType := desc.(*typedesc.ImmutableTypeDescriptor)
 					if !isType {
 						return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
@@ -608,7 +613,7 @@ func allocateDescriptorRewrites(
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		if descriptorCoverage == tree.AllDescriptors {
-			if table.ParentID == sqlbase.SystemDB.GetID() {
+			if table.ParentID == systemschema.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
 				descriptorsToRemap = append(descriptorsToRemap, table)
 			} else {
@@ -648,7 +653,7 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	sort.Sort(sqlbase.DescriptorInterfaces(descriptorsToRemap))
+	sort.Sort(catalog.Descriptors(descriptorsToRemap))
 
 	// Generate new IDs for the tables that need to be remapped.
 	for _, desc := range descriptorsToRemap {
@@ -670,21 +675,17 @@ func allocateDescriptorRewrites(
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeTableDescsInBackupManifests(
-	ctx context.Context,
-	backupManifests []BackupManifest,
-	codec keys.SQLCodec,
-	skipFKsWithNoMatchingTable bool,
+	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
-	protoGetter := sqlbase.MapProtoGetter{
-		Protos: make(map[interface{}]protoutil.Message),
-	}
-	// Populate the protoGetter with all table descriptors in all backup
+	descGetter := sqlbase.MapDescGetter{}
+
+	// Populate the descGetter with all table descriptors in all backup
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
 			if table := sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
-				protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(codec, table.ID))] =
-					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor)).DescriptorProto()
+				descGetter[table.ID] =
+					sqlbase.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
 			}
 		}
 	}
@@ -699,7 +700,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 			if !sqlbase.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, protoGetter, codec, skipFKsWithNoMatchingTable, table)
+			desc, err := sqlbase.NewFilledInMutableExistingTableDescriptor(ctx, descGetter, skipFKsWithNoMatchingTable, table)
 			if err != nil {
 				return err
 			}
@@ -717,12 +718,12 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 	}
 	// Collect potential new OID values.
 	var newOID, newArrayOID oid.Oid
-	if rw, ok := descriptorRewrites[sqlbase.GetTypeDescID(typ)]; ok {
-		newOID = sqlbase.TypeIDToOID(rw.ID)
+	if rw, ok := descriptorRewrites[typedesc.GetTypeDescID(typ)]; ok {
+		newOID = typedesc.TypeIDToOID(rw.ID)
 	}
 	if typ.Family() != types.ArrayFamily {
-		if rw, ok := descriptorRewrites[sqlbase.GetArrayTypeDescID(typ)]; ok {
-			newArrayOID = sqlbase.TypeIDToOID(rw.ID)
+		if rw, ok := descriptorRewrites[typedesc.GetArrayTypeDescID(typ)]; ok {
+			newArrayOID = typedesc.TypeIDToOID(rw.ID)
 		}
 	}
 	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)
@@ -735,7 +736,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 // rewriteTypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
 func rewriteTypeDescs(
-	types []*sqlbase.MutableTypeDescriptor, descriptorRewrites DescRewriteMap,
+	types []*typedesc.MutableTypeDescriptor, descriptorRewrites DescRewriteMap,
 ) error {
 	for _, typ := range types {
 		rewrite, ok := descriptorRewrites[typ.ID]
@@ -1066,7 +1067,7 @@ func restoreJobDescription(
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
 		return nil, nil, nil, false, nil
@@ -1278,8 +1279,9 @@ func doRestorePlan(
 		)
 	}
 
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, p.ExecCfg().Codec,
-		restoreStmt.Options.SkipMissingFKs); err != nil {
+	if err := maybeUpgradeTableDescsInBackupManifests(
+		ctx, mainBackupManifests, restoreStmt.Options.SkipMissingFKs,
+	); err != nil {
 		return err
 	}
 
@@ -1306,19 +1308,19 @@ func doRestorePlan(
 		}
 	}
 
-	databasesByID := make(map[descpb.ID]*sqlbase.MutableDatabaseDescriptor)
+	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
 	schemasByID := make(map[descpb.ID]*sqlbase.MutableSchemaDescriptor)
 	tablesByID := make(map[descpb.ID]*sqlbase.MutableTableDescriptor)
-	typesByID := make(map[descpb.ID]*sqlbase.MutableTypeDescriptor)
+	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
-		case *sqlbase.MutableDatabaseDescriptor:
+		case *dbdesc.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
 		case *sqlbase.MutableSchemaDescriptor:
 			schemasByID[desc.ID] = desc
 		case *sqlbase.MutableTableDescriptor:
 			tablesByID[desc.ID] = desc
-		case *sqlbase.MutableTypeDescriptor:
+		case *typedesc.MutableTypeDescriptor:
 			typesByID[desc.ID] = desc
 		}
 	}
@@ -1355,7 +1357,7 @@ func doRestorePlan(
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
 	}
-	var types []*sqlbase.MutableTypeDescriptor
+	var types []*typedesc.MutableTypeDescriptor
 	for _, desc := range typesByID {
 		types = append(types, desc)
 	}

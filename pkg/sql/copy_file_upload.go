@@ -17,10 +17,11 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -67,7 +68,7 @@ func newFileUploadMachine(
 	c := &copyMachine{
 		conn: conn,
 		// The planner will be prepared before use.
-		p: planner{execCfg: execCfg, alloc: &sqlbase.DatumAlloc{}},
+		p: planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}},
 	}
 	f = &fileUploadMachine{
 		c:  c,
@@ -130,8 +131,8 @@ func newFileUploadMachine(
 		_ = store.Delete(ctx, "")
 	}
 
-	c.resultColumns = make(sqlbase.ResultColumns, 1)
-	c.resultColumns[0] = sqlbase.ResultColumn{Typ: types.Bytes}
+	c.resultColumns = make(colinfo.ResultColumns, 1)
+	c.resultColumns[0] = colinfo.ResultColumn{Typ: types.Bytes}
 	c.parsingEvalCtx = c.p.EvalContext()
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()

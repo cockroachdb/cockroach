@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -198,8 +198,8 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 			err     error
 		)
 		for i := range data {
-			d := sqlbase.RandDatum(rng, t, false /* nullOk */)
-			data[i], err = sqlbase.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
+			d := rowenc.RandDatum(rng, t, false /* nullOk */)
+			data[i], err = rowenc.EncodeTableValue(data[i], descpb.ColumnID(encoding.NoColumnID), d, scratch)
 			if err != nil {
 				panic(err)
 			}
@@ -253,7 +253,7 @@ func TestRecordBatchSerializerSerializeDeserializeRandom(t *testing.T) {
 	)
 
 	for i := range typs {
-		typs[i] = sqlbase.RandType(rng)
+		typs[i] = rowenc.RandType(rng)
 		data[i] = randomDataFromType(rng, typs[i], dataLen, nullProbability)
 	}
 

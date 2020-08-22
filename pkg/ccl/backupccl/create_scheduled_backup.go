@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/errors"
@@ -506,7 +506,7 @@ func makeScheduledBackupEval(
 }
 
 // scheduledBackupHeader is the header for "CREATE SCHEDULE..." statements results.
-var scheduledBackupHeader = sqlbase.ResultColumns{
+var scheduledBackupHeader = colinfo.ResultColumns{
 	{Name: "schedule_id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
 	{Name: "status", Typ: types.String},
@@ -517,7 +517,7 @@ var scheduledBackupHeader = sqlbase.ResultColumns{
 
 func createBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	schedule, ok := stmt.(*tree.ScheduledBackup)
 	if !ok {
 		return nil, nil, nil, false, nil

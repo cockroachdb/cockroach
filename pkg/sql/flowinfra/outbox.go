@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -117,7 +117,7 @@ func (m *Outbox) Init(typs []*types.T) {
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
 func (m *Outbox) addRow(
-	ctx context.Context, row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	ctx context.Context, row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
 	mustFlush := false
 	var encodingErr error

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -226,7 +227,7 @@ func (ie *InternalExecutor) QueryWithCols(
 	session sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
+) ([]tree.Datums, colinfo.ResultColumns, error) {
 	return ie.queryInternal(ctx, opName, txn, session, stmt, qargs...)
 }
 
@@ -237,7 +238,7 @@ func (ie *InternalExecutor) queryInternal(
 	sessionDataOverride sqlbase.InternalExecutorSessionDataOverride,
 	stmt string,
 	qargs ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
+) ([]tree.Datums, colinfo.ResultColumns, error) {
 	res, err := ie.execInternal(ctx, opName, txn, sessionDataOverride, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
@@ -319,7 +320,7 @@ func (ie *InternalExecutor) ExecEx(
 type result struct {
 	rows         []tree.Datums
 	rowsAffected int
-	cols         sqlbase.ResultColumns
+	cols         colinfo.ResultColumns
 	err          error
 }
 

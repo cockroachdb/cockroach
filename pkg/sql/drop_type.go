@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -27,7 +28,7 @@ import (
 
 type dropTypeNode struct {
 	n  *tree.DropType
-	td map[descpb.ID]*sqlbase.MutableTypeDescriptor
+	td map[descpb.ID]*typedesc.MutableTypeDescriptor
 }
 
 // Use to satisfy the linter.
@@ -36,7 +37,7 @@ var _ planNode = &dropTypeNode{n: nil}
 func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, error) {
 	node := &dropTypeNode{
 		n:  n,
-		td: make(map[descpb.ID]*sqlbase.MutableTypeDescriptor),
+		td: make(map[descpb.ID]*typedesc.MutableTypeDescriptor),
 	}
 	if n.DropBehavior == tree.DropCascade {
 		return nil, unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported")
@@ -86,7 +87,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 }
 
 func (p *planner) canDropTypeDesc(
-	ctx context.Context, desc *sqlbase.MutableTypeDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, desc *typedesc.MutableTypeDescriptor, behavior tree.DropBehavior,
 ) error {
 	if err := p.canModifyType(ctx, desc); err != nil {
 		return err
@@ -214,7 +215,7 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 
 // dropTypeImpl does the work of dropping a type and everything that depends on it.
 func (p *planner) dropTypeImpl(
-	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string, queueJob bool,
+	ctx context.Context, typeDesc *typedesc.MutableTypeDescriptor, jobDesc string, queueJob bool,
 ) error {
 	if typeDesc.Dropped() {
 		return errors.Errorf("type %q is already being dropped", typeDesc.Name)

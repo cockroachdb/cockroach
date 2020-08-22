@@ -11,10 +11,10 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -411,7 +411,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(
 
 	// Don't bother looking for equivalent columns if colType has a composite
 	// key encoding.
-	if sqlbase.HasCompositeKeyEncoding(colType) {
+	if colinfo.HasCompositeKeyEncoding(colType) {
 		res.Add(col)
 		return res
 	}

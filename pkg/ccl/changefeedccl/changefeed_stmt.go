@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,14 +59,14 @@ func init() {
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
 
 	var sinkURIFn func() (string, error)
-	var header sqlbase.ResultColumns
+	var header colinfo.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
 	avoidBuffering := false
 	if unspecifiedSink {
@@ -78,7 +78,7 @@ func changefeedPlanHook(
 		// value BYTES)` and they correspond exactly to what would be emitted to
 		// a sink.
 		sinkURIFn = func() (string, error) { return ``, nil }
-		header = sqlbase.ResultColumns{
+		header = colinfo.ResultColumns{
 			{Name: "table", Typ: types.String},
 			{Name: "key", Typ: types.Bytes},
 			{Name: "value", Typ: types.Bytes},
@@ -90,7 +90,7 @@ func changefeedPlanHook(
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		header = sqlbase.ResultColumns{
+		header = colinfo.ResultColumns{
 			{Name: "job_id", Typ: types.Int},
 		}
 	}

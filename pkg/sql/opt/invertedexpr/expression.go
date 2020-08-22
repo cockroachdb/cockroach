@@ -17,7 +17,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -29,7 +29,7 @@ import (
 // defined by the SpanExpressionProto.Node.
 type DatumsToInvertedExpr interface {
 	// Convert uses the lookup column to construct an inverted expression.
-	Convert(context.Context, sqlbase.EncDatumRow) (*SpanExpressionProto, error)
+	Convert(context.Context, rowenc.EncDatumRow) (*SpanExpressionProto, error)
 }
 
 // EncInvertedVal is the encoded form of a value in the inverted column.

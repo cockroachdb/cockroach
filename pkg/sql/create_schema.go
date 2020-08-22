@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -117,7 +118,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Finally create the schema on disk.
 	return p.createDescriptorWithID(
 		params.ctx,
-		sqlbase.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
+		catalogkeys.NewSchemaKey(db.ID, n.Schema).Key(p.ExecCfg().Codec),
 		id,
 		desc,
 		params.ExecCfg().Settings,

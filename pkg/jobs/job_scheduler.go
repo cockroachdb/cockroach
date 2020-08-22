@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -96,7 +97,7 @@ ORDER BY random()
 // unmarshalScheduledJob is a helper to deserialize a row returned by
 // getFindSchedulesStatement() into a ScheduledJob
 func (s *jobScheduler) unmarshalScheduledJob(
-	row []tree.Datum, cols []sqlbase.ResultColumn,
+	row []tree.Datum, cols []colinfo.ResultColumn,
 ) (*ScheduledJob, int64, error) {
 	j := NewScheduledJob(s.env)
 	if err := j.InitFromDatums(row[1:], cols[1:]); err != nil {

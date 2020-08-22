@@ -13,13 +13,13 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type alterDatabaseOwnerNode struct {
 	n    *tree.AlterDatabaseOwner
-	desc *sqlbase.MutableDatabaseDescriptor
+	desc *dbdesc.MutableDatabaseDescriptor
 }
 
 // AlterDatabaseOwner transforms a tree.AlterDatabaseOwner into a plan node.

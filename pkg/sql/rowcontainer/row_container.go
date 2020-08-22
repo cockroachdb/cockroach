@@ -16,10 +16,13 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -30,7 +33,7 @@ import (
 // these.
 type SortableRowContainer interface {
 	Len() int
-	AddRow(context.Context, sqlbase.EncDatumRow) error
+	AddRow(context.Context, rowenc.EncDatumRow) error
 	// Sort sorts the rows according to the current ordering (the one set either
 	// at initialization or by the last call of Reorder() - if the container is
 	// ReorderableRowContainer).
@@ -55,7 +58,7 @@ type SortableRowContainer interface {
 	InitTopK()
 	// MaybeReplaceMax checks whether the given row belongs in the top k rows,
 	// potentially evicting a row in favor of the given row.
-	MaybeReplaceMax(context.Context, sqlbase.EncDatumRow) error
+	MaybeReplaceMax(context.Context, rowenc.EncDatumRow) error
 
 	// Close frees up resources held by the SortableRowContainer.
 	Close(context.Context)
@@ -69,7 +72,7 @@ type ReorderableRowContainer interface {
 	// Reorder changes the ordering on which the rows are sorted. In order for
 	// new ordering to take effect, Sort() must be called. It returns an error if
 	// it occurs.
-	Reorder(context.Context, sqlbase.ColumnOrdering) error
+	Reorder(context.Context, colinfo.ColumnOrdering) error
 }
 
 // IndexedRowContainer is a ReorderableRowContainer which also implements
@@ -90,7 +93,7 @@ type DeDupingRowContainer interface {
 	// AddRowWithDeDup adds the given row if not already present in the
 	// container. It returns the dense number of when the row is first
 	// added.
-	AddRowWithDeDup(context.Context, sqlbase.EncDatumRow) (int, error)
+	AddRowWithDeDup(context.Context, rowenc.EncDatumRow) (int, error)
 	// UnsafeReset resets the container, allowing for reuse. It renders all
 	// previously allocated rows unsafe.
 	UnsafeReset(context.Context) error
@@ -126,7 +129,7 @@ type RowIterator interface {
 	Next()
 	// Row returns the current row. The returned row is only valid until the
 	// next call to Rewind() or Next().
-	Row() (sqlbase.EncDatumRow, error)
+	Row() (rowenc.EncDatumRow, error)
 
 	// Close frees up resources held by the iterator.
 	Close()
@@ -139,13 +142,13 @@ type MemRowContainer struct {
 	RowContainer
 	types         []*types.T
 	invertSorting bool // Inverts the sorting predicate.
-	ordering      sqlbase.ColumnOrdering
+	ordering      colinfo.ColumnOrdering
 	scratchRow    tree.Datums
-	scratchEncRow sqlbase.EncDatumRow
+	scratchEncRow rowenc.EncDatumRow
 
 	evalCtx *tree.EvalContext
 
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc rowenc.DatumAlloc
 }
 
 var _ heap.Interface = &MemRowContainer{}
@@ -154,7 +157,7 @@ var _ IndexedRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering sqlbase.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
+	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *tree.EvalContext,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon)
 }
@@ -162,17 +165,17 @@ func (mc *MemRowContainer) Init(
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
-	ordering sqlbase.ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	types []*types.T,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 ) {
 	acc := mon.MakeBoundAccount()
-	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0 /* rowCapacity */)
+	mc.RowContainer.Init(acc, colinfo.ColTypeInfoFromColTypes(types), 0 /* rowCapacity */)
 	mc.types = types
 	mc.ordering = ordering
 	mc.scratchRow = make(tree.Datums, len(types))
-	mc.scratchEncRow = make(sqlbase.EncDatumRow, len(types))
+	mc.scratchEncRow = make(rowenc.EncDatumRow, len(types))
 	mc.evalCtx = evalCtx
 }
 
@@ -183,7 +186,7 @@ func (mc *MemRowContainer) Types() []*types.T {
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (mc *MemRowContainer) Less(i, j int) bool {
-	cmp := sqlbase.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
+	cmp := colinfo.CompareDatums(mc.ordering, mc.evalCtx, mc.At(i), mc.At(j))
 	if mc.invertSorting {
 		cmp = -cmp
 	}
@@ -192,16 +195,16 @@ func (mc *MemRowContainer) Less(i, j int) bool {
 
 // EncRow returns the idx-th row as an EncDatumRow. The slice itself is reused
 // so it is only valid until the next call to EncRow.
-func (mc *MemRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
+func (mc *MemRowContainer) EncRow(idx int) rowenc.EncDatumRow {
 	datums := mc.At(idx)
 	for i, d := range datums {
-		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
+		mc.scratchEncRow[i] = rowenc.DatumToEncDatum(mc.types[i], d)
 	}
 	return mc.scratchEncRow
 }
 
 // AddRow adds a row to the container.
-func (mc *MemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	if len(row) != len(mc.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(mc.types))
 	}
@@ -219,13 +222,13 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 // Sort is part of the SortableRowContainer interface.
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
-	cancelChecker := sqlbase.NewCancelChecker(ctx)
+	cancelChecker := cancelchecker.NewCancelChecker(ctx)
 	sqlbase.Sort(mc, cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new
 // MemRowContainer and can just change the ordering on-the-fly.
-func (mc *MemRowContainer) Reorder(_ context.Context, ordering sqlbase.ColumnOrdering) error {
+func (mc *MemRowContainer) Reorder(_ context.Context, ordering colinfo.ColumnOrdering) error {
 	mc.ordering = ordering
 	return nil
 }
@@ -238,7 +241,7 @@ func (mc *MemRowContainer) Pop() interface{} { panic("unimplemented") }
 
 // MaybeReplaceMax replaces the maximum element with the given row, if it is
 // smaller. Assumes InitTopK was called.
-func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (mc *MemRowContainer) MaybeReplaceMax(ctx context.Context, row rowenc.EncDatumRow) error {
 	max := mc.At(0)
 	cmp, err := row.CompareToDatums(mc.types, &mc.datumAlloc, mc.ordering, mc.evalCtx, max)
 	if err != nil {
@@ -298,7 +301,7 @@ func (i *memRowIterator) Next() {
 }
 
 // Row implements the RowIterator interface.
-func (i *memRowIterator) Row() (sqlbase.EncDatumRow, error) {
+func (i *memRowIterator) Row() (rowenc.EncDatumRow, error) {
 	return i.EncRow(i.curIdx), nil
 }
 
@@ -341,7 +344,7 @@ func (i memRowFinalIterator) Next() {
 }
 
 // Row implements the RowIterator interface.
-func (i memRowFinalIterator) Row() (sqlbase.EncDatumRow, error) {
+func (i memRowFinalIterator) Row() (rowenc.EncDatumRow, error) {
 	return i.EncRow(0), nil
 }
 
@@ -370,7 +373,7 @@ type DiskBackedRowContainer struct {
 	// encodings keeps around the DatumEncoding equivalents of the encoding
 	// directions in ordering to avoid conversions in hot paths.
 	encodings  []descpb.DatumEncoding
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc rowenc.DatumAlloc
 	scratchKey []byte
 
 	spilled bool
@@ -397,7 +400,7 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 //  - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //    and when it spills to disk.
 func (f *DiskBackedRowContainer) Init(
-	ordering sqlbase.ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	types []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
@@ -412,7 +415,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.diskMonitor = diskMonitor
 	f.encodings = make([]descpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
-		f.encodings[i] = sqlbase.EncodingDirToDatumEncoding(orderInfo.Direction)
+		f.encodings[i] = rowenc.EncodingDirToDatumEncoding(orderInfo.Direction)
 	}
 }
 
@@ -436,7 +439,7 @@ func (f *DiskBackedRowContainer) Len() int {
 }
 
 // AddRow is part of the SortableRowContainer interface.
-func (f *DiskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (f *DiskBackedRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	if err := f.src.AddRow(ctx, row); err != nil {
 		if spilled, spillErr := f.spillIfMemErr(ctx, err); !spilled && spillErr == nil {
 			// The error was not an out of memory error.
@@ -453,7 +456,7 @@ func (f *DiskBackedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatu
 
 // AddRowWithDeDup is part of the DeDupingRowContainer interface.
 func (f *DiskBackedRowContainer) AddRowWithDeDup(
-	ctx context.Context, row sqlbase.EncDatumRow,
+	ctx context.Context, row rowenc.EncDatumRow,
 ) (int, error) {
 	if !f.UsingDisk() {
 		if err := f.encodeKey(ctx, row); err != nil {
@@ -478,7 +481,7 @@ func (f *DiskBackedRowContainer) AddRowWithDeDup(
 	return f.drc.AddRowWithDeDup(ctx, row)
 }
 
-func (f *DiskBackedRowContainer) encodeKey(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (f *DiskBackedRowContainer) encodeKey(ctx context.Context, row rowenc.EncDatumRow) error {
 	if len(row) != len(f.mrc.types) {
 		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(f.mrc.types))
 	}
@@ -501,7 +504,7 @@ func (f *DiskBackedRowContainer) Sort(ctx context.Context) {
 
 // Reorder implements ReorderableRowContainer.
 func (f *DiskBackedRowContainer) Reorder(
-	ctx context.Context, ordering sqlbase.ColumnOrdering,
+	ctx context.Context, ordering colinfo.ColumnOrdering,
 ) error {
 	return f.src.Reorder(ctx, ordering)
 }
@@ -513,7 +516,7 @@ func (f *DiskBackedRowContainer) InitTopK() {
 
 // MaybeReplaceMax is part of the SortableRowContainer interface.
 func (f *DiskBackedRowContainer) MaybeReplaceMax(
-	ctx context.Context, row sqlbase.EncDatumRow,
+	ctx context.Context, row rowenc.EncDatumRow,
 ) error {
 	return f.src.MaybeReplaceMax(ctx, row)
 }
@@ -630,10 +633,10 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 type DiskBackedIndexedRowContainer struct {
 	*DiskBackedRowContainer
 
-	scratchEncRow sqlbase.EncDatumRow
+	scratchEncRow rowenc.EncDatumRow
 	storedTypes   []*types.T
-	datumAlloc    sqlbase.DatumAlloc
-	rowAlloc      sqlbase.EncDatumRowAlloc
+	datumAlloc    rowenc.DatumAlloc
+	rowAlloc      rowenc.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
 
 	// These fields are for optimizations when container spilled to disk.
@@ -674,7 +677,7 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 //  - memoryMonitor is used to monitor this container's memory usage.
 //  - diskMonitor is used to monitor this container's disk usage.
 func NewDiskBackedIndexedRowContainer(
-	ordering sqlbase.ColumnOrdering,
+	ordering colinfo.ColumnOrdering,
 	typs []*types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
@@ -687,7 +690,7 @@ func NewDiskBackedIndexedRowContainer(
 	d.storedTypes = make([]*types.T, len(typs)+1)
 	copy(d.storedTypes, typs)
 	d.storedTypes[len(d.storedTypes)-1] = types.Int
-	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
+	d.scratchEncRow = make(rowenc.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
 	d.maxCacheSize = maxIndexedRowsCacheSize
@@ -696,9 +699,9 @@ func NewDiskBackedIndexedRowContainer(
 }
 
 // AddRow implements SortableRowContainer.
-func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
-	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
+	f.scratchEncRow[len(f.scratchEncRow)-1] = rowenc.DatumToEncDatum(
 		types.Int,
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
@@ -708,7 +711,7 @@ func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.
 
 // Reorder implements ReorderableRowContainer.
 func (f *DiskBackedIndexedRowContainer) Reorder(
-	ctx context.Context, ordering sqlbase.ColumnOrdering,
+	ctx context.Context, ordering colinfo.ColumnOrdering,
 ) error {
 	if err := f.DiskBackedRowContainer.Reorder(ctx, ordering); err != nil {
 		return err
@@ -765,7 +768,7 @@ const maxIndexedRowsCacheSize = 4096
 func (f *DiskBackedIndexedRowContainer) GetRow(
 	ctx context.Context, pos int,
 ) (tree.IndexedRow, error) {
-	var rowWithIdx sqlbase.EncDatumRow
+	var rowWithIdx rowenc.EncDatumRow
 	var err error
 	if f.UsingDisk() {
 		if f.DisableCache {
@@ -873,7 +876,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 // cache to store 'row' and puts it as the last one in the cache. It adjusts
 // the memory account accordingly and, if necessary, removes some first rows.
 func (f *DiskBackedIndexedRowContainer) reuseFirstRowInCache(
-	ctx context.Context, idx int, row sqlbase.EncDatumRow,
+	ctx context.Context, idx int, row rowenc.EncDatumRow,
 ) error {
 	newRowSize := row.Size()
 	for {
@@ -964,7 +967,7 @@ func (f *DiskBackedIndexedRowContainer) getRowWithoutCache(
 // IndexedRow is a row with a corresponding index.
 type IndexedRow struct {
 	Idx int
-	Row sqlbase.EncDatumRow
+	Row rowenc.EncDatumRow
 }
 
 // GetIdx implements tree.IndexedRow interface.

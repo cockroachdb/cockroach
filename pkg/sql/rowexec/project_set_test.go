@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -27,18 +27,18 @@ import (
 func TestProjectSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.IntEncDatum(i)
+		v[i] = rowenc.IntEncDatum(i)
 	}
-	null := sqlbase.NullEncDatum()
+	null := rowenc.NullEncDatum()
 
 	testCases := []struct {
 		description string
 		spec        execinfrapb.ProjectSetSpec
-		input       sqlbase.EncDatumRows
+		input       rowenc.EncDatumRows
 		inputTypes  []*types.T
-		expected    sqlbase.EncDatumRows
+		expected    rowenc.EncDatumRows
 	}{
 		{
 			description: "scalar function",
@@ -46,14 +46,14 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "@1 + 1"},
 				},
-				GeneratedColumns: sqlbase.OneIntCol,
+				GeneratedColumns: rowenc.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2]},
 			},
-			inputTypes: sqlbase.OneIntCol,
-			expected: sqlbase.EncDatumRows{
+			inputTypes: rowenc.OneIntCol,
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
 		},
@@ -63,15 +63,15 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
-				GeneratedColumns: sqlbase.OneIntCol,
+				GeneratedColumns: rowenc.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[0]},
 				{v[1]},
 			},
-			inputTypes: sqlbase.OneIntCol,
-			expected: sqlbase.EncDatumRows{
+			inputTypes: rowenc.OneIntCol,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[0], v[2]},
@@ -91,11 +91,11 @@ func TestProjectSet(t *testing.T) {
 				GeneratedColumns: intCols(4),
 				NumColsPerGen:    []uint32{1, 1, 1, 1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: sqlbase.OneIntCol,
-			expected: sqlbase.EncDatumRows{
+			inputTypes: rowenc.OneIntCol,
+			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0], v[0], v[0]},
 				{v[0], null, null, v[1], v[1]},
 				{v[0], null, null, null, v[2]},
@@ -126,15 +126,15 @@ func BenchmarkProjectSet(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.IntEncDatum(i)
+		v[i] = rowenc.IntEncDatum(i)
 	}
 
 	benchCases := []struct {
 		description string
 		spec        execinfrapb.ProjectSetSpec
-		input       sqlbase.EncDatumRows
+		input       rowenc.EncDatumRows
 		inputTypes  []*types.T
 	}{
 		{
@@ -143,13 +143,13 @@ func BenchmarkProjectSet(b *testing.B) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(1, 100000)"},
 				},
-				GeneratedColumns: sqlbase.OneIntCol,
+				GeneratedColumns: rowenc.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: sqlbase.OneIntCol,
+			inputTypes: rowenc.OneIntCol,
 		},
 	}
 

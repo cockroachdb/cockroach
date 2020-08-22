@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1686,7 +1687,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			txn.SetFixedTimestamp(ctx, table.ModificationTime)
 
 			// Look up the descriptor.
-			descKey := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descID)
+			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descID)
 			dbDesc := &descpb.Descriptor{}
 			ts, err := txn.GetProtoTs(ctx, descKey, dbDesc)
 			if err != nil {

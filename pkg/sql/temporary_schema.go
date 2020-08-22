@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -90,7 +91,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, dbID descpb.ID,
 ) (descpb.ID, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
+	sKey := catalogkeys.NewSchemaKey(dbID, tempSchemaName)
 	schemaID, err := catalogkv.GetDescriptorID(ctx, p.txn, p.ExecCfg().Codec, sKey)
 	if err != nil {
 		return 0, err

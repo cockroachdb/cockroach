@@ -20,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,84 +38,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
-
-// DescriptorInterfaces is a sortable list of DescriptorInterfaces.
-type DescriptorInterfaces []catalog.Descriptor
-
-func (d DescriptorInterfaces) Len() int           { return len(d) }
-func (d DescriptorInterfaces) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
-func (d DescriptorInterfaces) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }
-
-// DescriptorProto prepares desc for serialization.
-func (desc *ImmutableTableDescriptor) DescriptorProto() *descpb.Descriptor {
-	// TODO(ajwerner): Copy over the metadata fields. This method should not exist
-	// on the TableDescriptor itself but rather on the wrappers.
-	return wrapDescriptor(&desc.TableDescriptor)
-}
-
-// ImmutableTableDescriptor is a custom type for TableDescriptors
-// It holds precomputed values and the underlying TableDescriptor
-// should be const.
-type ImmutableTableDescriptor struct {
-	descpb.TableDescriptor
-
-	// publicAndNonPublicCols is a list of public and non-public columns.
-	// It is partitioned by the state of the column: public, write-only, delete-only
-	publicAndNonPublicCols []descpb.ColumnDescriptor
-
-	// publicAndNonPublicCols is a list of public and non-public indexes.
-	// It is partitioned by the state of the index: public, write-only, delete-only
-	publicAndNonPublicIndexes []descpb.IndexDescriptor
-
-	writeOnlyColCount   int
-	writeOnlyIndexCount int
-
-	allChecks []descpb.TableDescriptor_CheckConstraint
-
-	// partialIndexOrds contains the ordinal of each partial index.
-	partialIndexOrds util.FastIntSet
-
-	// ReadableColumns is a list of columns (including those undergoing a schema change)
-	// which can be scanned. Columns in the process of a schema change
-	// are all set to nullable while column backfilling is still in
-	// progress, as mutation columns may have NULL values.
-	ReadableColumns []descpb.ColumnDescriptor
-
-	// columnsWithUDTs is a set of indexes into publicAndNonPublicCols containing
-	// indexes of columns that contain user defined types.
-	columnsWithUDTs []int
-
-	postDeserializationChanges PostDeserializationTableDescriptorChanges
-
-	// TODO (lucy): populate these and use them
-	// inboundFKs  []*ForeignKeyConstraint
-	// outboundFKs []*ForeignKeyConstraint
-}
-
-// GetPrimaryIndexID returns the ID of the primary index.
-func (desc *ImmutableTableDescriptor) GetPrimaryIndexID() descpb.IndexID {
-	return desc.PrimaryIndex.ID
-}
-
-// GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
-func (desc *ImmutableTableDescriptor) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
-	return desc.GetIndexes()
-}
-
-// IsTemporary returns true if this is a temporary table.
-func (desc *ImmutableTableDescriptor) IsTemporary() bool {
-	return desc.GetTemporary()
-}
-
-// GetPublicColumns return the public columns in the descriptor.
-func (desc *ImmutableTableDescriptor) GetPublicColumns() []descpb.ColumnDescriptor {
-	return desc.Columns
-}
-
-// GetColumnAtIdx returns the column at the specified index.
-func (desc *ImmutableTableDescriptor) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
-	return &desc.Columns[idx]
-}
 
 // MutableTableDescriptor is a custom type for TableDescriptors
 // going through schema mutations.
@@ -137,18 +62,6 @@ var ErrMissingColumns = errors.New("table must contain at least 1 column")
 
 // ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
-
-func validateName(name, typ string) error {
-	if len(name) == 0 {
-		return pgerror.Newf(pgcode.Syntax, "empty %s name", typ)
-	}
-	// TODO(pmattis): Do we want to be more restrictive than this?
-	return nil
-}
-
-// ErrDescriptorNotFound is returned by getTableDescFromID to signal that a
-// descriptor could not be found with the given id.
-var ErrDescriptorNotFound = errors.New("descriptor not found")
 
 // ErrIndexGCMutationsList is returned by FindIndexByID to signal that the
 // index with the given ID does not have a descriptor and is in the garbage
@@ -179,12 +92,11 @@ func NewMutableExistingTableDescriptor(tbl descpb.TableDescriptor) *MutableTable
 // but no error will be returned.
 func NewFilledInMutableExistingTableDescriptor(
 	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
+	dg catalog.DescGetter,
 	skipFKsWithMissingTable bool,
 	tbl *descpb.TableDescriptor,
 ) (*MutableTableDescriptor, error) {
-	desc, err := makeFilledInImmutableTableDescriptor(ctx, protoGetter, codec, tbl, skipFKsWithMissingTable)
+	desc, err := makeFilledInImmutableTableDescriptor(ctx, dg, tbl, skipFKsWithMissingTable)
 	if err != nil {
 		return nil, err
 	}
@@ -284,13 +196,9 @@ func NewImmutableTableDescriptor(tbl descpb.TableDescriptor) *ImmutableTableDesc
 // NewFilledInImmutableTableDescriptor will construct an
 // ImmutableTableDescriptor and potentially perform post-serialization upgrades.
 func NewFilledInImmutableTableDescriptor(
-	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
-	tbl *descpb.TableDescriptor,
+	ctx context.Context, dg catalog.DescGetter, tbl *descpb.TableDescriptor,
 ) (*ImmutableTableDescriptor, error) {
-	desc, err := makeFilledInImmutableTableDescriptor(ctx, protoGetter, codec, tbl,
-		false /* skipFKsWithMissingTable */)
+	desc, err := makeFilledInImmutableTableDescriptor(ctx, dg, tbl, false /* skipFKsWithMissingTable */)
 	if err != nil {
 		return nil, err
 	}
@@ -317,64 +225,17 @@ type PostDeserializationTableDescriptorChanges struct {
 
 func makeFilledInImmutableTableDescriptor(
 	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
+	dg catalog.DescGetter,
 	tbl *descpb.TableDescriptor,
 	skipFKsWithMissingTable bool,
 ) (ImmutableTableDescriptor, error) {
-	changes, err := maybeFillInDescriptor(ctx, protoGetter, codec, tbl, skipFKsWithMissingTable)
+	changes, err := maybeFillInDescriptor(ctx, dg, tbl, skipFKsWithMissingTable)
 	if err != nil {
 		return ImmutableTableDescriptor{}, err
 	}
 	desc := MakeImmutableTableDescriptor(*tbl)
 	desc.postDeserializationChanges = changes
 	return desc, nil
-}
-
-// getTableDescFromID retrieves the table descriptor for the table
-// ID passed in using an existing proto getter. Returns an error if the
-// descriptor doesn't exist or if it exists and is not a table.
-// NB: If this function changes, make sure to update GetTableDescFromIDWithFKsChanged
-// in a similar way.
-//
-// TODO(ajwerner): Get rid of this function after we plumb through a
-// higher-level abstraction for dealing with retrieving descriptors by ID
-// for validation and upgrading FKs.
-func getTableDescFromID(
-	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
-) (*descpb.TableDescriptor, error) {
-	table, err := getTableDescFromIDRaw(ctx, protoGetter, codec, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := maybeFillInDescriptor(ctx, protoGetter, codec, table, false); err != nil {
-		return nil, err
-	}
-
-	return table, nil
-}
-
-// getTableDescFromIDRaw retrieves the table descriptor for the table
-// ID passed in using an existing proto getter. Returns an error if the
-// descriptor doesn't exist or if it exists and is not a table. Note that it
-// does not "fill in" the descriptor, which performs various upgrade steps for
-// migrations and is *required* before ordinary presentation to other code. This
-// method is for internal use only and shouldn't get exposed.
-func getTableDescFromIDRaw(
-	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec, id descpb.ID,
-) (*descpb.TableDescriptor, error) {
-	desc := &descpb.Descriptor{}
-	descKey := MakeDescMetadataKey(codec, id)
-	ts, err := protoGetter.GetProtoTs(ctx, descKey, desc)
-	if err != nil {
-		return nil, err
-	}
-	table := TableFromDescriptor(desc, ts)
-	if table == nil {
-		return nil, ErrDescriptorNotFound
-	}
-	return table, nil
 }
 
 // FindIndexPartitionByName searches this index descriptor for a partition whose name
@@ -429,14 +290,8 @@ func (desc *ImmutableTableDescriptor) IsPhysicalTable() bool {
 func (desc *ImmutableTableDescriptor) FindIndexByID(
 	id descpb.IndexID,
 ) (*descpb.IndexDescriptor, error) {
-	return findTableIndexByID(&desc.TableDescriptor, id)
-}
-
-func findTableIndexByID(
-	desc *descpb.TableDescriptor, id descpb.IndexID,
-) (*descpb.IndexDescriptor, error) {
 	if desc.PrimaryIndex.ID == id {
-		return &desc.PrimaryIndex, nil
+		return desc.GetPrimaryIndex(), nil
 	}
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
@@ -734,17 +589,16 @@ func generatedFamilyName(familyID descpb.FamilyID, columnNames []string) string 
 // (for example: additional default privileges).
 func maybeFillInDescriptor(
 	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
+	dg catalog.DescGetter,
 	desc *descpb.TableDescriptor,
 	skipFKsWithNoMatchingTable bool,
 ) (changes PostDeserializationTableDescriptorChanges, err error) {
 	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
 	changes.FixedPrivileges = descpb.MaybeFixPrivileges(desc.ID, desc.Privileges)
 
-	if protoGetter != nil {
+	if dg != nil {
 		changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
-			ctx, protoGetter, codec, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)
+			ctx, dg, skipFKsWithNoMatchingTable /* skipFKsWithNoMatchingTable*/, desc)
 	}
 	if err != nil {
 		return PostDeserializationTableDescriptorChanges{}, err
@@ -752,34 +606,25 @@ func maybeFillInDescriptor(
 	return changes, nil
 }
 
-// MapProtoGetter is a ProtoGetter that has a hard-coded map of keys to proto
+// MapDescGetter is a protoGetter that has a hard-coded map of keys to proto
 // messages.
-type MapProtoGetter struct {
-	Protos map[interface{}]protoutil.Message
+type MapDescGetter map[descpb.ID]catalog.Descriptor
+
+// GetDesc implements the catalog.DescGetter interface.
+func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+	desc := m[id]
+	return desc, nil
 }
 
-// getProto implements the ProtoGetter interface.
-func (m MapProtoGetter) getProto(
-	ctx context.Context, key interface{}, msg protoutil.Message,
-) error {
-	msg.Reset()
-	if other, ok := m.Protos[string(key.(roachpb.Key))]; ok {
-		bytes := make([]byte, other.Size())
-		if _, err := other.MarshalTo(bytes); err != nil {
-			return err
-		}
-		if err := protoutil.Unmarshal(bytes, msg); err != nil {
-			return err
-		}
+// GetDescs implements the catalog.DescGetter interface.
+func (m MapDescGetter) GetDescs(
+	ctx context.Context, ids []descpb.ID,
+) ([]catalog.Descriptor, error) {
+	ret := make([]catalog.Descriptor, len(ids))
+	for i, id := range ids {
+		ret[i], _ = m.GetDesc(ctx, id)
 	}
-	return nil
-}
-
-// GetProtoTs implements the ProtoGetter interface.
-func (m MapProtoGetter) GetProtoTs(
-	ctx context.Context, key interface{}, msg protoutil.Message,
-) (hlc.Timestamp, error) {
-	return hlc.Timestamp{}, m.getProto(ctx, key, msg)
+	return ret, nil
 }
 
 func indexHasDeprecatedForeignKeyRepresentation(idx *descpb.IndexDescriptor) bool {
@@ -823,8 +668,7 @@ func TableHasDeprecatedForeignKeyRepresentation(desc *descpb.TableDescriptor) bo
 // should get reworked but we're leaving this here for now for simplicity.
 func maybeUpgradeForeignKeyRepresentation(
 	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
+	dg catalog.DescGetter,
 	skipFKsWithNoMatchingTable bool,
 	desc *descpb.TableDescriptor,
 ) (bool, error) {
@@ -833,13 +677,13 @@ func maybeUpgradeForeignKeyRepresentation(
 		// keys, so we have no chance to properly upgrade it. Just return as-is.
 		return false, nil
 	}
-	otherUnupgradedTables := make(map[descpb.ID]*descpb.TableDescriptor)
+	otherUnupgradedTables := make(map[descpb.ID]catalog.TableDescriptor)
 	changed := false
 	// No need to process mutations, since only descriptors written on a 19.2
 	// cluster (after finalizing the upgrade) have foreign key mutations.
 	for i := range desc.Indexes {
 		newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-			ctx, protoGetter, codec, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
+			ctx, dg, otherUnupgradedTables, desc, &desc.Indexes[i], skipFKsWithNoMatchingTable,
 		)
 		if err != nil {
 			return false, err
@@ -847,7 +691,7 @@ func maybeUpgradeForeignKeyRepresentation(
 		changed = changed || newChanged
 	}
 	newChanged, err := maybeUpgradeForeignKeyRepOnIndex(
-		ctx, protoGetter, codec, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
+		ctx, dg, otherUnupgradedTables, desc, &desc.PrimaryIndex, skipFKsWithNoMatchingTable,
 	)
 	if err != nil {
 		return false, err
@@ -859,14 +703,10 @@ func maybeUpgradeForeignKeyRepresentation(
 
 // maybeUpgradeForeignKeyRepOnIndex is the meat of the previous function - it
 // tries to upgrade a particular index's foreign key representation.
-//
-// TODO(ajwerner): This needs to take something that's going to give back an
-// ImmutableTableDescriptor rather than a regular TableDescriptor.
 func maybeUpgradeForeignKeyRepOnIndex(
 	ctx context.Context,
-	protoGetter catalog.ProtoGetter,
-	codec keys.SQLCodec,
-	otherUnupgradedTables map[descpb.ID]*descpb.TableDescriptor,
+	dg catalog.DescGetter,
+	otherUnupgradedTables map[descpb.ID]catalog.TableDescriptor,
 	desc *descpb.TableDescriptor,
 	idx *descpb.IndexDescriptor,
 	skipFKsWithNoMatchingTable bool,
@@ -875,9 +715,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	if idx.ForeignKey.IsSet() {
 		ref := &idx.ForeignKey
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
+			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
 			if err != nil {
-				if errors.Is(err, ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
 				} else {
 					return false, err
@@ -887,7 +727,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			}
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
-			referencedIndex, err := findTableIndexByID(tbl, ref.Index)
+			referencedIndex, err := tbl.FindIndexByID(ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -912,9 +752,9 @@ func maybeUpgradeForeignKeyRepOnIndex(
 	for refIdx := range idx.ReferencedBy {
 		ref := &(idx.ReferencedBy[refIdx])
 		if _, ok := otherUnupgradedTables[ref.Table]; !ok {
-			tbl, err := getTableDescFromIDRaw(ctx, protoGetter, codec, ref.Table)
+			tbl, err := catalog.GetTableDescFromID(ctx, dg, ref.Table)
 			if err != nil {
-				if errors.Is(err, ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) && skipFKsWithNoMatchingTable {
 					// Ignore this FK and keep going.
 				} else {
 					return false, err
@@ -925,7 +765,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 		}
 
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
-			originIndex, err := findTableIndexByID(otherTable, ref.Index)
+			originIndex, err := otherTable.FindIndexByID(ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -938,8 +778,10 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				// If we also find no matching reference in the new-style foreign keys,
 				// that indicates a corrupt reference.
 				var forwardFK *descpb.ForeignKeyConstraint
-				for i := range otherTable.OutboundFKs {
-					otherFK := &otherTable.OutboundFKs[i]
+				_ = otherTable.ForeachOutboundFK(func(otherFK *descpb.ForeignKeyConstraint) error {
+					if forwardFK != nil {
+						return nil
+					}
 					// To find a match, we find a foreign key reference that has the same
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
@@ -947,15 +789,15 @@ func maybeUpgradeForeignKeyRepOnIndex(
 						descpb.ColumnIDs(originIndex.ColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
-						break
 					}
-				}
+					return nil
+				})
 				if forwardFK == nil {
 					// Corrupted foreign key - there was no forward reference for the back
 					// reference.
 					return false, errors.AssertionFailedf(
 						"error finding foreign key on table %d for backref %+v",
-						otherTable.ID, ref)
+						otherTable.GetID(), ref)
 				}
 				inFK = descpb.ForeignKeyConstraint{
 					OriginTableID:       ref.Table,
@@ -1165,7 +1007,7 @@ func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
 	// collect the closure of ID's referenced.
 	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
-		typDesc, err := getType(UserDefinedTypeOIDToID(id))
+		typDesc, err := getType(typedesc.UserDefinedTypeOIDToID(id))
 		if err != nil {
 			return nil, err
 		}
@@ -1176,7 +1018,7 @@ func (desc *ImmutableTableDescriptor) GetAllReferencedTypeIDs(
 
 	// Now add all of the column types in the table.
 	addIDsInColumn := func(c *descpb.ColumnDescriptor) {
-		for id := range GetTypeDescriptorClosure(c.Type) {
+		for id := range typedesc.GetTypeDescriptorClosure(c.Type) {
 			ids[id] = struct{}{}
 		}
 	}
@@ -1299,44 +1141,6 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	return nil
 }
 
-// HasCompositeKeyEncoding returns true if key columns of the given kind can
-// have a composite encoding. For such types, it can be decided on a
-// case-by-base basis whether a given Datum requires the composite encoding.
-//
-// As an example of a composite encoding, collated string key columns are
-// encoded partly as a key and partly as a value. The key part is the collation
-// key, so that different strings that collate equal cannot both be used as
-// keys. The value part is the usual UTF-8 encoding of the string, stored so
-// that it can be recovered later for inspection/display.
-func HasCompositeKeyEncoding(typ *types.T) bool {
-	switch typ.Family() {
-	case types.CollatedStringFamily,
-		types.FloatFamily,
-		types.DecimalFamily:
-		return true
-	case types.ArrayFamily:
-		return HasCompositeKeyEncoding(typ.ArrayContents())
-	}
-	return false
-}
-
-// MustBeValueEncoded returns true if columns of the given kind can only be value
-// encoded.
-func MustBeValueEncoded(semanticType *types.T) bool {
-	switch semanticType.Family() {
-	case types.ArrayFamily:
-		switch semanticType.Oid() {
-		case oid.T_int2vector, oid.T_oidvector:
-			return true
-		default:
-			return MustBeValueEncoded(semanticType.ArrayContents())
-		}
-	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
-		return true
-	}
-	return false
-}
-
 func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]descpb.ColumnID) error {
 	if desc.NextIndexID == 0 {
 		desc.NextIndexID = 1
@@ -1370,7 +1174,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]desc
 	isCompositeColumn := make(map[descpb.ColumnID]struct{})
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
-		if HasCompositeKeyEncoding(col.Type) {
+		if colinfo.HasCompositeKeyEncoding(col.Type) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
 	}
@@ -1560,6 +1364,42 @@ func (desc *MutableTableDescriptor) allocateColumnFamilyIDs(
 	}
 }
 
+// fitColumnToFamily attempts to fit a new column into the existing column
+// families. If the heuristics find a fit, true is returned along with the
+// index of the selected family. Otherwise, false is returned and the column
+// should be put in a new family.
+//
+// Current heuristics:
+//  - Put all columns in family 0.
+func fitColumnToFamily(desc *MutableTableDescriptor, col descpb.ColumnDescriptor) (int, bool) {
+	// Fewer column families means fewer kv entries, which is generally faster.
+	// On the other hand, an update to any column in a family requires that they
+	// all are read and rewritten, so large (or numerous) columns that are not
+	// updated at the same time as other columns in the family make things
+	// slower.
+	//
+	// The initial heuristic used for family assignment tried to pack
+	// fixed-width columns into families up to a certain size and would put any
+	// variable-width column into its own family. This was conservative to
+	// guarantee that we avoid the worst-case behavior of a very large immutable
+	// blob in the same family as frequently updated columns.
+	//
+	// However, our initial customers have revealed that this is backward.
+	// Repeatedly, they have recreated existing schemas without any tuning and
+	// found lackluster performance. Each of these has turned out better as a
+	// single family (sometimes 100% faster or more), the most aggressive tuning
+	// possible.
+	//
+	// Further, as the WideTable benchmark shows, even the worst-case isn't that
+	// bad (33% slower with an immutable 1MB blob, which is the upper limit of
+	// what we'd recommend for column size regardless of families). This
+	// situation also appears less frequent than we feared.
+	//
+	// The result is that we put all columns in one family and require the user
+	// to manually specify family assignments when this is incorrect.
+	return 0, true
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *MutableTableDescriptor) MaybeIncrementVersion() {
 	// Already incremented, no-op.
@@ -1591,9 +1431,7 @@ func (desc *MutableTableDescriptor) OriginalVersion() descpb.DescriptorVersion {
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *ImmutableTableDescriptor) Validate(
-	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec,
-) error {
+func (desc *ImmutableTableDescriptor) Validate(ctx context.Context, dg catalog.DescGetter) error {
 	err := desc.ValidateTable()
 	if err != nil {
 		return err
@@ -1601,45 +1439,39 @@ func (desc *ImmutableTableDescriptor) Validate(
 	if desc.Dropped() {
 		return nil
 	}
-	return desc.validateCrossReferences(ctx, protoGetter, codec)
+	return desc.validateCrossReferences(ctx, dg)
 }
 
 // validateCrossReferences validates that each reference to another table is
 // resolvable and that the necessary back references exist.
-//
-// TODO(ajwerner): pass in a higher-level interface for retrieving descriptors
-// by ID and stop using the raw transaction to look up descriptors.
 func (desc *ImmutableTableDescriptor) validateCrossReferences(
-	ctx context.Context, protoGetter catalog.ProtoGetter, codec keys.SQLCodec,
+	ctx context.Context, dg catalog.DescGetter,
 ) error {
 	// Check that parent DB exists.
 	{
-		parent := &descpb.Descriptor{}
-		_, err := protoGetter.GetProtoTs(ctx, MakeDescMetadataKey(codec, desc.ParentID), parent)
+		db, err := dg.GetDesc(ctx, desc.ParentID)
 		if err != nil {
 			return err
 		}
-		db := parent.GetDatabase()
-		if db == nil {
-			return errors.AssertionFailedf("parentID %d  does not exist", errors.Safe(desc.ParentID))
+		if _, isDB := db.(catalog.DatabaseDescriptor); !isDB {
+			return errors.AssertionFailedf("parentID %d does not exist", errors.Safe(desc.ParentID))
 		}
 	}
 
-	tablesByID := map[descpb.ID]*ImmutableTableDescriptor{desc.ID: desc}
-	getTable := func(id descpb.ID) (*ImmutableTableDescriptor, error) {
+	tablesByID := map[descpb.ID]catalog.TableDescriptor{desc.ID: desc}
+	getTable := func(id descpb.ID) (catalog.TableDescriptor, error) {
 		if table, ok := tablesByID[id]; ok {
 			return table, nil
 		}
-		raw, err := getTableDescFromID(ctx, protoGetter, codec, id)
+		table, err := catalog.GetTableDescFromID(ctx, dg, id)
 		if err != nil {
 			return nil, err
 		}
-		table := NewImmutableTableDescriptor(*raw)
 		tablesByID[id] = table
 		return table, nil
 	}
 
-	findTargetIndex := func(tableID descpb.ID, indexID descpb.IndexID) (*ImmutableTableDescriptor, *descpb.IndexDescriptor, error) {
+	findTargetIndex := func(tableID descpb.ID, indexID descpb.IndexID) (catalog.TableDescriptor, *descpb.IndexDescriptor, error) {
 		targetTable, err := getTable(tableID)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
@@ -1648,7 +1480,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 		targetIndex, err := targetTable.FindIndexByID(indexID)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
-				"missing table=%s index=%d", targetTable.Name, errors.Safe(indexID))
+				"missing table=%s index=%d", targetTable.GetName(), errors.Safe(indexID))
 		}
 		return targetTable, targetIndex, nil
 	}
@@ -1662,16 +1494,15 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 				"invalid foreign key: missing table=%d", errors.Safe(fk.ReferencedTableID))
 		}
 		found := false
-		for i := range referencedTable.InboundFKs {
-			backref := &referencedTable.InboundFKs[i]
-			if backref.OriginTableID == desc.ID && backref.Name == fk.Name {
+		_ = referencedTable.ForeachInboundFK(func(backref *descpb.ForeignKeyConstraint) error {
+			if !found && backref.OriginTableID == desc.ID && backref.Name == fk.Name {
 				found = true
-				break
 			}
-		}
+			return nil
+		})
 		if !found {
 			return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
-				fk.Name, desc.Name, referencedTable.Name)
+				fk.Name, desc.Name, referencedTable.GetName())
 		}
 	}
 	for i := range desc.InboundFKs {
@@ -1682,16 +1513,15 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 				"invalid foreign key backreference: missing table=%d", errors.Safe(backref.OriginTableID))
 		}
 		found := false
-		for i := range originTable.OutboundFKs {
-			fk := &originTable.OutboundFKs[i]
-			if fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
+		_ = originTable.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+			if !found && fk.ReferencedTableID == desc.ID && fk.Name == backref.Name {
 				found = true
-				break
 			}
-		}
+			return nil
+		})
 		if !found {
 			return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
-				backref.Name, desc.Name, originTable.Name)
+				backref.Name, desc.Name, originTable.GetName())
 		}
 	}
 
@@ -1715,7 +1545,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 			if !found {
 				return errors.AssertionFailedf(
 					"missing interleave back reference to %q@%q from %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+					desc.Name, index.Name, targetTable.GetName(), targetIndex.Name)
 			}
 		}
 		interleaveBackrefs := make(map[descpb.ForeignKeyReference]struct{})
@@ -1734,19 +1564,19 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 			if err != nil {
 				return errors.Wrapf(err,
 					"invalid interleave backreference table=%s index=%d",
-					targetTable.Name, backref.Index)
+					targetTable.GetName(), backref.Index)
 			}
 			if len(targetIndex.Interleave.Ancestors) == 0 {
 				return errors.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+					desc.Name, index.Name, targetTable.GetName(), targetIndex.Name)
 			}
 			// The last ancestor is required to be a backreference.
 			ancestor := targetIndex.Interleave.Ancestors[len(targetIndex.Interleave.Ancestors)-1]
 			if ancestor.TableID != desc.ID || ancestor.IndexID != index.ID {
 				return errors.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
-					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
+					desc.Name, index.Name, targetTable.GetName(), targetIndex.Name)
 			}
 		}
 	}
@@ -1754,14 +1584,14 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 
 	// Validate the all types present in the descriptor exist. typeMap caches
 	// accesses to TypeDescriptors, and is wrapped by getType.
-	typeMap := make(map[descpb.ID]*ImmutableTypeDescriptor)
+	// TODO(ajwerner): generalize this to a cached implementation of the
+	// DescGetter.
+	typeMap := make(map[descpb.ID]catalog.TypeDescriptor)
 	getType := func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		if typeDesc, ok := typeMap[id]; ok {
 			return typeDesc, nil
 		}
-		// TODO(ajwerner): stop looking this up here and instead delegate to a
-		// higher level interface being passed in to look up descriptors by ID.
-		typeDesc, err := getTypeDescFromID(ctx, protoGetter, codec, id)
+		typeDesc, err := catalog.GetTypeDescFromID(ctx, dg, id)
 		if err != nil {
 			return nil, errors.Wrapf(err, "type ID %d in descriptor not found", id)
 		}
@@ -1798,7 +1628,7 @@ func (desc *ImmutableTableDescriptor) ValidateIndexNameIsUnique(indexName string
 // correct.
 // If version is supplied, the descriptor is checked for version incompatibilities.
 func (desc *ImmutableTableDescriptor) ValidateTable() error {
-	if err := validateName(desc.Name, "table"); err != nil {
+	if err := catalog.ValidateName(desc.Name, "table"); err != nil {
 		return err
 	}
 	if desc.ID == 0 {
@@ -1848,7 +1678,7 @@ func (desc *ImmutableTableDescriptor) ValidateTable() error {
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
 	columnIDs := make(map[descpb.ColumnID]string, len(desc.Columns))
 	for _, column := range desc.AllNonDropColumns() {
-		if err := validateName(column.Name, "column"); err != nil {
+		if err := catalog.ValidateName(column.Name, "column"); err != nil {
 			return err
 		}
 		if column.ID == 0 {
@@ -1865,7 +1695,7 @@ func (desc *ImmutableTableDescriptor) ValidateTable() error {
 			return pgerror.Newf(pgcode.DuplicateColumn,
 				"duplicate: column %q in the middle of being added, not yet public", column.Name)
 		}
-		if IsSystemColumnName(column.Name) {
+		if colinfo.IsSystemColumnName(column.Name) {
 			return pgerror.Newf(pgcode.DuplicateColumn,
 				"column name %q conflicts with a system column name", column.Name)
 		}
@@ -2015,7 +1845,7 @@ func (desc *ImmutableTableDescriptor) validateColumnFamilies(
 	colIDToFamilyID := map[descpb.ColumnID]descpb.FamilyID{}
 	for i := range desc.Families {
 		family := &desc.Families[i]
-		if err := validateName(family.Name, "family"); err != nil {
+		if err := catalog.ValidateName(family.Name, "family"); err != nil {
 			return err
 		}
 
@@ -2090,7 +1920,7 @@ func (desc *ImmutableTableDescriptor) validateTableIndexes(
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, index := range desc.AllNonDropIndexes() {
-		if err := validateName(index.Name, "index"); err != nil {
+		if err := catalog.ValidateName(index.Name, "index"); err != nil {
 			return err
 		}
 		if index.ID == 0 {
@@ -2204,7 +2034,7 @@ func (desc *ImmutableTableDescriptor) PrimaryKeyString() string {
 // stored sorted by upper bound. colOffset is non-zero for subpartitions and
 // indicates how many index columns to skip over.
 func (desc *ImmutableTableDescriptor) validatePartitioningDescriptor(
-	a *DatumAlloc,
+	a *rowenc.DatumAlloc,
 	idxDesc *descpb.IndexDescriptor,
 	partDesc *descpb.PartitioningDescriptor,
 	colOffset int,
@@ -2272,7 +2102,7 @@ func (desc *ImmutableTableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
-				tuple, keyPrefix, err := DecodePartitionTuple(
+				tuple, keyPrefix, err := rowenc.DecodePartitionTuple(
 					a, codec, desc, idxDesc, partDesc, valueEncBuf, fakePrefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
@@ -2301,12 +2131,12 @@ func (desc *ImmutableTableDescriptor) validatePartitioningDescriptor(
 
 			// NB: key encoding is used to check uniqueness because it has to match
 			// the behavior of the value when indexed.
-			fromDatums, fromKey, err := DecodePartitionTuple(
+			fromDatums, fromKey, err := rowenc.DecodePartitionTuple(
 				a, codec, desc, idxDesc, partDesc, p.FromInclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-			toDatums, toKey, err := DecodePartitionTuple(
+			toDatums, toKey, err := rowenc.DecodePartitionTuple(
 				a, codec, desc, idxDesc, partDesc, p.ToExclusive, fakePrefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
@@ -2331,6 +2161,22 @@ func (desc *ImmutableTableDescriptor) validatePartitioningDescriptor(
 	return nil
 }
 
+type partitionInterval struct {
+	name  string
+	start roachpb.Key
+	end   roachpb.Key
+}
+
+var _ interval.Interface = partitionInterval{}
+
+// ID is part of `interval.Interface` but unused in validatePartitioningDescriptor.
+func (ps partitionInterval) ID() uintptr { return 0 }
+
+// Range is part of `interval.Interface`.
+func (ps partitionInterval) Range() interval.Range {
+	return interval.Range{Start: []byte(ps.start), End: []byte(ps.end)}
+}
+
 // FindIndexesWithPartition returns all IndexDescriptors (potentially including
 // the primary index) which have a partition with the given name.
 func (desc *ImmutableTableDescriptor) FindIndexesWithPartition(
@@ -2350,7 +2196,7 @@ func (desc *ImmutableTableDescriptor) FindIndexesWithPartition(
 func (desc *ImmutableTableDescriptor) validatePartitioning() error {
 	partitionNames := make(map[string]string)
 
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	return desc.ForeachNonDropIndex(func(idxDesc *descpb.IndexDescriptor) error {
 		return desc.validatePartitioningDescriptor(
 			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
@@ -2361,57 +2207,6 @@ func (desc *ImmutableTableDescriptor) validatePartitioning() error {
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
-
-// fitColumnToFamily attempts to fit a new column into the existing column
-// families. If the heuristics find a fit, true is returned along with the
-// index of the selected family. Otherwise, false is returned and the column
-// should be put in a new family.
-//
-// Current heuristics:
-// - Put all columns in family 0.
-func fitColumnToFamily(desc *MutableTableDescriptor, col descpb.ColumnDescriptor) (int, bool) {
-	// Fewer column families means fewer kv entries, which is generally faster.
-	// On the other hand, an update to any column in a family requires that they
-	// all are read and rewritten, so large (or numerous) columns that are not
-	// updated at the same time as other columns in the family make things
-	// slower.
-	//
-	// The initial heuristic used for family assignment tried to pack
-	// fixed-width columns into families up to a certain size and would put any
-	// variable-width column into its own family. This was conservative to
-	// guarantee that we avoid the worst-case behavior of a very large immutable
-	// blob in the same family as frequently updated columns.
-	//
-	// However, our initial customers have revealed that this is backward.
-	// Repeatedly, they have recreated existing schemas without any tuning and
-	// found lackluster performance. Each of these has turned out better as a
-	// single family (sometimes 100% faster or more), the most aggressive tuning
-	// possible.
-	//
-	// Further, as the WideTable benchmark shows, even the worst-case isn't that
-	// bad (33% slower with an immutable 1MB blob, which is the upper limit of
-	// what we'd recommend for column size regardless of families). This
-	// situation also appears less frequent than we feared.
-	//
-	// The result is that we put all columns in one family and require the user
-	// to manually specify family assignments when this is incorrect.
-	return 0, true
-}
-
-// ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
-func ColumnTypeIsIndexable(t *types.T) bool {
-	// Some inverted index types also have a key encoding, but we don't
-	// want to support those yet. See #50659.
-	return !MustBeValueEncoded(t) && !ColumnTypeIsInvertedIndexable(t)
-}
-
-// ColumnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
-// using an inverted index.
-func ColumnTypeIsInvertedIndexable(t *types.T) bool {
-	family := t.Family()
-	return family == types.JsonFamily || family == types.ArrayFamily ||
-		family == types.GeographyFamily || family == types.GeometryFamily
-}
 
 func notIndexableError(cols []descpb.ColumnDescriptor, inverted bool) error {
 	if len(cols) == 0 {
@@ -2447,7 +2242,7 @@ func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames 
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !ColumnTypeIsIndexable(col.Type) {
+				if !colinfo.ColumnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2470,7 +2265,7 @@ func checkColumnsValidForInvertedIndex(
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !ColumnTypeIsInvertedIndexable(col.Type) {
+				if !colinfo.ColumnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2656,7 +2451,7 @@ func (desc *ImmutableTableDescriptor) FindColumnByName(
 			}
 		}
 	}
-	return nil, false, NewUndefinedColumnError(string(name))
+	return nil, false, colinfo.NewUndefinedColumnError(string(name))
 }
 
 // FindActiveOrNewColumnByName finds the column with the specified name.
@@ -2680,7 +2475,7 @@ func (desc *MutableTableDescriptor) FindActiveOrNewColumnByName(
 			return col, nil
 		}
 	}
-	return nil, NewUndefinedColumnError(string(name))
+	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
 // FindColumnMutationByName finds the mutation on the specified column.
@@ -2738,7 +2533,7 @@ func (desc *ImmutableTableDescriptor) FindActiveColumnByName(
 			return c, nil
 		}
 	}
-	return nil, NewUndefinedColumnError(name)
+	return nil, colinfo.NewUndefinedColumnError(name)
 }
 
 // FindColumnByID finds the column with specified ID.
@@ -3755,7 +3550,7 @@ func (desc *ImmutableTableDescriptor) PrimaryIndexSpan(codec keys.SQLCodec) roac
 func (desc *ImmutableTableDescriptor) IndexSpan(
 	codec keys.SQLCodec, indexID descpb.IndexID,
 ) roachpb.Span {
-	prefix := roachpb.Key(MakeIndexKeyPrefix(codec, desc, indexID))
+	prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc, indexID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 
@@ -3972,120 +3767,6 @@ func (desc *MutableTableDescriptor) IsShardColumn(col *descpb.ColumnDescriptor) 
 // TableDesc implements the TableDescriptor interface.
 func (desc *ImmutableTableDescriptor) TableDesc() *descpb.TableDescriptor {
 	return &desc.TableDescriptor
-}
-
-// DatabaseKey implements DescriptorKey.
-type DatabaseKey struct {
-	name string
-}
-
-// NewDatabaseKey returns a new DatabaseKey.
-func NewDatabaseKey(name string) DatabaseKey {
-	return DatabaseKey{name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (dk DatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, keys.RootNamespaceID, keys.RootNamespaceID, dk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (dk DatabaseKey) Name() string {
-	return dk.name
-}
-
-// TableKey implements DescriptorKey interface.
-type TableKey struct {
-	parentID       descpb.ID
-	parentSchemaID descpb.ID
-	name           string
-}
-
-// NewPublicTableKey returns a new TableKey scoped under the public schema.
-func NewPublicTableKey(parentID descpb.ID, name string) TableKey {
-	return TableKey{parentID: parentID, parentSchemaID: keys.PublicSchemaID, name: name}
-}
-
-// NewTableKey returns a new TableKey
-func NewTableKey(parentID descpb.ID, parentSchemaID descpb.ID, name string) TableKey {
-	return TableKey{parentID: parentID, parentSchemaID: parentSchemaID, name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (tk TableKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, tk.parentID, tk.parentSchemaID, tk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (tk TableKey) Name() string {
-	return tk.name
-}
-
-// SchemaKey implements DescriptorKey interface.
-type SchemaKey struct {
-	parentID descpb.ID
-	name     string
-}
-
-// NewSchemaKey returns a new SchemaKey
-func NewSchemaKey(parentID descpb.ID, name string) SchemaKey {
-	return SchemaKey{parentID: parentID, name: name}
-}
-
-// NewPublicSchemaKey returns a new SchemaKey specific to the public schema.
-func NewPublicSchemaKey(parentID descpb.ID) SchemaKey {
-	return SchemaKey{parentID: parentID, name: tree.PublicSchema}
-}
-
-// Key implements DescriptorKey interface.
-func (sk SchemaKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeNameMetadataKey(codec, sk.parentID, keys.RootNamespaceID, sk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (sk SchemaKey) Name() string {
-	return sk.name
-}
-
-// DeprecatedTableKey implements DescriptorKey interface.
-type DeprecatedTableKey struct {
-	parentID descpb.ID
-	name     string
-}
-
-// NewDeprecatedTableKey returns a new DeprecatedTableKey
-func NewDeprecatedTableKey(parentID descpb.ID, name string) DeprecatedTableKey {
-	return DeprecatedTableKey{parentID, name}
-}
-
-// Key implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, dtk.parentID, dtk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (dtk DeprecatedTableKey) Name() string {
-	return dtk.name
-}
-
-// DeprecatedDatabaseKey implements DescriptorKey interface.
-type DeprecatedDatabaseKey struct {
-	name string
-}
-
-// NewDeprecatedDatabaseKey returns a new DeprecatedDatabaseKey
-func NewDeprecatedDatabaseKey(name string) DeprecatedDatabaseKey {
-	return DeprecatedDatabaseKey{name: name}
-}
-
-// Key implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Key(codec keys.SQLCodec) roachpb.Key {
-	return MakeDeprecatedNameMetadataKey(codec, keys.RootNamespaceID, ddk.name)
-}
-
-// Name implements DescriptorKey interface.
-func (ddk DeprecatedDatabaseKey) Name() string {
-	return ddk.name
 }
 
 // GenerateUniqueConstraintName attempts to generate a unique constraint name

@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -86,7 +86,7 @@ func GenerateSubzoneSpans(
 		}
 	}
 
-	a := &sqlbase.DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
 	subzoneIndexByPartition := make(map[string]int32)
@@ -173,7 +173,7 @@ func GenerateSubzoneSpans(
 // highest precedence first and the interval.Range payloads are each a
 // `zonepb.Subzone` with the PartitionName set.
 func indexCoveringsForPartitioning(
-	a *sqlbase.DatumAlloc,
+	a *rowenc.DatumAlloc,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	idxDesc *descpb.IndexDescriptor,
@@ -199,7 +199,7 @@ func indexCoveringsForPartitioning(
 		listCoverings := make([]covering.Covering, int(partDesc.NumColumns)+1)
 		for _, p := range partDesc.List {
 			for _, valueEncBuf := range p.Values {
-				t, keyPrefix, err := sqlbase.DecodePartitionTuple(
+				t, keyPrefix, err := rowenc.DecodePartitionTuple(
 					a, codec, tableDesc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return nil, err
@@ -231,12 +231,12 @@ func indexCoveringsForPartitioning(
 			if _, ok := relevantPartitions[p.Name]; !ok {
 				continue
 			}
-			_, fromKey, err := sqlbase.DecodePartitionTuple(
+			_, fromKey, err := rowenc.DecodePartitionTuple(
 				a, codec, tableDesc, idxDesc, partDesc, p.FromInclusive, prefixDatums)
 			if err != nil {
 				return nil, err
 			}
-			_, toKey, err := sqlbase.DecodePartitionTuple(
+			_, toKey, err := rowenc.DecodePartitionTuple(
 				a, codec, tableDesc, idxDesc, partDesc, p.ToExclusive, prefixDatums)
 			if err != nil {
 				return nil, err

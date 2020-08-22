@@ -20,7 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -68,7 +71,7 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *sqlbase.ImmutableDatabaseDescriptor,
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.ImmutableDatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -93,7 +96,7 @@ type virtualSchemaTable struct {
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
-	populate func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error
 
 	// indexes, if non empty, is a slice of populate methods that also take a
 	// constraint, only generating rows that match the constraint. The order of
@@ -104,13 +107,13 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *sqlbase.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
+	generator func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
 type virtualSchemaView struct {
 	schema        string
-	resultColumns sqlbase.ResultColumns
+	resultColumns colinfo.ResultColumns
 }
 
 // getSchema is part of the virtualSchemaDef interface.
@@ -295,7 +298,7 @@ var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 type virtualSchemaEntry struct {
 	// TODO(ajwerner): Use a descpb.SchemaDescriptor here as part of the
 	// user-defined schema work.
-	desc            *sqlbase.ImmutableDatabaseDescriptor
+	desc            *dbdesc.ImmutableDatabaseDescriptor
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
@@ -358,7 +361,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		}
 
 		return virtualTypeEntry{
-			desc:    sqlbase.MakeSimpleAliasTypeDescriptor(typ),
+			desc:    typedesc.MakeSimpleAliasTypeDescriptor(typ),
 			mutable: flags.RequireMutable,
 		}, nil
 	default:
@@ -386,7 +389,7 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *sqlbase.ImmutableTypeDescriptor
+	desc    *typedesc.ImmutableTypeDescriptor
 	mutable bool
 }
 
@@ -411,7 +414,7 @@ func newInvalidVirtualDefEntryError() error {
 	return errors.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
-func (e virtualDefEntry) validateRow(datums tree.Datums, columns sqlbase.ResultColumns) error {
+func (e virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.ResultColumns) error {
 	if r, c := len(datums), len(columns); r != c {
 		return errors.AssertionFailedf("datum row count and column count differ: %d vs %d", r, c)
 	}
@@ -439,11 +442,11 @@ func (e virtualDefEntry) getPlanInfo(
 	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	idxConstraint *constraint.Constraint,
-) (sqlbase.ResultColumns, virtualTableConstructor) {
-	var columns sqlbase.ResultColumns
+) (colinfo.ResultColumns, virtualTableConstructor) {
+	var columns colinfo.ResultColumns
 	for i := range e.desc.Columns {
 		col := &e.desc.Columns[i]
-		columns = append(columns, sqlbase.ResultColumn{
+		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.Name,
 			Typ:            col.Type,
 			TableID:        table.GetID(),
@@ -452,7 +455,7 @@ func (e virtualDefEntry) getPlanInfo(
 	}
 
 	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
-		var dbDesc *sqlbase.ImmutableDatabaseDescriptor
+		var dbDesc *dbdesc.ImmutableDatabaseDescriptor
 		if dbName != "" {
 			dbDescI, err := p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
 				dbName, tree.DatabaseLookupFlags{
@@ -463,7 +466,7 @@ func (e virtualDefEntry) getPlanInfo(
 			if err != nil {
 				return nil, err
 			}
-			dbDesc = dbDescI.(*sqlbase.ImmutableDatabaseDescriptor)
+			dbDesc = dbDescI.(*dbdesc.ImmutableDatabaseDescriptor)
 		} else {
 			if !e.validWithNoDatabaseContext {
 				return nil, errInvalidDbPrefix
@@ -526,12 +529,12 @@ func (e virtualDefEntry) getPlanInfo(
 func (e virtualDefEntry) makeConstrainedRowsGenerator(
 	ctx context.Context,
 	p *planner,
-	dbDesc *sqlbase.ImmutableDatabaseDescriptor,
+	dbDesc *dbdesc.ImmutableDatabaseDescriptor,
 	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
 	columnIdxMap map[descpb.ColumnID]int,
 	idxConstraint *constraint.Constraint,
-	columns sqlbase.ResultColumns,
+	columns colinfo.ResultColumns,
 ) func(pusher rowPusher) error {
 	def := e.virtualDef.(virtualSchemaTable)
 	return func(pusher rowPusher) error {
@@ -670,8 +673,8 @@ var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
 	security.PublicRole, privilege.List{privilege.SELECT}, security.NodeUser,
 )
 
-func initVirtualDatabaseDesc(id descpb.ID, name string) *sqlbase.ImmutableDatabaseDescriptor {
-	return sqlbase.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+func initVirtualDatabaseDesc(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
+	return dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
@@ -720,7 +723,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (virtualDefEntry, error) {
 	entry, ok := vs.defsByID[id]
 	if !ok {
-		return virtualDefEntry{}, sqlbase.ErrDescriptorNotFound
+		return virtualDefEntry{}, catalog.ErrDescriptorNotFound
 	}
 	return *entry, nil
 }

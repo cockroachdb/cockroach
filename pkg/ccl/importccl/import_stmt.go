@@ -31,13 +31,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -228,7 +231,7 @@ func ensureRequiredPrivileges(
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil, false, nil
@@ -666,7 +669,7 @@ func importPlanHook(
 						)
 					}
 					if isTargetCol[col.Name] && col.IsComputed() {
-						return sqlbase.CannotWriteToComputedColError(col.Name)
+						return schemaexpr.CannotWriteToComputedColError(col.Name)
 					}
 				}
 			}
@@ -1064,7 +1067,7 @@ func prepareExistingTableDescForIngestion(
 		return nil, errors.Wrap(err, "another operation is currently operating on the table")
 	}
 	err = txn.CPut(ctx,
-		sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.ID),
 		importing.DescriptorProto(),
 		existingDesc)
 	if err != nil {
@@ -1366,7 +1369,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 				return errors.Wrap(err, "publishing tables")
 			}
 			b.CPut(
-				sqlbase.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
+				catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 				newTableDesc.DescriptorProto(),
 				existingDesc)
 		}
@@ -1522,7 +1525,7 @@ func (r *importResumer) dropTables(
 			return errors.Wrap(err, "rolling back tables")
 		}
 		b.CPut(
-			sqlbase.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
+			catalogkeys.MakeDescMetadataKey(execCfg.Codec, newTableDesc.ID),
 			newTableDesc.DescriptorProto(),
 			existingDesc)
 	}

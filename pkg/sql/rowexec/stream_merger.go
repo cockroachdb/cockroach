@@ -13,10 +13,11 @@ package rowexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -30,13 +31,13 @@ import (
 type streamMerger struct {
 	left       streamGroupAccumulator
 	right      streamGroupAccumulator
-	leftGroup  []sqlbase.EncDatumRow
-	rightGroup []sqlbase.EncDatumRow
+	leftGroup  []rowenc.EncDatumRow
+	rightGroup []rowenc.EncDatumRow
 	// nulLEquality indicates when NULL = NULL is truth-y. This is helpful
 	// when we want NULL to be meaningful during equality, for example
 	// during SCRUB secondary index checks.
 	nullEquality bool
-	datumAlloc   sqlbase.DatumAlloc
+	datumAlloc   rowenc.DatumAlloc
 }
 
 func (sm *streamMerger) start(ctx context.Context) {
@@ -49,7 +50,7 @@ func (sm *streamMerger) start(ctx context.Context) {
 // be empty.
 func (sm *streamMerger) NextBatch(
 	ctx context.Context, evalCtx *tree.EvalContext,
-) ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+) ([]rowenc.EncDatumRow, []rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sm.leftGroup == nil {
 		var meta *execinfrapb.ProducerMetadata
 		sm.leftGroup, meta = sm.left.nextGroup(ctx, evalCtx)
@@ -68,7 +69,7 @@ func (sm *streamMerger) NextBatch(
 		return nil, nil, nil
 	}
 
-	var lrow, rrow sqlbase.EncDatumRow
+	var lrow, rrow rowenc.EncDatumRow
 	if len(sm.leftGroup) > 0 {
 		lrow = sm.leftGroup[0]
 	}
@@ -83,7 +84,7 @@ func (sm *streamMerger) NextBatch(
 	if err != nil {
 		return nil, nil, &execinfrapb.ProducerMetadata{Err: err}
 	}
-	var leftGroup, rightGroup []sqlbase.EncDatumRow
+	var leftGroup, rightGroup []rowenc.EncDatumRow
 	if cmp <= 0 {
 		leftGroup = sm.leftGroup
 		sm.leftGroup = nil
@@ -107,10 +108,10 @@ func (sm *streamMerger) NextBatch(
 // yet decoded.
 func CompareEncDatumRowForMerge(
 	lhsTypes []*types.T,
-	lhs, rhs sqlbase.EncDatumRow,
-	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	lhs, rhs rowenc.EncDatumRow,
+	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
-	da *sqlbase.DatumAlloc,
+	da *rowenc.DatumAlloc,
 	evalCtx *tree.EvalContext,
 ) (int, error) {
 	if lhs == nil && rhs == nil {
@@ -167,9 +168,9 @@ func (sm *streamMerger) close(ctx context.Context) {
 // All metadata from the sources is forwarded to metadataSink.
 func makeStreamMerger(
 	leftSource execinfra.RowSource,
-	leftOrdering sqlbase.ColumnOrdering,
+	leftOrdering colinfo.ColumnOrdering,
 	rightSource execinfra.RowSource,
-	rightOrdering sqlbase.ColumnOrdering,
+	rightOrdering colinfo.ColumnOrdering,
 	nullEquality bool,
 	memMonitor *mon.BytesMonitor,
 ) (streamMerger, error) {

@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -158,9 +158,9 @@ func TestHashJoiner(t *testing.T) {
 func TestHashJoinerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := joinerErrorTestCases()
@@ -241,7 +241,7 @@ func TestHashJoinerError(t *testing.T) {
 }
 
 func checkExpectedRows(
-	types []*types.T, expectedRows sqlbase.EncDatumRows, results *distsqlutils.RowBuffer,
+	types []*types.T, expectedRows rowenc.EncDatumRows, results *distsqlutils.RowBuffer,
 ) error {
 	var expected []string
 	for _, row := range expectedRows {
@@ -279,9 +279,9 @@ func checkExpectedRows(
 // the consumer is draining.
 func TestHashJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -290,7 +290,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
-	inputs := []sqlbase.EncDatumRows{
+	inputs := []rowenc.EncDatumRows{
 		{
 			{v[0]},
 			{v[1]},
@@ -300,7 +300,7 @@ func TestHashJoinerDrain(t *testing.T) {
 			{v[1]},
 		},
 	}
-	expected := sqlbase.EncDatumRows{
+	expected := rowenc.EncDatumRows{
 		{v[0]},
 	}
 	leftInputDrainNotification := make(chan error, 1)
@@ -319,13 +319,13 @@ func TestHashJoinerDrain(t *testing.T) {
 		leftInputDrainNotification <- nil
 	}
 	leftInput := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		inputs[0],
 		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := distsqlutils.NewRowBuffer(sqlbase.OneIntCol, inputs[1], distsqlutils.RowBufferArgs{})
+	rightInput := distsqlutils.NewRowBuffer(rowenc.OneIntCol, inputs[1], distsqlutils.RowBufferArgs{})
 	out := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
@@ -372,7 +372,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.Mu.Records))
 	}
 
-	if err := checkExpectedRows(sqlbase.OneIntCol, expected, out); err != nil {
+	if err := checkExpectedRows(rowenc.OneIntCol, expected, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -383,9 +383,9 @@ func TestHashJoinerDrain(t *testing.T) {
 func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [10]sqlbase.EncDatum{}
+	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -394,7 +394,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
-	inputs := []sqlbase.EncDatumRows{
+	inputs := []rowenc.EncDatumRows{
 		{
 			{v[0]},
 			{v[1]},
@@ -431,7 +431,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		rightInputDrainNotification <- nil
 	}
 	rightErrorReturned := false
-	rightInputNext := func(rb *distsqlutils.RowBuffer) (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	rightInputNext := func(rb *distsqlutils.RowBuffer) (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		if !rightErrorReturned {
 			rightErrorReturned = true
 			// The right input is going to return an error as the first thing.
@@ -441,12 +441,12 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		return nil, nil
 	}
 	leftInput := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		inputs[0],
 		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
 	rightInput := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		inputs[1],
 		distsqlutils.RowBufferArgs{
 			OnConsumerDone: rightInputConsumerDone,
@@ -454,7 +454,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 	)
 	out := distsqlutils.NewRowBuffer(
-		sqlbase.OneIntCol,
+		rowenc.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{},
 	)
@@ -549,9 +549,9 @@ func BenchmarkHashJoiner(b *testing.B) {
 					continue
 				}
 				b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-					rows := sqlbase.MakeIntRows(numRows, numCols)
-					leftInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
-					rightInput := execinfra.NewRepeatableRowSource(sqlbase.OneIntCol, rows)
+					rows := rowenc.MakeIntRows(numRows, numCols)
+					leftInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rows)
+					rightInput := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rows)
 					b.SetBytes(int64(8 * numRows * numCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {

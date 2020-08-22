@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -551,7 +552,7 @@ func makeSQLServerArgs(
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			statusServer: serverpb.MakeOptionalStatusServer(nil),
-			nodeLiveness: sqlbase.MakeOptionalNodeLiveness(nil),
+			nodeLiveness: optionalnodeliveness.MakeContainer(nil),
 			gossip:       gossip.MakeOptionalGossip(nil),
 			grpcServer:   dummyRPCServer,
 			recorder:     dummyRecorder,

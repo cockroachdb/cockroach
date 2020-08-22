@@ -23,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -87,7 +90,7 @@ func (oc *optCatalog) reset() {
 type optSchema struct {
 	planner *planner
 
-	database *sqlbase.ImmutableDatabaseDescriptor
+	database *dbdesc.ImmutableDatabaseDescriptor
 	schema   catalog.ResolvedSchema
 
 	name cat.SchemaName
@@ -180,7 +183,7 @@ func (oc *optCatalog) ResolveSchema(
 	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
-		database: prefix.Database.(*sqlbase.ImmutableDatabaseDescriptor),
+		database: prefix.Database.(*dbdesc.ImmutableDatabaseDescriptor),
 		schema:   prefix.Schema,
 		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil
@@ -225,7 +228,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 
 	if err != nil {
 		isAdding := catalog.HasAddingTableError(err)
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) || isAdding {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) || isAdding {
 			return nil, isAdding, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
 		return nil, false, err
@@ -659,14 +662,14 @@ func newOptTable(
 	// Note that the column does not exist when err != nil. This check is done
 	// for migration purposes. We need to avoid adding the system column if the
 	// table has a column with this name for some reason.
-	if _, _, err := desc.FindColumnByName(sqlbase.MVCCTimestampColumnName); err != nil {
+	if _, _, err := desc.FindColumnByName(colinfo.MVCCTimestampColumnName); err != nil {
 		col, ord := newColumn()
 		col.InitNonVirtual(
 			ord,
-			cat.StableID(sqlbase.MVCCTimestampColumnID),
-			tree.Name(sqlbase.MVCCTimestampColumnName),
+			cat.StableID(colinfo.MVCCTimestampColumnID),
+			tree.Name(colinfo.MVCCTimestampColumnName),
 			cat.System,
-			sqlbase.MVCCTimestampColumnType,
+			colinfo.MVCCTimestampColumnType,
 			true, /* nullable */
 			true, /* hidden */
 			nil,  /* defaultExpr */
@@ -936,8 +939,8 @@ func (ot *optTable) getColDesc(i int) *descpb.ColumnDescriptor {
 	if i < len(ot.desc.DeletableColumns()) {
 		return &ot.desc.DeletableColumns()[i]
 	}
-	if ot.columns[i].ColID() == cat.StableID(sqlbase.MVCCTimestampColumnID) {
-		return &sqlbase.MVCCTimestampColumnDesc
+	if ot.columns[i].ColID() == cat.StableID(colinfo.MVCCTimestampColumnID) {
+		return &colinfo.MVCCTimestampColumnDesc
 	}
 	return nil
 }
@@ -1222,10 +1225,10 @@ func (oi *optIndex) PartitionByListPrefixes() []tree.Datums {
 		return nil
 	}
 	res := make([]tree.Datums, 0, len(list))
-	var a sqlbase.DatumAlloc
+	var a rowenc.DatumAlloc
 	for i := range list {
 		for _, valueEncBuf := range list[i].Values {
-			t, _, err := sqlbase.DecodePartitionTuple(
+			t, _, err := rowenc.DecodePartitionTuple(
 				&a, oi.tab.codec, oi.tab.desc, oi.desc, &oi.desc.Partitioning,
 				valueEncBuf, nil, /* prefixDatums */
 			)

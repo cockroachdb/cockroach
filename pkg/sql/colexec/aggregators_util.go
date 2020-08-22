@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
@@ -52,7 +52,7 @@ func newAggregatorHelper(
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 	isHashAgg bool,
 ) aggregatorHelper {
 	hasDistinct, hasFilterAgg := false, false
@@ -254,9 +254,9 @@ type distinctAggregatorHelperBase struct {
 	inputTypes       []*types.T
 	aggColsConverter *vecToDatumConverter
 	arena            stringarena.Arena
-	datumAlloc       *sqlbase.DatumAlloc
+	datumAlloc       *rowenc.DatumAlloc
 	scratch          struct {
-		ed      sqlbase.EncDatum
+		ed      rowenc.EncDatum
 		encoded []byte
 		// converted is a scratch space for converting a single element.
 		converted []tree.Datum
@@ -268,7 +268,7 @@ func newDistinctAggregatorHelperBase(
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 ) *distinctAggregatorHelperBase {
 	b := &distinctAggregatorHelperBase{
 		aggregatorHelperBase: newAggregatorHelperBase(spec),
@@ -387,7 +387,7 @@ func newFilteringDistinctHashAggregatorHelper(
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
 	filters []*filteringSingleFunctionHashHelper,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 ) aggregatorHelper {
 	return &filteringDistinctHashAggregatorHelper{
 		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(
@@ -448,7 +448,7 @@ func newDistinctOrderedAggregatorHelper(
 	memAccount *mon.BoundAccount,
 	inputTypes []*types.T,
 	spec *execinfrapb.AggregatorSpec,
-	datumAlloc *sqlbase.DatumAlloc,
+	datumAlloc *rowenc.DatumAlloc,
 ) aggregatorHelper {
 	return &distinctOrderedAggregatorHelper{
 		distinctAggregatorHelperBase: newDistinctAggregatorHelperBase(

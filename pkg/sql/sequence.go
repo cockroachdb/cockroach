@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -67,7 +68,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			return nil, nil
 		}
 	}
-	return nil, sqlbase.NewUndefinedColumnError(string(columnName))
+	return nil, colinfo.NewUndefinedColumnError(string(columnName))
 }
 
 // IncrementSequence implements the tree.SequenceOperators interface.
@@ -374,7 +375,7 @@ func removeSequenceOwnerIfExists(
 	if err != nil {
 		// Special case error swallowing for #50711 and #50781, which can cause a
 		// column to own sequences that have been dropped/do not exist.
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			log.Eventf(ctx, "swallowing error during sequence ownership unlinking: %s", err.Error())
 			return nil
 		}
@@ -530,7 +531,7 @@ func (p *planner) dropSequencesOwnedByCol(
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
 		if err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				log.Eventf(ctx, "swallowing error dropping owned sequences: %s", err.Error())
 				continue
 			}

@@ -14,9 +14,11 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -35,7 +37,7 @@ type updateNode struct {
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	run updateRun
 }
@@ -63,7 +65,7 @@ type updateRun struct {
 	// iVarContainerForComputedCols is used as a temporary buffer that
 	// holds the updated values for every column in the source, to
 	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
+	iVarContainerForComputedCols schemaexpr.RowIndexedVarContainer
 
 	// sourceSlots is the helper that maps RHS expressions to LHS targets.
 	// This is necessary because there may be fewer RHS expressions than
@@ -130,7 +132,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if u.run.rowsNeeded {
 		u.run.tu.rows = rowcontainer.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(u.columns),
+			colinfo.ColTypeInfoFromResCols(u.columns),
 		)
 	}
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
@@ -406,7 +408,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckDatumTypeFitsColumnType(&ss.column, typ)
+	return colinfo.CheckDatumTypeFitsColumnType(&ss.column, typ)
 }
 
 // enforceLocalColumnConstraints asserts the column constraints that
@@ -427,7 +429,7 @@ func enforceLocalColumnConstraints(row tree.Datums, cols []descpb.ColumnDescript
 		if !col.Nullable && row[i] == tree.DNull {
 			return sqlbase.NewNonNullViolationError(col.Name)
 		}
-		outVal, err := sqlbase.AdjustValueToColumnType(col.Type, row[i], &col.Name)
+		outVal, err := colinfo.AdjustValueToColumnType(col.Type, row[i], &col.Name)
 		if err != nil {
 			return err
 		}

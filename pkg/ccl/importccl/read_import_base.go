@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -55,7 +56,7 @@ func runImport(
 		if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			resolver := flowCtx.TypeResolverFactory.NewTypeResolver(txn)
 			for _, table := range spec.Tables {
-				if err := sqlbase.HydrateTypesInTableDescriptor(ctx, table.Desc, resolver); err != nil {
+				if err := typedesc.HydrateTypesInTableDescriptor(ctx, table.Desc, resolver); err != nil {
 					return err
 				}
 			}

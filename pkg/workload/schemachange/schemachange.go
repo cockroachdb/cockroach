@@ -19,8 +19,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -457,7 +457,7 @@ func (w *schemaChangeWorker) addColumn(tx *pgx.Tx) (string, error) {
 
 	def := &tree.ColumnTableDef{
 		Name: tree.Name(columnName),
-		Type: sqlbase.RandSortingType(w.rng),
+		Type: rowenc.RandSortingType(w.rng),
 	}
 	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
 	return fmt.Sprintf(`ALTER TABLE "%s" ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
@@ -520,7 +520,7 @@ func (w *schemaChangeWorker) createTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	stmt := sqlbase.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
+	stmt := rowenc.RandCreateTable(w.rng, "table", int(atomic.AddInt64(w.seqNum, 1)))
 	stmt.Table = tree.MakeUnqualifiedTableName(tree.Name(tableName))
 	stmt.IfNotExists = w.rng.Intn(2) == 0
 	return tree.Serialize(stmt), nil
@@ -784,7 +784,7 @@ func (w *schemaChangeWorker) setColumnType(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf(`ALTER TABLE "%s" ALTER COLUMN "%s" SET DATA TYPE %s`,
-		tableName, columnName, sqlbase.RandSortingType(w.rng)), nil
+		tableName, columnName, rowenc.RandSortingType(w.rng)), nil
 }
 
 func (w *schemaChangeWorker) randColumn(

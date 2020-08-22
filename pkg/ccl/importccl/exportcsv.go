@@ -15,11 +15,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
@@ -157,9 +158,9 @@ type csvWriter struct {
 var _ execinfra.Processor = &csvWriter{}
 
 func (sp *csvWriter) OutputTypes() []*types.T {
-	res := make([]*types.T, len(sqlbase.ExportColumns))
+	res := make([]*types.T, len(colinfo.ExportColumns))
 	for i := range res {
-		res[i] = sqlbase.ExportColumns[i].Typ
+		res[i] = colinfo.ExportColumns[i].Typ
 	}
 	return res
 }
@@ -173,7 +174,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		sp.input.Start(ctx)
 		input := execinfra.MakeNoMetadataRowSource(sp.input, sp.output)
 
-		alloc := &sqlbase.DatumAlloc{}
+		alloc := &rowenc.DatumAlloc{}
 
 		writer := newCSVExporter(sp.spec)
 
@@ -257,16 +258,16 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			if err := es.WriteFile(ctx, filename, bytes.NewReader(writer.Bytes())); err != nil {
 				return err
 			}
-			res := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(
+			res := rowenc.EncDatumRow{
+				rowenc.DatumToEncDatum(
 					types.String,
 					tree.NewDString(filename),
 				),
-				sqlbase.DatumToEncDatum(
+				rowenc.DatumToEncDatum(
 					types.Int,
 					tree.NewDInt(tree.DInt(rows)),
 				),
-				sqlbase.DatumToEncDatum(
+				rowenc.DatumToEncDatum(
 					types.Int,
 					tree.NewDInt(tree.DInt(size)),
 				),

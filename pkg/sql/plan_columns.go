@@ -10,9 +10,9 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 
-var noColumns = make(sqlbase.ResultColumns, 0)
+var noColumns = make(colinfo.ResultColumns, 0)
 
 // planColumns returns the signature of rows logically computed
 // by the given planNode.
@@ -26,20 +26,20 @@ var noColumns = make(sqlbase.ResultColumns, 0)
 // The returned slice is *not* mutable. To modify the result column
 // set, implement a separate recursion (e.g. needed_columns.go) or use
 // planMutableColumns defined below.
-func planColumns(plan planNode) sqlbase.ResultColumns {
+func planColumns(plan planNode) colinfo.ResultColumns {
 	return getPlanColumns(plan, false)
 }
 
 // planMutableColumns is similar to planColumns() but returns a
 // ResultColumns slice that can be modified by the caller.
-func planMutableColumns(plan planNode) sqlbase.ResultColumns {
+func planMutableColumns(plan planNode) colinfo.ResultColumns {
 	return getPlanColumns(plan, true)
 }
 
 // getPlanColumns implements the logic for the
 // planColumns/planMutableColumns functions. The mut argument
 // indicates whether the slice should be mutable (mut=true) or not.
-func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
+func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	switch n := plan.(type) {
 
 	// Nodes that define their own schema.
@@ -100,29 +100,29 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
-		return n.getColumns(mut, sqlbase.ScrubColumns)
+		return n.getColumns(mut, colinfo.ScrubColumns)
 	case *explainDistSQLNode:
-		return n.getColumns(mut, sqlbase.ExplainDistSQLColumns)
+		return n.getColumns(mut, colinfo.ExplainDistSQLColumns)
 	case *explainVecNode:
-		return n.getColumns(mut, sqlbase.ExplainVecColumns)
+		return n.getColumns(mut, colinfo.ExplainVecColumns)
 	case *relocateNode:
-		return n.getColumns(mut, sqlbase.AlterTableRelocateColumns)
+		return n.getColumns(mut, colinfo.AlterTableRelocateColumns)
 	case *scatterNode:
-		return n.getColumns(mut, sqlbase.AlterTableScatterColumns)
+		return n.getColumns(mut, colinfo.AlterTableScatterColumns)
 	case *showFingerprintsNode:
-		return n.getColumns(mut, sqlbase.ShowFingerprintsColumns)
+		return n.getColumns(mut, colinfo.ShowFingerprintsColumns)
 	case *splitNode:
-		return n.getColumns(mut, sqlbase.AlterTableSplitColumns)
+		return n.getColumns(mut, colinfo.AlterTableSplitColumns)
 	case *unsplitNode:
-		return n.getColumns(mut, sqlbase.AlterTableUnsplitColumns)
+		return n.getColumns(mut, colinfo.AlterTableUnsplitColumns)
 	case *unsplitAllNode:
-		return n.getColumns(mut, sqlbase.AlterTableUnsplitColumns)
+		return n.getColumns(mut, colinfo.AlterTableUnsplitColumns)
 	case *showTraceReplicaNode:
-		return n.getColumns(mut, sqlbase.ShowReplicaTraceColumns)
+		return n.getColumns(mut, colinfo.ShowReplicaTraceColumns)
 	case *sequenceSelectNode:
-		return n.getColumns(mut, sqlbase.SequenceSelectColumns)
+		return n.getColumns(mut, colinfo.SequenceSelectColumns)
 	case *exportNode:
-		return n.getColumns(mut, sqlbase.ExportColumns)
+		return n.getColumns(mut, colinfo.ExportColumns)
 
 	// The columns in the hookFnNode are returned by the hook function; we don't
 	// know if they can be modified in place or not.
@@ -167,17 +167,17 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 // (shared) ResultColumns slice as long as no read/write access is
 // requested to the slice via planMutableColumns.
 type optColumnsSlot struct {
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 }
 
-func (c *optColumnsSlot) getColumns(mut bool, cols sqlbase.ResultColumns) sqlbase.ResultColumns {
+func (c *optColumnsSlot) getColumns(mut bool, cols colinfo.ResultColumns) colinfo.ResultColumns {
 	if c.columns != nil {
 		return c.columns
 	}
 	if !mut {
 		return cols
 	}
-	c.columns = make(sqlbase.ResultColumns, len(cols))
+	c.columns = make(colinfo.ResultColumns, len(cols))
 	copy(c.columns, cols)
 	return c.columns
 }

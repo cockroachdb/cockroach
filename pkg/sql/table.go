@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +37,7 @@ func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
 	databaseID descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
-	typesToDrop []*sqlbase.MutableTypeDescriptor,
+	typesToDrop []*typedesc.MutableTypeDescriptor,
 	jobDesc string,
 ) error {
 	// TODO (lucy): This should probably be deleting the queued jobs for all the

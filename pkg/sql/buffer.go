@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // bufferNode consumes its input one row at a time, stores it in the buffer,
@@ -37,7 +37,7 @@ type bufferNode struct {
 func (n *bufferNode) startExec(params runParams) error {
 	n.bufferedRows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(getPlanColumns(n.plan, false /* mut */)),
+		colinfo.ColTypeInfoFromResCols(getPlanColumns(n.plan, false /* mut */)),
 	)
 	return nil
 }

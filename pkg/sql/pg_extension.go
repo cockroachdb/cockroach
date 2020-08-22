@@ -18,10 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -41,14 +41,14 @@ var pgExtension = virtualSchema{
 
 func postgisColumnsTablePopulator(
 	matchingFamily types.Family,
-) func(context.Context, *planner, *sqlbase.ImmutableDatabaseDescriptor, func(...tree.Datum) error) error {
-	return func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+) func(context.Context, *planner, *dbdesc.ImmutableDatabaseDescriptor, func(...tree.Datum) error) error {
+	return func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(
 			ctx,
 			p,
 			dbContext,
 			hideVirtual,
-			func(db *sqlbase.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
 				if !table.IsPhysicalTable() {
 					return nil
 				}
@@ -140,7 +140,7 @@ CREATE TABLE pg_extension.spatial_ref_sys (
 	srtext varchar(2048),
 	proj4text varchar(2048)
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *sqlbase.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, projection := range geoprojbase.Projections {
 			if err := addRow(
 				tree.NewDInt(tree.DInt(projection.SRID)),

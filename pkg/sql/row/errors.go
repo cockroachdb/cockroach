@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -147,7 +147,7 @@ func DecodeRowInfo(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(codec, tableDesc, key)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc, key)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -199,7 +199,7 @@ func DecodeRowInfo(
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* isCheck */
-		&sqlbase.DatumAlloc{},
+		&rowenc.DatumAlloc{},
 		tableArgs,
 	); err != nil {
 		return nil, nil, nil, err

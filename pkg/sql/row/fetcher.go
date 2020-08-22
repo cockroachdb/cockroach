@@ -21,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -98,9 +99,9 @@ type tableInfo struct {
 
 	keyValTypes []*types.T
 	extraTypes  []*types.T
-	keyVals     []sqlbase.EncDatum
-	extraVals   []sqlbase.EncDatum
-	row         sqlbase.EncDatumRow
+	keyVals     []rowenc.EncDatum
+	extraVals   []rowenc.EncDatum
+	row         rowenc.EncDatumRow
 	decodedRow  tree.Datums
 
 	// The following fields contain MVCC metadata for each row and may be
@@ -243,7 +244,7 @@ type Fetcher struct {
 	IgnoreUnexpectedNulls bool
 
 	// Buffered allocation of decoded datums.
-	alloc *sqlbase.DatumAlloc
+	alloc *rowenc.DatumAlloc
 }
 
 // Reset resets this Fetcher, preserving the memory capacity that was used
@@ -265,7 +266,7 @@ func (rf *Fetcher) Init(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	isCheck bool,
-	alloc *sqlbase.DatumAlloc,
+	alloc *rowenc.DatumAlloc,
 	tables ...FetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
@@ -303,7 +304,7 @@ func (rf *Fetcher) Init(
 			index:            tableArgs.Index,
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
-			row:              make(sqlbase.EncDatumRow, len(tableArgs.Cols)),
+			row:              make(rowenc.EncDatumRow, len(tableArgs.Cols)),
 			decodedRow:       make(tree.Datums, len(tableArgs.Cols)),
 
 			// These slice fields might get re-allocated below, so reslice them from
@@ -317,7 +318,7 @@ func (rf *Fetcher) Init(
 		var err error
 		if multipleTables {
 			// We produce references to every signature's reference.
-			equivSignatures, err := sqlbase.TableEquivSignatures(table.desc.TableDesc(), table.index)
+			equivSignatures, err := rowenc.TableEquivSignatures(table.desc.TableDesc(), table.index)
 			if err != nil {
 				return err
 			}
@@ -352,7 +353,7 @@ func (rf *Fetcher) Init(
 				// The idx-th column is required.
 				table.neededCols.Add(int(col))
 				// If this column is the timestamp column, set up the output index.
-				sysColKind := sqlbase.GetSystemColumnKindFromColumnID(col)
+				sysColKind := colinfo.GetSystemColumnKindFromColumnID(col)
 				if sysColKind == descpb.SystemColumnKind_MVCCTIMESTAMP {
 					table.timestampOutputIdx = idx
 					rf.mvccDecodeStrategy = MVCCDecodingRequired
@@ -361,7 +362,7 @@ func (rf *Fetcher) Init(
 		}
 
 		table.knownPrefixLength = len(
-			sqlbase.MakeIndexKeyPrefix(codec, table.desc, table.index.ID),
+			rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID),
 		)
 
 		var indexColumnIDs []descpb.ColumnID
@@ -428,14 +429,14 @@ func (rf *Fetcher) Init(
 		}
 
 		// Prepare our index key vals slice.
-		table.keyValTypes, err = sqlbase.GetColumnTypes(table.desc, indexColumnIDs)
+		table.keyValTypes, err = colinfo.GetColumnTypes(table.desc, indexColumnIDs)
 		if err != nil {
 			return err
 		}
 		if cap(table.keyVals) >= nIndexCols {
 			table.keyVals = table.keyVals[:nIndexCols]
 		} else {
-			table.keyVals = make([]sqlbase.EncDatum, nIndexCols)
+			table.keyVals = make([]rowenc.EncDatum, nIndexCols)
 		}
 
 		if hasExtraCols(&table) {
@@ -444,12 +445,12 @@ func (rf *Fetcher) Init(
 			// Primary indexes only contain ascendingly-encoded
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
-			table.extraTypes, err = sqlbase.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
+			table.extraTypes, err = colinfo.GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
 			nExtraColumns := len(table.index.ExtraColumnIDs)
 			if cap(table.extraVals) >= nExtraColumns {
 				table.extraVals = table.extraVals[:nExtraColumns]
 			} else {
-				table.extraVals = make([]sqlbase.EncDatum, nExtraColumns)
+				table.extraVals = make([]rowenc.EncDatum, nExtraColumns)
 			}
 			if err != nil {
 				return err
@@ -719,7 +720,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 			for range rf.currentTable.index.ExtraColumnIDs {
 				var err error
 				// Slice off an extra encoded column from rf.keyRemainingBytes.
-				rf.keyRemainingBytes, err = sqlbase.SkipTableKey(rf.keyRemainingBytes)
+				rf.keyRemainingBytes, err = rowenc.SkipTableKey(rf.keyRemainingBytes)
 				if err != nil {
 					return false, err
 				}
@@ -753,7 +754,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []sqlbase.EncDatum) string {
+func (rf *Fetcher) prettyEncDatums(types []*types.T, vals []rowenc.EncDatum) string {
 	var buf strings.Builder
 	for i, v := range vals {
 		if err := v.EnsureDecoded(types[i], rf.alloc); err != nil {
@@ -776,7 +777,7 @@ func (rf *Fetcher) ReadIndexKey(
 	// If there is only one table to check keys for, there is no need
 	// to go through the equivalence signature checks.
 	if len(rf.tables) == 1 {
-		return sqlbase.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
+		return rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 			rf.currentTable.desc,
 			rf.currentTable.index,
 			rf.currentTable.keyValTypes,
@@ -797,7 +798,7 @@ func (rf *Fetcher) ReadIndexKey(
 
 	// key now contains the bytes in the key (if match) that are not part
 	// of the signature in order.
-	tableIdx, key, match, err := sqlbase.IndexKeyEquivSignature(key, rf.allEquivSignatures, rf.keySigBuf, rf.keyRestBuf)
+	tableIdx, key, match, err := rowenc.IndexKeyEquivSignature(key, rf.allEquivSignatures, rf.keySigBuf, rf.keyRestBuf)
 	if err != nil {
 		return nil, false, false, err
 	}
@@ -839,7 +840,7 @@ func (rf *Fetcher) ReadIndexKey(
 	// when processing the ind
 	// ex key. The column values are at the
 	// front of the key.
-	if key, foundNull, err = sqlbase.DecodeKeyVals(
+	if key, foundNull, err = rowenc.DecodeKeyVals(
 		rf.currentTable.keyValTypes,
 		rf.currentTable.keyVals,
 		rf.currentTable.indexColumnDirs,
@@ -982,7 +983,7 @@ func (rf *Fetcher) processKV(
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
 				var err error
-				valueBytes, _, err = sqlbase.DecodeKeyVals(
+				valueBytes, _, err = rowenc.DecodeKeyVals(
 					table.extraTypes,
 					table.extraVals,
 					nil,
@@ -1069,14 +1070,14 @@ func (rf *Fetcher) processValueSingle(
 			// although that would require changing UnmarshalColumnValue to operate
 			// on bytes, and for Encode/DecodeTableValue to operate on marshaled
 			// single values.
-			value, err := sqlbase.UnmarshalColumnValue(rf.alloc, typ, kv.Value)
+			value, err := rowenc.UnmarshalColumnValue(rf.alloc, typ, kv.Value)
 			if err != nil {
 				return "", "", err
 			}
 			if rf.traceKV {
 				prettyValue = value.String()
 			}
-			table.row[idx] = sqlbase.DatumToEncDatum(typ, value)
+			table.row[idx] = rowenc.DatumToEncDatum(typ, value)
 			if DebugRowFetch {
 				log.Infof(ctx, "Scan %s -> %v", kv.Key, value)
 			}
@@ -1136,8 +1137,8 @@ func (rf *Fetcher) processValueBytes(
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.DeletableColumns()[idx].Name)
 		}
 
-		var encValue sqlbase.EncDatum
-		encValue, valueBytes, err = sqlbase.EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset,
+		var encValue rowenc.EncDatum
+		encValue, valueBytes, err = rowenc.EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset,
 			dataOffset, typ)
 		if err != nil {
 			return "", "", err
@@ -1184,7 +1185,7 @@ func (rf *Fetcher) processValueTuple(
 func (rf *Fetcher) NextRow(
 	ctx context.Context,
 ) (
-	row sqlbase.EncDatumRow,
+	row rowenc.EncDatumRow,
 	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	err error,
@@ -1276,7 +1277,7 @@ func (rf *Fetcher) RowIsDeleted() bool {
 //  - There is no extra unexpected or incorrect data encoded in the k/v
 //    pair.
 //  - Decoded keys follow the same ordering as their encoding.
-func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, error) {
+func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (rowenc.EncDatumRow, error) {
 	row, table, index, err := rf.NextRow(ctx)
 	if row == nil {
 		return nil, nil
@@ -1364,7 +1365,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
 
-			if result, err := sqlbase.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
+			if result, err := rowenc.EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
 				scratch); err != nil {
 				return errors.NewAssertionErrorWithWrappedErrf(err, "could not re-encode column %s, value was %#v",
 					col.Name, rowVal.Datum)
@@ -1383,7 +1384,7 @@ func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 // secondary index datums.
 func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
-	colToEncDatum := make(map[descpb.ColumnID]sqlbase.EncDatum, len(table.row))
+	colToEncDatum := make(map[descpb.ColumnID]rowenc.EncDatum, len(table.row))
 	values := make(tree.Datums, len(table.row))
 	for i, col := range table.cols {
 		colToEncDatum[col.ID] = table.row[i]
@@ -1391,7 +1392,7 @@ func (rf *Fetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error 
 	}
 
 	// The below code makes incorrect checks (#45256).
-	indexEntries, err := sqlbase.EncodeSecondaryIndex(
+	indexEntries, err := rowenc.EncodeSecondaryIndex(
 		rf.codec, table.desc, table.index, table.colIdxMap, values, false /* includeEmpty */)
 	if err != nil {
 		return err
@@ -1464,7 +1465,7 @@ func (rf *Fetcher) finalizeRow() error {
 		//  fetcher and change its contents with each row. If that assumption gets
 		//  lifted, then we can avoid an allocation of a new decimal datum here.
 		dec := rf.alloc.NewDDecimal(tree.DDecimal{Decimal: tree.TimestampToDecimal(rf.RowLastModified())})
-		table.row[table.timestampOutputIdx] = sqlbase.EncDatum{Datum: dec}
+		table.row[table.timestampOutputIdx] = rowenc.EncDatum{Datum: dec}
 	}
 
 	// Fill in any missing values with NULLs
@@ -1495,7 +1496,7 @@ func (rf *Fetcher) finalizeRow() error {
 				}
 				return err
 			}
-			table.row[i] = sqlbase.EncDatum{
+			table.row[i] = rowenc.EncDatum{
 				Datum: tree.DNull,
 			}
 			// We've set valueColsFound to the number of present columns in the row

@@ -16,8 +16,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -58,7 +58,7 @@ func (e *entry) isNode() bool {
 
 // EnterNode creates a new node as a child of the current node.
 func (ob *OutputBuilder) EnterNode(
-	name string, columns sqlbase.ResultColumns, ordering sqlbase.ColumnOrdering,
+	name string, columns colinfo.ResultColumns, ordering colinfo.ColumnOrdering,
 ) {
 	var colStr, ordStr string
 	if ob.flags.Verbose {
@@ -116,7 +116,7 @@ func (ob *OutputBuilder) Attrf(key, format string, args ...interface{}) {
 // Expr adds an information field with an expression. The expression's
 // IndexedVars refer to the given columns. If the expression is nil, nothing is
 // emitted.
-func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinfo.ResultColumns) {
 	if expr == nil {
 		return
 	}
@@ -138,7 +138,7 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns sqlbas
 }
 
 // VExpr is a verbose-only variant of Expr.
-func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns sqlbase.ResultColumns) {
+func (ob *OutputBuilder) VExpr(key string, expr tree.TypedExpr, varColumns colinfo.ResultColumns) {
 	if ob.flags.Verbose {
 		ob.Expr(key, expr, varColumns)
 	}

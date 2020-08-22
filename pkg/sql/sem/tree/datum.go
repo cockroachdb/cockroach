@@ -225,7 +225,7 @@ func (d Datums) IsDistinctFrom(evalCtx *EvalContext, other Datums) bool {
 
 // CompositeDatum is a Datum that may require composite encoding in
 // indexes. Any Datum implementing this interface must also add itself to
-// sqlbase/HasCompositeKeyEncoding.
+// colinfo.HasCompositeKeyEncoding.
 type CompositeDatum interface {
 	Datum
 	// IsComposite returns true if this datum is not round-tripable in a key
