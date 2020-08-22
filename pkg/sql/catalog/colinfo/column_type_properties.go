@@ -175,7 +175,7 @@ func AdjustValueToColumnType(
 	case types.GeometryFamily:
 		if in, ok := inVal.(*tree.DGeometry); ok {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				in.Geometry,
+				&in.Geometry,
 				typ.InternalType.GeoMetadata.SRID,
 				typ.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -185,7 +185,7 @@ func AdjustValueToColumnType(
 	case types.GeographyFamily:
 		if in, ok := inVal.(*tree.DGeography); ok {
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				in.Geography,
+				&in.Geography,
 				typ.InternalType.GeoMetadata.SRID,
 				typ.InternalType.GeoMetadata.ShapeType,
 			); err != nil {

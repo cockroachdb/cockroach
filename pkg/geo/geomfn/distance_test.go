@@ -653,10 +653,9 @@ func TestLongestLineString(t *testing.T) {
 				require.NoError(t, err)
 				b, err := geo.ParseGeometry(tc.b)
 				require.NoError(t, err)
-				longestLine, err := LongestLineString(a, b)
+				_, err = LongestLineString(a, b)
 				require.Error(t, err)
 				require.True(t, geo.IsEmptyGeometryError(err))
-				require.Nil(t, longestLine)
 			})
 		}
 	})

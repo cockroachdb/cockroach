@@ -98,7 +98,7 @@ func mustDecodeEWKBFromString(t *testing.T, h string) geopb.EWKB {
 
 func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 	testCases := []struct {
-		t             GeospatialType
+		t             Geometry
 		srid          geopb.SRID
 		shape         geopb.ShapeType
 		errorContains string
@@ -113,7 +113,7 @@ func TestGeospatialTypeFitsColumnMetadata(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%#v_fits_%d_%s", tc.t, tc.srid, tc.shape), func(t *testing.T) {
-			err := GeospatialTypeFitsColumnMetadata(tc.t, tc.srid, tc.shape)
+			err := GeospatialTypeFitsColumnMetadata(&tc.t, tc.srid, tc.shape)
 			if tc.errorContains != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.errorContains)

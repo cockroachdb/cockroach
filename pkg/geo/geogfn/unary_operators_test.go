@@ -245,24 +245,24 @@ func TestLength(t *testing.T) {
 func TestProject(t *testing.T) {
 	var testCases = []struct {
 		desc      string
-		point     *geo.Geography
+		point     geo.Geography
 		distance  float64
 		azimuth   float64
-		projected *geo.Geography
+		projected geo.Geography
 	}{
 		{
 			"POINT(0 0), 100000, radians(45)",
-			geo.MustNewGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4326)),
+			geo.MustMakeGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4326)),
 			100000,
 			45 * math.Pi / 180.0,
-			geo.MustNewGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0.6352310291255374, 0.6394723347291977}).SetSRID(4326)),
+			geo.MustMakeGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0.6352310291255374, 0.6394723347291977}).SetSRID(4326)),
 		},
 		{
 			"SRID=4004;POINT(0 0), 100000, radians(45)",
-			geo.MustNewGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4004)),
+			geo.MustMakeGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0, 0}).SetSRID(4004)),
 			100000,
 			45 * math.Pi / 180.0,
-			geo.MustNewGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0.6353047281438549, 0.6395336363116583}).SetSRID(4004)),
+			geo.MustMakeGeographyFromGeomT(geom.NewPointFlat(geom.XY, []float64{0.6353047281438549, 0.6395336363116583}).SetSRID(4004)),
 		},
 	}
 

@@ -99,54 +99,54 @@ type Geometry struct {
 	spatialObject geopb.SpatialObject
 }
 
-// NewGeometry returns a new Geometry. Assumes the input EWKB is validated and in little endian.
-func NewGeometry(spatialObject geopb.SpatialObject) (*Geometry, error) {
+// MakeGeometry returns a new Geometry. Assumes the input EWKB is validated and in little endian.
+func MakeGeometry(spatialObject geopb.SpatialObject) (Geometry, error) {
 	if spatialObject.SRID != 0 {
 		if _, ok := geoprojbase.Projection(spatialObject.SRID); !ok {
-			return nil, errors.Newf("unknown SRID for Geometry: %d", spatialObject.SRID)
+			return Geometry{}, errors.Newf("unknown SRID for Geometry: %d", spatialObject.SRID)
 		}
 	}
 	if spatialObject.Type != geopb.SpatialObjectType_GeometryType {
-		return nil, errors.Newf("expected geometry type, found %s", spatialObject.Type)
+		return Geometry{}, errors.Newf("expected geometry type, found %s", spatialObject.Type)
 	}
-	return &Geometry{spatialObject: spatialObject}, nil
+	return Geometry{spatialObject: spatialObject}, nil
 }
 
-// NewGeometryUnsafe creates a geometry object that assumes spatialObject is from the DB.
+// MakeGeometryUnsafe creates a geometry object that assumes spatialObject is from the DB.
 // It assumes the spatialObject underneath is safe.
-func NewGeometryUnsafe(spatialObject geopb.SpatialObject) *Geometry {
-	return &Geometry{spatialObject: spatialObject}
+func MakeGeometryUnsafe(spatialObject geopb.SpatialObject) Geometry {
+	return Geometry{spatialObject: spatialObject}
 }
 
-// NewGeometryFromPointCoords makes a point from x, y coordinates.
-func NewGeometryFromPointCoords(x, y float64) (*Geometry, error) {
+// MakeGeometryFromPointCoords makes a point from x, y coordinates.
+func MakeGeometryFromPointCoords(x, y float64) (Geometry, error) {
 	s, err := spatialObjectFromGeomT(geom.NewPointFlat(geom.XY, []float64{x, y}), geopb.SpatialObjectType_GeometryType)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(s)
+	return MakeGeometry(s)
 }
 
-// NewGeometryFromGeomT creates a new Geometry object from a geom.T object.
-func NewGeometryFromGeomT(g geom.T) (*Geometry, error) {
+// MakeGeometryFromGeomT creates a new Geometry object from a geom.T object.
+func MakeGeometryFromGeomT(g geom.T) (Geometry, error) {
 	spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeometryType)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(spatialObject)
+	return MakeGeometry(spatialObject)
 }
 
 // ParseGeometry parses a Geometry from a given text.
-func ParseGeometry(str string) (*Geometry, error) {
+func ParseGeometry(str string) (Geometry, error) {
 	spatialObject, err := parseAmbiguousText(geopb.SpatialObjectType_GeometryType, str, geopb.DefaultGeometrySRID)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(spatialObject)
+	return MakeGeometry(spatialObject)
 }
 
 // MustParseGeometry behaves as ParseGeometry, but panics if there is an error.
-func MustParseGeometry(str string) *Geometry {
+func MustParseGeometry(str string) Geometry {
 	g, err := ParseGeometry(str)
 	if err != nil {
 		panic(err)
@@ -157,35 +157,35 @@ func MustParseGeometry(str string) *Geometry {
 // ParseGeometryFromEWKT parses the EWKT into a Geometry.
 func ParseGeometryFromEWKT(
 	ewkt geopb.EWKT, srid geopb.SRID, defaultSRIDOverwriteSetting defaultSRIDOverwriteSetting,
-) (*Geometry, error) {
+) (Geometry, error) {
 	g, err := parseEWKT(geopb.SpatialObjectType_GeometryType, ewkt, srid, defaultSRIDOverwriteSetting)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(g)
+	return MakeGeometry(g)
 }
 
 // ParseGeometryFromEWKB parses the EWKB into a Geometry.
-func ParseGeometryFromEWKB(ewkb geopb.EWKB) (*Geometry, error) {
+func ParseGeometryFromEWKB(ewkb geopb.EWKB) (Geometry, error) {
 	g, err := parseEWKB(geopb.SpatialObjectType_GeometryType, ewkb, geopb.DefaultGeometrySRID, DefaultSRIDIsHint)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(g)
+	return MakeGeometry(g)
 }
 
 // ParseGeometryFromEWKBAndSRID parses the EWKB into a given Geometry with the given
 // SRID set.
-func ParseGeometryFromEWKBAndSRID(ewkb geopb.EWKB, srid geopb.SRID) (*Geometry, error) {
+func ParseGeometryFromEWKBAndSRID(ewkb geopb.EWKB, srid geopb.SRID) (Geometry, error) {
 	g, err := parseEWKB(geopb.SpatialObjectType_GeometryType, ewkb, srid, DefaultSRIDShouldOverwrite)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(g)
+	return MakeGeometry(g)
 }
 
 // MustParseGeometryFromEWKB behaves as ParseGeometryFromEWKB, but panics if an error occurs.
-func MustParseGeometryFromEWKB(ewkb geopb.EWKB) *Geometry {
+func MustParseGeometryFromEWKB(ewkb geopb.EWKB) Geometry {
 	ret, err := ParseGeometryFromEWKB(ewkb)
 	if err != nil {
 		panic(err)
@@ -194,27 +194,27 @@ func MustParseGeometryFromEWKB(ewkb geopb.EWKB) *Geometry {
 }
 
 // ParseGeometryFromGeoJSON parses the GeoJSON into a given Geometry.
-func ParseGeometryFromGeoJSON(json []byte) (*Geometry, error) {
+func ParseGeometryFromGeoJSON(json []byte) (Geometry, error) {
 	g, err := parseGeoJSON(geopb.SpatialObjectType_GeometryType, json, geopb.DefaultGeometrySRID)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(g)
+	return MakeGeometry(g)
 }
 
 // ParseGeometryFromEWKBUnsafe returns a new Geometry from an EWKB, without any SRID checks.
 // You should only do this if you trust the EWKB is setup correctly.
 // You most likely want geo.ParseGeometryFromEWKB instead.
-func ParseGeometryFromEWKBUnsafe(ewkb geopb.EWKB) (*Geometry, error) {
+func ParseGeometryFromEWKBUnsafe(ewkb geopb.EWKB) (Geometry, error) {
 	base, err := parseEWKBRaw(geopb.SpatialObjectType_GeometryType, ewkb)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometryUnsafe(base), nil
+	return MakeGeometryUnsafe(base), nil
 }
 
 // AsGeography converts a given Geometry to its Geography form.
-func (g *Geometry) AsGeography() (*Geography, error) {
+func (g *Geometry) AsGeography() (Geography, error) {
 	srid := g.SRID()
 	if srid == 0 {
 		// Set a geography SRID if one is not already set.
@@ -222,19 +222,19 @@ func (g *Geometry) AsGeography() (*Geography, error) {
 	}
 	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeographyType)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(spatialObject)
+	return MakeGeography(spatialObject)
 }
 
 // CloneWithSRID sets a given Geometry's SRID to another, without any transformations.
 // Returns a new Geometry object.
-func (g *Geometry) CloneWithSRID(srid geopb.SRID) (*Geometry, error) {
+func (g *Geometry) CloneWithSRID(srid geopb.SRID) (Geometry, error) {
 	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeometryType)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(spatialObject)
+	return MakeGeometry(spatialObject)
 }
 
 // adjustSpatialObject returns the SpatialObject with new parameters.
@@ -337,7 +337,7 @@ func (g *Geometry) SpaceCurveIndex() uint64 {
 // Compare compares a Geometry against another.
 // It compares using SpaceCurveIndex, followed by the byte representation of the Geometry.
 // This must produce the same ordering as the index mechanism.
-func (g *Geometry) Compare(o *Geometry) int {
+func (g *Geometry) Compare(o Geometry) int {
 	lhs := g.SpaceCurveIndex()
 	rhs := o.SpaceCurveIndex()
 	if lhs > rhs {
@@ -358,42 +358,42 @@ type Geography struct {
 	spatialObject geopb.SpatialObject
 }
 
-// NewGeography returns a new Geography. Assumes the input EWKB is validated and in little endian.
-func NewGeography(spatialObject geopb.SpatialObject) (*Geography, error) {
+// MakeGeography returns a new Geography. Assumes the input EWKB is validated and in little endian.
+func MakeGeography(spatialObject geopb.SpatialObject) (Geography, error) {
 	projection, ok := geoprojbase.Projection(spatialObject.SRID)
 	if !ok {
-		return nil, errors.Newf("unknown SRID for Geography: %d", spatialObject.SRID)
+		return Geography{}, errors.Newf("unknown SRID for Geography: %d", spatialObject.SRID)
 	}
 	if !projection.IsLatLng {
-		return nil, errors.Newf(
+		return Geography{}, errors.Newf(
 			"SRID %d cannot be used for geography as it is not in a lon/lat coordinate system",
 			spatialObject.SRID,
 		)
 	}
 	if spatialObject.Type != geopb.SpatialObjectType_GeographyType {
-		return nil, errors.Newf("expected geography type, found %s", spatialObject.Type)
+		return Geography{}, errors.Newf("expected geography type, found %s", spatialObject.Type)
 	}
-	return &Geography{spatialObject: spatialObject}, nil
+	return Geography{spatialObject: spatialObject}, nil
 }
 
-// NewGeographyUnsafe creates a geometry object that assumes spatialObject is from the DB.
+// MakeGeographyUnsafe creates a geometry object that assumes spatialObject is from the DB.
 // It assumes the spatialObject underneath is safe.
-func NewGeographyUnsafe(spatialObject geopb.SpatialObject) *Geography {
-	return &Geography{spatialObject: spatialObject}
+func MakeGeographyUnsafe(spatialObject geopb.SpatialObject) Geography {
+	return Geography{spatialObject: spatialObject}
 }
 
-// NewGeographyFromGeomT creates a new Geography from a geom.T object.
-func NewGeographyFromGeomT(g geom.T) (*Geography, error) {
+// MakeGeographyFromGeomT creates a new Geography from a geom.T object.
+func MakeGeographyFromGeomT(g geom.T) (Geography, error) {
 	spatialObject, err := spatialObjectFromGeomT(g, geopb.SpatialObjectType_GeographyType)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(spatialObject)
+	return MakeGeography(spatialObject)
 }
 
-// MustNewGeographyFromGeomT enforces no error from NewGeographyFromGeomT.
-func MustNewGeographyFromGeomT(g geom.T) *Geography {
-	ret, err := NewGeographyFromGeomT(g)
+// MustMakeGeographyFromGeomT enforces no error from MakeGeographyFromGeomT.
+func MustMakeGeographyFromGeomT(g geom.T) Geography {
+	ret, err := MakeGeographyFromGeomT(g)
 	if err != nil {
 		panic(err)
 	}
@@ -401,16 +401,16 @@ func MustNewGeographyFromGeomT(g geom.T) *Geography {
 }
 
 // ParseGeography parses a Geography from a given text.
-func ParseGeography(str string) (*Geography, error) {
+func ParseGeography(str string) (Geography, error) {
 	spatialObject, err := parseAmbiguousText(geopb.SpatialObjectType_GeographyType, str, geopb.DefaultGeographySRID)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(spatialObject)
+	return MakeGeography(spatialObject)
 }
 
 // MustParseGeography behaves as ParseGeography, but panics if there is an error.
-func MustParseGeography(str string) *Geography {
+func MustParseGeography(str string) Geography {
 	g, err := ParseGeography(str)
 	if err != nil {
 		panic(err)
@@ -421,35 +421,35 @@ func MustParseGeography(str string) *Geography {
 // ParseGeographyFromEWKT parses the EWKT into a Geography.
 func ParseGeographyFromEWKT(
 	ewkt geopb.EWKT, srid geopb.SRID, defaultSRIDOverwriteSetting defaultSRIDOverwriteSetting,
-) (*Geography, error) {
+) (Geography, error) {
 	g, err := parseEWKT(geopb.SpatialObjectType_GeographyType, ewkt, srid, defaultSRIDOverwriteSetting)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(g)
+	return MakeGeography(g)
 }
 
 // ParseGeographyFromEWKB parses the EWKB into a Geography.
-func ParseGeographyFromEWKB(ewkb geopb.EWKB) (*Geography, error) {
+func ParseGeographyFromEWKB(ewkb geopb.EWKB) (Geography, error) {
 	g, err := parseEWKB(geopb.SpatialObjectType_GeographyType, ewkb, geopb.DefaultGeographySRID, DefaultSRIDIsHint)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(g)
+	return MakeGeography(g)
 }
 
 // ParseGeographyFromEWKBAndSRID parses the EWKB into a given Geography with the
 // given SRID set.
-func ParseGeographyFromEWKBAndSRID(ewkb geopb.EWKB, srid geopb.SRID) (*Geography, error) {
+func ParseGeographyFromEWKBAndSRID(ewkb geopb.EWKB, srid geopb.SRID) (Geography, error) {
 	g, err := parseEWKB(geopb.SpatialObjectType_GeographyType, ewkb, srid, DefaultSRIDShouldOverwrite)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(g)
+	return MakeGeography(g)
 }
 
 // MustParseGeographyFromEWKB behaves as ParseGeographyFromEWKB, but panics if an error occurs.
-func MustParseGeographyFromEWKB(ewkb geopb.EWKB) *Geography {
+func MustParseGeographyFromEWKB(ewkb geopb.EWKB) Geography {
 	ret, err := ParseGeographyFromEWKB(ewkb)
 	if err != nil {
 		panic(err)
@@ -458,42 +458,42 @@ func MustParseGeographyFromEWKB(ewkb geopb.EWKB) *Geography {
 }
 
 // ParseGeographyFromGeoJSON parses the GeoJSON into a given Geography.
-func ParseGeographyFromGeoJSON(json []byte) (*Geography, error) {
+func ParseGeographyFromGeoJSON(json []byte) (Geography, error) {
 	g, err := parseGeoJSON(geopb.SpatialObjectType_GeographyType, json, geopb.DefaultGeographySRID)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(g)
+	return MakeGeography(g)
 }
 
 // ParseGeographyFromEWKBUnsafe returns a new Geography from an EWKB, without any SRID checks.
 // You should only do this if you trust the EWKB is setup correctly.
 // You most likely want ParseGeographyFromEWKB instead.
-func ParseGeographyFromEWKBUnsafe(ewkb geopb.EWKB) (*Geography, error) {
+func ParseGeographyFromEWKBUnsafe(ewkb geopb.EWKB) (Geography, error) {
 	base, err := parseEWKBRaw(geopb.SpatialObjectType_GeographyType, ewkb)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeographyUnsafe(base), nil
+	return MakeGeographyUnsafe(base), nil
 }
 
 // CloneWithSRID sets a given Geography's SRID to another, without any transformations.
 // Returns a new Geography object.
-func (g *Geography) CloneWithSRID(srid geopb.SRID) (*Geography, error) {
+func (g *Geography) CloneWithSRID(srid geopb.SRID) (Geography, error) {
 	spatialObject, err := adjustSpatialObject(g.spatialObject, srid, geopb.SpatialObjectType_GeographyType)
 	if err != nil {
-		return nil, err
+		return Geography{}, err
 	}
-	return NewGeography(spatialObject)
+	return MakeGeography(spatialObject)
 }
 
 // AsGeometry converts a given Geography to its Geometry form.
-func (g *Geography) AsGeometry() (*Geometry, error) {
+func (g *Geography) AsGeometry() (Geometry, error) {
 	spatialObject, err := adjustSpatialObject(g.spatialObject, g.SRID(), geopb.SpatialObjectType_GeometryType)
 	if err != nil {
-		return nil, err
+		return Geometry{}, err
 	}
-	return NewGeometry(spatialObject)
+	return MakeGeometry(spatialObject)
 }
 
 // AsGeomT returns the Geography as a geom.T object.
@@ -581,7 +581,7 @@ func (g *Geography) SpaceCurveIndex() uint64 {
 // Compare compares a Geography against another.
 // It compares using SpaceCurveIndex, followed by the byte representation of the Geography.
 // This must produce the same ordering as the index mechanism.
-func (g *Geography) Compare(o *Geography) int {
+func (g *Geography) Compare(o Geography) int {
 	lhs := g.SpaceCurveIndex()
 	rhs := o.SpaceCurveIndex()
 	if lhs > rhs {
