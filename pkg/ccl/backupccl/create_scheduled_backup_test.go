@@ -588,3 +588,23 @@ func TestCreateBackupScheduleRequiresAdminRole(t *testing.T) {
 	_, err = testuser.Exec("CREATE SCHEDULE FOR BACKUP INTO 'somewhere' RECURRING '@daily'")
 	require.Error(t, err)
 }
+
+func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	const collectionLocation = "nodelocal://1/collection"
+
+	th.sqlDB.Exec(t, `BACKUP INTO $1`, collectionLocation)
+
+	// Expect that trying to normally create a scheduled backup to this location
+	// fails.
+	th.sqlDB.ExpectErr(t, "backups already created in",
+		"CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
+
+	// Expect that we can override this option with the ignore_existing_backups
+	// flag.
+	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' "+
+		"RECURRING '@daily' WITH EXPERIMENTAL SCHEDULE OPTIONS ignore_existing_backups;")
+}
