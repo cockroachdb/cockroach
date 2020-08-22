@@ -241,7 +241,8 @@ type batchedInvertedExprEvaluator struct {
 	fragmentedSpans []invertedSpanRoutingInfo
 
 	// Temporary state used during initialization.
-	routingSpans []invertedSpanRoutingInfo
+	routingSpans  []invertedSpanRoutingInfo
+	coveringSpans []invertedSpan
 }
 
 // Helper used in building fragmentedSpans using pendingSpans. pendingSpans
@@ -348,7 +349,8 @@ func (b *batchedInvertedExprEvaluator) pendingLenWithSameEnd(
 }
 
 // init fragments the spans for later routing of rows and returns spans
-// representing a union of all the spans (for executing the scan).
+// representing a union of all the spans (for executing the scan). The
+// returned slice is only valid until the next call to reset.
 func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 	if cap(b.exprEvals) < len(b.exprs) {
 		b.exprEvals = make([]*invertedExprEvaluator, len(b.exprs))
@@ -389,7 +391,6 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 	})
 
 	// The union of the spans, which is returned from this function.
-	var coveringSpans []invertedSpan
 	currentCoveringSpan := b.routingSpans[0].span
 	// Create a slice of pendingSpans to be fragmented by windowing over the
 	// full collection of routingSpans. All spans in a given window have the
@@ -404,7 +405,7 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 		if bytes.Compare(pendingSpans[0].span.Start, span.span.Start) < 0 {
 			pendingSpans = b.fragmentPendingSpans(pendingSpans, span.span.Start)
 			if bytes.Compare(currentCoveringSpan.End, span.span.Start) < 0 {
-				coveringSpans = append(coveringSpans, currentCoveringSpan)
+				b.coveringSpans = append(b.coveringSpans, currentCoveringSpan)
 				currentCoveringSpan = span.span
 			} else if bytes.Compare(currentCoveringSpan.End, span.span.End) < 0 {
 				currentCoveringSpan.End = span.span.End
@@ -417,8 +418,8 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 		pendingSpans = pendingSpans[:len(pendingSpans)+1]
 	}
 	b.fragmentPendingSpans(pendingSpans, nil)
-	coveringSpans = append(coveringSpans, currentCoveringSpan)
-	return coveringSpans
+	b.coveringSpans = append(b.coveringSpans, currentCoveringSpan)
+	return b.coveringSpans
 }
 
 // TODO(sumeer): if this will be called in non-decreasing order of enc,
@@ -451,4 +452,5 @@ func (b *batchedInvertedExprEvaluator) reset() {
 	b.exprEvals = b.exprEvals[:0]
 	b.fragmentedSpans = b.fragmentedSpans[:0]
 	b.routingSpans = b.routingSpans[:0]
+	b.coveringSpans = b.coveringSpans[:0]
 }
