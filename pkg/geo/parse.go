@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
+	"github.com/pierrre/geohash"
 	"github.com/twpayne/go-geom"
 	"github.com/twpayne/go-geom/encoding/ewkb"
 	"github.com/twpayne/go-geom/encoding/ewkbhex"
@@ -208,4 +210,53 @@ func hasPrefixIgnoreCase(str string, prefix string) bool {
 		}
 	}
 	return true
+}
+
+// ParseGeometryPointFromGeoHash converts a GeoHash to a Geometry Point
+// using a Lng/Lat Point representation of the GeoHash.
+func ParseGeometryPointFromGeoHash(g string, precision int) (*Geometry, error) {
+	box, err := parseGeoHash(g, precision)
+	if err != nil {
+		return nil, err
+	}
+	point := box.Center()
+	geom, gErr := NewGeometryFromPointCoords(point.Lon, point.Lat)
+	if gErr != nil {
+		return nil, gErr
+	}
+	return geom, nil
+}
+
+// ParseCartesianBoundingBoxFromGeoHash converts a GeoHash to a CartesianBoundingBox.
+func ParseCartesianBoundingBoxFromGeoHash(g string, precision int) (CartesianBoundingBox, error) {
+	box, err := parseGeoHash(g, precision)
+	if err != nil {
+		return CartesianBoundingBox{}, err
+	}
+	return CartesianBoundingBox{
+		BoundingBox: geopb.BoundingBox{
+			LoX: box.Lon.Min,
+			HiX: box.Lon.Max,
+			LoY: box.Lat.Min,
+			HiY: box.Lat.Max,
+		},
+	}, nil
+}
+
+func parseGeoHash(g string, precision int) (geohash.Box, error) {
+	if len(g) == 0 {
+		return geohash.Box{}, errors.Newf("length of GeoHash must be greater than 0")
+	}
+
+	// If precision is more than the length of the geohash
+	// or if precision is less than 0 then set
+	// precision equal to length of geohash.
+	if precision > len(g) || precision < 0 {
+		precision = len(g)
+	}
+	box, err := geohash.Decode(g[:precision])
+	if err != nil {
+		return geohash.Box{}, err
+	}
+	return box, nil
 }

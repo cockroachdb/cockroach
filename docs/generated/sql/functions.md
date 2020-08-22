@@ -974,6 +974,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="st_azimuth"></a><code>st_azimuth(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the azimuth in radians of the segment defined by the given point geometries, or NULL if the two points are coincident.</p>
 <p>The azimuth is angle is referenced from north, and is positive clockwise: North = 0; East = π/2; South = π; West = 3π/2.</p>
 </span></td></tr>
+<tr><td><a name="st_box2dfromgeohash"></a><code>st_box2dfromgeohash(geohash: <a href="string.html">string</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Return a Box2D from a GeoHash string with max precision.</p>
+</span></td></tr>
+<tr><td><a name="st_box2dfromgeohash"></a><code>st_box2dfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Return a Box2D from a GeoHash string with supplied precision.</p>
+</span></td></tr>
 <tr><td><a name="st_buffer"></a><code>st_buffer(geography: geography, distance: <a href="float.html">float</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a Geometry that represents all points whose distance is less than or equal to the given distance
 from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
@@ -1264,6 +1268,10 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromewkt"></a><code>st_geomfromewkt(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an EWKT representation.</p>
 </span></td></tr>
+<tr><td><a name="st_geomfromgeohash"></a><code>st_geomfromgeohash(geohash: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a POLYGON Geometry from a GeoHash string with max precision.</p>
+</span></td></tr>
+<tr><td><a name="st_geomfromgeohash"></a><code>st_geomfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a POLYGON Geometry from a GeoHash string with supplied precision.</p>
+</span></td></tr>
 <tr><td><a name="st_geomfromgeojson"></a><code>st_geomfromgeojson(val: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an GeoJSON representation.</p>
 </span></td></tr>
 <tr><td><a name="st_geomfromgeojson"></a><code>st_geomfromgeojson(val: jsonb) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from an GeoJSON representation.</p>
@@ -1490,9 +1498,9 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 </span></td></tr>
 <tr><td><a name="st_point"></a><code>st_point(x: <a href="float.html">float</a>, y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new Point with the given X and Y coordinates.</p>
 </span></td></tr>
-<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a Geometry point from a GeoHash string with max precision.</p>
+<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a POINT Geometry from a GeoHash string with max precision.</p>
 </span></td></tr>
-<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a Geometry point from a GeoHash string with supplied precision.</p>
+<tr><td><a name="st_pointfromgeohash"></a><code>st_pointfromgeohash(geohash: <a href="string.html">string</a>, precision: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Return a POINT Geometry from a GeoHash string with supplied precision.</p>
 </span></td></tr>
 <tr><td><a name="st_pointfromtext"></a><code>st_pointfromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not Point, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
@@ -1604,9 +1612,6 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 <p>This function utilizes the PROJ library for coordinate projections.</p>
 </span></td></tr>
 <tr><td><a name="st_translate"></a><code>st_translate(g: geometry, deltaX: <a href="float.html">float</a>, deltaY: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry translated by the given deltas</p>
-</span></td></tr>
-<tr><td><a name="st_union"></a><code>st_union(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the union of the given geometries as a single Geometry object.</p>
-<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_within"></a><code>st_within(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a is completely inside geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>

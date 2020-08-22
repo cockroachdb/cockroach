@@ -778,6 +778,140 @@ var geoBuiltins = map[string]builtinDefinition{
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_pointfromgeohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := args[1].(*tree.DInt)
+				ret, err := geo.ParseGeometryPointFromGeoHash(string(*g), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a POINT Geometry from a GeoHash string with supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := len(string(*g))
+				ret, err := geo.ParseGeometryPointFromGeoHash(string(*g), p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a POINT Geometry from a GeoHash string with max precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_geomfromgeohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := args[1].(*tree.DInt)
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(*g), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT())
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a POLYGON Geometry from a GeoHash string with supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := len(string(*g))
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(*g), p)
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT())
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Return a POLYGON Geometry from a GeoHash string with max precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_box2dfromgeohash": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+				{"precision", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := args[1].(*tree.DInt)
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(*g), int(*p))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBox2D(bbox), nil
+			},
+			Info: infoBuilder{
+				info: "Return a Box2D from a GeoHash string with supplied precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geohash", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Box2D),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DString)
+				p := len(string(*g))
+				bbox, err := geo.ParseCartesianBoundingBoxFromGeoHash(string(*g), p)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBox2D(bbox), nil
+			},
+			Info: infoBuilder{
+				info: "Return a Box2D from a GeoHash string with max precision.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// Output
@@ -1173,48 +1307,6 @@ var geoBuiltins = map[string]builtinDefinition{
 			},
 			Info: infoBuilder{
 				info: "Returns a GeoHash representation of the geography with the supplied precision.",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-	),
-	"st_pointfromgeohash": makeBuiltin(
-		defProps(),
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geohash", types.String},
-				{"precision", types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				g := args[0].(*tree.DString)
-				p := args[1].(*tree.DInt)
-				ret, err := geo.NewGeometryPointFromGeoHash(string(*g), int(*p))
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(ret), nil
-			},
-			Info: infoBuilder{
-				info: "Return a Geometry point from a GeoHash string with supplied precision.",
-			}.String(),
-			Volatility: tree.VolatilityImmutable,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"geohash", types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				g := args[0].(*tree.DString)
-				p := len(string(*g))
-				ret, err := geo.NewGeometryPointFromGeoHash(string(*g), p)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(ret), nil
-			},
-			Info: infoBuilder{
-				info: "Return a Geometry point from a GeoHash string with max precision.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -2968,24 +3060,6 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			types.Geography,
 			infoBuilder{
 				info:         "Returns the point intersections of the given geographies." + usingBestGeomProjectionWarning,
-				libraryUsage: usesGEOS,
-			},
-			tree.VolatilityImmutable,
-		),
-	),
-	"st_union": makeBuiltin(
-		defProps(),
-		geometryOverload2(
-			func(ctx *tree.EvalContext, a *tree.DGeometry, b *tree.DGeometry) (tree.Datum, error) {
-				union, err := geomfn.Union(a.Geometry, b.Geometry)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDGeometry(union), err
-			},
-			types.Geometry,
-			infoBuilder{
-				info:         "Returns the union of the given geometries as a single Geometry object.",
 				libraryUsage: usesGEOS,
 			},
 			tree.VolatilityImmutable,

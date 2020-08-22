@@ -68,6 +68,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.AggregatorSpec_STDDEV_POP:           1,
 	execinfrapb.AggregatorSpec_ST_MAKELINE:          1,
 	execinfrapb.AggregatorSpec_ST_EXTENT:            1,
+	execinfrapb.AggregatorSpec_ST_UNION:             1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -183,9 +184,9 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							for j := range aggFnInputTypes {
 								aggFnInputTypes[j] = sqlbase.RandType(rng)
 							}
-							// There is a special case for concat_agg, string_agg,
-							// st_makeline, and st_extent when at least one argument is a
-							// tuple. Such cases pass GetAggregateInfo check below,
+							// There is a special case for some functions when at
+							// least one argument is a tuple.
+							// Such cases pass GetAggregateInfo check below,
 							// but they are actually invalid, and during normal
 							// execution it is caught during type-checking.
 							// However, we don't want to do fully-fledged type
@@ -195,7 +196,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 							case execinfrapb.AggregatorSpec_CONCAT_AGG,
 								execinfrapb.AggregatorSpec_STRING_AGG,
 								execinfrapb.AggregatorSpec_ST_MAKELINE,
-								execinfrapb.AggregatorSpec_ST_EXTENT:
+								execinfrapb.AggregatorSpec_ST_EXTENT,
+								execinfrapb.AggregatorSpec_ST_UNION:
 								for _, typ := range aggFnInputTypes {
 									if typ.Family() == types.TupleFamily {
 										invalid = true

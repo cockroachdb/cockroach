@@ -2156,7 +2156,7 @@ full-join (cross)
 
 # Can't simplify: one equality condition has columns from same side of join.
 norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
-SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
+SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.i=a.f AND a2.i=a2.f
 ----
 full-join (hash)
  ├── columns: k:1 i:2 f:3 s:4 j:5 k:7 i:8 f:9 s:10 j:11
@@ -2173,8 +2173,8 @@ full-join (hash)
  │    └── fd: (7)-->(8-11)
  └── filters
       ├── a.k:1 = a2.k:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      ├── a.f:3 IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(3), constraints=(/3: (/NULL - ]; tight)]
-      └── a2.f:9 IS DISTINCT FROM CAST(NULL AS FLOAT8) [outer=(9), constraints=(/9: (/NULL - ]; tight)]
+      ├── a.i:2 = a.f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      └── a2.i:8 = a2.f:9 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
 
 # Can't simplify: equality conditions have columns from different tables.
 norm expect-not=(SimplifyRightJoin,SimplifyLeftJoin)
@@ -3369,3 +3369,87 @@ inner-join (cross)
  │         └── k = x
  ├── scan uv
  └── filters (true)
+
+# --------------------------------------------------
+# RemoveJoinNotNullCondition
+# --------------------------------------------------
+
+# Left join case.
+norm expect=RemoveJoinNotNullCondition
+SELECT * FROM a LEFT JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:7!null i:8 f:9!null s:10 j:11
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (7)
+ ├── fd: (1)-->(2-5), (7)-->(8-11), (1)==(7), (7)==(1)
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan a2
+ │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8-11)
+ └── filters
+      └── a.k:1 = a2.k:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# Full join case.
+norm expect=RemoveJoinNotNullCondition
+SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
+----
+inner-join (hash)
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:7!null i:8 f:9!null s:10 j:11
+ ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
+ ├── key: (7)
+ ├── fd: (7)-->(8-11), (1)-->(2-5), (1)==(7), (7)==(1)
+ ├── scan a2
+ │    ├── columns: a2.k:7!null a2.i:8 a2.f:9!null a2.s:10 a2.j:11
+ │    ├── key: (7)
+ │    └── fd: (7)-->(8-11)
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.k:1 = a2.k:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+
+# No-op case because i is nullable.
+norm expect-not=RemoveJoinNotNullCondition
+SELECT i FROM a
+FULL JOIN xy ON k < y AND i IS NOT NULL
+----
+project
+ ├── columns: i:2
+ └── full-join (cross)
+      ├── columns: k:1 i:2 y:8
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan xy
+      │    └── columns: y:8
+      └── filters
+           ├── k:1 < y:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+           └── i:2 IS NOT NULL [outer=(2), constraints=(/2: (/NULL - ]; tight)]
+
+# No-op case because i+k can be NULL.
+norm expect-not=RemoveJoinNotNullCondition
+SELECT k FROM a
+FULL JOIN xy ON i+k IS NOT NULL
+----
+project
+ ├── columns: k:1
+ ├── immutable
+ └── full-join (cross)
+      ├── columns: k:1 i:2
+      ├── immutable
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── scan xy
+      └── filters
+           └── (i:2 + k:1) IS NOT NULL [outer=(1,2), immutable]
