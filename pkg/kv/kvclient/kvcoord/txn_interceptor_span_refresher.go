@@ -560,7 +560,9 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 	}
 
 	ba.RefreshSpanIterate(br, func(span roachpb.Span) {
-		log.VEventf(ctx, 3, "recording span to refresh: %s", span)
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
+		}
 		sr.refreshFootprint.insert(span)
 	})
 	return nil

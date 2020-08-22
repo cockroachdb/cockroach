@@ -240,14 +240,14 @@ type batchedInvertedExprEvaluator struct {
 	// Spans here are in sorted order and non-overlapping.
 	fragmentedSpans []invertedSpanRoutingInfo
 
-	// Temporary state used for constructing fragmentedSpans. All spans here
-	// have the same start key. They are not sorted by end key.
-	pendingSpans []invertedSpanRoutingInfo
+	// Temporary state used during initialization.
+	routingSpans []invertedSpanRoutingInfo
 }
 
 // Helper used in building fragmentedSpans using pendingSpans. pendingSpans
 // contains spans with the same start key. This fragments and removes all
 // spans up to end key fragmentUntil (or all spans if fragmentUntil == nil).
+// It then returns the remaining pendingSpans.
 //
 // Example 1:
 // pendingSpans contains
@@ -276,15 +276,15 @@ type batchedInvertedExprEvaluator struct {
 //    c-e-f            f-i
 //    c-e
 func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
-	fragmentUntil invertedexpr.EncInvertedVal,
-) {
+	pendingSpans []invertedSpanRoutingInfo, fragmentUntil invertedexpr.EncInvertedVal,
+) []invertedSpanRoutingInfo {
 	// The start keys are the same, so this only sorts in increasing
 	// order of end keys.
-	sort.Slice(b.pendingSpans, func(i, j int) bool {
-		return bytes.Compare(b.pendingSpans[i].span.End, b.pendingSpans[j].span.End) < 0
+	sort.Slice(pendingSpans, func(i, j int) bool {
+		return bytes.Compare(pendingSpans[i].span.End, pendingSpans[j].span.End) < 0
 	})
-	for len(b.pendingSpans) > 0 {
-		if fragmentUntil != nil && bytes.Compare(fragmentUntil, b.pendingSpans[0].span.Start) <= 0 {
+	for len(pendingSpans) > 0 {
+		if fragmentUntil != nil && bytes.Compare(fragmentUntil, pendingSpans[0].span.Start) <= 0 {
 			break
 		}
 		// The prefix of pendingSpans that will be completely consumed when
@@ -294,7 +294,7 @@ func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 		var end invertedexpr.EncInvertedVal
 		// The start of the fragment after the next fragment.
 		var nextStart invertedexpr.EncInvertedVal
-		if fragmentUntil != nil && bytes.Compare(fragmentUntil, b.pendingSpans[0].span.End) < 0 {
+		if fragmentUntil != nil && bytes.Compare(fragmentUntil, pendingSpans[0].span.End) < 0 {
 			// Can't completely remove any spans from pendingSpans, but a prefix
 			// of these spans will be removed
 			removeSize = 0
@@ -303,40 +303,43 @@ func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 		} else {
 			// We can remove all spans whose end key is the same as span[0].
 			// The end of span[0] is also the end key of this fragment.
-			removeSize = b.pendingLenWithSameEnd()
-			end = b.pendingSpans[0].span.End
+			removeSize = b.pendingLenWithSameEnd(pendingSpans)
+			end = pendingSpans[0].span.End
 			nextStart = end
 		}
 		// The next span to be added to fragmentedSpans.
 		nextSpan := invertedSpanRoutingInfo{
 			span: invertedSpan{
-				Start: b.pendingSpans[0].span.Start,
+				Start: pendingSpans[0].span.Start,
 				End:   end,
 			},
 		}
-		for i := 0; i < len(b.pendingSpans); i++ {
+		for i := 0; i < len(pendingSpans); i++ {
 			if i >= removeSize {
 				// This span is not completely removed so adjust its start.
-				b.pendingSpans[i].span.Start = nextStart
+				pendingSpans[i].span.Start = nextStart
 			}
 			// All spans in pendingSpans contribute to exprAndSetIndexList.
 			nextSpan.exprAndSetIndexList =
-				append(nextSpan.exprAndSetIndexList, b.pendingSpans[i].exprAndSetIndexList...)
+				append(nextSpan.exprAndSetIndexList, pendingSpans[i].exprAndSetIndexList...)
 		}
 		b.fragmentedSpans = append(b.fragmentedSpans, nextSpan)
-		b.pendingSpans = b.pendingSpans[removeSize:]
+		pendingSpans = pendingSpans[removeSize:]
 		if removeSize == 0 {
 			// fragmentUntil was earlier than the smallest End key in the pending
 			// spans, so cannot fragment any more.
 			break
 		}
 	}
+	return pendingSpans
 }
 
-func (b *batchedInvertedExprEvaluator) pendingLenWithSameEnd() int {
+func (b *batchedInvertedExprEvaluator) pendingLenWithSameEnd(
+	pendingSpans []invertedSpanRoutingInfo,
+) int {
 	length := 1
-	for i := 1; i < len(b.pendingSpans); i++ {
-		if !bytes.Equal(b.pendingSpans[0].span.End, b.pendingSpans[i].span.End) {
+	for i := 1; i < len(pendingSpans); i++ {
+		if !bytes.Equal(pendingSpans[0].span.End, pendingSpans[i].span.End) {
 			break
 		}
 		length++
@@ -353,7 +356,6 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 		b.exprEvals = b.exprEvals[:len(b.exprs)]
 	}
 	// Initial spans fetched from all expressions.
-	var routingSpans []invertedSpanRoutingInfo
 	for i, expr := range b.exprs {
 		if expr == nil {
 			b.exprEvals[i] = nil
@@ -363,7 +365,7 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 		exprSpans := b.exprEvals[i].getSpansAndSetIndex()
 		for _, spans := range exprSpans {
 			for _, span := range spans.spans {
-				routingSpans = append(routingSpans,
+				b.routingSpans = append(b.routingSpans,
 					invertedSpanRoutingInfo{
 						span:                span,
 						exprAndSetIndexList: []exprAndSetIndex{{exprIndex: i, setIndex: spans.setIndex}},
@@ -372,30 +374,35 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 			}
 		}
 	}
-	if len(routingSpans) == 0 {
+	if len(b.routingSpans) == 0 {
 		return nil
 	}
 
 	// Sort the routingSpans in increasing order of start key, and for equal
 	// start keys in increasing order of end key.
-	sort.Slice(routingSpans, func(i, j int) bool {
-		cmp := bytes.Compare(routingSpans[i].span.Start, routingSpans[j].span.Start)
+	sort.Slice(b.routingSpans, func(i, j int) bool {
+		cmp := bytes.Compare(b.routingSpans[i].span.Start, b.routingSpans[j].span.Start)
 		if cmp == 0 {
-			cmp = bytes.Compare(routingSpans[i].span.End, routingSpans[j].span.End)
+			cmp = bytes.Compare(b.routingSpans[i].span.End, b.routingSpans[j].span.End)
 		}
 		return cmp < 0
 	})
 
 	// The union of the spans, which is returned from this function.
 	var coveringSpans []invertedSpan
-	currentCoveringSpan := routingSpans[0].span
-	b.pendingSpans = append(b.pendingSpans, routingSpans[0])
+	currentCoveringSpan := b.routingSpans[0].span
+	// Create a slice of pendingSpans to be fragmented by windowing over the
+	// full collection of routingSpans. All spans in a given window have the
+	// same start key. They are not sorted by end key.
+	pendingSpans := b.routingSpans[:1]
 	// This loop does both the union of the routingSpans and fragments the
-	// routingSpans.
-	for i := 1; i < len(routingSpans); i++ {
-		span := routingSpans[i]
-		if bytes.Compare(b.pendingSpans[0].span.Start, span.span.Start) < 0 {
-			b.fragmentPendingSpans(span.span.Start)
+	// routingSpans. The pendingSpans slice contains a subsequence of the
+	// routingSpans slice, that when passed to fragmentPendingSpans will be
+	// mutated by it.
+	for i := 1; i < len(b.routingSpans); i++ {
+		span := b.routingSpans[i]
+		if bytes.Compare(pendingSpans[0].span.Start, span.span.Start) < 0 {
+			pendingSpans = b.fragmentPendingSpans(pendingSpans, span.span.Start)
 			if bytes.Compare(currentCoveringSpan.End, span.span.Start) < 0 {
 				coveringSpans = append(coveringSpans, currentCoveringSpan)
 				currentCoveringSpan = span.span
@@ -405,10 +412,11 @@ func (b *batchedInvertedExprEvaluator) init() []invertedSpan {
 		} else if bytes.Compare(currentCoveringSpan.End, span.span.End) < 0 {
 			currentCoveringSpan.End = span.span.End
 		}
-		// Add this span to the pending list.
-		b.pendingSpans = append(b.pendingSpans, span)
+		// Add this span to the pending list by expanding the window over
+		// b.routingSpans.
+		pendingSpans = pendingSpans[:len(pendingSpans)+1]
 	}
-	b.fragmentPendingSpans(nil)
+	b.fragmentPendingSpans(pendingSpans, nil)
 	coveringSpans = append(coveringSpans, currentCoveringSpan)
 	return coveringSpans
 }
@@ -442,5 +450,5 @@ func (b *batchedInvertedExprEvaluator) reset() {
 	b.exprs = b.exprs[:0]
 	b.exprEvals = b.exprEvals[:0]
 	b.fragmentedSpans = b.fragmentedSpans[:0]
-	b.pendingSpans = b.pendingSpans[:0]
+	b.routingSpans = b.routingSpans[:0]
 }

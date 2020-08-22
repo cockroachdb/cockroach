@@ -383,12 +383,12 @@ func (s *SpanExpression) ToProto() *SpanExpressionProto {
 }
 
 func getProtoSpans(spans []InvertedSpan) []SpanExpressionProto_Span {
-	out := make([]SpanExpressionProto_Span, 0, len(spans))
+	out := make([]SpanExpressionProto_Span, len(spans))
 	for i := range spans {
-		out = append(out, SpanExpressionProto_Span{
+		out[i] = SpanExpressionProto_Span{
 			Start: spans[i].Start,
 			End:   spans[i].End,
-		})
+		}
 	}
 	return out
 }
