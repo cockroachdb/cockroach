@@ -442,16 +442,22 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
 // key is removed from toCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of toCheck is returned by this function.
-func (ht *hashTable) check(
-	probeVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
-) uint64 {
-	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel)
+func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
+	ht.checkCols(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	switch ht.probeMode {
 	case hashTableDefaultProbeMode:
-		_CHECK_BODY(true, false)
+		if ht.same != nil {
+			_CHECK_BODY(true, false)
+		} else {
+			_CHECK_BODY(false, false)
+		}
 	case hashTableDeletingProbeMode:
-		_CHECK_BODY(true, true)
+		if ht.same != nil {
+			_CHECK_BODY(true, true)
+		} else {
+			_CHECK_BODY(false, true)
+		}
 	default:
 		colexecerror.InternalError("unsupported hash table probe mode")
 	}
@@ -528,10 +534,7 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
 func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	probeVecs := ht.keys
-	buildVecs := ht.vals.ColVecs()
-	buildKeyCols := ht.keyCols
-	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
+	ht.checkCols(ht.keys, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
 	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {

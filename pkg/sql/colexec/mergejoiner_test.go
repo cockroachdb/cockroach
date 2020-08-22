@@ -1534,6 +1534,32 @@ var mjTestCases = []*joinTestCase{
 		rightEqColsAreKey: true,
 		expected:          tuples{{1}},
 	},
+	{
+		description:       "INTERSECT ALL join when right eq cols are key",
+		joinType:          descpb.IntersectAllJoin,
+		leftTypes:         []*types.T{types.Int},
+		rightTypes:        []*types.T{types.Int},
+		leftTuples:        tuples{{1}, {1}, {2}, {2}, {2}, {4}, {4}},
+		rightTuples:       tuples{{1}, {2}, {3}},
+		leftEqCols:        []uint32{0},
+		rightEqCols:       []uint32{0},
+		leftOutCols:       []uint32{0},
+		rightEqColsAreKey: true,
+		expected:          tuples{{1}, {2}},
+	},
+	{
+		description:       "EXCEPT ALL join when right eq cols are key",
+		joinType:          descpb.ExceptAllJoin,
+		leftTypes:         []*types.T{types.Int},
+		rightTypes:        []*types.T{types.Int},
+		leftTuples:        tuples{{1}, {1}, {2}, {2}, {2}, {3}, {3}},
+		rightTuples:       tuples{{1}, {2}, {3}},
+		leftEqCols:        []uint32{0},
+		rightEqCols:       []uint32{0},
+		leftOutCols:       []uint32{0},
+		rightEqColsAreKey: true,
+		expected:          tuples{{1}, {2}, {2}, {3}},
+	},
 }
 
 func TestMergeJoiner(t *testing.T) {

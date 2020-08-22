@@ -13036,10 +13036,7 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
 func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	probeVecs := ht.keys
-	buildVecs := ht.vals.ColVecs()
-	buildKeyCols := ht.keyCols
-	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
+	ht.checkCols(ht.keys, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
 	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
