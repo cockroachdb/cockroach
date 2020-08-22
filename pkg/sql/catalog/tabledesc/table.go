@@ -175,7 +175,7 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 }
 
 // GetConstraintInfo returns a summary of all constraints on the table.
-func (desc *ImmutableTableDescriptor) GetConstraintInfo(
+func (desc *Immutable) GetConstraintInfo(
 	ctx context.Context, dg catalog.DescGetter,
 ) (map[string]descpb.ConstraintDetail, error) {
 	var tableLookup catalog.TableLookupFn
@@ -189,7 +189,7 @@ func (desc *ImmutableTableDescriptor) GetConstraintInfo(
 
 // GetConstraintInfoWithLookup returns a summary of all constraints on the
 // table using the provided function to fetch a TableDescriptor from an ID.
-func (desc *ImmutableTableDescriptor) GetConstraintInfoWithLookup(
+func (desc *Immutable) GetConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(tableLookup)
@@ -197,14 +197,14 @@ func (desc *ImmutableTableDescriptor) GetConstraintInfoWithLookup(
 
 // CheckUniqueConstraints returns a non-nil error if a descriptor contains two
 // constraints with the same name.
-func (desc *ImmutableTableDescriptor) CheckUniqueConstraints() error {
+func (desc *Immutable) CheckUniqueConstraints() error {
 	_, err := desc.collectConstraintInfo(nil)
 	return err
 }
 
 // if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
-func (desc *ImmutableTableDescriptor) collectConstraintInfo(
+func (desc *Immutable) collectConstraintInfo(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	info := make(map[string]descpb.ConstraintDetail)
@@ -370,7 +370,7 @@ func FindFKOriginIndex(
 // It returns either an index that is active, or an index that was created
 // in the same transaction that is currently running.
 func FindFKOriginIndexInTxn(
-	originTable *MutableTableDescriptor, originColIDs descpb.ColumnIDs,
+	originTable *Mutable, originColIDs descpb.ColumnIDs,
 ) (*descpb.IndexDescriptor, error) {
 	// Search for an index on the origin table that matches our foreign
 	// key columns.
@@ -409,9 +409,9 @@ func InitTableDescriptor(
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
-) MutableTableDescriptor {
-	return MutableTableDescriptor{
-		ImmutableTableDescriptor: ImmutableTableDescriptor{
+) Mutable {
+	return Mutable{
+		Immutable: Immutable{
 			TableDescriptor: descpb.TableDescriptor{
 				ID:                      id,
 				Name:                    name,

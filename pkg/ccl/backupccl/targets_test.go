@@ -37,7 +37,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(ajwerner): There should be a constructor for an ImmutableTableDescriptor
+	// TODO(ajwerner): There should be a constructor for an Immutable
 	// and really all of the leasable descriptor types which includes its initial
 	// DescriptorMeta. This refactoring precedes the actual adoption of
 	// DescriptorMeta.
@@ -48,8 +48,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) *tabledesc.ImmutableTableDescriptor {
-			desc := tabledesc.NewImmutableTableDescriptor(descriptor)
+		mkTable := func(descriptor tbDesc) *tabledesc.Immutable {
+			desc := tabledesc.NewImmutable(descriptor)
 			desc.ModificationTime = ts1
 			return desc
 		}

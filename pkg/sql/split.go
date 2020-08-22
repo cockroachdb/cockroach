@@ -26,7 +26,7 @@ import (
 type splitNode struct {
 	optColumnsSlot
 
-	tableDesc      *tabledesc.ImmutableTableDescriptor
+	tableDesc      *tabledesc.Immutable
 	index          *descpb.IndexDescriptor
 	rows           planNode
 	run            splitRun

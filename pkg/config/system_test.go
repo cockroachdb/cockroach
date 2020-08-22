@@ -68,7 +68,7 @@ func sqlKV(tableID uint32, indexID, descID uint64) roachpb.KeyValue {
 func descriptor(descID uint64) roachpb.KeyValue {
 	id := descpb.ID(descID)
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-	v := tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
+	v := tabledesc.NewImmutable(descpb.TableDescriptor{ID: id})
 	kv := roachpb.KeyValue{Key: k}
 	if err := kv.Value.SetProto(v.DescriptorProto()); err != nil {
 		panic(err)

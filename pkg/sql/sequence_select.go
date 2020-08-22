@@ -21,7 +21,7 @@ import (
 type sequenceSelectNode struct {
 	optColumnsSlot
 
-	desc *tabledesc.ImmutableTableDescriptor
+	desc *tabledesc.Immutable
 
 	val  int64
 	done bool
@@ -29,7 +29,7 @@ type sequenceSelectNode struct {
 
 var _ planNode = &sequenceSelectNode{}
 
-func (p *planner) SequenceSelectNode(desc *tabledesc.ImmutableTableDescriptor) (planNode, error) {
+func (p *planner) SequenceSelectNode(desc *tabledesc.Immutable) (planNode, error) {
 	if desc.SequenceOpts == nil {
 		return nil, errors.New("descriptor is not a sequence")
 	}

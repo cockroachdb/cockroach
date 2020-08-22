@@ -292,14 +292,14 @@ func unwrapDescriptor(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		immTable, err := tabledesc.NewFilledInImmutableTableDescriptor(ctx, dg, table)
+		immTable, err := tabledesc.NewFilledInImmutable(ctx, dg, table)
 		if err != nil {
 			return nil, err
 		}
 		if err := immTable.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutableTableDescriptor(*table), nil
+		return tabledesc.NewImmutable(*table), nil
 	case database != nil:
 		dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*database)
 		if err := dbDesc.Validate(); err != nil {
@@ -327,7 +327,7 @@ func unwrapDescriptorMutable(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		mutTable, err := tabledesc.NewFilledInMutableExistingTableDescriptor(ctx, dg, false /* skipFKsWithMissingTable */, table)
+		mutTable, err := tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
 		if err != nil {
 			return nil, err
 		}
@@ -509,13 +509,13 @@ func GetDatabaseDescByID(
 // returning an error if the table is not found.
 func MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		TableDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*tabledesc.ImmutableTableDescriptor), nil
+	return desc.(*tabledesc.Immutable), nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
@@ -638,7 +638,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		return tabledesc.NewMutableExistingTableDescriptor(*table)
+		return tabledesc.NewExistingMutable(*table)
 	case database != nil:
 		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
 	case typ != nil:

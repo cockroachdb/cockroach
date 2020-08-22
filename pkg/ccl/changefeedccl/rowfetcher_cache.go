@@ -51,8 +51,8 @@ func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetche
 
 func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
-) (*tabledesc.ImmutableTableDescriptor, error) {
-	var tableDesc *tabledesc.ImmutableTableDescriptor
+) (*tabledesc.Immutable, error) {
+	var tableDesc *tabledesc.Immutable
 	key, err := c.codec.StripTenantPrefix(key)
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (c *rowFetcherCache) TableDescForKey(
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
-		tableDesc = desc.(*tabledesc.ImmutableTableDescriptor)
+		tableDesc = desc.(*tabledesc.Immutable)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
 		if err := c.leaseMgr.Release(tableDesc); err != nil {
@@ -97,7 +97,7 @@ func (c *rowFetcherCache) TableDescForKey(
 }
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 ) (*row.Fetcher, error) {
 	idVer := idVersion{id: tableDesc.ID, version: tableDesc.Version}
 	if rf, ok := c.fetchers[idVer]; ok {

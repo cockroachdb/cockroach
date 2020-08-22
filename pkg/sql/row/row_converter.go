@@ -89,7 +89,7 @@ func GenerateInsertRow(
 	insertCols []descpb.ColumnDescriptor,
 	computedColsLookup []descpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	rowVals tree.Datums,
 	rowContainerForComputedVals *schemaexpr.RowIndexedVarContainer,
 ) (tree.Datums, error) {
@@ -201,7 +201,7 @@ type DatumRowConverter struct {
 	KvBatch  KVBatch
 	BatchCap int
 
-	tableDesc *tabledesc.ImmutableTableDescriptor
+	tableDesc *tabledesc.Immutable
 
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
@@ -237,7 +237,7 @@ func TestingSetDatumRowConverterBatchSize(newSize int) func() {
 // NewDatumRowConverter returns an instance of a DatumRowConverter.
 func NewDatumRowConverter(
 	ctx context.Context,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	targetColNames tree.NameList,
 	evalCtx *tree.EvalContext,
 	kvCh chan<- KVBatch,

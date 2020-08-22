@@ -32,7 +32,7 @@ import (
 type renameTableNode struct {
 	n            *tree.RenameTable
 	oldTn, newTn *tree.TableName
-	tableDesc    *tabledesc.MutableTableDescriptor
+	tableDesc    *tabledesc.Mutable
 }
 
 // RenameTable renames the table, view or sequence.

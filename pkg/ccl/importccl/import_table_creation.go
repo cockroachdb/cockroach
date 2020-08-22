@@ -83,7 +83,7 @@ type fkHandler struct {
 // NoFKs is used by formats that do not support FKs.
 var NoFKs = fkHandler{resolver: make(fkResolver)}
 
-// MakeSimpleTableDescriptor creates a MutableTableDescriptor from a CreateTable parse
+// MakeSimpleTableDescriptor creates a Mutable from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
@@ -99,7 +99,7 @@ func MakeSimpleTableDescriptor(
 	parentID, parentSchemaID, tableID descpb.ID,
 	fks fkHandler,
 	walltime int64,
-) (*tabledesc.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
 		return nil, unimplemented.NewWithIssueDetailf(42846, "import.if-no-exists", "unsupported IF NOT EXISTS")
@@ -147,7 +147,7 @@ func MakeSimpleTableDescriptor(
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},
 	}
-	affected := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
+	affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 	tableDesc, err := sql.NewTableDesc(
 		ctx,
@@ -180,7 +180,7 @@ func MakeSimpleTableDescriptor(
 // creation. sql.NewTableDesc and ResolveFK set the table to the ADD state
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
-func fixDescriptorFKState(tableDesc *tabledesc.MutableTableDescriptor) error {
+func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
 	tableDesc.State = descpb.TableDescriptor_PUBLIC
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
@@ -249,7 +249,7 @@ func (so *importSequenceOperators) SetSequenceValue(
 	return errSequenceOperators
 }
 
-type fkResolver map[string]*tabledesc.MutableTableDescriptor
+type fkResolver map[string]*tabledesc.Mutable
 
 var _ resolver.SchemaResolver = fkResolver{}
 
@@ -315,6 +315,6 @@ func (r fkResolver) LookupSchema(
 // Implements the sql.SchemaResolver interface.
 func (r fkResolver) LookupTableByID(
 	ctx context.Context, id descpb.ID,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	return nil, errSchemaResolver
 }

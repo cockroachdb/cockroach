@@ -457,7 +457,7 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 
 	if _, err := t.node(1).Publish(
 		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*tabledesc.MutableTableDescriptor)
+			table := desc.(*tabledesc.Mutable)
 			table.Version++
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -465,7 +465,7 @@ func TestLeaseManagerPublishIllegalVersionChange(testingT *testing.T) {
 	}
 	if _, err := t.node(1).Publish(
 		context.Background(), keys.LeaseTableID, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*tabledesc.MutableTableDescriptor)
+			table := desc.(*tabledesc.Mutable)
 			table.Version--
 			return nil
 		}, nil); !testutils.IsError(err, "updated version") {
@@ -1669,7 +1669,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			if err != nil {
 				t.Fatalf("error while publishing: %v", err)
 			}
-			table := desc.(*tabledesc.ImmutableTableDescriptor)
+			table := desc.(*tabledesc.Immutable)
 
 			// Wait a little time to give a chance to other goroutines to
 			// race past.

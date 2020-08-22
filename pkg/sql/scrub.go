@@ -192,7 +192,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
-		tableDesc := objDesc.(*tabledesc.ImmutableTableDescriptor)
+		tableDesc := objDesc.(*tabledesc.Immutable)
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue
@@ -205,10 +205,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context,
-	p *planner,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
-	tableName *tree.TableName,
+	ctx context.Context, p *planner, tableDesc *tabledesc.Immutable, tableName *tree.TableName,
 ) error {
 	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
@@ -286,7 +283,7 @@ func (n *scrubNode) startScrubTable(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *tabledesc.ImmutableTableDescriptor, columns []*descpb.ColumnDescriptor,
+	tableDesc *tabledesc.Immutable, columns []*descpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -345,7 +342,7 @@ func pairwiseOp(left []string, right []string, op string) []string {
 // createPhysicalCheckOperations will return the physicalCheckOperation
 // for all indexes on a table.
 func createPhysicalCheckOperations(
-	tableDesc *tabledesc.ImmutableTableDescriptor, tableName *tree.TableName,
+	tableDesc *tabledesc.Immutable, tableName *tree.TableName,
 ) (checks []checkOperation) {
 	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
 	for i := range tableDesc.Indexes {
@@ -362,7 +359,7 @@ func createPhysicalCheckOperations(
 // first invalid index.
 func createIndexCheckOperations(
 	indexNames tree.NameList,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
@@ -420,7 +417,7 @@ func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
 	constraintNames tree.NameList,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {

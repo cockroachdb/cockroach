@@ -27,13 +27,13 @@ import (
 func updateDescriptorGCMutations(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	table *tabledesc.ImmutableTableDescriptor,
+	table *tabledesc.Immutable,
 	garbageCollectedIndexID descpb.IndexID,
 ) error {
 	log.Infof(ctx, "updating GCMutations for table %d after removing index %d", table.ID, garbageCollectedIndexID)
 	// Remove the mutation from the table descriptor.
 	updateTableMutations := func(desc catalog.MutableDescriptor) error {
-		tbl := desc.(*tabledesc.MutableTableDescriptor)
+		tbl := desc.(*tabledesc.Mutable)
 		for i := 0; i < len(tbl.GCMutations); i++ {
 			other := tbl.GCMutations[i]
 			if other.IndexID == garbageCollectedIndexID {
@@ -59,10 +59,7 @@ func updateDescriptorGCMutations(
 
 // dropTableDesc removes a descriptor from the KV database.
 func dropTableDesc(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable,
 ) error {
 	log.Infof(ctx, "removing table descriptor for table %d", tableDesc.ID)
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

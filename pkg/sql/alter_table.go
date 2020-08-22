@@ -260,7 +260,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-				affected := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
+				affected := make(map[descpb.ID]*tabledesc.Mutable)
 
 				// If there are any FKs, we will need to update the table descriptor of the
 				// depended-on table (to register this table against its DependedOnBy field).
@@ -563,7 +563,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err := n.tableDesc.DropConstraint(
 				params.ctx,
 				name, details,
-				func(desc *tabledesc.MutableTableDescriptor, ref *descpb.ForeignKeyConstraint) error {
+				func(desc *tabledesc.Mutable, ref *descpb.ForeignKeyConstraint) error {
 					return params.p.removeFKBackReference(params.ctx, desc, ref)
 				}, params.ExecCfg().Settings); err != nil {
 				return err
@@ -806,7 +806,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 }
 
 func (p *planner) setAuditMode(
-	ctx context.Context, desc *tabledesc.MutableTableDescriptor, auditMode tree.AuditMode,
+	ctx context.Context, desc *tabledesc.Mutable, auditMode tree.AuditMode,
 ) (bool, error) {
 	// An auditing config change is itself auditable!
 	// We record the event even if the permission check below fails:
@@ -831,9 +831,7 @@ func (n *alterTableNode) Close(context.Context)        {}
 // addIndexMutationWithSpecificPrimaryKey adds an index mutation into the given table descriptor, but sets up
 // the index with ExtraColumnIDs from the given index, rather than the table's primary key.
 func addIndexMutationWithSpecificPrimaryKey(
-	table *tabledesc.MutableTableDescriptor,
-	toAdd *descpb.IndexDescriptor,
-	primary *descpb.IndexDescriptor,
+	table *tabledesc.Mutable, toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
@@ -858,7 +856,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 // dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
 	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
 	params runParams,
@@ -1124,11 +1122,11 @@ func (p *planner) removeColumnComment(
 // don't have to manually take care of updating both table descriptors.
 func (p *planner) updateFKBackReferenceName(
 	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	ref *descpb.ForeignKeyConstraint,
 	newName string,
 ) error {
-	var referencedTableDesc *tabledesc.MutableTableDescriptor
+	var referencedTableDesc *tabledesc.Mutable
 	// We don't want to lookup/edit a second copy of the same table.
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc

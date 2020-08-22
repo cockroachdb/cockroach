@@ -183,7 +183,7 @@ func spansForAllTableIndexes(
 		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
-			tbl := tabledesc.NewImmutableTableDescriptor(*rawTbl)
+			tbl := tabledesc.NewImmutable(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {

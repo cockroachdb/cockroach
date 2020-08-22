@@ -54,7 +54,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	toTruncate := make(map[descpb.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
-	toTraverse := make([]tabledesc.MutableTableDescriptor, 0, len(n.Tables))
+	toTraverse := make([]tabledesc.Mutable, 0, len(n.Tables))
 
 	// Collect copies of each interleaved descriptor being truncated before any
 	// modification has been done to them. We need this in order to truncate
@@ -276,7 +276,7 @@ func (p *planner) truncateTable(
 	// Reassign any self references.
 	if err := p.reassignInterleaveIndexReferences(
 		ctx,
-		[]*tabledesc.MutableTableDescriptor{tableDesc},
+		[]*tabledesc.Mutable{tableDesc},
 		tableDesc.ID,
 		indexIDMapping,
 	); err != nil {
@@ -320,11 +320,7 @@ func (p *planner) truncateTable(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func ClearTableDataInChunks(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
-	traceKV bool,
+	ctx context.Context, db *kv.DB, codec keys.SQLCodec, tableDesc *tabledesc.Immutable, traceKV bool,
 ) error {
 	const chunkSize = row.TableTruncateChunkSize
 	var resume roachpb.Span
@@ -354,13 +350,13 @@ func ClearTableDataInChunks(
 // findAllReferencingInterleaves finds all tables that might interleave or
 // be interleaved by the input table.
 func (p *planner) findAllReferencingInterleaves(
-	ctx context.Context, table *tabledesc.MutableTableDescriptor,
-) ([]*tabledesc.MutableTableDescriptor, error) {
+	ctx context.Context, table *tabledesc.Mutable,
+) ([]*tabledesc.Mutable, error) {
 	refs, err := table.FindAllReferences()
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]*tabledesc.MutableTableDescriptor, 0, len(refs))
+	tables := make([]*tabledesc.Mutable, 0, len(refs))
 	for id := range refs {
 		if id == table.ID {
 			continue
@@ -379,7 +375,7 @@ func (p *planner) findAllReferencingInterleaves(
 // interleave descriptor references according to indexIDMapping.
 func (p *planner) reassignInterleaveIndexReferences(
 	ctx context.Context,
-	tables []*tabledesc.MutableTableDescriptor,
+	tables []*tabledesc.Mutable,
 	truncatedID descpb.ID,
 	indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
@@ -412,9 +408,7 @@ func (p *planner) reassignInterleaveIndexReferences(
 }
 
 func (p *planner) reassignIndexComments(
-	ctx context.Context,
-	table *tabledesc.MutableTableDescriptor,
-	indexIDMapping map[descpb.IndexID]descpb.IndexID,
+	ctx context.Context, table *tabledesc.Mutable, indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
 	// Check if there are any index comments that need to be updated.
 	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(

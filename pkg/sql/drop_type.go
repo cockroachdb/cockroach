@@ -170,7 +170,7 @@ func (p *planner) removeTypeBackReference(
 }
 
 func (p *planner) addBackRefsFromAllTypesInTable(
-	ctx context.Context, desc *tabledesc.MutableTableDescriptor,
+	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
 	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)
@@ -192,7 +192,7 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 }
 
 func (p *planner) removeBackRefsFromAllTypesInTable(
-	ctx context.Context, desc *tabledesc.MutableTableDescriptor,
+	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
 	typeIDs, err := desc.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
 		mutDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, id)

@@ -54,10 +54,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 )
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *PlanningCtx,
-	desc *tabledesc.ImmutableTableDescriptor,
-	reqStats []requestedStat,
-	job *jobs.Job,
+	planCtx *PlanningCtx, desc *tabledesc.Immutable, reqStats []requestedStat, job *jobs.Job,
 ) (*PhysicalPlan, error) {
 	if len(reqStats) == 0 {
 		return nil, errors.New("no stats requested")
@@ -254,7 +251,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		}
 	}
 
-	tableDesc := tabledesc.NewImmutableTableDescriptor(details.Table)
+	tableDesc := tabledesc.NewImmutable(details.Table)
 	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
 }
 

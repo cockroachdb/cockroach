@@ -29,9 +29,7 @@ import (
 )
 
 func (p *planner) AlterPrimaryKey(
-	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
-	alterPKNode *tree.AlterTableAlterPrimaryKey,
+	ctx context.Context, tableDesc *tabledesc.Mutable, alterPKNode *tree.AlterTableAlterPrimaryKey,
 ) error {
 	// Make sure that all nodes in the cluster are able to perform primary key changes before proceeding.
 	if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.VersionPrimaryKeyChanges) {

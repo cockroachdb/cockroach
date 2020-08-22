@@ -71,7 +71,7 @@ func emitExplain(
 	ob.AddField("distribution", distribution.String())
 	ob.AddField("vectorized", fmt.Sprintf("%t", vectorized))
 	spanFormatFn := func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string {
-		var tabDesc *tabledesc.ImmutableTableDescriptor
+		var tabDesc *tabledesc.Immutable
 		var idxDesc *descpb.IndexDescriptor
 		if table.IsVirtualTable() {
 			tabDesc = table.(*optVirtualTable).desc

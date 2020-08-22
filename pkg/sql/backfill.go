@@ -544,7 +544,7 @@ func (sc *SchemaChanger) validateConstraints(
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *tabledesc.ImmutableTableDescriptor
+	var tableDesc *tabledesc.Immutable
 
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
@@ -624,7 +624,7 @@ func (sc *SchemaChanger) validateConstraints(
 // reuse an existing kv.Txn safely.
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	tableDesc, err := tc.GetTableVersionByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
 	if err != nil {
 		return nil, err
@@ -644,7 +644,7 @@ func (sc *SchemaChanger) getTableVersion(
 func TruncateInterleavedIndexes(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	table *tabledesc.ImmutableTableDescriptor,
+	table *tabledesc.Immutable,
 	indexes []descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "truncating %d interleaved indexes", len(indexes))
@@ -991,15 +991,15 @@ func (sc *SchemaChanger) distBackfill(
 // TODO(ajwerner): Fix the transaction and descriptor lifetimes here.
 func (sc *SchemaChanger) updateJobRunningStatus(
 	ctx context.Context, status jobs.RunningStatus,
-) (*tabledesc.MutableTableDescriptor, error) {
-	var tableDesc *tabledesc.MutableTableDescriptor
+) (*tabledesc.Mutable, error) {
+	var tableDesc *tabledesc.Mutable
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID, catalogkv.Mutable,
 			catalogkv.TableDescriptorKind, true /* required */)
 		if err != nil {
 			return err
 		}
-		tableDesc = desc.(*tabledesc.MutableTableDescriptor)
+		tableDesc = desc.(*tabledesc.Mutable)
 
 		// Update running status of job.
 		updateJobRunningProgress := false
@@ -1059,7 +1059,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 
 	readAsOf := sc.clock.Now()
-	var tableDesc *tabledesc.ImmutableTableDescriptor
+	var tableDesc *tabledesc.Immutable
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tableDesc, err = catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
@@ -1118,7 +1118,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateInvertedIndexes(
 	ctx context.Context,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
@@ -1234,7 +1234,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 // at the historical fixed timestamp for checks.
 func (sc *SchemaChanger) validateForwardIndexes(
 	ctx context.Context,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	indexes []*descpb.IndexDescriptor,
 	runHistoricalTxn historicalTxnRunner,
 ) error {
@@ -1461,7 +1461,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 // It operates entirely on the current goroutine and is thus able to
 // reuse the planner's kv.Txn safely.
 func runSchemaChangesInTxn(
-	ctx context.Context, planner *planner, tableDesc *tabledesc.MutableTableDescriptor, traceKV bool,
+	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
 ) error {
 	if len(tableDesc.DrainingNames) > 0 {
 		// Reclaim all the old names. Leave the data and descriptor
@@ -1491,7 +1491,7 @@ func runSchemaChangesInTxn(
 	// mutations that need to be processed.
 	for i := 0; i < len(tableDesc.Mutations); i++ {
 		m := tableDesc.Mutations[i]
-		immutDesc := tabledesc.NewImmutableTableDescriptor(*tableDesc.TableDesc())
+		immutDesc := tabledesc.NewImmutable(*tableDesc.TableDesc())
 		switch m.Direction {
 		case descpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
@@ -1520,7 +1520,7 @@ func runSchemaChangesInTxn(
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 				case descpb.ConstraintToUpdate_FOREIGN_KEY:
 					fk := t.Constraint.ForeignKey
-					var referencedTableDesc *tabledesc.MutableTableDescriptor
+					var referencedTableDesc *tabledesc.Mutable
 					// We don't want to lookup/edit a second copy of the same table.
 					selfReference := tableDesc.ID == fk.ReferencedTableID
 					if selfReference {
@@ -1807,7 +1807,7 @@ func columnBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
@@ -1841,7 +1841,7 @@ func indexBackfillInTxn(
 	txn *kv.Txn,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	traceKV bool,
 ) error {
 	var backfiller backfill.IndexBackfiller
@@ -1868,7 +1868,7 @@ func indexTruncateInTxn(
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	idx *descpb.IndexDescriptor,
 	traceKV bool,
 ) error {
