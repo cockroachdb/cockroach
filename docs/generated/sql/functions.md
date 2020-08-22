@@ -728,7 +728,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant does not utilize any geospatial index.</p>
 </span></td></tr>
-<tr><td><a name="_st_dfullywithin"></a><code>_st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.</p>
+<tr><td><a name="_st_dfullywithin"></a><code>_st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.</p>
+<p>This function variant does not utilize any geospatial index.</p>
+</span></td></tr>
+<tr><td><a name="_st_dfullywithinexclusive"></a><code>_st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant does not utilize any geospatial index.</p>
 </span></td></tr>
 <tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points using S2. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
@@ -1136,7 +1139,10 @@ from the given Geometry.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
-<tr><td><a name="st_dfullywithin"></a><code>st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.</p>
+<tr><td><a name="st_dfullywithin"></a><code>st_dfullywithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.</p>
+<p>This function variant will attempt to utilize any available geospatial index.</p>
+</span></td></tr>
+<tr><td><a name="st_dfullywithinexclusive"></a><code>st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 </span></td></tr>
 <tr><td><a name="st_dimension"></a><code>st_dimension(geometry: geometry) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of topological dimensions of a given Geometry.</p>

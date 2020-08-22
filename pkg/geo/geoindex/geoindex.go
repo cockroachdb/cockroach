@@ -32,19 +32,20 @@ import (
 // index scan may produce false positives. Therefore, the original function must
 // be called on the output of the index operation to filter the results.
 var RelationshipMap = map[string]RelationshipType{
-	"st_covers":           Covers,
-	"st_coveredby":        CoveredBy,
-	"st_contains":         Covers,
-	"st_containsproperly": Covers,
-	"st_crosses":          Intersects,
-	"st_dwithin":          DWithin,
-	"st_dfullywithin":     DFullyWithin,
-	"st_equals":           Intersects,
-	"st_intersects":       Intersects,
-	"st_overlaps":         Intersects,
-	"st_touches":          Intersects,
-	"st_within":           CoveredBy,
-	"st_dwithinexclusive": DWithin,
+	"st_covers":                Covers,
+	"st_coveredby":             CoveredBy,
+	"st_contains":              Covers,
+	"st_containsproperly":      Covers,
+	"st_crosses":               Intersects,
+	"st_dwithin":               DWithin,
+	"st_dfullywithin":          DFullyWithin,
+	"st_equals":                Intersects,
+	"st_intersects":            Intersects,
+	"st_overlaps":              Intersects,
+	"st_touches":               Intersects,
+	"st_within":                CoveredBy,
+	"st_dwithinexclusive":      DWithin,
+	"st_dfullywithinexclusive": DFullyWithin,
 }
 
 // RelationshipReverseMap contains a default function for each of the

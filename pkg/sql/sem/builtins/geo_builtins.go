@@ -2632,14 +2632,14 @@ Note if geometries are the same, it will return the LineString with the minimum 
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist))
+				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist), geo.FnInclusive)
 				if err != nil {
 					return nil, err
 				}
 				return tree.MakeDBool(tree.DBool(ret)), nil
 			},
 			Info: infoBuilder{
-				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units. " +
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, inclusive. " +
 					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than or equal to distance units.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
@@ -4051,6 +4051,32 @@ Bottom Left.`,
 		},
 	),
 	"st_dwithinexclusive": makeSTDWithinBuiltin(geo.FnExclusive),
+	"st_dfullywithinexclusive": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry_a", types.Geometry},
+				{"geometry_b", types.Geometry},
+				{"distance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				a := args[0].(*tree.DGeometry)
+				b := args[1].(*tree.DGeometry)
+				dist := args[2].(*tree.DFloat)
+				ret, err := geomfn.DFullyWithin(a.Geometry, b.Geometry, float64(*dist), geo.FnExclusive)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. " +
+					"In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 }
 
 // returnCompatibilityFixedStringBuiltin is an overload that takes in 0 arguments
@@ -4621,9 +4647,9 @@ func stAsGeoJSONFromTuple(
 	return tree.NewDString(string(marshalledIndent)), nil
 }
 
-func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
+func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 	exclusivityStr := ", inclusive."
-	if exclusive {
+	if exclusivity == geo.FnExclusive {
 		exclusivityStr = ", exclusive."
 	}
 	return makeBuiltin(
@@ -4639,7 +4665,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				a := args[0].(*tree.DGeometry)
 				b := args[1].(*tree.DGeometry)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusive)
+				ret, err := geomfn.DWithin(a.Geometry, b.Geometry, float64(*dist), exclusivity)
 				if err != nil {
 					return nil, err
 				}
@@ -4662,7 +4688,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				a := args[0].(*tree.DGeography)
 				b := args[1].(*tree.DGeography)
 				dist := args[2].(*tree.DFloat)
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid, exclusive)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), geogfn.UseSpheroid, exclusivity)
 				if err != nil {
 					return nil, err
 				}
@@ -4690,7 +4716,7 @@ func makeSTDWithinBuiltin(exclusive geo.FnExclusivity) builtinDefinition {
 				dist := args[2].(*tree.DFloat)
 				useSpheroid := args[3].(*tree.DBool)
 
-				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid), exclusive)
+				ret, err := geogfn.DWithin(a.Geography, b.Geography, float64(*dist), toUseSphereOrSpheroid(useSpheroid), exclusivity)
 				if err != nil {
 					return nil, err
 				}
