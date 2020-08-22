@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -68,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/jackc/pgx"
@@ -79,6 +81,171 @@ import (
 
 func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
+}
+
+type datadrivenTestState struct {
+	servers    map[string]serverutils.TestServerInterface
+	dataDirs   map[string]string
+	sqlDBs     map[string]*gosql.DB
+	cleanupFns []func()
+}
+
+func (d *datadrivenTestState) cleanup(ctx context.Context) {
+	for _, s := range d.servers {
+		s.Stopper().Stop(ctx)
+	}
+	for _, f := range d.cleanupFns {
+		f()
+	}
+}
+
+func (d *datadrivenTestState) addServer(t *testing.T, name, iodir string) {
+	var tc serverutils.TestClusterInterface
+	var cleanup func()
+	if iodir == "" {
+		_, tc, _, iodir, cleanup = BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+	} else {
+		_, tc, _, cleanup = backupRestoreTestSetupEmpty(t, singleNode, iodir, InitNone)
+	}
+	d.servers[name] = tc.Server(0)
+	d.sqlDBs[name] = tc.ServerConn(0)
+	d.dataDirs[name] = iodir
+	d.cleanupFns = append(d.cleanupFns, cleanup)
+}
+
+func (d *datadrivenTestState) getIODir(t *testing.T, server string) string {
+	dir, ok := d.dataDirs[server]
+	if !ok {
+		t.Fatalf("server %s does not exist", server)
+	}
+	return dir
+}
+
+func (d *datadrivenTestState) getSQLDB(t *testing.T, server string) *gosql.DB {
+	db, ok := d.sqlDBs[server]
+	if !ok {
+		t.Fatalf("server %s does not exist", server)
+	}
+	return db
+}
+
+func newDatadrivenTestState() datadrivenTestState {
+	return datadrivenTestState{
+		servers:  make(map[string]serverutils.TestServerInterface),
+		dataDirs: make(map[string]string),
+		sqlDBs:   make(map[string]*gosql.DB),
+	}
+}
+
+// TestBackupRestoreDataDriven is a datadriven test to test standard
+// backup/restore interactions involving setting up clusters and running
+// different SQL commands. The test files are in testdata/backup-restore.
+// It has the following commands:
+//
+// - "new-server name=<name> [share-io-dir=<name>]": create a new server with
+//   the input name. It takes in an optional share-io-dir argument to share an
+//   IO directory with an existing server. This is useful when restoring from a
+//   backup taken in another server.
+// - "exec-sql server=<name>": executes the input SQL query on the target server.
+//   By default, server is the last created server.
+// - "query-sql server=<name>": executes the input SQL query on the target server
+//   and expects that the results are as desired. By default, server is the last
+//   created server.
+// - "reset": clear all state associated with the test.
+func TestBackupRestoreDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	datadriven.Walk(t, "testdata/backup-restore/", func(t *testing.T, path string) {
+		var lastCreatedServer string
+		ds := newDatadrivenTestState()
+		defer ds.cleanup(ctx)
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "reset":
+				ds.cleanup(ctx)
+				ds = newDatadrivenTestState()
+				return ""
+			case "new-server":
+				var name, shareDirWith, iodir string
+				d.ScanArgs(t, "name", &name)
+				if d.HasArg("share-io-dir") {
+					d.ScanArgs(t, "share-io-dir", &shareDirWith)
+				}
+				if shareDirWith != "" {
+					iodir = ds.getIODir(t, shareDirWith)
+				}
+				lastCreatedServer = name
+				ds.addServer(t, name, iodir)
+				return ""
+			case "exec-sql":
+				var server string
+				if d.HasArg("server") {
+					d.ScanArgs(t, "server", &server)
+				} else {
+					server = lastCreatedServer
+				}
+				_, err := ds.getSQLDB(t, server).Exec(d.Input)
+				if err == nil {
+					return ""
+				}
+				return err.Error()
+			case "query-sql":
+				var server string
+				if d.HasArg("server") {
+					d.ScanArgs(t, "server", &server)
+				} else {
+					server = lastCreatedServer
+				}
+				rows, err := ds.getSQLDB(t, server).Query(d.Input)
+				if err != nil {
+					return err.Error()
+				}
+				// Find out how many output columns there are.
+				cols, err := rows.Columns()
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Allocate a buffer of *interface{} to write results into.
+				elemsI := make([]interface{}, len(cols))
+				for i := range elemsI {
+					elemsI[i] = new(interface{})
+				}
+				elems := make([]string, len(cols))
+
+				// Build string output of the row data.
+				var output strings.Builder
+				for rows.Next() {
+					if err := rows.Scan(elemsI...); err != nil {
+						t.Fatal(err)
+					}
+					for i, elem := range elemsI {
+						val := *(elem.(*interface{}))
+						switch t := val.(type) {
+						case []byte:
+							// The postgres wire protocol does not distinguish between
+							// strings and byte arrays, but our tests do. In order to do
+							// The Right Thing™, we replace byte arrays which are valid
+							// UTF-8 with strings. This allows byte arrays which are not
+							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+							// while printing valid strings naturally.
+							if str := string(t); utf8.ValidString(str) {
+								elems[i] = str
+							}
+						default:
+							elems[i] = fmt.Sprintf("%v", val)
+						}
+					}
+					output.WriteString(strings.Join(elems, " "))
+					output.WriteString("\n")
+				}
+				return output.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+	})
 }
 
 func TestBackupRestoreStatementResult(t *testing.T) {
@@ -1893,119 +2060,6 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 				`SELECT 'another'::d.farewell;`)
 			sqlDB.Exec(t, `SELECT 'third'::d.farewell`)
 		})
-	})
-
-	// Test full cluster backup/restore.
-	t.Run("full-cluster", func(t *testing.T) {
-		_, _, sqlDB, dataDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
-		defer cleanupFn()
-		// Create some types, databases, and tables that use them.
-		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
-
-CREATE DATABASE d;
-CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
-CREATE TABLE d.t1 (x d.greeting);
-INSERT INTO d.t1 VALUES ('hello'), ('howdy');
-CREATE TABLE d.t2 (x d.greeting[]);
-INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
-
-CREATE DATABASE d2;
-CREATE TYPE d2.farewell AS ENUM ('bye', 'cya');
-CREATE TABLE d2.t1 (x d2.farewell);
-INSERT INTO d2.t1 VALUES ('bye'), ('cya');
-CREATE TABLE d2.t2 (x d2.farewell[]);
-INSERT INTO d2.t2 VALUES (ARRAY['bye']), (ARRAY['cya']);
-`)
-		// Backup the cluster.
-		sqlDB.Exec(t, `BACKUP TO 'nodelocal://0/test/'`)
-		// Start a new server that shares the data directory.
-		_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitNone)
-		defer cleanupRestore()
-
-		// Restore into the new cluster.
-		sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/test/'`)
-
-		// Check all of the tables have the right data.
-		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.t1 ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
-		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d.t2 ORDER BY x`, [][]string{{"{howdy}"}, {"{hi}"}})
-		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d2.t1 ORDER BY x`, [][]string{{"bye"}, {"cya"}})
-		sqlDBRestore.CheckQueryResults(t, `SELECT * FROM d2.t2 ORDER BY x`, [][]string{{"{bye}"}, {"{cya}"}})
-
-		// We should be able to resolve each restored type. Test this by inserting
-		// into each of the restored tables.
-		sqlDBRestore.Exec(t, `INSERT INTO d.t1 VALUES ('hi')`)
-		sqlDBRestore.Exec(t, `INSERT INTO d.t2 VALUES (ARRAY['hello'])`)
-		sqlDBRestore.Exec(t, `INSERT INTO d2.t1 VALUES ('cya')`)
-		sqlDBRestore.Exec(t, `INSERT INTO d2.t2 VALUES (ARRAY['cya'])`)
-
-		// Each of the restored types should have namespace entries. Test this by
-		// trying to create types that would cause namespace conflicts.
-		sqlDBRestore.Exec(t, `SET experimental_enable_enums = true`)
-		sqlDBRestore.ExpectErr(t, `pq: type "d.public.greeting" already exists`, `CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')`)
-		sqlDBRestore.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
-		sqlDBRestore.ExpectErr(t, `pq: type "d2.public.farewell" already exists`, `CREATE TYPE d2.farewell AS ENUM ('go', 'away')`)
-		sqlDBRestore.ExpectErr(t, `pq: type "d2.public._farewell" already exists`, `CREATE TYPE d2._farewell AS ENUM ('go', 'away')`)
-
-		// We shouldn't be able to drop the types since there are tables that
-		// depend on them. These tests ensure that the back references from types
-		// to tables that use them are handled correctly by backup and restore.
-		sqlDBRestore.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d.public.t1 d.public.t2\]\) still depend on it`, `DROP TYPE d.greeting`)
-		sqlDBRestore.ExpectErr(t, `pq: cannot drop type "farewell" because other objects \(\[d2.public.t1 d2.public.t2\]\) still depend on it`, `DROP TYPE d2.farewell`)
-	})
-
-	// Test backup/restore of a database.
-	t.Run("database", func(t *testing.T) {
-		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
-		defer cleanupFn()
-		// Create a database with some types and tables. We include a table with
-		// different expressions within to test that the types within get remapped.
-		sqlDB.Exec(t, `
-SET experimental_enable_enums = true;
-CREATE DATABASE d;
-CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
-CREATE TYPE d.farewell AS ENUM ('bye', 'cya');
-CREATE TABLE d.t1 (x d.greeting);
-INSERT INTO d.t1 VALUES ('hello'), ('howdy');
-CREATE TABLE d.t2 (x d.greeting[]);
-INSERT INTO d.t2 VALUES (ARRAY['howdy']), (ARRAY['hi']);
-CREATE TABLE d.expr (
-	x d.greeting,
-  y d.greeting DEFAULT 'hello',
-	z bool AS (y = 'howdy') STORED,
-  CHECK (x < 'hi'),
-	CHECK (x = ANY enum_range(y, 'hi'))
-);
-`)
-		// Now backup the database.
-		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
-		// Drop the database and restore into it.
-		sqlDB.Exec(t, `DROP DATABASE d`)
-		sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
-
-		// All of the tables should have the values we expect.
-		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t1 ORDER BY x`, [][]string{{"hello"}, {"howdy"}})
-		sqlDB.CheckQueryResults(t, `SELECT * FROM d.t2 ORDER BY x`, [][]string{{"{howdy}"}, {"{hi}"}})
-
-		// Insert a row into the expr table so that all of the expressions are
-		// evaluated and checked.
-		sqlDB.Exec(t, `INSERT INTO d.expr VALUES ('howdy')`)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM d.expr`, [][]string{{"howdy", "hello", "false"}})
-		sqlDB.ExpectErr(t, `pq: failed to satisfy CHECK constraint`, `INSERT INTO d.expr VALUES ('hi')`)
-
-		// We should be able to use the restored types to create new tables.
-		sqlDB.Exec(t, `CREATE TABLE d.t3 (x d.greeting, y d.farewell)`)
-		// We should detect name conflicts trying to overwrite existing type names.
-		sqlDB.ExpectErr(t, `pq: type "d.public.greeting" already exists`, `CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')`)
-		sqlDB.ExpectErr(t, `pq: type "d.public._greeting" already exists`, `CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')`)
-		sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`, `CREATE TYPE d.farewell AS ENUM ('hello', 'hiya')`)
-		sqlDB.ExpectErr(t, `pq: type "d.public._farewell" already exists`, `CREATE TYPE d._farewell AS ENUM ('hello', 'hiya')`)
-
-		// We shouldn't be able to drop the types since there are tables that
-		// depend on them. These tests ensure that the back references from types
-		// to tables that use them are handled correctly by backup and restore.
-		sqlDB.ExpectErr(t, `pq: cannot drop type "greeting" because other objects \(\[d.public.t1 d.public.t2 d.public.expr d.public.t3\]\) still depend on it`, `DROP TYPE d.greeting`)
-		sqlDB.ExpectErr(t, `pq: cannot drop type "farewell" because other objects \(\[d.public.t3\]\) still depend on it`, `DROP TYPE d.farewell`)
 	})
 
 	// Test backup/restore of a single table.
