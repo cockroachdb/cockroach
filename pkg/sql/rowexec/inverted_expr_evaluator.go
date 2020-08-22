@@ -227,6 +227,19 @@ type invertedSpanRoutingInfo struct {
 	exprAndSetIndexList []exprAndSetIndex
 }
 
+// invertedSpanRoutingInfosByEndKey is a slice of invertedSpanRoutingInfo that
+// implements the sort.Interface interface by sorting infos by their span's end
+// key. The (unchecked) assumption is that spans in a slice all have the same
+// start key.
+type invertedSpanRoutingInfosByEndKey []invertedSpanRoutingInfo
+
+// Implement sort.Interface.
+func (s invertedSpanRoutingInfosByEndKey) Len() int      { return len(s) }
+func (s invertedSpanRoutingInfosByEndKey) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s invertedSpanRoutingInfosByEndKey) Less(i, j int) bool {
+	return bytes.Compare(s[i].span.End, s[j].span.End) < 0
+}
+
 // batchedInvertedExprEvaluator is for evaluating one or more expressions. The
 // batched evaluator can be reused by calling reset(). In the build phase,
 // append expressions directly to exprs. A nil expression is permitted, and is
@@ -241,8 +254,9 @@ type batchedInvertedExprEvaluator struct {
 	fragmentedSpans []invertedSpanRoutingInfo
 
 	// Temporary state used during initialization.
-	routingSpans  []invertedSpanRoutingInfo
-	coveringSpans []invertedSpan
+	routingSpans       []invertedSpanRoutingInfo
+	coveringSpans      []invertedSpan
+	pendingSpansToSort invertedSpanRoutingInfosByEndKey
 }
 
 // Helper used in building fragmentedSpans using pendingSpans. pendingSpans
@@ -279,11 +293,11 @@ type batchedInvertedExprEvaluator struct {
 func (b *batchedInvertedExprEvaluator) fragmentPendingSpans(
 	pendingSpans []invertedSpanRoutingInfo, fragmentUntil invertedexpr.EncInvertedVal,
 ) []invertedSpanRoutingInfo {
-	// The start keys are the same, so this only sorts in increasing
-	// order of end keys.
-	sort.Slice(pendingSpans, func(i, j int) bool {
-		return bytes.Compare(pendingSpans[i].span.End, pendingSpans[j].span.End) < 0
-	})
+	// The start keys are the same, so this only sorts in increasing order of
+	// end keys. Assign slice to a field on the receiver before sorting to avoid
+	// a heap allocation when the slice header passes through an interface.
+	b.pendingSpansToSort = invertedSpanRoutingInfosByEndKey(pendingSpans)
+	sort.Sort(&b.pendingSpansToSort)
 	for len(pendingSpans) > 0 {
 		if fragmentUntil != nil && bytes.Compare(fragmentUntil, pendingSpans[0].span.Start) <= 0 {
 			break
