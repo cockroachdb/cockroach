@@ -65,22 +65,19 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 
-tc_start_block "Compile publish-artifacts"
-build/builder.sh go install ./pkg/cmd/publish-artifacts
-tc_end_block "Compile publish-artifacts"
-
-
 tc_start_block "Compile publish-provisional-artifacts"
 build/builder.sh go install ./pkg/cmd/publish-provisional-artifacts
 tc_end_block "Compile publish-provisional-artifacts"
 
 
 tc_start_block "Make and publish release S3 artifacts"
+# Using publish-provisional-artifacts here is funky. We're directly publishing
+# the official binaries, not provisional ones. Legacy naming. To clean up...
 build/builder.sh env \
   AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   TC_BUILD_BRANCH="$build_name" \
-  publish-artifacts -release -bucket "$bucket"
+  publish-provisional-artifacts -provisional -release -bucket "$bucket"
 tc_end_block "Make and publish release S3 artifacts"
 
 
@@ -89,7 +86,7 @@ configure_docker_creds
 docker_login_with_google
 docker_login
 
-# TODO: update publish-artifacts with option to leave one or more cockroach binaries in the local filesystem
+# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 
