@@ -3409,7 +3409,10 @@ func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if includeConstraints || mutation.GetConstraint() == nil {
+		// Don't include the primary key swap, or constraint mutations if
+		// they were not requested.
+		if mutation.GetPrimaryKeySwap() == nil &&
+			(includeConstraints || mutation.GetConstraint() == nil) {
 			if err := table.MakeMutationComplete(mutation); err != nil {
 				return nil, err
 			}
