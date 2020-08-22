@@ -667,6 +667,11 @@ func MakeHashJoinerSpec(
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
 	case descpb.LeftAntiJoin:
+		// LEFT ANTI joins currently rely on the fact that
+		// ht.probeScratch.headID is populated in order to perform the
+		// matching. However, headID is only populated when the right side is
+		// considered to be non-distinct, so we override that information here.
+		rightDistinct = false
 	case descpb.IntersectAllJoin:
 	case descpb.ExceptAllJoin:
 	default:
