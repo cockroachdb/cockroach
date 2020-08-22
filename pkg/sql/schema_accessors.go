@@ -50,10 +50,10 @@ type (
 	ImmutableDatabaseDescriptor = dbdesc.ImmutableDatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTableDescriptor = tabledesc.MutableTableDescriptor
+	MutableTableDescriptor = tabledesc.Mutable
 	// ImmutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ImmutableTableDescriptor = tabledesc.ImmutableTableDescriptor
+	ImmutableTableDescriptor = tabledesc.Immutable
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = descpb.TableDescriptor

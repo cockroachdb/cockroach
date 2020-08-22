@@ -291,7 +291,7 @@ func backupShowerDefault(
 								IgnoreComments: true,
 							}
 							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-								tabledesc.NewImmutableTableDescriptor(*table), displayOptions)
+								tabledesc.NewImmutable(*table), displayOptions)
 							if err != nil {
 								continue
 							}

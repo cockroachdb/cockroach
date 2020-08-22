@@ -86,7 +86,7 @@ func hasNewColumnDropBackfillMutation(e TableEvent) (res bool) {
 	return !dropMutationExists(e.Before) && dropMutationExists(e.After)
 }
 
-func dropMutationExists(desc *tabledesc.ImmutableTableDescriptor) bool {
+func dropMutationExists(desc *tabledesc.Immutable) bool {
 	for _, m := range desc.Mutations {
 		if m.Direction == descpb.DescriptorMutation_DROP &&
 			m.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
@@ -108,7 +108,7 @@ func newColumnNoBackfill(e TableEvent) (res bool) {
 		!e.Before.HasColumnBackfillMutation()
 }
 
-func pkChangeMutationExists(desc *tabledesc.ImmutableTableDescriptor) bool {
+func pkChangeMutationExists(desc *tabledesc.Immutable) bool {
 	for _, m := range desc.Mutations {
 		if m.Direction == descpb.DescriptorMutation_ADD && m.GetPrimaryKeySwap() != nil {
 			return true

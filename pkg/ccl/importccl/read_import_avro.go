@@ -448,7 +448,7 @@ var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
 	kvCh chan row.KVBatch,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,

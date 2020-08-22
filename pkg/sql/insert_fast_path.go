@@ -95,7 +95,7 @@ type insertFastPathFKSpanInfo struct {
 type insertFastPathFKCheck struct {
 	exec.InsertFastPathFKCheck
 
-	tabDesc     *tabledesc.ImmutableTableDescriptor
+	tabDesc     *tabledesc.Immutable
 	idxDesc     *descpb.IndexDescriptor
 	keyPrefix   []byte
 	colMap      map[descpb.ColumnID]int

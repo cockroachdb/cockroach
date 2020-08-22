@@ -56,7 +56,7 @@ CREATE INDEX ON t.t1 (x);
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
 	// to the pre-19.2 table descriptor format where foreign key information
 	// is stored on the index.
-	downgradeForeignKey := func(tbl *tabledesc.ImmutableTableDescriptor) *tabledesc.ImmutableTableDescriptor {
+	downgradeForeignKey := func(tbl *tabledesc.Immutable) *tabledesc.Immutable {
 		// Downgrade the outbound foreign keys.
 		for i := range tbl.OutboundFKs {
 			fk := &tbl.OutboundFKs[i]
@@ -64,7 +64,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			var referencedTbl *tabledesc.ImmutableTableDescriptor
+			var referencedTbl *tabledesc.Immutable
 			err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				referencedTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.ReferencedTableID)
 				return err
@@ -95,7 +95,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			var originTbl *tabledesc.ImmutableTableDescriptor
+			var originTbl *tabledesc.Immutable
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				originTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.OriginTableID)
 				return err

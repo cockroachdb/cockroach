@@ -90,7 +90,7 @@ func newTableReader(
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := tabledesc.NewImmutableTableDescriptor(spec.Table)
+	tableDesc := tabledesc.NewImmutable(spec.Table)
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
 	resultTypes := tableDesc.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := tableDesc.ColumnIdxMapWithMutations(returnMutations)

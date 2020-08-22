@@ -73,7 +73,7 @@ func TestTableEventFilter(t *testing.T) {
 			name: "don't filter end of add NULL-able computed column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: func() *tabledesc.ImmutableTableDescriptor {
+				Before: func() *tabledesc.Immutable {
 					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1))
 					col := td.Mutations[0].GetColumn()
 					col.Nullable = true

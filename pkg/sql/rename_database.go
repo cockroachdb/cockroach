@@ -240,7 +240,7 @@ func isAllowedDependentDescInRenameDatabase(
 	ctx context.Context,
 	dependedOn *descpb.TableDescriptor_Reference,
 	tbDesc catalog.TableDescriptor,
-	dependentDesc *tabledesc.ImmutableTableDescriptor,
+	dependentDesc *tabledesc.Immutable,
 	dbName string,
 ) (bool, string, error) {
 	// If it is a sequence, and it does not contain the database name, then we have

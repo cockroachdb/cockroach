@@ -310,7 +310,7 @@ CREATE TABLE crdb_internal.tables (
 			// Note: we do not use forEachTableDesc() here because we want to
 			// include added and dropped descriptors.
 			for _, desc := range descs {
-				table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
+				table, ok := desc.(*tabledesc.Immutable)
 				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 					continue
 				}
@@ -424,7 +424,7 @@ CREATE TABLE crdb_internal.schema_changes (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
+			table, ok := desc.(*tabledesc.Immutable)
 			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
@@ -2279,7 +2279,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
 			switch desc := desc.(type) {
-			case *tabledesc.ImmutableTableDescriptor:
+			case *tabledesc.Immutable:
 				parents[id] = uint32(desc.ParentID)
 				tableNames[id] = desc.GetName()
 				indexNames[id] = make(map[uint32]string)
@@ -2546,7 +2546,7 @@ CREATE TABLE crdb_internal.zones (
 				return err
 			}
 
-			var table *tabledesc.ImmutableTableDescriptor
+			var table *tabledesc.Immutable
 			if zs.Database != "" {
 				database, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, descpb.ID(id))
 				if err != nil {

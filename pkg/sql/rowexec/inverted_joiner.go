@@ -62,7 +62,7 @@ type invertedJoiner struct {
 
 	runningState invertedJoinerState
 	diskMonitor  *mon.BytesMonitor
-	desc         tabledesc.ImmutableTableDescriptor
+	desc         tabledesc.Immutable
 	// The map from ColumnIDs in the table to the column position.
 	colIdxMap map[descpb.ColumnID]int
 	index     *descpb.IndexDescriptor
@@ -161,7 +161,7 @@ func newInvertedJoiner(
 	output execinfra.RowReceiver,
 ) (execinfra.RowSourcedProcessor, error) {
 	ij := &invertedJoiner{
-		desc:                 tabledesc.MakeImmutableTableDescriptor(spec.Table),
+		desc:                 tabledesc.MakeImmutable(spec.Table),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		datumsToInvertedExpr: datumsToInvertedExpr,

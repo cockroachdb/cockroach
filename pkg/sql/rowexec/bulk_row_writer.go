@@ -38,7 +38,7 @@ type bulkRowWriter struct {
 	flowCtx        *execinfra.FlowCtx
 	processorID    int32
 	batchIdxAtomic int64
-	tableDesc      tabledesc.ImmutableTableDescriptor
+	tableDesc      tabledesc.Immutable
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
 	output         execinfra.RowReceiver
@@ -59,7 +59,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      tabledesc.MakeImmutableTableDescriptor(spec.Table),
+		tableDesc:      tabledesc.MakeImmutable(spec.Table),
 		spec:           spec,
 		input:          input,
 		output:         output,

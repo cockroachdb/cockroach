@@ -32,7 +32,7 @@ func CreateTestTableDescriptor(
 	parentID, id descpb.ID,
 	schema string,
 	privileges *descpb.PrivilegeDescriptor,
-) (*tabledesc.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
 	if err != nil {

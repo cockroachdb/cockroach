@@ -881,7 +881,7 @@ func newTestSpec(t *testing.T, format roachpb.IOFileFormat, inputs ...string) te
 
 	// Initialize table descriptor for import. We need valid descriptor to run
 	// converters, even though we don't actually import anything in this test.
-	var descr *tabledesc.MutableTableDescriptor
+	var descr *tabledesc.Mutable
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
 		descr = descForTable(t,

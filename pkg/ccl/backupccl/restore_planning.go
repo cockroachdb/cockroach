@@ -70,7 +70,7 @@ const (
 // non-empty db qualifiers with `newDB`.
 //
 // TODO: this AST traversal misses tables named in strings (#24556).
-func rewriteViewQueryDBNames(table *tabledesc.MutableTableDescriptor, newDB string) error {
+func rewriteViewQueryDBNames(table *tabledesc.Mutable, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
 		return pgerror.Wrapf(err, pgcode.Syntax,
@@ -117,12 +117,12 @@ func rewriteTypesInExpr(expr string, rewrites DescRewriteMap) (string, error) {
 // skipMissingViews option is not set, an error is returned if any
 // unrestorable views are found.
 func maybeFilterMissingViews(
-	tablesByID map[descpb.ID]*tabledesc.MutableTableDescriptor, skipMissingViews bool,
-) (map[descpb.ID]*tabledesc.MutableTableDescriptor, error) {
+	tablesByID map[descpb.ID]*tabledesc.Mutable, skipMissingViews bool,
+) (map[descpb.ID]*tabledesc.Mutable, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
-	var hasValidViewDependencies func(desc *tabledesc.MutableTableDescriptor) bool
-	hasValidViewDependencies = func(desc *tabledesc.MutableTableDescriptor) bool {
+	var hasValidViewDependencies func(desc *tabledesc.Mutable) bool
+	hasValidViewDependencies = func(desc *tabledesc.Mutable) bool {
 		if !desc.IsView() {
 			return true
 		}
@@ -134,7 +134,7 @@ func maybeFilterMissingViews(
 		return true
 	}
 
-	filteredTablesByID := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
+	filteredTablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	for id, table := range tablesByID {
 		if hasValidViewDependencies(table) {
 			filteredTablesByID[id] = table
@@ -160,7 +160,7 @@ func allocateDescriptorRewrites(
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
-	tablesByID map[descpb.ID]*tabledesc.MutableTableDescriptor,
+	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
@@ -687,7 +687,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 		for _, desc := range backupManifest.Descriptors {
 			if table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
 				descGetter[table.ID] =
-					tabledesc.NewImmutableTableDescriptor(*protoutil.Clone(table).(*descpb.TableDescriptor))
+					tabledesc.NewImmutable(*protoutil.Clone(table).(*descpb.TableDescriptor))
 			}
 		}
 	}
@@ -702,7 +702,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 			if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := tabledesc.NewFilledInMutableExistingTableDescriptor(ctx, descGetter, skipFKsWithNoMatchingTable, table)
+			desc, err := tabledesc.NewFilledInExistingMutable(ctx, descGetter, skipFKsWithNoMatchingTable, table)
 			if err != nil {
 				return err
 			}
@@ -800,7 +800,7 @@ func maybeRewriteSchemaID(curSchemaID descpb.ID, descriptorRewrites DescRewriteM
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
 func RewriteTableDescs(
-	tables []*tabledesc.MutableTableDescriptor, descriptorRewrites DescRewriteMap, overrideDB string,
+	tables []*tabledesc.Mutable, descriptorRewrites DescRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := descriptorRewrites[table.ID]
@@ -1310,7 +1310,7 @@ func doRestorePlan(
 
 	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
 	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
-	tablesByID := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
+	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
@@ -1318,7 +1318,7 @@ func doRestorePlan(
 			databasesByID[desc.GetID()] = desc
 		case *schemadesc.Mutable:
 			schemasByID[desc.ID] = desc
-		case *tabledesc.MutableTableDescriptor:
+		case *tabledesc.Mutable:
 			tablesByID[desc.ID] = desc
 		case *typedesc.MutableTypeDescriptor:
 			typesByID[desc.ID] = desc
@@ -1353,7 +1353,7 @@ func doRestorePlan(
 	for i := range schemasByID {
 		schemas = append(schemas, schemasByID[i])
 	}
-	var tables []*tabledesc.MutableTableDescriptor
+	var tables []*tabledesc.Mutable
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
 	}

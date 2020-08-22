@@ -40,7 +40,7 @@ import (
 
 // TableEvent represents a change to a table descriptor.
 type TableEvent struct {
-	Before, After *tabledesc.ImmutableTableDescriptor
+	Before, After *tabledesc.Immutable
 }
 
 // Timestamp refers to the ModificationTime of the After table descriptor.
@@ -119,7 +119,7 @@ type SchemaFeed struct {
 		// of the table descriptor seen by the poller. This is needed to determine
 		// when a backilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
-		previousTableVersion map[descpb.ID]*tabledesc.ImmutableTableDescriptor
+		previousTableVersion map[descpb.ID]*tabledesc.Immutable
 	}
 }
 
@@ -139,7 +139,7 @@ func New(cfg Config) *SchemaFeed {
 		targets:  cfg.Targets,
 		leaseMgr: cfg.LeaseManager,
 	}
-	m.mu.previousTableVersion = make(map[descpb.ID]*tabledesc.ImmutableTableDescriptor)
+	m.mu.previousTableVersion = make(map[descpb.ID]*tabledesc.Immutable)
 	m.mu.highWater = cfg.InitialHighWater
 	return m
 }
@@ -186,7 +186,7 @@ func (tf *SchemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Lock()
 	initialTableDescTs := tf.mu.highWater
 	tf.mu.Unlock()
-	var initialDescs []*tabledesc.ImmutableTableDescriptor
+	var initialDescs []*tabledesc.Immutable
 	initialTableDescsFn := func(ctx context.Context, txn *kv.Txn) error {
 		initialDescs = initialDescs[:0]
 		txn.SetFixedTimestamp(ctx, initialTableDescTs)
@@ -322,7 +322,7 @@ func (tf *SchemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	}
 }
 
-func descLess(a, b *tabledesc.ImmutableTableDescriptor) bool {
+func descLess(a, b *tabledesc.Immutable) bool {
 	if a.ModificationTime.Equal(b.ModificationTime) {
 		return a.GetID() < b.GetID()
 	}
@@ -338,8 +338,8 @@ func descLess(a, b *tabledesc.ImmutableTableDescriptor) bool {
 func (tf *SchemaFeed) ingestDescriptors(
 	ctx context.Context,
 	startTS, endTS hlc.Timestamp,
-	descs []*tabledesc.ImmutableTableDescriptor,
-	validateFn func(ctx context.Context, desc *tabledesc.ImmutableTableDescriptor) error,
+	descs []*tabledesc.Immutable,
+	validateFn func(ctx context.Context, desc *tabledesc.Immutable) error,
 ) error {
 	sort.Slice(descs, func(i, j int) bool { return descLess(descs[i], descs[j]) })
 	var validateErr error
@@ -395,7 +395,7 @@ func (e TableEvent) String() string {
 	return formatEvent(e)
 }
 
-func formatDesc(desc *tabledesc.ImmutableTableDescriptor) string {
+func formatDesc(desc *tabledesc.Immutable) string {
 	return fmt.Sprintf("%d:%d@%v", desc.ID, desc.Version, desc.ModificationTime)
 }
 
@@ -403,9 +403,7 @@ func formatEvent(e TableEvent) string {
 	return fmt.Sprintf("%v->%v", formatDesc(e.Before), formatDesc(e.After))
 }
 
-func (tf *SchemaFeed) validateTable(
-	ctx context.Context, desc *tabledesc.ImmutableTableDescriptor,
-) error {
+func (tf *SchemaFeed) validateTable(ctx context.Context, desc *tabledesc.Immutable) error {
 	if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 		return err
 	}
@@ -451,7 +449,7 @@ func (tf *SchemaFeed) validateTable(
 
 func fetchTableDescriptorVersions(
 	ctx context.Context, db *kv.DB, startTS, endTS hlc.Timestamp, targets jobspb.ChangefeedTargets,
-) ([]*tabledesc.ImmutableTableDescriptor, error) {
+) ([]*tabledesc.Immutable, error) {
 	if log.V(2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
@@ -475,7 +473,7 @@ func fetchTableDescriptorVersions(
 		return nil, errors.Wrapf(err, `fetching changes for %s`, span)
 	}
 
-	var tableDescs []*tabledesc.ImmutableTableDescriptor
+	var tableDescs []*tabledesc.Immutable
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
@@ -513,7 +511,7 @@ func fetchTableDescriptorVersions(
 					return err
 				}
 				if tableDesc := descpb.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
-					tableDescs = append(tableDescs, tabledesc.NewImmutableTableDescriptor(*tableDesc))
+					tableDescs = append(tableDescs, tabledesc.NewImmutable(*tableDesc))
 				}
 			}
 		}(); err != nil {

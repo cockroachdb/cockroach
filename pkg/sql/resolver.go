@@ -497,7 +497,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return tabledesc.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
+	return tabledesc.NewExistingMutable(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -520,7 +520,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *tabledesc.MutableTableDescriptor
+	newTableDesc *tabledesc.Mutable
 }
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
@@ -536,7 +536,7 @@ func (r *fkSelfResolver) LookupObject(
 		if lookupFlags.RequireMutable {
 			return true, table, nil
 		}
-		return true, &table.ImmutableTableDescriptor, nil
+		return true, &table.Immutable, nil
 	}
 	lookupFlags.IncludeOffline = false
 	return r.SchemaResolver.LookupObject(ctx, lookupFlags, dbName, scName, tbName)
@@ -578,7 +578,7 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Database:
 			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
 		case *descpb.Descriptor_Table:
-			descs[i] = tabledesc.NewImmutableTableDescriptor(*t.Table)
+			descs[i] = tabledesc.NewImmutable(*t.Table)
 		case *descpb.Descriptor_Type:
 			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
 		case *descpb.Descriptor_Schema:
@@ -606,7 +606,7 @@ func newInternalLookupCtx(
 			if prefix == nil || prefix.GetID() == desc.GetID() {
 				dbIDs = append(dbIDs, desc.GetID())
 			}
-		case *tabledesc.ImmutableTableDescriptor:
+		case *tabledesc.Immutable:
 			tbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.

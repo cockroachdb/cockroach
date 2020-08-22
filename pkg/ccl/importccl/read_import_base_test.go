@@ -135,7 +135,7 @@ func TestParallelImportProducerHandlesConsumerErrors(t *testing.T) {
 		numWorkers: 1,
 		batchSize:  2,
 		evalCtx:    testEvalCtx,
-		tableDesc:  tabledesc.NewImmutableTableDescriptor(descr),
+		tableDesc:  tabledesc.NewImmutable(descr),
 		kvCh:       kvCh,
 	}
 
@@ -174,7 +174,7 @@ func TestParallelImportProducerHandlesCancellation(t *testing.T) {
 		numWorkers: 1,
 		batchSize:  2,
 		evalCtx:    testEvalCtx,
-		tableDesc:  tabledesc.NewImmutableTableDescriptor(descr),
+		tableDesc:  tabledesc.NewImmutable(descr),
 		kvCh:       kvCh,
 	}
 

@@ -55,12 +55,12 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // and splits.
 type KeyRewriter struct {
 	prefixes prefixRewriter
-	descs    map[descpb.ID]*tabledesc.ImmutableTableDescriptor
+	descs    map[descpb.ID]*tabledesc.Immutable
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
 func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	descs := make(map[descpb.ID]*tabledesc.ImmutableTableDescriptor)
+	descs := make(map[descpb.ID]*tabledesc.Immutable)
 	for _, rekey := range rekeys {
 		var desc descpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
@@ -70,15 +70,13 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutableTableDescriptor(*table)
+		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutable(*table)
 	}
 	return MakeKeyRewriter(descs)
 }
 
 // MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(
-	descs map[descpb.ID]*tabledesc.ImmutableTableDescriptor,
-) (*KeyRewriter, error) {
+func MakeKeyRewriter(descs map[descpb.ID]*tabledesc.Immutable) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {

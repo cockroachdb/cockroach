@@ -28,7 +28,7 @@ var _ checkOperation = &physicalCheckOperation{}
 // physicalCheckOperation is a check on an indexes physical data.
 type physicalCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *tabledesc.ImmutableTableDescriptor
+	tableDesc *tabledesc.Immutable
 	indexDesc *descpb.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
@@ -50,9 +50,7 @@ type physicalCheckRun struct {
 }
 
 func newPhysicalCheckOperation(
-	tableName *tree.TableName,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
-	indexDesc *descpb.IndexDescriptor,
+	tableName *tree.TableName, tableDesc *tabledesc.Immutable, indexDesc *descpb.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,

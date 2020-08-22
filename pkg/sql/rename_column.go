@@ -29,7 +29,7 @@ var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
 
 type renameColumnNode struct {
 	n         *tree.RenameColumn
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 }
 
 // RenameColumn renames the column.
@@ -89,7 +89,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 // the column being renamed is a generated column for a hash sharded index.
 func (p *planner) renameColumn(
 	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	oldName, newName *tree.Name,
 	allowRenameOfShardColumn bool,
 ) (changed bool, err error) {

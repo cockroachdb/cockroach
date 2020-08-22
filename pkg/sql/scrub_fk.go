@@ -24,8 +24,8 @@ import (
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
 type sqlForeignKeyCheckOperation struct {
 	tableName           *tree.TableName
-	tableDesc           *tabledesc.ImmutableTableDescriptor
-	referencedTableDesc *tabledesc.ImmutableTableDescriptor
+	tableDesc           *tabledesc.Immutable
+	referencedTableDesc *tabledesc.Immutable
 	constraint          *descpb.ConstraintDetail
 	asOf                hlc.Timestamp
 
@@ -44,7 +44,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	constraint descpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
@@ -52,7 +52,7 @@ func newSQLForeignKeyCheckOperation(
 		tableName:           tableName,
 		tableDesc:           tableDesc,
 		constraint:          &constraint,
-		referencedTableDesc: tabledesc.NewImmutableTableDescriptor(*constraint.ReferencedTable),
+		referencedTableDesc: tabledesc.NewImmutable(*constraint.ReferencedTable),
 		asOf:                asOf,
 	}
 }

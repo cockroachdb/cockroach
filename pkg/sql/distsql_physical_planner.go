@@ -921,9 +921,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(nodeID roachpb.NodeID) bool {
 	return distsql.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
-func getIndexIdx(
-	index *descpb.IndexDescriptor, desc *tabledesc.ImmutableTableDescriptor,
-) (uint32, error) {
+func getIndexIdx(index *descpb.IndexDescriptor, desc *tabledesc.Immutable) (uint32, error) {
 	if index.ID == desc.PrimaryIndex.ID {
 		return 0, nil
 	}
@@ -978,9 +976,7 @@ func initTableReaderSpec(
 
 // scanNodeOrdinal returns the index of a column with the given ID.
 func tableOrdinal(
-	desc *tabledesc.ImmutableTableDescriptor,
-	colID descpb.ColumnID,
-	visibility execinfrapb.ScanVisibility,
+	desc *tabledesc.Immutable, colID descpb.ColumnID, visibility execinfrapb.ScanVisibility,
 ) int {
 	for i := range desc.Columns {
 		if desc.Columns[i].ID == colID {
@@ -1008,9 +1004,7 @@ func tableOrdinal(
 // toTableOrdinals returns a mapping from column ordinals in cols to table
 // reader column ordinals.
 func toTableOrdinals(
-	cols []*descpb.ColumnDescriptor,
-	desc *tabledesc.ImmutableTableDescriptor,
-	visibility execinfrapb.ScanVisibility,
+	cols []*descpb.ColumnDescriptor, desc *tabledesc.Immutable, visibility execinfrapb.ScanVisibility,
 ) []int {
 	res := make([]int, len(cols))
 	for i := range res {
@@ -1168,7 +1162,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 type tableReaderPlanningInfo struct {
 	spec                  *execinfrapb.TableReaderSpec
 	post                  execinfrapb.PostProcessSpec
-	desc                  *tabledesc.ImmutableTableDescriptor
+	desc                  *tabledesc.Immutable
 	spans                 []roachpb.Span
 	reverse               bool
 	scanVisibility        execinfrapb.ScanVisibility

@@ -123,7 +123,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		}
 		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
 	}
-	return tableToAvroSchema(tabledesc.NewImmutableTableDescriptor(tableDesc), avroSchemaNoSuffix)
+	return tableToAvroSchema(tabledesc.NewImmutable(tableDesc), avroSchemaNoSuffix)
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {

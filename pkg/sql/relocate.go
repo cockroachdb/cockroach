@@ -30,7 +30,7 @@ type relocateNode struct {
 	optColumnsSlot
 
 	relocateLease bool
-	tableDesc     *tabledesc.ImmutableTableDescriptor
+	tableDesc     *tabledesc.Immutable
 	index         *descpb.IndexDescriptor
 	rows          planNode
 

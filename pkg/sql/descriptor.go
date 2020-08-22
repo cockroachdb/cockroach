@@ -160,7 +160,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *tabledesc.MutableTableDescriptor:
+	case *tabledesc.Mutable:
 		isTable = true
 		if err := desc.ValidateTable(); err != nil {
 			return err
@@ -192,7 +192,7 @@ func (p *planner) createDescriptorWithID(
 		// Queue a schema change job to eventually make the table public.
 		if err := p.createOrUpdateSchemaChangeJob(
 			ctx,
-			mutDesc.(*tabledesc.MutableTableDescriptor),
+			mutDesc.(*tabledesc.Mutable),
 			jobDesc,
 			descpb.InvalidMutationID); err != nil {
 			return err

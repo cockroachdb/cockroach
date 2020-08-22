@@ -196,7 +196,7 @@ type vTableLookupJoinNode struct {
 
 	dbName string
 	db     *dbdesc.ImmutableDatabaseDescriptor
-	table  *tabledesc.ImmutableTableDescriptor
+	table  *tabledesc.Immutable
 	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.

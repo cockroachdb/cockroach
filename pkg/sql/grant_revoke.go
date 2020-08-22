@@ -198,7 +198,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				}
 			}
 
-		case *tabledesc.MutableTableDescriptor:
+		case *tabledesc.Mutable:
 			// TODO (lucy): This should probably have a single consolidated job like
 			// DROP DATABASE.
 			if err := p.createOrUpdateSchemaChangeJob(

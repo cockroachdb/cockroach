@@ -177,7 +177,7 @@ func NewSequenceTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,
-) (*tabledesc.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
 		parentID,

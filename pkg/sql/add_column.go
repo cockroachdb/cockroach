@@ -26,7 +26,7 @@ func (p *planner) addColumnImpl(
 	params runParams,
 	n *alterTableNode,
 	tn *tree.TableName,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 	t *tree.AlterTableAddColumn,
 ) error {
 	d := t.ColumnDef
