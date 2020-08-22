@@ -460,17 +460,15 @@ func (ht *hashTable) appendAllDistinct(ctx context.Context, batch coldata.Batch)
 }
 
 // checkCols performs a column by column checkCol on the key columns.
-func (ht *hashTable) checkCols(
-	probeVecs, buildVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
-) {
+func (ht *hashTable) checkCols(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) {
 	switch ht.probeMode {
 	case hashTableDefaultProbeMode:
-		for i := range ht.keyCols {
-			ht.checkCol(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
+		for i, keyCol := range ht.keyCols {
+			ht.checkCol(probeVecs[i], ht.vals.ColVec(int(keyCol)), i, nToCheck, probeSel)
 		}
 	case hashTableDeletingProbeMode:
-		for i := range ht.keyCols {
-			ht.checkColDeleting(probeVecs[i], buildVecs[buildKeyCols[i]], i, nToCheck, probeSel)
+		for i, keyCol := range ht.keyCols {
+			ht.checkColDeleting(probeVecs[i], ht.vals.ColVec(int(keyCol)), i, nToCheck, probeSel)
 		}
 	default:
 		colexecerror.InternalError(fmt.Sprintf("unsupported hash table probe mode: %d", ht.probeMode))

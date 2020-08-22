@@ -309,10 +309,16 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 func (hj *hashJoiner) build(ctx context.Context) {
 	hj.ht.build(ctx, hj.inputTwo)
 
-	if !hj.spec.rightDistinct {
-		// We might have duplicates in the hash table, so we need to set up
-		// same and visited slices for the prober.
+	// We might have duplicates in the hash table, so we need to set up
+	// same and visited slices for the prober.
+	if !hj.spec.rightDistinct && hj.spec.joinType != descpb.LeftAntiJoin && hj.spec.joinType != descpb.ExceptAllJoin {
+		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
+		// they have separate collectAnti* methods.
 		hj.ht.same = maybeAllocateUint64Array(hj.ht.same, hj.ht.vals.Length()+1)
+	}
+	if !hj.spec.rightDistinct || hj.spec.joinType.IsSetOpJoin() {
+		// visited slice is also used for set-operation joins, regardless of
+		// the fact whether the right side is distinct.
 		hj.ht.visited = maybeAllocateBoolArray(hj.ht.visited, hj.ht.vals.Length()+1)
 		// Since keyID = 0 is reserved for end of list, it can be marked as visited
 		// at the beginning.
@@ -462,7 +468,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = hj.ht.check(hj.ht.keys, hj.ht.keyCols, nToCheck, sel)
+					nToCheck = hj.ht.check(hj.ht.keys, nToCheck, sel)
 					hj.ht.findNext(hj.ht.buildScratch.next, nToCheck)
 				}
 
@@ -666,14 +672,19 @@ func MakeHashJoinerSpec(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-	case descpb.LeftAntiJoin:
-		// LEFT ANTI joins currently rely on the fact that
-		// ht.probeScratch.headID is populated in order to perform the
-		// matching. However, headID is only populated when the right side is
-		// considered to be non-distinct, so we override that information here.
+	case descpb.LeftAntiJoin,
+		descpb.IntersectAllJoin,
+		descpb.ExceptAllJoin:
+		// LEFT ANTI, INTERSECT ALL, and EXCEPT ALL joins currently rely on
+		// the fact that ht.probeScratch.headID is populated in order to
+		// perform the matching. However, headID is only populated when the
+		// right side is considered to be non-distinct, so we override that
+		// information here. Note that it forces these joins to be slower
+		// than they could have been if they utilized the actual
+		// distinctness information.
+		// TODO(yuzefovich): refactor these joins to take advantage of the
+		// actual distinctness information.
 		rightDistinct = false
-	case descpb.IntersectAllJoin:
-	case descpb.ExceptAllJoin:
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}
