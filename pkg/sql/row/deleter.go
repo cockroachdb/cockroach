@@ -38,9 +38,7 @@ type Deleter struct {
 // expectation of which values are passed as values to DeleteRow. Any column
 // passed in requestedCols will be included in FetchCols.
 func MakeDeleter(
-	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
-	requestedCols []descpb.ColumnDescriptor,
+	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, requestedCols []descpb.ColumnDescriptor,
 ) Deleter {
 	indexes := tableDesc.DeletableIndexes()
 

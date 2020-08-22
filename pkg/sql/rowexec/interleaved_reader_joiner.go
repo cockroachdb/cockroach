@@ -308,9 +308,9 @@ func newInterleavedReaderJoiner(
 			}
 		}
 	}
-	tableDescs := make([]*tabledesc.ImmutableTableDescriptor, len(spec.Tables))
+	tableDescs := make([]*tabledesc.Immutable, len(spec.Tables))
 	for i, raw := range spec.Tables {
-		tableDescs[i] = tabledesc.NewImmutableTableDescriptor(raw.Desc)
+		tableDescs[i] = tabledesc.NewImmutable(raw.Desc)
 	}
 	tables := make([]tableInfo, len(spec.Tables))
 	// We need to take spans from all tables and merge them together
@@ -429,7 +429,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 	args := make([]row.FetcherTableArgs, len(tables))
 
 	for i, table := range tables {
-		desc := tabledesc.NewImmutableTableDescriptor(table.Desc)
+		desc := tabledesc.NewImmutable(table.Desc)
 		var err error
 		args[i].Index, args[i].IsSecondaryIndex, err = desc.FindIndexByIndexIdx(int(table.IndexIdx))
 		if err != nil {

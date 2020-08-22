@@ -105,7 +105,7 @@ func (*dropSequenceNode) Close(context.Context)        {}
 
 func (p *planner) dropSequenceImpl(
 	ctx context.Context,
-	seqDesc *tabledesc.MutableTableDescriptor,
+	seqDesc *tabledesc.Mutable,
 	queueJob bool,
 	jobDesc string,
 	behavior tree.DropBehavior,
@@ -120,7 +120,7 @@ func (p *planner) dropSequenceImpl(
 // a table uses it in a DEFAULT expression on one of its columns, or nil if there is no
 // such dependency.
 func (p *planner) sequenceDependencyError(
-	ctx context.Context, droppedDesc *tabledesc.MutableTableDescriptor,
+	ctx context.Context, droppedDesc *tabledesc.Mutable,
 ) error {
 	if len(droppedDesc.DependedOnBy) > 0 {
 		return pgerror.Newf(
@@ -133,7 +133,7 @@ func (p *planner) sequenceDependencyError(
 }
 
 func (p *planner) canRemoveAllTableOwnedSequences(
-	ctx context.Context, desc *tabledesc.MutableTableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, desc *tabledesc.Mutable, behavior tree.DropBehavior,
 ) error {
 	for _, col := range desc.Columns {
 		err := p.canRemoveOwnedSequencesImpl(ctx, desc, &col, behavior, false /* isColumnDrop */)
@@ -146,7 +146,7 @@ func (p *planner) canRemoveAllTableOwnedSequences(
 
 func (p *planner) canRemoveAllColumnOwnedSequences(
 	ctx context.Context,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 ) error {
@@ -155,7 +155,7 @@ func (p *planner) canRemoveAllColumnOwnedSequences(
 
 func (p *planner) canRemoveOwnedSequencesImpl(
 	ctx context.Context,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	behavior tree.DropBehavior,
 	isColumnDrop bool,

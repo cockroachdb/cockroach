@@ -28,7 +28,7 @@ import (
 type showFingerprintsNode struct {
 	optColumnsSlot
 
-	tableDesc *tabledesc.ImmutableTableDescriptor
+	tableDesc *tabledesc.Immutable
 	indexes   []*descpb.IndexDescriptor
 
 	run showFingerprintsRun

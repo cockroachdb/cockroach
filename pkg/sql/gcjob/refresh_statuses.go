@@ -146,7 +146,7 @@ func updateTableStatus(
 	execCfg *sql.ExecutorConfig,
 	ttlSeconds int64,
 	protectedtsCache protectedts.Cache,
-	table *tabledesc.ImmutableTableDescriptor,
+	table *tabledesc.Immutable,
 	tableDropTimes map[descpb.ID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
 ) time.Time {
@@ -191,7 +191,7 @@ func updateIndexesStatus(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	tableTTL int32,
-	table *tabledesc.ImmutableTableDescriptor,
+	table *tabledesc.Immutable,
 	protectedtsCache protectedts.Cache,
 	zoneCfg *zonepb.ZoneConfig,
 	indexDropTimes map[descpb.IndexID]int64,

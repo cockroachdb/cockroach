@@ -863,7 +863,7 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 		var err error
 		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
 			nil, uuid.UUID{} /* clusterID */, keys.SystemSQLCodec,
-			tabledesc.NewImmutableTableDescriptor(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
+			tabledesc.NewImmutable(tableDesc), tableZone.Subzones, false /* hasNewSubzones */)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")
 		}

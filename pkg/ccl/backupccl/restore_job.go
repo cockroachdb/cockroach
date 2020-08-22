@@ -302,7 +302,7 @@ func WriteDescriptors(
 				if mut, ok := desc.(*dbdesc.MutableDatabaseDescriptor); ok {
 					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 						desc.GetID(), desc)
 				}
 			}
@@ -361,10 +361,10 @@ func WriteDescriptors(
 				}
 			}
 			if updatedPrivileges != nil {
-				if mut, ok := table.(*tabledesc.MutableTableDescriptor); ok {
+				if mut, ok := table.(*tabledesc.Mutable); ok {
 					mut.Privileges = updatedPrivileges
 				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 						table.GetID(), table)
 				}
 			}
@@ -811,12 +811,12 @@ func createImportingDescriptors(
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
 	// tables as the slice of interfaces.
-	var mutableTables []*tabledesc.MutableTableDescriptor
+	var mutableTables []*tabledesc.Mutable
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			mut := tabledesc.NewMutableCreatedTableDescriptor(*desc.TableDesc())
+			mut := tabledesc.NewCreatedMutable(*desc.TableDesc())
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
@@ -1176,7 +1176,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		b := txn.NewBatch()
 		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
-			newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.TableDesc())
+			newTableDesc := tabledesc.NewExistingMutable(*tbl.TableDesc())
 			newTableDesc.Version++
 			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1303,7 +1303,7 @@ func (r *restoreResumer) dropDescriptors(
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
-		tableToDrop := tabledesc.NewMutableExistingTableDescriptor(*tbl)
+		tableToDrop := tabledesc.NewExistingMutable(*tbl)
 		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP

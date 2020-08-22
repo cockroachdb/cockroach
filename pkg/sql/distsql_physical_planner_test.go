@@ -64,10 +64,7 @@ import (
 // TODO(radu): we should verify that the queries in tests using SplitTable
 // are indeed distributed as intended.
 func SplitTable(
-	t *testing.T,
-	tc serverutils.TestClusterInterface,
-	desc *tabledesc.ImmutableTableDescriptor,
-	sps []SplitPoint,
+	t *testing.T, tc serverutils.TestClusterInterface, desc *tabledesc.Immutable, sps []SplitPoint,
 ) {
 	if tc.ReplicationMode() != base.ReplicationManual {
 		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
@@ -163,7 +160,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 				return
 			default:
 				// Split the table at a random row.
-				var tableDesc *tabledesc.ImmutableTableDescriptor
+				var tableDesc *tabledesc.Immutable
 				require.NoError(t, cdb.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					desc, err := catalogkv.UncachedPhysicalAccessor{}.GetObjectDesc(ctx,
 						txn, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec,
@@ -172,7 +169,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					tableDesc = desc.(*tabledesc.ImmutableTableDescriptor)
+					tableDesc = desc.(*tabledesc.Immutable)
 					return nil
 				}))
 

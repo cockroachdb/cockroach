@@ -46,7 +46,7 @@ func gcIndexes(
 		return false, err
 	}
 
-	var parentTable *tabledesc.ImmutableTableDescriptor
+	var parentTable *tabledesc.Immutable
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		parentTable, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
 		return err
@@ -86,7 +86,7 @@ func gcIndexes(
 func clearIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	index descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.ID)
@@ -113,7 +113,7 @@ func clearIndex(
 func completeDroppedIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	table *tabledesc.ImmutableTableDescriptor,
+	table *tabledesc.Immutable,
 	indexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {

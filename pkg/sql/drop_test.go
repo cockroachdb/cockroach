@@ -709,7 +709,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	const numRows = 2*row.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
-	var descs []*tabledesc.ImmutableTableDescriptor
+	var descs []*tabledesc.Immutable
 	for i := 0; i < numTables; i++ {
 		tableName := fmt.Sprintf("test%d", i)
 		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
@@ -827,9 +827,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	}
 }
 
-func writeTableDesc(
-	ctx context.Context, db *kv.DB, tableDesc *tabledesc.MutableTableDescriptor,
-) error {
+func writeTableDesc(ctx context.Context, db *kv.DB, tableDesc *tabledesc.Mutable) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
@@ -891,7 +889,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		tableDesc = desc.(*tabledesc.MutableTableDescriptor)
+		tableDesc = desc.(*tabledesc.Mutable)
 		return nil
 	}); err != nil {
 		t.Fatal(err)

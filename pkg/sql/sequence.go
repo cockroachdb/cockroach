@@ -111,7 +111,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	return val, nil
 }
 
-func boundsExceededError(descriptor *tabledesc.ImmutableTableDescriptor) error {
+func boundsExceededError(descriptor *tabledesc.Immutable) error {
 	seqOpts := descriptor.SequenceOpts
 	isAscending := seqOpts.Increment > 0
 
@@ -211,7 +211,7 @@ func MakeSequenceKeyVal(
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, codec keys.SQLCodec, desc *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, codec keys.SQLCodec, desc *tabledesc.Immutable,
 ) (int64, error) {
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")
@@ -463,10 +463,10 @@ func addSequenceOwner(
 func maybeAddSequenceDependencies(
 	ctx context.Context,
 	sc resolver.SchemaResolver,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
-	backrefs map[descpb.ID]*tabledesc.MutableTableDescriptor,
+	backrefs map[descpb.ID]*tabledesc.Mutable,
 ) ([]*MutableTableDescriptor, error) {
 	seqNames, err := sequence.GetUsedSequenceNames(expr)
 	if err != nil {
@@ -558,7 +558,7 @@ func (p *planner) dropSequencesOwnedByCol(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func (p *planner) removeSequenceDependencies(
-	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, col *descpb.ColumnDescriptor,
+	ctx context.Context, tableDesc *tabledesc.Mutable, col *descpb.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.

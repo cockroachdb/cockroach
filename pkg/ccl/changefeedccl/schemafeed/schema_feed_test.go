@@ -25,7 +25,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
-	validateFn := func(_ context.Context, desc *tabledesc.ImmutableTableDescriptor) error {
+	validateFn := func(_ context.Context, desc *tabledesc.Immutable) error {
 		if desc.Name != `` {
 			return errors.Newf("descriptor: %s", desc.Name)
 		}
@@ -67,8 +67,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.Equal(t, ts(3), m.highWater())
 
 	// validates
-	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*tabledesc.ImmutableTableDescriptor{
-		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0}),
+	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []*tabledesc.Immutable{
+		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0}),
 	}, validateFn))
 	require.Equal(t, ts(4), m.highWater())
 
@@ -107,8 +107,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*tabledesc.ImmutableTableDescriptor{
-		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0, Name: `whoops!`}),
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []*tabledesc.Immutable{
+		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `whoops!`}),
 	}, validateFn), `descriptor: whoops!`)
 	require.Equal(t, ts(7), m.highWater())
 
@@ -124,8 +124,8 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*tabledesc.ImmutableTableDescriptor{
-		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: 0, Name: `oh no!`}),
+	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []*tabledesc.Immutable{
+		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `oh no!`}),
 	}, validateFn), `descriptor: oh no!`)
 	require.Equal(t, ts(7), m.highWater())
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)

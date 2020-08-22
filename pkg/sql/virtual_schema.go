@@ -328,7 +328,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
 				return mutableVirtualDefEntry{
-					desc: tabledesc.NewMutableExistingTableDescriptor(*def.desc.TableDesc()),
+					desc: tabledesc.NewExistingMutable(*def.desc.TableDesc()),
 				}, nil
 			}
 			return &def, nil
@@ -372,7 +372,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *tabledesc.ImmutableTableDescriptor
+	desc                       *tabledesc.Immutable
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -382,7 +382,7 @@ func (e virtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type mutableVirtualDefEntry struct {
-	desc *tabledesc.MutableTableDescriptor
+	desc *tabledesc.Mutable
 }
 
 func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
@@ -641,7 +641,7 @@ func NewVirtualSchemaHolder(
 
 			entry := virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       tabledesc.NewImmutableTableDescriptor(tableDesc),
+				desc:                       tabledesc.NewImmutable(tableDesc),
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
@@ -731,7 +731,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (virtualDe
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.ImmutableTableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.Immutable, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (virtualDefEntry, error)
@@ -744,7 +744,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

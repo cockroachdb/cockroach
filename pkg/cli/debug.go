@@ -206,7 +206,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		table := tabledesc.NewImmutableTableDescriptor(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
+		table := tabledesc.NewImmutable(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
 
 		fn := func(kv storage.MVCCKeyValue) (string, error) {
 			var v roachpb.Value

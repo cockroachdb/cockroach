@@ -24,7 +24,7 @@ import (
 
 type alterTableSetSchemaNode struct {
 	newSchema string
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 	n         *tree.AlterTableSetSchema
 }
 

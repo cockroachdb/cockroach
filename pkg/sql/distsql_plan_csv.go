@@ -156,7 +156,7 @@ func presplitTableBoundaries(
 	expirationTime := cfg.DB.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, tbl := range tables {
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
-		tblDesc := tabledesc.MakeImmutableTableDescriptor(*tbl.Desc)
+		tblDesc := tabledesc.MakeImmutable(*tbl.Desc)
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
 			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err

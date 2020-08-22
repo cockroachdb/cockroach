@@ -71,7 +71,7 @@ type joinReader struct {
 
 	diskMonitor *mon.BytesMonitor
 
-	desc      tabledesc.ImmutableTableDescriptor
+	desc      tabledesc.Immutable
 	index     *descpb.IndexDescriptor
 	colIdxMap map[descpb.ColumnID]int
 
@@ -136,7 +136,7 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:       tabledesc.MakeImmutableTableDescriptor(spec.Table),
+		desc:       tabledesc.MakeImmutable(spec.Table),
 		input:      input,
 		inputTypes: input.OutputTypes(),
 		lookupCols: lookupCols,

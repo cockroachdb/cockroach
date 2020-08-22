@@ -159,9 +159,9 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		}
 		if found {
 			// Remap the ID's on the table.
-			tbl, ok := desc.(*tabledesc.MutableTableDescriptor)
+			tbl, ok := desc.(*tabledesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("%q was not a MutableTableDescriptor", objName.Object())
+				return errors.AssertionFailedf("%q was not a Mutable", objName.Object())
 			}
 
 			// If this table has any dependents, then we can't proceed (similar to the

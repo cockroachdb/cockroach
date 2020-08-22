@@ -311,12 +311,12 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 //
 func (tc *Collection) GetMutableTableDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*tabledesc.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	mutDesc, ok := desc.(*tabledesc.MutableTableDescriptor)
+	mutDesc, ok := desc.(*tabledesc.Mutable)
 	if !ok {
 		return nil, nil
 	}
@@ -324,7 +324,7 @@ func (tc *Collection) GetMutableTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*tabledesc.MutableTableDescriptor), nil
+	return hydrated.(*tabledesc.Mutable), nil
 }
 
 func (tc *Collection) getMutableObjectDescriptor(
@@ -588,12 +588,12 @@ func (tc *Collection) getDatabaseVersionDeprecated(
 //
 func (tc *Collection) GetTableVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
+	table, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedRelationError(tn)
@@ -604,7 +604,7 @@ func (tc *Collection) GetTableVersion(
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*tabledesc.ImmutableTableDescriptor), nil
+	return hydrated.(*tabledesc.Immutable), nil
 }
 
 func (tc *Collection) getObjectVersion(
@@ -742,7 +742,7 @@ func (tc *Collection) GetDatabaseVersionByID(
 // GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
 func (tc *Collection) GetTableVersionByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -751,7 +751,7 @@ func (tc *Collection) GetTableVersionByID(
 		}
 		return nil, err
 	}
-	table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
+	table, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
@@ -760,7 +760,7 @@ func (tc *Collection) GetTableVersionByID(
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*tabledesc.ImmutableTableDescriptor), nil
+	return hydrated.(*tabledesc.Immutable), nil
 }
 
 func (tc *Collection) getDescriptorVersionByID(
@@ -825,17 +825,17 @@ func (tc *Collection) getDescriptorVersionByID(
 // table descriptor of the table modified in the same transaction.
 func (tc *Collection) GetMutableTableVersionByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
-) (*tabledesc.MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, tableID, txn)
 	if err != nil {
 		return nil, err
 	}
-	table := desc.(*tabledesc.MutableTableDescriptor)
+	table := desc.(*tabledesc.Mutable)
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*tabledesc.MutableTableDescriptor), nil
+	return hydrated.(*tabledesc.Mutable), nil
 }
 
 func (tc *Collection) getMutableDescriptorByID(
@@ -926,8 +926,8 @@ func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
 	switch t := desc.(type) {
-	case *tabledesc.MutableTableDescriptor:
-		// It is safe to hydrate directly into MutableTableDescriptor since it is
+	case *tabledesc.Mutable:
+		// It is safe to hydrate directly into Mutable since it is
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
 		getType := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
@@ -949,7 +949,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
-	case *tabledesc.ImmutableTableDescriptor:
+	case *tabledesc.Immutable:
 		// ImmutableTableDescriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
 		// defined types in the descriptor, then return early.
@@ -985,7 +985,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, typedesc.TypeLookupFunc(getType)); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutableTableDescriptor(*descBase), nil
+		return tabledesc.NewImmutable(*descBase), nil
 	default:
 		return desc, nil
 	}
@@ -1124,9 +1124,9 @@ func (tc *Collection) GetDescriptorsWithNewVersion() []lease.IDVersion {
 
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
-func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.ImmutableTableDescriptor) {
+func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 	for _, desc := range tc.uncommittedDescriptors {
-		if table, ok := desc.immutable.(*tabledesc.ImmutableTableDescriptor); ok {
+		if table, ok := desc.immutable.(*tabledesc.Immutable); ok {
 			tables = append(tables, table)
 		}
 	}
@@ -1307,10 +1307,10 @@ func (tc *Collection) getUncommittedDescriptor(
 }
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.
-func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *tabledesc.MutableTableDescriptor {
+func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *tabledesc.Mutable {
 	desc := tc.getUncommittedDescriptorByID(id)
 	if desc != nil {
-		if table, ok := desc.(*tabledesc.MutableTableDescriptor); ok {
+		if table, ok := desc.(*tabledesc.Mutable); ok {
 			return table
 		}
 	}
@@ -1379,7 +1379,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Now hydrate all table descriptors.
 			for i := range descs {
 				desc := descs[i]
-				if tblDesc, ok := desc.(*tabledesc.ImmutableTableDescriptor); ok {
+				if tblDesc, ok := desc.(*tabledesc.Immutable); ok {
 					if err := typedesc.HydrateTypesInTableDescriptor(
 						ctx,
 						tblDesc.TableDesc(),

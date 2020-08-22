@@ -24,7 +24,7 @@ import (
 
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 	indexDesc *descpb.IndexDescriptor
 }
 
