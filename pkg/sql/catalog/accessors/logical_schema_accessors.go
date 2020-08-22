@@ -123,7 +123,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 			if flags.RequireMutable {
 				return nil, errors.Newf("cannot use mutable descriptor of aliased type %s.%s", schema, object)
 			}
-			return typedesc.MakeSimpleAliasTypeDescriptor(alias), nil
+			return typedesc.MakeSimpleAlias(alias), nil
 		}
 	}
 

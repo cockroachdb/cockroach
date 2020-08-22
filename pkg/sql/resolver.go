@@ -205,7 +205,7 @@ func (p *planner) ResolveType(
 		return nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
-	tdesc := desc.(*typedesc.ImmutableTypeDescriptor)
+	tdesc := desc.(*typedesc.Immutable)
 
 	// Disllow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
@@ -557,7 +557,7 @@ type internalLookupCtx struct {
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
-	typDescs    map[descpb.ID]*typedesc.ImmutableTypeDescriptor
+	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
 }
 
@@ -580,7 +580,7 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Table:
 			descs[i] = tabledesc.NewImmutable(*t.Table)
 		case *descpb.Descriptor_Type:
-			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
+			descs[i] = typedesc.NewImmutable(*t.Type)
 		case *descpb.Descriptor_Schema:
 			descs[i] = schemadesc.NewImmutable(*t.Schema)
 		}
@@ -595,7 +595,7 @@ func newInternalLookupCtx(
 	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
-	typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
+	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs []descpb.ID
 	// Record database descriptors for name lookups.
 	for i := range descs {
@@ -612,7 +612,7 @@ func newInternalLookupCtx(
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, desc.ID)
 			}
-		case *typedesc.ImmutableTypeDescriptor:
+		case *typedesc.Immutable:
 			typDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
@@ -733,7 +733,7 @@ func getTableNameFromTableDescriptor(
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
 func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
-) (*typedesc.MutableTypeDescriptor, error) {
+) (*typedesc.Mutable, error) {
 	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
 	if err != nil {
 		return nil, err

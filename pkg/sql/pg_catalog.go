@@ -1505,7 +1505,7 @@ CREATE TABLE pg_catalog.pg_enum (
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
-		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.ImmutableTypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.Immutable) error {
 			// We only want to iterate over ENUM types.
 			if typDesc.Kind != descpb.TypeDescriptor_ENUM {
 				return nil
@@ -2808,7 +2808,7 @@ CREATE TABLE pg_catalog.pg_type (
 				}
 
 				// Now generate rows for user defined types in this database.
-				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.ImmutableTypeDescriptor) error {
+				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.ImmutableDatabaseDescriptor, _ string, typDesc *typedesc.Immutable) error {
 					sc, err := p.Descriptors().ResolveSchemaByID(ctx, p.txn, typDesc.ParentSchemaID)
 					if err != nil {
 						return err

@@ -154,7 +154,7 @@ func (p *planner) createArrayType(
 	params runParams,
 	n *tree.CreateType,
 	typ *tree.TypeName,
-	typDesc *typedesc.MutableTypeDescriptor,
+	typDesc *typedesc.Mutable,
 	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 ) (descpb.ID, error) {
@@ -190,7 +190,7 @@ func (p *planner) createArrayType(
 	// Construct the descriptor for the array type.
 	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
 	// meta, just hold on.
-	arrayTypDesc := typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
+	arrayTypDesc := typedesc.NewCreatedMutable(descpb.TypeDescriptor{
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
@@ -286,7 +286,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := typedesc.NewMutableCreatedTypeDescriptor(
+	typeDesc := typedesc.NewCreatedMutable(
 		descpb.TypeDescriptor{
 			Name:           typeName.Type(),
 			ID:             id,

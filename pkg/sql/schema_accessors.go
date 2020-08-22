@@ -62,7 +62,7 @@ type (
 	TypeDescriptor = descpb.TypeDescriptor
 	// MutableTypeDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTypeDescriptor = typedesc.MutableTypeDescriptor
+	MutableTypeDescriptor = typedesc.Mutable
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ViewDescriptor = descpb.TableDescriptor

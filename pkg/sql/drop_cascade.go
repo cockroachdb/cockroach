@@ -32,7 +32,7 @@ type dropCascadeState struct {
 
 	td                      []toDelete
 	allTableObjectsToDelete []*tabledesc.Mutable
-	typesToDelete           []*typedesc.MutableTypeDescriptor
+	typesToDelete           []*typedesc.Mutable
 
 	droppedNames []string
 }
@@ -132,10 +132,10 @@ func (d *dropCascadeState) resolveCollectedObjects(
 			if !found {
 				continue
 			}
-			typDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
+			typDesc, ok := desc.(*typedesc.Mutable)
 			if !ok {
 				return errors.AssertionFailedf(
-					"descriptor for %q is not MutableTypeDescriptor",
+					"descriptor for %q is not Mutable",
 					objName.Object(),
 				)
 			}
