@@ -2262,6 +2262,10 @@ backup_options:
 //     * skip: skip this execution, reschedule it based on RECURRING (or change_capture_period)
 //       expression.
 //     * wait: wait for the previous execution to complete.  This is the default.
+//   * ignore_existing_backups
+//     If backups were already created in the destination in which a new schedule references,
+//     this flag must be passed in to acknowledge that the new schedule may be backing up different
+//     objects.
 //
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
