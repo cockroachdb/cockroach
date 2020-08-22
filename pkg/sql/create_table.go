@@ -491,7 +491,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.ctx,
 				params.p.txn,
 				params.ExecCfg().Codec,
-				desc.Immutable().(*tabledesc.ImmutableTableDescriptor),
+				desc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor),
 				desc.Columns,
 				params.p.alloc)
 			if err != nil {

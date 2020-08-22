@@ -3223,7 +3223,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 
 	importCtx := &parallelImportContext{
 		evalCtx:   &evalCtx,
-		tableDesc: tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor),
+		tableDesc: tableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor),
 		kvCh:      kvCh,
 	}
 
@@ -3873,7 +3873,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3976,7 +3976,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

@@ -24,6 +24,8 @@ import (
 )
 
 var _ catalog.DatabaseDescriptor = (*ImmutableDatabaseDescriptor)(nil)
+var _ catalog.DatabaseDescriptor = (*MutableDatabaseDescriptor)(nil)
+var _ catalog.MutableDescriptor = (*MutableDatabaseDescriptor)(nil)
 
 // ImmutableDatabaseDescriptor wraps a database descriptor and provides methods
 // on it.
@@ -219,8 +221,8 @@ func (desc *MutableDatabaseDescriptor) OriginalVersion() descpb.DescriptorVersio
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *MutableDatabaseDescriptor) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableDatabaseDescriptor(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))

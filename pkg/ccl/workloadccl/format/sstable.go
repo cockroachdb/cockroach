@@ -49,7 +49,7 @@ func ToTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil
+	return tableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor), nil
 }
 
 // ToSSTable constructs a single sstable with the kvs necessary to represent a
