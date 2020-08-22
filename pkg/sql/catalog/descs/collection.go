@@ -1095,7 +1095,7 @@ func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) e
 	}
 	tbl := uncommittedDescriptor{
 		mutable:   desc,
-		immutable: desc.Immutable(),
+		immutable: desc.ImmutableCopy(),
 	}
 	for i, d := range tc.uncommittedDescriptors {
 		if d.mutable.GetID() == desc.GetID() {

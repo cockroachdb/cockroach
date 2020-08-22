@@ -1304,7 +1304,7 @@ func (r *restoreResumer) dropDescriptors(
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
 		tableToDrop := tabledesc.NewMutableExistingTableDescriptor(*tbl)
-		prev := tableToDrop.Immutable().(catalog.TableDescriptor)
+		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP
 		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)

@@ -1045,7 +1045,7 @@ func prepareExistingTableDescForIngestion(
 
 	// TODO(dt): Ensure no other schema changes can start during ingest.
 	importing := tabledesc.NewMutableExistingTableDescriptor(*desc)
-	existing := importing.Immutable().(*tabledesc.ImmutableTableDescriptor)
+	existing := importing.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor)
 	importing.Version++
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
@@ -1326,7 +1326,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
 			newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.Desc)
-			prevTableDesc := newTableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor)
+			prevTableDesc := newTableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor)
 			newTableDesc.Version++
 			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1495,7 +1495,7 @@ func (r *importResumer) dropTables(
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.Desc)
-		prevTableDesc := newTableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor)
+		prevTableDesc := newTableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor)
 		newTableDesc.Version++
 		if tbl.IsNew {
 			newTableDesc.State = descpb.TableDescriptor_DROP

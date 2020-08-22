@@ -3400,7 +3400,7 @@ const IncludeConstraints = true
 func (desc *ImmutableTableDescriptor) MakeFirstMutationPublic(
 	includeConstraints bool,
 ) (*MutableTableDescriptor, error) {
-	// Clone the ImmutableTable descriptor because we want to create an Immutable one.
+	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewMutableExistingTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
 	mutationID := desc.Mutations[0].MutationID
 	i := 0

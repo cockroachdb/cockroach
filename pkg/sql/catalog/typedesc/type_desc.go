@@ -35,6 +35,7 @@ import (
 
 var _ catalog.TypeDescriptor = (*ImmutableTypeDescriptor)(nil)
 var _ catalog.TypeDescriptor = (*MutableTypeDescriptor)(nil)
+var _ catalog.MutableDescriptor = (*MutableTypeDescriptor)(nil)
 
 // MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
 // for the input type. It is intended to be used as an intermediate for name
@@ -227,8 +228,8 @@ func (desc *MutableTypeDescriptor) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *MutableTypeDescriptor) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))

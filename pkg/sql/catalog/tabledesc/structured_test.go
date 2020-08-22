@@ -1381,7 +1381,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
-		return desc.Immutable().(catalog.TableDescriptor), nil
+		return desc.ImmutableCopy().(catalog.TableDescriptor), nil
 	}
 
 	before, err := desc.GetConstraintInfoWithLookup(lookup)

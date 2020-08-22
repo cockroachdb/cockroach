@@ -26,6 +26,7 @@ import (
 
 var _ catalog.SchemaDescriptor = (*ImmutableSchemaDescriptor)(nil)
 var _ catalog.SchemaDescriptor = (*MutableSchemaDescriptor)(nil)
+var _ catalog.MutableDescriptor = (*MutableSchemaDescriptor)(nil)
 
 // ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
 // on it.
@@ -37,7 +38,7 @@ type ImmutableSchemaDescriptor struct {
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
 // where we anticipate having a mutable copy of Schema descriptors. There's a
-// large amount of space to question this `Mutable|Immutable` version of each
+// large amount of space to question this `Mutable|ImmutableCopy` version of each
 // descriptor type. Maybe it makes no sense but we're running with it for the
 // moment. This is an intermediate state on the road to descriptors being
 // handled outside of the catalog entirely as interfaces.
@@ -167,8 +168,8 @@ func (desc *MutableSchemaDescriptor) OriginalVersion() descpb.DescriptorVersion 
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *MutableSchemaDescriptor) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))

@@ -33,8 +33,8 @@ type MutableDescriptor interface {
 	OriginalName() string
 	OriginalID() descpb.ID
 	OriginalVersion() descpb.DescriptorVersion
-	// Immutable returns an immutable copy of this descriptor.
-	Immutable() Descriptor
+	// ImmutableCopy returns an immutable copy of this descriptor.
+	ImmutableCopy() Descriptor
 	// IsNew returns whether the descriptor was created in this transaction.
 	IsNew() bool
 }

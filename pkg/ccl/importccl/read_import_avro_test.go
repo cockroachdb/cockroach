@@ -200,7 +200,7 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 	return &testHelper{
 		schemaJSON: string(schemaJSON),
 		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs).
-			Immutable().(*tabledesc.ImmutableTableDescriptor),
+			ImmutableCopy().(*tabledesc.ImmutableTableDescriptor),
 		codec:    codec,
 		gens:     gens,
 		settings: st,
@@ -591,7 +591,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(b, err)
 
 	avro, err := newAvroInputReader(kvCh,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor),
+		tableDesc.ImmutableCopy().(*tabledesc.ImmutableTableDescriptor),
 		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 

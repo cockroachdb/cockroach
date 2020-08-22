@@ -20,6 +20,7 @@ import (
 
 var _ catalog.TableDescriptor = (*ImmutableTableDescriptor)(nil)
 var _ catalog.TableDescriptor = (*MutableTableDescriptor)(nil)
+var _ catalog.MutableDescriptor = (*MutableTableDescriptor)(nil)
 
 // ImmutableTableDescriptor is a custom type for TableDescriptors
 // It holds precomputed values and the underlying TableDescriptor
@@ -95,8 +96,8 @@ func (desc *ImmutableTableDescriptor) GetColumnAtIdx(idx int) *descpb.ColumnDesc
 	return &desc.Columns[idx]
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableTableDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *MutableTableDescriptor) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
 	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
