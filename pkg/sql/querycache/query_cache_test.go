@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -46,7 +45,7 @@ func expect(t *testing.T, c *C, exp string) {
 }
 
 func data(sql string, mem *memo.Memo, memEstimate int64) *CachedData {
-	cd := &CachedData{SQL: sql, Memo: mem, PrepareMetadata: &sqlbase.PrepareMetadata{}}
+	cd := &CachedData{SQL: sql, Memo: mem, PrepareMetadata: &PrepareMetadata{}}
 	n := memEstimate - cd.memoryEstimate()
 	if n < 0 {
 		panic(errors.AssertionFailedf("size %d too small", memEstimate))

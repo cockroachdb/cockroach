@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -94,7 +96,7 @@ type adoptedJob struct {
 type Registry struct {
 	ac          log.AmbientContext
 	stopper     *stop.Stopper
-	nl          sqlbase.OptionalNodeLiveness
+	nl          optionalnodeliveness.Container
 	db          *kv.DB
 	ex          sqlutil.InternalExecutor
 	clock       *hlc.Clock
@@ -181,7 +183,7 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	nl sqlbase.OptionalNodeLiveness,
+	nl optionalnodeliveness.Container,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.SQLIDContainer,
@@ -657,7 +659,7 @@ WHERE NOT(crdb_internal.sql_liveness_is_alive(claim_session_id))`,
 	return nil
 }
 
-func (r *Registry) maybeCancelJobs(ctx context.Context, nlw sqlbase.OptionalNodeLiveness) {
+func (r *Registry) maybeCancelJobs(ctx context.Context, nlw optionalnodeliveness.Container) {
 	// Cancel all jobs if the stopper is quiescing.
 	select {
 	case <-r.stopper.ShouldQuiesce():
@@ -745,7 +747,7 @@ func (r *Registry) isOrphaned(ctx context.Context, payload *jobspb.Payload) (boo
 			pendingMutations = hasAnyMutations || hasDropJob
 			return nil
 		}); err != nil {
-			if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				// Treat missing table descriptors as no longer relevant for the
 				// job payload. See
 				// https://github.com/cockroachdb/cockroach/45399.

@@ -28,8 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
@@ -193,7 +196,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(knz): bake this migration into v19.1.
 		name:             "create default databases",
 		workFn:           createDefaultDbs,
-		newDescriptorIDs: databaseIDs(sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName),
+		newDescriptorIDs: databaseIDs(catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName),
 	},
 	{
 		// Introduced in v2.1. Baked into 20.1.
@@ -369,7 +372,7 @@ func databaseIDs(
 			// This runs as part of an older migration (introduced in 2.1). We use
 			// the DeprecatedDatabaseKey, and let the 20.1 migration handle moving
 			// from the old namespace table into the new one.
-			kv, err := db.Get(ctx, sqlbase.NewDeprecatedDatabaseKey(name).Key(codec))
+			kv, err := db.Get(ctx, catalogkeys.NewDeprecatedDatabaseKey(name).Key(codec))
 			if err != nil {
 				return nil, err
 			}
@@ -539,7 +542,7 @@ func ExpectedDescriptorIDs(
 	if err != nil {
 		return nil, err
 	}
-	descriptorIDs := sqlbase.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
+	descriptorIDs := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
 		// Is the migration not creating descriptors?
 		if migration.newDescriptorIDs == nil ||
@@ -847,7 +850,7 @@ func (m *Manager) migrateSystemNamespace(
 			q := fmt.Sprintf(
 				`SELECT "parentID", name, id FROM [%d AS namespace_deprecated]
               WHERE id NOT IN (SELECT id FROM [%d AS namespace]) LIMIT %d`,
-				sqlbase.DeprecatedNamespaceTable.ID, sqlbase.NamespaceTable.ID, batchSize+1)
+				systemschema.DeprecatedNamespaceTable.ID, systemschema.NamespaceTable.ID, batchSize+1)
 			rows, err := r.sqlExecutor.QueryEx(
 				ctx, "read-deprecated-namespace-table", txn,
 				sqlbase.InternalExecutorSessionDataOverride{
@@ -872,12 +875,12 @@ func (m *Manager) migrateSystemNamespace(
 				id := descpb.ID(tree.MustBeDInt(row[2]))
 				if parentID == keys.RootNamespaceID {
 					// This row represents a database. Add it to the new namespace table.
-					databaseKey := sqlbase.NewDatabaseKey(name)
+					databaseKey := catalogkeys.NewDatabaseKey(name)
 					if err := txn.Put(ctx, databaseKey.Key(r.codec), id); err != nil {
 						return err
 					}
 					// Also create a 'public' schema for this database.
-					schemaKey := sqlbase.NewSchemaKey(id, "public")
+					schemaKey := catalogkeys.NewSchemaKey(id, "public")
 					log.VEventf(ctx, 2, "migrating system.namespace entry for database %s", name)
 					if err := txn.Put(ctx, schemaKey.Key(r.codec), keys.PublicSchemaID); err != nil {
 						return err
@@ -891,7 +894,7 @@ func (m *Manager) migrateSystemNamespace(
 						// deprecated ID.
 						continue
 					}
-					tableKey := sqlbase.NewTableKey(parentID, keys.PublicSchemaID, name)
+					tableKey := catalogkeys.NewTableKey(parentID, keys.PublicSchemaID, name)
 					log.VEventf(ctx, 2, "migrating system.namespace entry for table %s", name)
 					if err := txn.Put(ctx, tableKey.Key(r.codec), id); err != nil {
 						return err
@@ -941,7 +944,7 @@ func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescript
 		b := txn.NewBatch()
 		tKey := catalogkv.MakePublicTableNameKey(ctx, r.settings, desc.GetParentID(), desc.GetName())
 		b.CPut(tKey.Key(r.codec), desc.GetID(), nil)
-		b.CPut(sqlbase.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
+		b.CPut(catalogkeys.MakeDescMetadataKey(r.codec, desc.GetID()), desc.DescriptorProto(), nil)
 		if err := txn.SetSystemConfigTrigger(r.codec.ForSystemTenant()); err != nil {
 			return err
 		}
@@ -956,41 +959,41 @@ func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescript
 }
 
 func createCommentTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.CommentsTable)
+	return createSystemTable(ctx, r, systemschema.CommentsTable)
 }
 
 func createReplicationConstraintStatsTable(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, sqlbase.ReplicationConstraintStatsTable); err != nil {
+	if err := createSystemTable(ctx, r, systemschema.ReplicationConstraintStatsTable); err != nil {
 		return err
 	}
 	err := r.execAsRoot(ctx, "add-constraints-ttl",
 		fmt.Sprintf(
 			"ALTER TABLE system.replication_constraint_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
-			int(sqlbase.ReplicationConstraintStatsTableTTL.Seconds())))
-	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationConstraintStatsTable.Name)
+			int(systemschema.ReplicationConstraintStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", systemschema.ReplicationConstraintStatsTable.Name)
 }
 
 func createReplicationCriticalLocalitiesTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.ReplicationCriticalLocalitiesTable)
+	return createSystemTable(ctx, r, systemschema.ReplicationCriticalLocalitiesTable)
 }
 
 func createReplicationStatsTable(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, sqlbase.ReplicationStatsTable); err != nil {
+	if err := createSystemTable(ctx, r, systemschema.ReplicationStatsTable); err != nil {
 		return err
 	}
 	err := r.execAsRoot(ctx, "add-replication-status-ttl",
 		fmt.Sprintf("ALTER TABLE system.replication_stats CONFIGURE ZONE USING gc.ttlseconds = %d",
-			int(sqlbase.ReplicationStatsTableTTL.Seconds())))
-	return errors.Wrapf(err, "failed to set TTL on %s", sqlbase.ReplicationStatsTable.Name)
+			int(systemschema.ReplicationStatsTableTTL.Seconds())))
+	return errors.Wrapf(err, "failed to set TTL on %s", systemschema.ReplicationStatsTable.Name)
 }
 
 func createProtectedTimestampsMetaTable(ctx context.Context, r runner) error {
-	return errors.Wrap(createSystemTable(ctx, r, sqlbase.ProtectedTimestampsMetaTable),
+	return errors.Wrap(createSystemTable(ctx, r, systemschema.ProtectedTimestampsMetaTable),
 		"failed to create system.protected_ts_meta")
 }
 
 func createProtectedTimestampsRecordsTable(ctx context.Context, r runner) error {
-	return errors.Wrap(createSystemTable(ctx, r, sqlbase.ProtectedTimestampsRecordsTable),
+	return errors.Wrap(createSystemTable(ctx, r, systemschema.ProtectedTimestampsRecordsTable),
 		"failed to create system.protected_ts_records")
 }
 
@@ -1002,13 +1005,13 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		// "namespace". This corrects the behavior of this migration as it existed
 		// in 20.1 betas. The old namespace table cannot be edited without breaking
 		// explicit selects from system.namespace in 19.2.
-		deprecatedKey := sqlbase.MakeDescMetadataKey(r.codec, keys.DeprecatedNamespaceTableID)
+		deprecatedKey := catalogkeys.MakeDescMetadataKey(r.codec, keys.DeprecatedNamespaceTableID)
 		deprecatedDesc := &descpb.Descriptor{}
 		ts, err := txn.GetProtoTs(ctx, deprecatedKey, deprecatedDesc)
 		if err != nil {
 			return err
 		}
-		sqlbase.TableFromDescriptor(deprecatedDesc, ts).Name = sqlbase.DeprecatedNamespaceTable.Name
+		sqlbase.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.Name
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to
@@ -1022,18 +1025,18 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		//    idempotent semantics of the migration ensure that "namespace" maps to
 		//    the correct ID in the new system.namespace table after all tables are
 		//    copied over.
-		nameKey := sqlbase.NewPublicTableKey(
-			sqlbase.NamespaceTable.GetParentID(), sqlbase.NamespaceTableName)
-		b.Put(nameKey.Key(r.codec), sqlbase.NamespaceTable.GetID())
-		b.Put(sqlbase.MakeDescMetadataKey(
-			r.codec, sqlbase.NamespaceTable.GetID()), sqlbase.NamespaceTable.DescriptorProto())
+		nameKey := catalogkeys.NewPublicTableKey(
+			systemschema.NamespaceTable.GetParentID(), systemschema.NamespaceTableName)
+		b.Put(nameKey.Key(r.codec), systemschema.NamespaceTable.GetID())
+		b.Put(catalogkeys.MakeDescMetadataKey(
+			r.codec, systemschema.NamespaceTable.GetID()), systemschema.NamespaceTable.DescriptorProto())
 		return txn.Run(ctx, b)
 	})
 }
 
 func createRoleOptionsTable(ctx context.Context, r runner) error {
 	// Create system.role_options table with an entry for (admin, CREATEROLE).
-	err := createSystemTable(ctx, r, sqlbase.RoleOptionsTable)
+	err := createSystemTable(ctx, r, systemschema.RoleOptionsTable)
 	if err != nil {
 		return errors.Wrap(err, "failed to create system.role_options")
 	}
@@ -1063,17 +1066,17 @@ func addCreateRoleToAdminAndRoot(ctx context.Context, r runner) error {
 }
 
 func createReportsMetaTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.ReportsMetaTable)
+	return createSystemTable(ctx, r, systemschema.ReportsMetaTable)
 }
 
 func createStatementInfoSystemTables(ctx context.Context, r runner) error {
-	if err := createSystemTable(ctx, r, sqlbase.StatementBundleChunksTable); err != nil {
+	if err := createSystemTable(ctx, r, systemschema.StatementBundleChunksTable); err != nil {
 		return errors.Wrap(err, "failed to create system.statement_bundle_chunks")
 	}
-	if err := createSystemTable(ctx, r, sqlbase.StatementDiagnosticsRequestsTable); err != nil {
+	if err := createSystemTable(ctx, r, systemschema.StatementDiagnosticsRequestsTable); err != nil {
 		return errors.Wrap(err, "failed to create system.statement_diagnostics_requests")
 	}
-	if err := createSystemTable(ctx, r, sqlbase.StatementDiagnosticsTable); err != nil {
+	if err := createSystemTable(ctx, r, systemschema.StatementDiagnosticsTable); err != nil {
 		return errors.Wrap(err, "failed to create system.statement_diagnostics")
 	}
 	return nil
@@ -1214,7 +1217,7 @@ func createDefaultDbs(ctx context.Context, r runner) error {
 
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		for _, dbName := range []string{sqlbase.DefaultDatabaseName, sqlbase.PgDatabaseName} {
+		for _, dbName := range []string{catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName} {
 			stmt := fmt.Sprintf(createDbStmt, dbName)
 			err = r.execAsRoot(ctx, "create-default-db", stmt)
 			if err != nil {
@@ -1335,7 +1338,7 @@ STORING (status)
 }
 
 func createScheduledJobsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.ScheduledJobsTable)
+	return createSystemTable(ctx, r, systemschema.ScheduledJobsTable)
 }
 
 func alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(
@@ -1352,9 +1355,9 @@ ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
 	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {
 		return err
 	}
-	return createSystemTable(ctx, r, sqlbase.SqllivenessTable)
+	return createSystemTable(ctx, r, systemschema.SqllivenessTable)
 }
 
 func createTenantsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.TenantsTable)
+	return createSystemTable(ctx, r, systemschema.TenantsTable)
 }

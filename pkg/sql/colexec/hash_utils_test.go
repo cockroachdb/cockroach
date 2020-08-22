@@ -16,7 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +42,7 @@ func TestHashFunctionFamily(t *testing.T) {
 	var (
 		cancelChecker     CancelChecker
 		overloadHelperVar overloadHelper
-		datumAlloc        sqlbase.DatumAlloc
+		datumAlloc        rowenc.DatumAlloc
 	)
 
 	for initHashValue, buckets := range [][]uint64{bucketsA, bucketsB} {

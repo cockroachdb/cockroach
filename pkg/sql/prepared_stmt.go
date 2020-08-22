@@ -17,8 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -43,7 +43,7 @@ const (
 // References need to be registered with incRef() and de-registered with
 // decRef().
 type PreparedStatement struct {
-	sqlbase.PrepareMetadata
+	querycache.PrepareMetadata
 
 	// Memo is the memoized data structure constructed by the cost-based optimizer
 	// during prepare of a SQL statement. It can significantly speed up execution

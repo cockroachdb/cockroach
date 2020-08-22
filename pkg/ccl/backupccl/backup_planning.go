@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -69,15 +71,15 @@ const (
 // {in,out} of being included in a full cluster backup. See #43781.
 var fullClusterSystemTables = []string{
 	// System config tables.
-	sqlbase.UsersTable.Name,
-	sqlbase.ZonesTable.Name,
-	sqlbase.SettingsTable.Name,
+	systemschema.UsersTable.Name,
+	systemschema.ZonesTable.Name,
+	systemschema.SettingsTable.Name,
 	// Rest of system tables.
-	sqlbase.LocationsTable.Name,
-	sqlbase.RoleMembersTable.Name,
-	sqlbase.UITable.Name,
-	sqlbase.CommentsTable.Name,
-	sqlbase.JobsTable.Name,
+	systemschema.LocationsTable.Name,
+	systemschema.RoleMembersTable.Name,
+	systemschema.UITable.Name,
+	systemschema.CommentsTable.Name,
+	systemschema.JobsTable.Name,
 	// Table statistics are backed up in the backup descriptor for now.
 }
 
@@ -432,7 +434,7 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 	backupStmt := getBackupStatement(stmt)
 	if backupStmt == nil {
 		return nil, nil, nil, false, nil

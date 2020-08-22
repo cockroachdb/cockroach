@@ -20,10 +20,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -39,10 +40,10 @@ import (
 // columns.
 func compareRows(
 	lTypes []*types.T,
-	l, r sqlbase.EncDatumRow,
+	l, r rowenc.EncDatumRow,
 	e *tree.EvalContext,
-	d *sqlbase.DatumAlloc,
-	ordering sqlbase.ColumnOrdering,
+	d *rowenc.DatumAlloc,
+	ordering colinfo.ColumnOrdering,
 ) (int, error) {
 	for _, orderInfo := range ordering {
 		col := orderInfo.ColIdx
@@ -73,29 +74,29 @@ func TestDiskRowContainer(t *testing.T) {
 
 	// These orderings assume at least 4 columns.
 	numCols := 4
-	orderings := []sqlbase.ColumnOrdering{
+	orderings := []colinfo.ColumnOrdering{
 		{
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    0,
 				Direction: encoding.Ascending,
 			},
 		},
 		{
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    0,
 				Direction: encoding.Descending,
 			},
 		},
 		{
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    3,
 				Direction: encoding.Ascending,
 			},
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    1,
 				Direction: encoding.Descending,
 			},
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    2,
 				Direction: encoding.Ascending,
 			},
@@ -123,9 +124,9 @@ func TestDiskRowContainer(t *testing.T) {
 			for _, ordering := range orderings {
 				typs := make([]*types.T, numCols)
 				for i := range typs {
-					typs[i] = sqlbase.RandSortingType(rng)
+					typs[i] = rowenc.RandSortingType(rng)
 				}
-				row := sqlbase.RandEncDatumRowOfTypes(rng, typs)
+				row := rowenc.RandEncDatumRowOfTypes(rng, typs)
 				func() {
 					d := MakeDiskRowContainer(diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
@@ -141,7 +142,7 @@ func TestDiskRowContainer(t *testing.T) {
 					} else if !ok {
 						t.Fatal("unexpectedly invalid")
 					}
-					readRow := make(sqlbase.EncDatumRow, len(row))
+					readRow := make(rowenc.EncDatumRow, len(row))
 
 					temp, err := i.Row()
 					if err != nil {
@@ -174,8 +175,8 @@ func TestDiskRowContainer(t *testing.T) {
 		numRows := 1024
 		for _, ordering := range orderings {
 			// numRows rows with numCols columns of random types.
-			types := sqlbase.RandSortingTypes(rng, numCols)
-			rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+			types := rowenc.RandSortingTypes(rng, numCols)
+			rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
 				d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
@@ -244,18 +245,18 @@ func TestDiskRowContainer(t *testing.T) {
 	t.Run("DeDupingRowContainer", func(t *testing.T) {
 		numCols := 2
 		numRows := 10
-		ordering := sqlbase.ColumnOrdering{
-			sqlbase.ColumnOrderInfo{
+		ordering := colinfo.ColumnOrdering{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    0,
 				Direction: encoding.Ascending,
 			},
-			sqlbase.ColumnOrderInfo{
+			colinfo.ColumnOrderInfo{
 				ColIdx:    1,
 				Direction: encoding.Descending,
 			},
 		}
 		// Use random types and random rows.
-		types := sqlbase.RandSortingTypes(rng, numCols)
+		types := rowenc.RandSortingTypes(rng, numCols)
 		numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 		d := MakeDiskRowContainer(diskMonitor, types, ordering, tempEngine)
 		defer d.Close(ctx)
@@ -296,8 +297,8 @@ func TestDiskRowContainer(t *testing.T) {
 		numCols := 2
 		numRows := 10
 		// Use random types and random rows.
-		types := sqlbase.RandSortingTypes(rng, numCols)
-		rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+		types := rowenc.RandSortingTypes(rng, numCols)
+		rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
 		// There are no ordering columns when using the numberedRowIterator.
 		d := MakeDiskRowContainer(diskMonitor, types, nil, tempEngine)
 		defer d.Close(ctx)
@@ -337,11 +338,11 @@ func makeUniqueRows(
 	rng *rand.Rand,
 	numRows int,
 	types []*types.T,
-	ordering sqlbase.ColumnOrdering,
-) (int, sqlbase.EncDatumRows) {
-	rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
+	ordering colinfo.ColumnOrdering,
+) (int, rowenc.EncDatumRows) {
+	rows := rowenc.RandEncDatumRowsOfTypes(rng, numRows, types)
 	// It is possible there was some duplication, so remove duplicates.
-	var alloc sqlbase.DatumAlloc
+	var alloc rowenc.DatumAlloc
 	sort.Slice(rows, func(i, j int) bool {
 		cmp, err := rows[i].Compare(types, &alloc, ordering, evalCtx, rows[j])
 		require.NoError(t, err)
@@ -389,12 +390,12 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	d := MakeDiskRowContainer(
 		monitor,
 		[]*types.T{types.Int},
-		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
+		colinfo.ColumnOrdering{colinfo.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)
 	defer d.Close(ctx)
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
+	row := rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
 		t.Fatalf("unexpected error: %v", err)
@@ -406,7 +407,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &rowenc.DatumAlloc{}
 	evalCtx := tree.MakeTestingEvalContext(st)
 	tempEngine, _, err := storage.NewTempEngine(ctx, storage.DefaultStorageEngine, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -426,12 +427,12 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(diskMonitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(diskMonitor, rowenc.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
 	const numRows = 100
-	rows := sqlbase.MakeIntRows(numRows, numCols)
+	rows := rowenc.MakeIntRows(numRows, numCols)
 	for _, row := range rows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -439,15 +440,15 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 
 	// checkEqual checks that the given row is equal to otherRow.
-	checkEqual := func(row sqlbase.EncDatumRow, otherRow sqlbase.EncDatumRow) error {
+	checkEqual := func(row rowenc.EncDatumRow, otherRow rowenc.EncDatumRow) error {
 		for j, c := range row {
 			if cmp, err := c.Compare(types.Int, alloc, &evalCtx, &otherRow[j]); err != nil {
 				return err
 			} else if cmp != 0 {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
-					row.String(sqlbase.OneIntCol),
-					otherRow.String(sqlbase.OneIntCol),
+					row.String(rowenc.OneIntCol),
+					otherRow.String(rowenc.OneIntCol),
 				)
 			}
 		}
@@ -501,7 +502,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	}
 
 	// Add a couple extra rows to check that they're picked up by the iterator.
-	extraRows := sqlbase.MakeIntRows(4, 1)
+	extraRows := rowenc.MakeIntRows(4, 1)
 	for _, row := range extraRows {
 		if err := d.AddRow(ctx, row); err != nil {
 			t.Fatal(err)
@@ -553,14 +554,14 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(monitor, sqlbase.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(monitor, rowenc.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
 		numCols = 1
 		numRows = 100
 	)
-	rows := sqlbase.MakeIntRows(numRows, numCols)
+	rows := rowenc.MakeIntRows(numRows, numCols)
 
 	const (
 		numResets            = 4
@@ -591,8 +592,8 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row.String(sqlbase.OneIntCol) != firstRow.String(sqlbase.OneIntCol) {
-				t.Fatalf("unexpected row read %s, expected %s", row.String(sqlbase.OneIntCol), firstRow.String(sqlbase.OneIntCol))
+			if row.String(rowenc.OneIntCol) != firstRow.String(rowenc.OneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(rowenc.OneIntCol), firstRow.String(rowenc.OneIntCol))
 			}
 		}()
 

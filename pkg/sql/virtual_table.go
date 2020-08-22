@@ -13,12 +13,15 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/errors"
 )
 
@@ -78,7 +81,7 @@ func setupGenerator(
 	addRow := func(datums ...tree.Datum) error {
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case comm <- virtualTableGeneratorResponse{datums: datums}:
 		}
 
@@ -92,7 +95,7 @@ func setupGenerator(
 		// worker, and then back to the next() caller after it is done.
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return cancelchecker.QueryCanceledError
 		case <-comm:
 		}
 		return nil
@@ -112,7 +115,7 @@ func setupGenerator(
 		err := worker(funcRowPusher(addRow))
 		// If the query was canceled, next() will already return a
 		// QueryCanceledError, so just exit here.
-		if errors.Is(err, sqlbase.QueryCanceledError) {
+		if errors.Is(err, cancelchecker.QueryCanceledError) {
 			return
 		}
 
@@ -129,13 +132,13 @@ func setupGenerator(
 		select {
 		case comm <- virtualTableGeneratorResponse{}:
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		}
 
 		// Wait for the row to be sent.
 		select {
 		case <-ctx.Done():
-			return nil, sqlbase.QueryCanceledError
+			return nil, cancelchecker.QueryCanceledError
 		case resp := <-comm:
 			return resp.datums, resp.err
 		}
@@ -146,14 +149,14 @@ func setupGenerator(
 // virtualTableNode is a planNode that constructs its rows by repeatedly
 // invoking a virtualTableGenerator function.
 type virtualTableNode struct {
-	columns    sqlbase.ResultColumns
+	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
 	cleanup    func()
 	currentRow tree.Datums
 }
 
 func (p *planner) newVirtualTableNode(
-	columns sqlbase.ResultColumns, next virtualTableGenerator, cleanup func(),
+	columns colinfo.ResultColumns, next virtualTableGenerator, cleanup func(),
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,
@@ -192,7 +195,7 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *sqlbase.ImmutableDatabaseDescriptor
+	db     *dbdesc.ImmutableDatabaseDescriptor
 	table  *sqlbase.ImmutableTableDescriptor
 	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
@@ -203,14 +206,14 @@ type vTableLookupJoinNode struct {
 	joinType descpb.JoinType
 
 	// columns is the join's output schema.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 	// pred contains the join's on condition, if any.
 	pred *joinPredicate
 	// inputCols is the schema of the input to this lookup join.
-	inputCols sqlbase.ResultColumns
+	inputCols colinfo.ResultColumns
 	// vtableCols is the schema of the virtual table we're looking up rows from,
 	// before any projection.
-	vtableCols sqlbase.ResultColumns
+	vtableCols colinfo.ResultColumns
 	// lookupCols is the projection on vtableCols to apply.
 	lookupCols exec.TableColumnOrdinalSet
 
@@ -240,7 +243,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
 	v.run.rows = rowcontainer.NewRowContainer(
 		params.EvalContext().Mon.MakeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(v.columns),
+		colinfo.ColTypeInfoFromResCols(v.columns),
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
@@ -258,7 +261,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	v.db = db.(*sqlbase.ImmutableDatabaseDescriptor)
+	v.db = db.(*dbdesc.ImmutableDatabaseDescriptor)
 	return err
 }
 

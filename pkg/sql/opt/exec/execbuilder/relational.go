@@ -17,6 +17,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -122,11 +122,11 @@ func (ep *execPlan) reqOrdering(expr memo.RelExpr) exec.OutputOrdering {
 
 // sqlOrdering converts an Ordering to a ColumnOrdering (according to the
 // outputCols map).
-func (ep *execPlan) sqlOrdering(ordering opt.Ordering) sqlbase.ColumnOrdering {
+func (ep *execPlan) sqlOrdering(ordering opt.Ordering) colinfo.ColumnOrdering {
 	if ordering.Empty() {
 		return nil
 	}
-	colOrder := make(sqlbase.ColumnOrdering, len(ordering))
+	colOrder := make(colinfo.ColumnOrdering, len(ordering))
 	for i := range ordering {
 		colOrder[i].ColIdx = int(ep.getNodeColumnOrdinal(ordering[i].ID()))
 		if ordering[i].Descending() {
@@ -399,7 +399,7 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 
 func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {
 	md := b.mem.Metadata()
-	resultCols := make(sqlbase.ResultColumns, len(cols))
+	resultCols := make(colinfo.ResultColumns, len(cols))
 	for i, col := range cols {
 		colMeta := md.ColumnMeta(col)
 		resultCols[i].Name = colMeta.Alias
@@ -654,7 +654,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 
 	var res execPlan
 	exprs := make(tree.TypedExprs, 0, len(projections)+prj.Passthrough.Len())
-	cols := make(sqlbase.ResultColumns, 0, len(exprs))
+	cols := make(colinfo.ResultColumns, 0, len(exprs))
 	ctx := input.makeBuildScalarCtx()
 	for i := range projections {
 		item := &projections[i]
@@ -664,7 +664,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		}
 		res.outputCols.Set(int(item.Col), i)
 		exprs = append(exprs, expr)
-		cols = append(cols, sqlbase.ResultColumn{
+		cols = append(cols, colinfo.ResultColumn{
 			Name: md.ColumnMeta(item.Col).Alias,
 			Typ:  item.Typ,
 		})
@@ -674,7 +674,7 @@ func (b *Builder) buildProject(prj *memo.ProjectExpr) (execPlan, error) {
 		indexedVar := b.indexedVar(&ctx, md, colID)
 		exprs = append(exprs, indexedVar)
 		meta := md.ColumnMeta(colID)
-		cols = append(cols, sqlbase.ResultColumn{
+		cols = append(cols, colinfo.ResultColumn{
 			Name: meta.Alias,
 			Typ:  meta.Type,
 		})
@@ -832,11 +832,11 @@ func (b *Builder) makePresentation(cols opt.ColSet) physical.Presentation {
 
 // presentationToResultColumns returns ResultColumns corresponding to the
 // columns in a presentation.
-func (b *Builder) presentationToResultColumns(pres physical.Presentation) sqlbase.ResultColumns {
+func (b *Builder) presentationToResultColumns(pres physical.Presentation) colinfo.ResultColumns {
 	md := b.mem.Metadata()
-	result := make(sqlbase.ResultColumns, len(pres))
+	result := make(colinfo.ResultColumns, len(pres))
 	for i := range pres {
-		result[i] = sqlbase.ResultColumn{
+		result[i] = colinfo.ResultColumn{
 			Name: pres[i].Alias,
 			Typ:  md.ColumnMeta(pres[i].ID).Type,
 		}
@@ -1914,7 +1914,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	scalarCtx := input.makeBuildScalarCtx()
 
 	exprs := make(tree.TypedExprs, len(zip))
-	zipCols := make(sqlbase.ResultColumns, 0, len(zip))
+	zipCols := make(colinfo.ResultColumns, 0, len(zip))
 	numColsPerGen := make([]int, len(zip))
 
 	ep := execPlan{outputCols: input.outputCols}
@@ -1929,7 +1929,7 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 
 		for _, col := range item.Cols {
 			colMeta := md.ColumnMeta(col)
-			zipCols = append(zipCols, sqlbase.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+			zipCols = append(zipCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
 
 			ep.outputCols.Set(int(col), n)
 			n++
@@ -1946,9 +1946,9 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	return ep, nil
 }
 
-func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
+func (b *Builder) resultColumn(id opt.ColumnID) colinfo.ResultColumn {
 	colMeta := b.mem.Metadata().ColumnMeta(id)
-	return sqlbase.ResultColumn{
+	return colinfo.ResultColumn{
 		Name: colMeta.Alias,
 		Typ:  colMeta.Type,
 	}
@@ -2159,7 +2159,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		)
 	}
 
-	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
+	resultCols := make(colinfo.ResultColumns, w.Relational().OutputCols.Len())
 
 	// All the passthrough cols will keep their ordinal index.
 	passthrough.ForEach(func(col opt.ColumnID) {

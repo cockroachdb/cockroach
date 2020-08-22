@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // zigzagJoinNode represents a zigzag join. A zigzag join uses multiple indexes
@@ -34,7 +34,7 @@ type zigzagJoinNode struct {
 
 	// columns are the produced columns, namely the columns in all
 	// indexes in 'sides' - in the same order as sides.
-	columns sqlbase.ResultColumns
+	columns colinfo.ResultColumns
 
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on keyCols.

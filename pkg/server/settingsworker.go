@@ -18,9 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,9 +30,9 @@ import (
 
 // RefreshSettings starts a settings-changes listener.
 func (s *Server) refreshSettings() {
-	tbl := sqlbase.SettingsTable
+	tbl := systemschema.SettingsTable
 
-	a := &sqlbase.DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	codec := keys.TODOSQLCodec
 	settingsTablePrefix := codec.TablePrefix(uint32(tbl.ID))
 	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
@@ -45,8 +46,8 @@ func (s *Server) refreshSettings() {
 		// First we need to decode the setting name field from the index key.
 		{
 			types := []*types.T{tbl.Columns[0].Type}
-			nameRow := make([]sqlbase.EncDatum, 1)
-			_, matches, _, err := sqlbase.DecodeIndexKey(codec, tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
+			nameRow := make([]rowenc.EncDatum, 1)
+			_, matches, _, err := rowenc.DecodeIndexKey(codec, tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
 				return errors.Wrap(err, "failed to decode key")
 			}
@@ -79,7 +80,7 @@ func (s *Server) refreshSettings() {
 				colID := lastColID + descpb.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
-					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
+					res, bytes, err = rowenc.DecodeTableValue(a, tbl.Columns[idx].Type, bytes)
 					if err != nil {
 						return err
 					}

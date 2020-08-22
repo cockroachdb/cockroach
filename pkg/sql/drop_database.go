@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,7 +36,7 @@ import (
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *sqlbase.MutableDatabaseDescriptor
+	dbDesc *dbdesc.MutableDatabaseDescriptor
 	d      *dropCascadeState
 }
 
@@ -145,7 +147,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 
 		// Delete the database from the system.descriptor table.
-		descKey := sqlbase.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
+		descKey := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, n.dbDesc.GetID())
 		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 			log.VEventf(ctx, 2, "Del %s", descKey)
 		}
@@ -288,7 +290,7 @@ func (p *planner) accumulateOwnedSequences(
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
 				// exist.
-				if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
 					log.Infof(ctx,
 						"swallowing error for owned sequence that was not found %s", err.Error())
 					continue

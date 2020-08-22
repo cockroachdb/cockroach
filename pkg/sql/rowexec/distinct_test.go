@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,23 +28,23 @@ import (
 func TestDistinct(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	v := [15]sqlbase.EncDatum{}
+	v := [15]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
-	vNull := sqlbase.DatumToEncDatum(types.Unknown, tree.DNull)
+	vNull := rowenc.DatumToEncDatum(types.Unknown, tree.DNull)
 
 	testCases := []struct {
 		spec     execinfrapb.DistinctSpec
-		input    sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
+		input    rowenc.EncDatumRows
+		expected rowenc.EncDatumRows
 		error    string
 	}{
 		{
 			spec: execinfrapb.DistinctSpec{
 				DistinctColumns: []uint32{0, 1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[5], v[6], v[2]},
 				{v[2], v[3], v[3]},
@@ -53,7 +53,7 @@ func TestDistinct(t *testing.T) {
 				{v[3], v[5], v[6]},
 				{v[2], v[9], v[7]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[5], v[6], v[2]},
 				{v[2], v[6], v[5]},
@@ -66,7 +66,7 @@ func TestDistinct(t *testing.T) {
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{0, 1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[3], v[2]},
 				{v[2], v[6], v[3]},
@@ -75,7 +75,7 @@ func TestDistinct(t *testing.T) {
 				{v[5], v[6], v[6]},
 				{v[5], v[6], v[7]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[6], v[3]},
 				{v[2], v[9], v[4]},
@@ -88,7 +88,7 @@ func TestDistinct(t *testing.T) {
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[3], v[2]},
 				{v[2], v[6], v[3]},
@@ -98,7 +98,7 @@ func TestDistinct(t *testing.T) {
 				{v[6], v[6], v[7]},
 				{v[7], v[6], v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[6], v[3]},
 				{v[2], v[9], v[4]},
@@ -111,7 +111,7 @@ func TestDistinct(t *testing.T) {
 				OrderedColumns:  []uint32{1},
 				DistinctColumns: []uint32{1},
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[3], v[2]},
 				{v[2], v[6], v[3]},
@@ -121,7 +121,7 @@ func TestDistinct(t *testing.T) {
 				{v[6], v[6], v[7]},
 				{v[7], v[6], v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[2], v[6], v[3]},
 				{v[2], v[9], v[4]},
@@ -136,7 +136,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns:  []uint32{0, 1},
 				NullsAreDistinct: false,
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[1], v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{v[1], v[2], v[3]},
@@ -146,7 +146,7 @@ func TestDistinct(t *testing.T) {
 				{vNull, v[2], v[7]},
 				{v[1], vNull, v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[1], v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{v[1], vNull, v[5]},
@@ -158,7 +158,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns:  []uint32{0, 1},
 				NullsAreDistinct: true,
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[1], v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{v[1], v[2], v[3]},
@@ -168,7 +168,7 @@ func TestDistinct(t *testing.T) {
 				{vNull, v[2], v[7]},
 				{v[1], vNull, v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{v[1], v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{vNull, vNull, v[4]},
@@ -186,7 +186,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns:  []uint32{0, 1},
 				NullsAreDistinct: false,
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{vNull, v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{vNull, v[2], v[3]},
@@ -196,7 +196,7 @@ func TestDistinct(t *testing.T) {
 				{v[1], vNull, v[7]},
 				{v[1], v[2], v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{vNull, v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{v[1], vNull, v[5]},
@@ -209,7 +209,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns:  []uint32{0, 1},
 				NullsAreDistinct: true,
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{vNull, v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{vNull, v[2], v[3]},
@@ -219,7 +219,7 @@ func TestDistinct(t *testing.T) {
 				{v[1], vNull, v[7]},
 				{v[1], v[2], v[8]},
 			},
-			expected: sqlbase.EncDatumRows{
+			expected: rowenc.EncDatumRows{
 				{vNull, v[2], v[1]},
 				{vNull, vNull, v[2]},
 				{vNull, v[2], v[3]},
@@ -237,7 +237,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns: []uint32{0, 1},
 				ErrorOnDup:      "duplicate rows",
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[1], v[2], v[1]},
 				{v[2], v[3], v[2]},
 				{v[2], v[3], v[3]},
@@ -252,7 +252,7 @@ func TestDistinct(t *testing.T) {
 				DistinctColumns: []uint32{0, 1},
 				ErrorOnDup:      "duplicate rows",
 			},
-			input: sqlbase.EncDatumRows{
+			input: rowenc.EncDatumRows{
 				{v[2], v[3], v[1]},
 				{v[1], v[2], v[2]},
 				{v[3], v[4], v[3]},
@@ -266,7 +266,7 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := distsqlutils.NewRowBuffer(sqlbase.ThreeIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(rowenc.ThreeIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -286,7 +286,7 @@ func TestDistinct(t *testing.T) {
 			if !out.ProducerClosed() {
 				t.Fatalf("output RowReceiver not closed")
 			}
-			var res sqlbase.EncDatumRows
+			var res rowenc.EncDatumRows
 			for {
 				row, meta := out.Next()
 				if meta != nil {
@@ -304,8 +304,8 @@ func TestDistinct(t *testing.T) {
 					t.Errorf("expected error: %v, got %v", c.error, err)
 				}
 			} else {
-				if result := res.String(sqlbase.ThreeIntCols); result != c.expected.String(sqlbase.ThreeIntCols) {
-					t.Errorf("invalid results: %v, expected %v'", result, c.expected.String(sqlbase.ThreeIntCols))
+				if result := res.String(rowenc.ThreeIntCols); result != c.expected.String(rowenc.ThreeIntCols) {
+					t.Errorf("invalid results: %v, expected %v'", result, c.expected.String(rowenc.ThreeIntCols))
 				}
 			}
 		})
@@ -332,7 +332,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := execinfra.NewRepeatableRowSource(sqlbase.TwoIntCols, sqlbase.MakeIntRows(numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(rowenc.TwoIntCols, rowenc.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()

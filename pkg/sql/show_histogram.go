@@ -15,7 +15,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -27,7 +29,7 @@ import (
 // Ideally, we would want upper_bound to have the type of the column the
 // histogram is on. However, we don't want to have a SHOW statement for which
 // the schema depends on its parameters.
-var showHistogramColumns = sqlbase.ResultColumns{
+var showHistogramColumns = colinfo.ResultColumns{
 	{Name: "upper_bound", Typ: types.String},
 	{Name: "range_rows", Typ: types.Int},
 	{Name: "distinct_range_rows", Typ: types.Float},
@@ -74,7 +76,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 
 			v := p.newContainerValuesNode(showHistogramColumns, 0)
 			for _, b := range histogram.Buckets {
-				ed, _, err := sqlbase.EncDatumFromBuffer(
+				ed, _, err := rowenc.EncDatumFromBuffer(
 					histogram.ColumnType, descpb.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {

@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -92,7 +92,7 @@ type routerOutput struct {
 		// container if we don't need to buffer many rows. The buffer is a circular
 		// FIFO queue, with rowBufLen elements and the left-most (oldest) element at
 		// rowBufLeft.
-		rowBuf                [routerRowBufSize]sqlbase.EncDatumRow
+		rowBuf                [routerRowBufSize]rowenc.EncDatumRow
 		rowBufLeft, rowBufLen uint32
 
 		// The "level 2" rowContainer is used when we need to buffer more rows than
@@ -118,7 +118,7 @@ func (ro *routerOutput) addMetadataLocked(meta *execinfrapb.ProducerMetadata) {
 
 // addRowLocked adds a row to rowBuf (potentially evicting the oldest row into
 // rowContainer).
-func (ro *routerOutput) addRowLocked(ctx context.Context, row sqlbase.EncDatumRow) error {
+func (ro *routerOutput) addRowLocked(ctx context.Context, row rowenc.EncDatumRow) error {
 	if ro.mu.streamStatus != execinfra.NeedMoreRows {
 		// The consumer doesn't want more rows; drop the row.
 		return nil
@@ -139,8 +139,8 @@ func (ro *routerOutput) addRowLocked(ctx context.Context, row sqlbase.EncDatumRo
 }
 
 func (ro *routerOutput) popRowsLocked(
-	ctx context.Context, rowBuf []sqlbase.EncDatumRow,
-) ([]sqlbase.EncDatumRow, error) {
+	ctx context.Context, rowBuf []rowenc.EncDatumRow,
+) ([]rowenc.EncDatumRow, error) {
 	n := 0
 	// First try to get rows from the row container.
 	if ro.mu.rowContainer.Len() > 0 {
@@ -158,7 +158,7 @@ func (ro *routerOutput) popRowsLocked(
 					return err
 				}
 				// TODO(radu): use an EncDatumRowAlloc?
-				rowBuf[n] = make(sqlbase.EncDatumRow, len(row))
+				rowBuf[n] = make(rowenc.EncDatumRow, len(row))
 				copy(rowBuf[n], row)
 				n++
 			}
@@ -284,7 +284,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			}
 
 			drain := false
-			rowBuf := make([]sqlbase.EncDatumRow, routerRowBufSize)
+			rowBuf := make([]rowenc.EncDatumRow, routerRowBufSize)
 			streamStatus := execinfra.NeedMoreRows
 			ro.mu.Lock()
 			for {
@@ -481,7 +481,7 @@ type hashRouter struct {
 
 	hashCols []uint32
 	buffer   []byte
-	alloc    sqlbase.DatumAlloc
+	alloc    rowenc.DatumAlloc
 }
 
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
@@ -492,7 +492,7 @@ type hashRouter struct {
 type rangeRouter struct {
 	routerBase
 
-	alloc sqlbase.DatumAlloc
+	alloc rowenc.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
 	encodings []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding
@@ -516,7 +516,7 @@ func makeMirrorRouter(rb routerBase) (router, error) {
 
 // Push is part of the RowReceiver interface.
 func (mr *mirrorRouter) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	aggStatus := mr.aggStatus()
 	if meta != nil {
@@ -571,7 +571,7 @@ func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 // If, according to the hash, the row needs to go to a consumer that's draining
 // or closed, the row is silently dropped.
 func (hr *hashRouter) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	aggStatus := hr.aggStatus()
 	if meta != nil {
@@ -609,7 +609,7 @@ func (hr *hashRouter) Push(
 
 // computeDestination hashes a row and returns the index of the output stream on
 // which it must be sent.
-func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
+func (hr *hashRouter) computeDestination(row rowenc.EncDatumRow) (int, error) {
 	hr.buffer = hr.buffer[:0]
 	for _, col := range hr.hashCols {
 		if int(col) >= len(row) {
@@ -657,7 +657,7 @@ func makeRangeRouter(
 }
 
 func (rr *rangeRouter) Push(
-	row sqlbase.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) execinfra.ConsumerStatus {
 	aggStatus := rr.aggStatus()
 	if meta != nil {
@@ -690,7 +690,7 @@ func (rr *rangeRouter) Push(
 	return aggStatus
 }
 
-func (rr *rangeRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
+func (rr *rangeRouter) computeDestination(row rowenc.EncDatumRow) (int, error) {
 	var err error
 	rr.b = rr.b[:0]
 	for _, enc := range rr.encodings {

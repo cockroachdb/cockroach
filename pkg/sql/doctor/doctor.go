@@ -17,13 +17,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,55 +33,45 @@ type DescriptorTableRow struct {
 	ModTime   hlc.Timestamp
 }
 
-func key(id int64) roachpb.Key {
-	return sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
-}
-
-// NewProtoGetter creates a sqlbase.MapProtoGetter from a descriptor table.
-func NewProtoGetter(rows []DescriptorTableRow) (*sqlbase.MapProtoGetter, error) {
-	pg := sqlbase.MapProtoGetter{
-		Protos: make(map[interface{}]protoutil.Message),
-	}
+// NewDescGetter creates a sqlbase.MapProtoGetter from a descriptor table.
+func NewDescGetter(rows []DescriptorTableRow) (sqlbase.MapDescGetter, error) {
+	pg := sqlbase.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
 			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
 		}
 		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
-		pg.Protos[string(key(r.ID))] = &d
+		pg[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(context.TODO(), &d)
 	}
-	return &pg, nil
+	return pg, nil
 }
 
 // Examine runs a suite of consistency checks over the descriptor table.
 func Examine(descTable []DescriptorTableRow, verbose bool, stdout io.Writer) (ok bool, err error) {
 	fmt.Fprintf(stdout, "Examining %d descriptors...\n", len(descTable))
-	protoGetter, err := NewProtoGetter(descTable)
+	descGetter, err := NewDescGetter(descTable)
 	if err != nil {
 		return false, err
 	}
 	var problemsFound bool
 	for _, row := range descTable {
-		desc := protoGetter.Protos[string(key(row.ID))].(*descpb.Descriptor)
-		t := sqlbase.TableFromDescriptor(desc, hlc.Timestamp{})
-		if t == nil {
+		table, isTable := descGetter[descpb.ID(row.ID)].(catalog.TableDescriptor)
+		if !isTable {
 			// So far we only examine table descriptors. We may add checks for other
 			// descriptors in later versions.
 			continue
 		}
-		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), desc, ts)
-		table := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(desc, ts))
-		if int64(table.ID) != row.ID {
-			fmt.Fprintf(stdout, "Table %3d: different id in the descriptor: %d", row.ID, table.ID)
+		if int64(table.GetID()) != row.ID {
+			fmt.Fprintf(stdout, "Table %3d: different id in the descriptor: %d", row.ID, table.GetID())
 			problemsFound = true
 			continue
 		}
-		if err := table.Validate(context.Background(), protoGetter, keys.SystemSQLCodec); err != nil {
+		if err := table.Validate(context.Background(), descGetter); err != nil {
 			problemsFound = true
-			fmt.Fprintf(stdout, "Table %3d: %s\n", table.ID, err)
+			fmt.Fprintf(stdout, "Table %3d: %s\n", table.GetID(), err)
 		} else if verbose {
-			fmt.Fprintf(stdout, "Table %3d: validated\n", table.ID)
+			fmt.Fprintf(stdout, "Table %3d: validated\n", table.GetID())
 		}
 	}
 	return !problemsFound, nil

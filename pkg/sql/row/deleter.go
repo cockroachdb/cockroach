@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,7 +103,7 @@ func (rd *Deleter) DeleteRow(
 		}
 
 		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
-		entries, err := sqlbase.EncodeSecondaryIndex(
+		entries, err := rowenc.EncodeSecondaryIndex(
 			rd.Helper.Codec,
 			rd.Helper.TableDesc,
 			&rd.Helper.Indexes[i],
@@ -157,7 +158,7 @@ func (rd *Deleter) DeleteIndexRow(
 	// to delete all k/v's for this row. By setting includeEmpty
 	// to true, we will get a k/v pair for each family in the row,
 	// which will guarantee that we delete all the k/v's in this row.
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(
 		rd.Helper.Codec,
 		rd.Helper.TableDesc,
 		idx,

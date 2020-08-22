@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -80,7 +82,7 @@ func resolveNewTypeName(
 // the parent schema.
 func getCreateTypeParams(
 	params runParams, name *tree.TypeName, db catalog.DatabaseDescriptor,
-) (typeKey sqlbase.DescriptorKey, schemaID descpb.ID, err error) {
+) (typeKey catalogkeys.DescriptorKey, schemaID descpb.ID, err error) {
 	// Check we are not creating a type which conflicts with an alias available
 	// as a built-in type in CockroachDB but an extension type on the public
 	// schema for PostgreSQL.
@@ -152,7 +154,7 @@ func (p *planner) createArrayType(
 	params runParams,
 	n *tree.CreateType,
 	typ *tree.TypeName,
-	typDesc *sqlbase.MutableTypeDescriptor,
+	typDesc *typedesc.MutableTypeDescriptor,
 	db catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 ) (descpb.ID, error) {
@@ -180,7 +182,7 @@ func (p *planner) createArrayType(
 	var elemTyp *types.T
 	switch t := typDesc.Kind; t {
 	case descpb.TypeDescriptor_ENUM:
-		elemTyp = types.MakeEnum(sqlbase.TypeIDToOID(typDesc.GetID()), sqlbase.TypeIDToOID(id))
+		elemTyp = types.MakeEnum(typedesc.TypeIDToOID(typDesc.GetID()), typedesc.TypeIDToOID(id))
 	default:
 		return 0, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
@@ -188,7 +190,7 @@ func (p *planner) createArrayType(
 	// Construct the descriptor for the array type.
 	// TODO(ajwerner): This is getting fixed up in a later commit to deal with
 	// meta, just hold on.
-	arrayTypDesc := sqlbase.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
+	arrayTypDesc := typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{
 		Name:           arrayTypeName,
 		ID:             id,
 		ParentID:       db.GetID(),
@@ -284,7 +286,7 @@ func (p *planner) createEnum(params runParams, n *tree.CreateType) error {
 	//  a free list of descriptor ID's (#48438), we should allocate an ID from
 	//  there if id + oidext.CockroachPredefinedOIDMax overflows past the
 	//  maximum uint32 value.
-	typeDesc := sqlbase.NewMutableCreatedTypeDescriptor(
+	typeDesc := typedesc.NewMutableCreatedTypeDescriptor(
 		descpb.TypeDescriptor{
 			Name:           typeName.Type(),
 			ID:             id,

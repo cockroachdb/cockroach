@@ -19,7 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,12 +48,12 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	name string,
 	flags tree.DatabaseLookupFlags,
 ) (desc catalog.DatabaseDescriptor, err error) {
-	if name == sqlbase.SystemDatabaseName {
+	if name == systemschema.SystemDatabaseName {
 		if flags.RequireMutable {
-			return sqlbase.NewMutableExistingDatabaseDescriptor(
-				*sqlbase.MakeSystemDatabaseDesc().DatabaseDesc()), nil
+			return dbdesc.NewMutableExistingDatabaseDescriptor(
+				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
 		}
-		return sqlbase.SystemDB, nil
+		return systemschema.MakeSystemDatabaseDesc(), nil
 	}
 
 	found, descID, err := LookupDatabaseID(ctx, txn, codec, name)
@@ -136,7 +140,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
-	prefix := sqlbase.NewTableKey(dbDesc.GetID(), schema.ID, "").Key(codec)
+	prefix := catalogkeys.NewTableKey(dbDesc.GetID(), schema.ID, "").Key(codec)
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -182,7 +186,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 		return tableNames, nil
 	}
 
-	dprefix := sqlbase.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(codec)
+	dprefix := catalogkeys.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(codec)
 	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, err
@@ -239,7 +243,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// Note: we can only bypass name to ID resolution. The desc
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
-	descID := sqlbase.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
+	descID := bootstrap.LookupSystemTableDescriptorID(ctx, settings, codec, dbID, object)
 	if descID == descpb.InvalidID {
 		var found bool
 		found, descID, err = LookupObjectID(ctx, txn, codec, dbID, schema.ID, object)
@@ -281,7 +285,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// As this table can not be renamed by users, it is okay that the first
 			// check fails.
 			if desc.GetName() == object ||
-				object == sqlbase.NamespaceTableName && db == sqlbase.SystemDatabaseName {
+				object == systemschema.NamespaceTableName && db == systemschema.SystemDatabaseName {
 				return desc, nil
 			}
 		}

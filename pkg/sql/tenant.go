@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -93,7 +94,7 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, tenInfo []byte
 	}
 
 	// Initialize the tenant's keyspace.
-	schema := sqlbase.MakeMetadataSchema(
+	schema := bootstrap.MakeMetadataSchema(
 		keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)),
 		nil, /* defaultZoneConfig */
 		nil, /* defaultZoneConfig */

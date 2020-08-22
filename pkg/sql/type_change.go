@@ -19,11 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -34,7 +35,7 @@ import (
 // the descriptor gets written to a batch, as well as ensuring that a job is
 // created to perform the schema change on the type.
 func (p *planner) writeTypeSchemaChange(
-	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor, jobDesc string,
+	ctx context.Context, typeDesc *typedesc.MutableTypeDescriptor, jobDesc string,
 ) error {
 	// Check if there is an active job for this type, otherwise create one.
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID]
@@ -73,7 +74,7 @@ func (p *planner) writeTypeSchemaChange(
 }
 
 func (p *planner) writeTypeDesc(
-	ctx context.Context, typeDesc *sqlbase.MutableTypeDescriptor,
+	ctx context.Context, typeDesc *typedesc.MutableTypeDescriptor,
 ) error {
 	// Maybe increment the type's version.
 	typeDesc.MaybeIncrementVersion()
@@ -119,15 +120,15 @@ func (TypeSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
-) (*sqlbase.ImmutableTypeDescriptor, error) {
-	var typeDesc *sqlbase.ImmutableTypeDescriptor
+) (*typedesc.ImmutableTypeDescriptor, error) {
+	var typeDesc *typedesc.ImmutableTypeDescriptor
 	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, t.execCfg.Codec, t.typeID,
 			catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
 		if err != nil {
 			return err
 		}
-		typeDesc = desc.(*sqlbase.ImmutableTypeDescriptor)
+		typeDesc = desc.(*typedesc.ImmutableTypeDescriptor)
 		return nil
 	}); err != nil {
 		return nil, err
@@ -180,7 +181,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up.
 			update := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
-				typeDesc := descs[typeDesc.ID].(*sqlbase.MutableTypeDescriptor)
+				typeDesc := descs[typeDesc.ID].(*typedesc.MutableTypeDescriptor)
 				didModify := false
 				for i := range typeDesc.EnumMembers {
 					member := &typeDesc.EnumMembers[i]
@@ -207,7 +208,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 	// Finally, make sure all of the leases are updated.
 	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
-		if errors.Is(err, sqlbase.ErrDescriptorNotFound) {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil
 		}
 		return err
@@ -217,7 +218,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if typeDesc.Dropped() {
 		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			b := txn.NewBatch()
-			b.Del(sqlbase.MakeDescMetadataKey(codec, typeDesc.ID))
+			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.ID))
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return err
@@ -241,7 +242,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		switch {
 		case tcErr == nil:
 			return nil
-		case errors.Is(tcErr, sqlbase.ErrDescriptorNotFound):
+		case errors.Is(tcErr, catalog.ErrDescriptorNotFound):
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
 			log.Infof(

@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -267,7 +269,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MinUserDescID))
+		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(keys.MinUserDescID))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -1295,7 +1297,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	userTableMax := keys.MinUserDescID + 4
 	var exceptions map[int]struct{}
-	schema := sqlbase.MakeMetadataSchema(
+	schema := bootstrap.MakeMetadataSchema(
 		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
 	)
 	// Write table descriptors for the tables in the metadata schema as well as
@@ -1320,7 +1322,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
 			id := descpb.ID(i)
-			key := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+			key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 			desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
 			if err := txn.Put(ctx, key, desc.DescriptorProto()); err != nil {
 				return err
@@ -1389,7 +1391,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
 		id := descpb.ID(userTableMax)
-		k := sqlbase.MakeDescMetadataKey(keys.SystemSQLCodec, id)
+		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
 		desc := sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ID: id})
 		return txn.Put(ctx, k, desc.DescriptorProto())
 	}); err != nil {

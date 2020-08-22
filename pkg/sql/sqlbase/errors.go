@@ -120,11 +120,6 @@ func NewUndefinedRelationError(name tree.NodeFormatter) error {
 		"relation %q does not exist", tree.ErrString(name))
 }
 
-// NewUndefinedColumnError creates an error that represents a missing database column.
-func NewUndefinedColumnError(name string) error {
-	return pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
-}
-
 // NewColumnAlreadyExistsError creates an error for a preexisting column.
 func NewColumnAlreadyExistsError(name, relation string) error {
 	return pgerror.Newf(pgcode.DuplicateColumn, "column %q of relation %q already exists", name, relation)
@@ -212,10 +207,6 @@ func NewWindowInAggError() error {
 func NewAggInAggError() error {
 	return pgerror.New(pgcode.Grouping, "aggregate function calls cannot be nested")
 }
-
-// QueryCanceledError is an error representing query cancellation.
-var QueryCanceledError = pgerror.New(
-	pgcode.QueryCanceled, "query execution canceled")
 
 // QueryTimeoutError is an error representing a query timeout.
 var QueryTimeoutError = pgerror.New(

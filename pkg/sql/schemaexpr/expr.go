@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,10 +40,10 @@ func DequalifyAndValidateExpr(
 	semaCtx *tree.SemaContext,
 	maxVolatility tree.Volatility,
 	tn *tree.TableName,
-) (string, sqlbase.TableColSet, error) {
-	var colIDs sqlbase.TableColSet
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tn, sqlbase.ResultColumnsFromColDescs(
+) (string, TableColSet, error) {
+	var colIDs TableColSet
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColDescs(
 			desc.GetID(),
 			desc.AllNonDropColumns(),
 		),
@@ -76,10 +77,8 @@ func DequalifyAndValidateExpr(
 }
 
 // ExtractColumnIDs returns the set of column IDs within the given expression.
-func ExtractColumnIDs(
-	desc catalog.TableDescriptor, rootExpr tree.Expr,
-) (sqlbase.TableColSet, error) {
-	var colIDs sqlbase.TableColSet
+func ExtractColumnIDs(desc catalog.TableDescriptor, rootExpr tree.Expr) (TableColSet, error) {
+	var colIDs TableColSet
 
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
@@ -163,7 +162,7 @@ func deserializeExprForFormatting(
 type nameResolver struct {
 	evalCtx    *tree.EvalContext
 	tableID    descpb.ID
-	source     *sqlbase.DataSourceInfo
+	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
 	ivarHelper *tree.IndexedVarHelper
 }
@@ -172,9 +171,9 @@ type nameResolver struct {
 func newNameResolver(
 	evalCtx *tree.EvalContext, tableID descpb.ID, tn *tree.TableName, cols []*descpb.ColumnDescriptor,
 ) *nameResolver {
-	source := sqlbase.NewSourceInfoForSingleTable(
+	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
-		sqlbase.ResultColumnsFromColDescPtrs(tableID, cols),
+		colinfo.ResultColumnsFromColDescPtrs(tableID, cols),
 	)
 	nrc := &nameResolverIVarContainer{cols}
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
@@ -199,7 +198,7 @@ func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 func (nr *nameResolver) addColumn(col *descpb.ColumnDescriptor) {
 	nr.ivarHelper.AppendSlot()
 	nr.nrc.cols = append(nr.nrc.cols, col)
-	newCols := sqlbase.ResultColumnsFromColDescs(nr.tableID, []descpb.ColumnDescriptor{*col})
+	newCols := colinfo.ResultColumnsFromColDescs(nr.tableID, []descpb.ColumnDescriptor{*col})
 	nr.source.SourceColumns = append(nr.source.SourceColumns, newCols...)
 }
 

@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 )
 
 // MetadataTestSender intersperses a metadata record after every row.
@@ -80,7 +80,7 @@ func (mts *MetadataTestSender) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (mts *MetadataTestSender) Next() (sqlbase.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (mts *MetadataTestSender) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	// Every call after a row has been returned returns a metadata record.
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
