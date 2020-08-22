@@ -126,7 +126,7 @@ func resolveDest(
 			}
 
 			// Pick a piece-specific suffix and update the destination path(s).
-			partName := endTime.GoTime().Format(dateBasedFolderName)
+			partName := endTime.GoTime().Format(dateBasedIncFolderName)
 			partName = path.Join(chosenSuffix, partName)
 			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
 			if err != nil {
@@ -260,7 +260,7 @@ func resolveBackupCollection(
 		chosenSuffix = strings.TrimPrefix(subdir, "/")
 		chosenSuffix = "/" + chosenSuffix
 	} else {
-		chosenSuffix = endTime.GoTime().Format(dateBasedFolderName)
+		chosenSuffix = endTime.GoTime().Format(dateBasedIntoFolderName)
 	}
 	return collectionURI, chosenSuffix, nil
 }

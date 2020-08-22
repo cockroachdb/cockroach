@@ -68,8 +68,9 @@ const (
 	// ZipType is the format of a GZipped compressed file.
 	ZipType = "application/x-gzip"
 
-	dateBasedFolderName = "/20060102/150405.00"
-	latestFileName      = "LATEST"
+	dateBasedIncFolderName  = "/20060102/150405.00"
+	dateBasedIntoFolderName = "/2006/01/02-150405.00"
+	latestFileName          = "LATEST"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
