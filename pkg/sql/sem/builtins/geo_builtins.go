@@ -2274,6 +2274,17 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 	//
 	// Unary predicates
 	//
+	"st_isclosed": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			geomfn.IsClosed,
+			infoBuilder{
+				info: `Returns whether the geometry is closed as defined by whether the start and end points are coincident. ` +
+					`Points are considered closed, empty geometries are not. For collections and multi-types, all members must be closed, ` +
+					`as must all polygon rings.`,
+			},
+		),
+	),
 	"st_iscollection": makeBuiltin(
 		defProps(),
 		geometryOverload1UnaryPredicate(
@@ -2289,6 +2300,28 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			geomfn.IsEmpty,
 			infoBuilder{
 				info: "Returns whether the geometry is empty.",
+			},
+		),
+	),
+	"st_isring": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			geomfn.IsRing,
+			infoBuilder{
+				info: `Returns whether the geometry is a single linestring that is closed and simple, as defined by ` +
+					`ST_IsClosed and ST_IsSimple.`,
+				libraryUsage: usesGEOS,
+			},
+		),
+	),
+	"st_issimple": makeBuiltin(
+		defProps(),
+		geometryOverload1UnaryPredicate(
+			geomfn.IsSimple,
+			infoBuilder{
+				info: `Returns true if the geometry has no anomalous geometric points, e.g. that it intersects with ` +
+					`or lies tangent to itself.`,
+				libraryUsage: usesGEOS,
 			},
 		),
 	),

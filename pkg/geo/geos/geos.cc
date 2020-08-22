@@ -56,6 +56,7 @@ typedef int (*CR_GEOS_GetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef void (*CR_GEOS_GeomDestroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef char (*CR_GEOS_IsEmpty_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
+typedef char (*CR_GEOS_IsSimple_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef int (*CR_GEOS_GeomTypeId_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
 typedef CR_GEOS_WKTReader (*CR_GEOS_WKTReader_create_r)(CR_GEOS_Handle);
@@ -143,6 +144,7 @@ struct CR_GEOS {
   CR_GEOS_Free_r GEOSFree_r;
 
   CR_GEOS_IsEmpty_r GEOSisEmpty_r;
+  CR_GEOS_IsSimple_r GEOSisSimple_r;
   CR_GEOS_GeomTypeId_r GEOSGeomTypeId_r;
 
   CR_GEOS_BufferParams_create_r GEOSBufferParams_create_r;
@@ -250,6 +252,7 @@ struct CR_GEOS {
     INIT(GEOSMakeValid_r);
     INIT(GEOSArea_r);
     INIT(GEOSLength_r);
+    INIT(GEOSisSimple_r);
     INIT(GEOSGetCentroid_r);
     INIT(GEOSConvexHull_r);
     INIT(GEOSUnion_r);
@@ -532,6 +535,35 @@ CR_GEOS_Status CR_GEOS_Area(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
 
 CR_GEOS_Status CR_GEOS_Length(CR_GEOS* lib, CR_GEOS_Slice a, double* ret) {
   return CR_GEOS_UnaryOperator(lib, lib->GEOSLength_r, a, ret);
+}
+
+//
+// Unary predicates.
+//
+
+template <typename T>
+CR_GEOS_Status CR_GEOS_UnaryPredicate(CR_GEOS* lib, T fn, CR_GEOS_Slice a, char* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto geom = CR_GEOS_GeometryFromSlice(lib, handle, a);
+  if (geom != nullptr) {
+    auto r = fn(handle, geom);
+    // r == 2 indicates an exception.
+    if (r == 2) {
+      if (error.length() == 0) {
+        error.assign(CR_GEOS_NO_ERROR_DEFINED_MESSAGE);
+      }
+    } else {
+      *ret = r;
+    }
+    lib->GEOSGeom_destroy_r(handle, geom);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_IsSimple(CR_GEOS* lib, CR_GEOS_Slice a, char* ret) {
+  return CR_GEOS_UnaryPredicate(lib, lib->GEOSisSimple_r, a, ret);
 }
 
 //

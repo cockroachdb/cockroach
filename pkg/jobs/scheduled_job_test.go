@@ -41,7 +41,7 @@ func TestCreatePausedScheduledJob(t *testing.T) {
 
 	j := h.newScheduledJob(t, "test_job", "test sql")
 	require.NoError(t, j.SetSchedule("@daily"))
-	j.Pause("this job is paused")
+	j.Pause()
 	require.NoError(t, j.Create(context.Background(), h.cfg.InternalExecutor, nil))
 	require.True(t, j.ScheduleID() > 0)
 	require.True(t, j.NextRun().Equal(time.Time{}))
@@ -99,18 +99,16 @@ func TestPauseUnpauseJob(t *testing.T) {
 	require.NoError(t, j.Create(ctx, h.cfg.InternalExecutor, nil))
 
 	// Pause and save.
-	j.Pause("just because")
+	j.Pause()
 	require.NoError(t, j.Update(ctx, h.cfg.InternalExecutor, nil))
 
 	// Verify job is paused
 	loaded := h.loadSchedule(t, j.ScheduleID())
 	// Paused jobs have next run time set to NULL
 	require.True(t, loaded.IsPaused())
-	require.Equal(t, 1, len(loaded.rec.ScheduleChanges.Changes))
-	require.Equal(t, "just because", loaded.rec.ScheduleChanges.Changes[0].Reason)
 
 	// Un-pausing the job resets next run time.
-	require.NoError(t, j.Unpause("we are back"))
+	require.NoError(t, j.ScheduleNextRun())
 	require.NoError(t, j.Update(ctx, h.cfg.InternalExecutor, nil))
 
 	// Verify job is no longer paused
@@ -118,7 +116,4 @@ func TestPauseUnpauseJob(t *testing.T) {
 	// Running schedules have nextRun set to non-null value
 	require.False(t, loaded.IsPaused())
 	require.False(t, loaded.NextRun().Equal(time.Time{}))
-	require.Equal(t, 2, len(loaded.rec.ScheduleChanges.Changes))
-	require.Equal(t, "just because", loaded.rec.ScheduleChanges.Changes[0].Reason)
-	require.Equal(t, "we are back", loaded.rec.ScheduleChanges.Changes[1].Reason)
 }

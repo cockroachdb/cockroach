@@ -28,7 +28,7 @@ DROP TABLE a
 # TODO (lucy): Update this if/when we decide to change how these jobs queued by
 # the startup migration are handled.
 query TT
-SELECT job_type, status FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges')
+SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root' AND (job_type = 'SCHEMA CHANGE GC' OR (job_type = 'SCHEMA CHANGE' AND description != 'updating privileges'))
 ----
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
