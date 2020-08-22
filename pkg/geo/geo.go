@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
@@ -244,7 +245,7 @@ func adjustSpatialObject(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	adjustGeomSRID(t, srid)
+	AdjustGeomTSRID(t, srid)
 	return spatialObjectFromGeomT(t, soType)
 }
 
@@ -583,6 +584,29 @@ func (g *Geography) Compare(o *Geography) int {
 //
 // Common
 //
+
+// AdjustGeomTSRID adjusts the SRID of a given geom.T.
+// Ideally SetSRID is an interface of geom.T, but that is not the case.
+func AdjustGeomTSRID(t geom.T, srid geopb.SRID) {
+	switch t := t.(type) {
+	case *geom.Point:
+		t.SetSRID(int(srid))
+	case *geom.LineString:
+		t.SetSRID(int(srid))
+	case *geom.Polygon:
+		t.SetSRID(int(srid))
+	case *geom.GeometryCollection:
+		t.SetSRID(int(srid))
+	case *geom.MultiPoint:
+		t.SetSRID(int(srid))
+	case *geom.MultiLineString:
+		t.SetSRID(int(srid))
+	case *geom.MultiPolygon:
+		t.SetSRID(int(srid))
+	default:
+		panic(fmt.Errorf("geo: unknown geom type: %v", t))
+	}
+}
 
 // IsLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
