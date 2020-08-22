@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -163,7 +164,10 @@ func buildOpaque(
 		plan, err = p.maybePlanHook(ctx, stmt)
 		if plan == nil && err == nil {
 			return nil, pgerror.Newf(pgcode.CCLRequired,
-				"a CCL binary is required to use this statement type: %T", stmt)
+				"a CCL binary is required to use this statement type: %s",
+				// TODO(knz): Simplify this to %T.
+				// See: https://github.com/cockroachdb/cockroach/issues/53207
+				errors.Safe(fmt.Sprintf("%T", stmt)))
 		}
 	default:
 		return nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)

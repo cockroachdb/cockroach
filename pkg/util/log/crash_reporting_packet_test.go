@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
@@ -125,7 +126,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += " (TestCrashReportingPacket)"
 			return message
 		}(), []extraPair{
-			{"1: details", "format: \"panic: %v\"\n-- arg 1: " + panicPre},
+			{"1: details", "panic: " + panicPre},
 		}},
 		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 11, func() string {
 			message := prefix
@@ -138,7 +139,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += " (TestCrashReportingPacket)"
 			return message
 		}(), []extraPair{
-			{"1: details", "format: \"panic: %v\"\n-- arg 1: " + panicPost},
+			{"1: details", "panic: " + panicPost},
 		}},
 	}
 
@@ -243,12 +244,16 @@ func TestInternalErrorReporting(t *testing.T) {
 
 	t.Logf("%# v", pretty.Formatter(p))
 
-	assert.Regexp(t, `\*errors.errorString\n`+
-		`\*safedetails.withSafeDetails: format: "%s" \(1\)\n`+
+	// rm is the redaction mark, what remains after redaction when
+	// the redaction markers are removed.
+	rm := string(redact.RedactableBytes(redact.RedactedMarker()).StripMarkers())
+
+	assert.Regexp(t, `builtins\.go:\d+: crdb_internal.force_assertion_error\(\): `+rm+`\n`+
+		`--\n`+
+		`\*errutil.leafError: `+rm+` \(1\)\n`+
 		`builtins.go:\d+: \*withstack.withStack \(top exception\)\n`+
 		`\*assert.withAssertionFailure\n`+
-		`\*errutil.withMessage\n`+
-		`\*safedetails.withSafeDetails: format: "%s\(\)" \(2\)\n`+
+		`\*errutil.withPrefix: crdb_internal.force_assertion_error\(\) \(2\)\n`+
 		`eval.go:\d+: \*withstack.withStack \(3\)\n`+
 		`\*telemetrykeys.withTelemetry: crdb_internal.force_assertion_error\(\) \(4\)\n`+
 		`\(check the extra data payloads\)`, p.Message)
@@ -257,8 +262,8 @@ func TestInternalErrorReporting(t *testing.T) {
 		key   string
 		reVal string
 	}{
-		{"1: details", "format: \"%s\"\n.*string:<redacted>"},
-		{"2: details", `format: "%s\(\)".*\n.*force_assertion_error`},
+		{"1: details", rm},
+		{"2: details", `crdb_internal\.force_assertion_error\(\)`},
 		{"4: details", `crdb_internal\.force_assertion_error\(\)`},
 	}
 	for _, ex := range expectedExtra {
@@ -282,7 +287,7 @@ func TestInternalErrorReporting(t *testing.T) {
 	// The innermost stack trace (and main exception object) is the last
 	// one in the Sentry event.
 	assert.Regexp(t, `^builtins.go:\d+ \(.*\)$`, p.Exception[1].Type)
-	assert.Regexp(t, `^\*errors\.errorString: format: "%s"`, p.Exception[1].Value)
+	assert.Regexp(t, `^\*errutil\.leafError: crdb_internal\.force_assertion_error\(\): `+rm, p.Exception[1].Value)
 	fr := p.Exception[1].Stacktrace.Frames
 	assert.Regexp(t, `.*/builtins.go`, fr[len(fr)-1].Filename)
 	assert.Regexp(t, `.*/eval.go`, fr[len(fr)-2].Filename)

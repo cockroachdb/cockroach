@@ -135,7 +135,7 @@ func TestSplitAt(t *testing.T) {
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION true",
-			error: "SPLIT AT: expected timestamp, decimal, or interval, got bool (*tree.DBool)",
+			error: "SPLIT AT: expected timestamp, decimal, or interval, got bool",
 		},
 		{
 			in:    "ALTER TABLE d.i SPLIT AT VALUES (17) WITH EXPIRATION '1969-01-01 00:00:00.0'",

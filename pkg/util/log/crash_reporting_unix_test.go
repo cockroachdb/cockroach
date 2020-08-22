@@ -21,7 +21,9 @@ import (
 func init() {
 	safeErrorTestCases = append(safeErrorTestCases, safeErrorTestCase{
 		err: os.NewSyscallError("write", unix.ENOSPC),
-		expErr: `syscall.Errno: no space left on device
-*os.SyscallError: write`,
+		expErr: `write: no space left on device
+(1) write
+Wraps: (2) no space left on device
+Error types: (1) *os.SyscallError (2) syscall.Errno`,
 	})
 }
