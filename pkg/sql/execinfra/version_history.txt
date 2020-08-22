@@ -123,3 +123,6 @@
 - Version: 32 (MinAcceptedVersion: 30)
     - Added an aggregator for ST_Extent. The change is backwards compatible
       (mixed versions will prevent parallelization).
+- Version: 33 (MinAcceptedVersion: 30)
+    - Added an aggregator for ST_Union. The change is backwards compatible
+      (mixed versions will prevent parallelization).
