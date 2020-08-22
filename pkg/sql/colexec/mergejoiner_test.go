@@ -1478,6 +1478,20 @@ var mjTestCases = []joinTestCase{
 		onExpr:       execinfrapb.Expression{Expr: "@2 + @3 < 50"},
 		expected:     tuples{{1, 10}, {4, 40}},
 	},
+	{
+		description:       "LEFT ANTI join when right eq cols are key",
+		joinType:          sqlbase.LeftAntiJoin,
+		leftTypes:         []coltypes.T{coltypes.Int64},
+		rightTypes:        []coltypes.T{coltypes.Int64},
+		leftTuples:        tuples{{0}, {0}, {1}, {2}},
+		rightTuples:       tuples{{0}, {2}},
+		leftEqCols:        []uint32{0},
+		rightEqCols:       []uint32{0},
+		leftOutCols:       []uint32{0},
+		rightOutCols:      []uint32{},
+		rightEqColsAreKey: true,
+		expected:          tuples{{1}},
+	},
 }
 
 func TestMergeJoiner(t *testing.T) {
