@@ -309,7 +309,11 @@ func CombineResponses(left, right Response) error {
 	if lOK && rOK {
 		return cLeft.combine(cRight)
 	} else if lOK != rOK {
-		return errors.Errorf("can not combine %T and %T", left, right)
+		// TODO(knz): Simplify to %T when
+		// https://github.com/cockroachdb/cockroach/issues/53207 is
+		// addressed.
+		return errors.Errorf("can not combine %s and %s",
+			errors.Safe(fmt.Sprintf("%T", left)), errors.Safe(fmt.Sprintf("%T", right)))
 	}
 	return nil
 }

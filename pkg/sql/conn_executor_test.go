@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
@@ -72,23 +73,22 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
 	}
 
-	const expSafeRedactedMessage = `...conn_executor_test.go:NN: *errors.errorString: <redacted>
-*safedetails.withSafeDetails: some error
-*withstack.withStack
-  (more details:)
-  github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
-  	...conn_executor_test.go:NN
-  testing.tRunner
-  	...testing.go:NN
-  runtime.goexit
-  	...asm_amd64.s:NN
-*safedetails.withSafeDetails: format: "while executing: %s"
-  (more details:)
-  -- arg 1: INSERT INTO _(_, _) VALUES (_, _, __more2__)`
+	const expSafeRedactedMessage = `some error
+(1) while executing: INSERT INTO _(_, _) VALUES (_, _, __more2__)
+Wraps: (2) attached stack trace
+  -- stack trace:
+  | github.com/cockroachdb/cockroach/pkg/sql_test.TestAnonymizeStatementsForReporting
+  | 	...conn_executor_test.go:NN
+  | testing.tRunner
+  | 	...testing.go:NN
+  | runtime.goexit
+  | 	...asm_amd64.s:NN
+Wraps: (3) some error
+Error types: (1) *safedetails.withSafeDetails (2) *withstack.withStack (3) *errutil.leafError`
 
 	// Edit non-determinstic stack trace filenames from the message.
 	actSafeRedactedMessage := fileref.ReplaceAllString(
-		errors.Redact(safeErr), "...$2:NN")
+		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN")
 
 	if actSafeRedactedMessage != expSafeRedactedMessage {
 		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{

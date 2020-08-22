@@ -11,7 +11,6 @@
 package pgerror
 
 import (
-	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -88,12 +87,8 @@ func Newf(code pgcode.Code, format string, args ...interface{}) error {
 // DangerousStatementf creates a new error for "rejected dangerous
 // statements".
 func DangerousStatementf(format string, args ...interface{}) error {
-	var buf bytes.Buffer
-	buf.WriteString("rejected: ")
-	fmt.Fprintf(&buf, format, args...)
-	buf.WriteString(" (sql_safe_updates = true)")
-	err := errors.Newf("%s", buf.String())
-	err = errors.WithSafeDetails(err, format, args...)
+	err := errors.Newf(format, args...)
+	err = errors.WithMessage(err, "rejected (sql_safe_updates = true)")
 	err = WithCandidateCode(err, pgcode.Warning)
 	return err
 }
@@ -132,6 +127,21 @@ func (pg *Error) Format(s fmt.State, verb rune) {
 	case verb == 'q':
 		fmt.Fprintf(s, "%q", pg.Message)
 	}
+}
+
+var _ errors.SafeFormatter = (*Error)(nil)
+
+// SafeFormatError implements the errors.SafeFormatter interface.
+func (pg *Error) SafeFormatError(s errors.Printer) (next error) {
+	s.Print(pg.Message)
+	if s.Detail() {
+		if pg.Source != nil {
+			s.Printf("Source: %s:%d in %s()",
+				errors.Safe(pg.Source.File), errors.Safe(pg.Source.Line), errors.Safe(pg.Source.Function))
+		}
+		s.Printf("SQLSTATE ", errors.Safe(pg.Code))
+	}
+	return nil
 }
 
 // IsSQLRetryableError returns true if err is retryable. This is true

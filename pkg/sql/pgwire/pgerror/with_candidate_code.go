@@ -27,7 +27,7 @@ type withCandidateCode struct {
 var _ error = (*withCandidateCode)(nil)
 var _ errors.SafeDetailer = (*withCandidateCode)(nil)
 var _ fmt.Formatter = (*withCandidateCode)(nil)
-var _ errors.Formatter = (*withCandidateCode)(nil)
+var _ errors.SafeFormatter = (*withCandidateCode)(nil)
 
 func (w *withCandidateCode) Error() string         { return w.cause.Error() }
 func (w *withCandidateCode) Cause() error          { return w.cause }
@@ -36,9 +36,9 @@ func (w *withCandidateCode) SafeDetails() []string { return []string{w.code} }
 
 func (w *withCandidateCode) Format(s fmt.State, verb rune) { errors.FormatError(w, s, verb) }
 
-func (w *withCandidateCode) FormatError(p errors.Printer) (next error) {
+func (w *withCandidateCode) SafeFormatError(p errors.Printer) (next error) {
 	if p.Detail() {
-		p.Printf("candidate pg code: %s", w.code)
+		p.Printf("candidate pg code: %s", errors.Safe(w.code))
 	}
 	return w.cause
 }
