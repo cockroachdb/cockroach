@@ -72,7 +72,7 @@ func parseEWKBHex(
 		return geopb.SpatialObject{}, err
 	}
 	if (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -90,7 +90,7 @@ func parseEWKB(
 		return geopb.SpatialObject{}, err
 	}
 	if overwrite == DefaultSRIDShouldOverwrite || (defaultSRID != 0 && t.SRID() == 0) || int32(t.SRID()) < 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
 }
@@ -103,7 +103,7 @@ func parseWKB(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	adjustGeomSRID(t, defaultSRID)
+	AdjustGeomTSRID(t, defaultSRID)
 	return spatialObjectFromGeomT(t, soType)
 }
 
@@ -116,32 +116,9 @@ func parseGeoJSON(
 		return geopb.SpatialObject{}, err
 	}
 	if defaultSRID != 0 && t.SRID() == 0 {
-		adjustGeomSRID(t, defaultSRID)
+		AdjustGeomTSRID(t, defaultSRID)
 	}
 	return spatialObjectFromGeomT(t, soType)
-}
-
-// adjustGeomSRID adjusts the SRID of a given geom.T.
-// Ideally SetSRID is an interface of geom.T, but that is not the case.
-func adjustGeomSRID(t geom.T, srid geopb.SRID) {
-	switch t := t.(type) {
-	case *geom.Point:
-		t.SetSRID(int(srid))
-	case *geom.LineString:
-		t.SetSRID(int(srid))
-	case *geom.Polygon:
-		t.SetSRID(int(srid))
-	case *geom.GeometryCollection:
-		t.SetSRID(int(srid))
-	case *geom.MultiPoint:
-		t.SetSRID(int(srid))
-	case *geom.MultiLineString:
-		t.SetSRID(int(srid))
-	case *geom.MultiPolygon:
-		t.SetSRID(int(srid))
-	default:
-		panic(fmt.Errorf("geo: unknown geom type: %v", t))
-	}
 }
 
 const sridPrefix = "SRID="

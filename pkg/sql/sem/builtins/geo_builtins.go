@@ -2270,6 +2270,68 @@ Note If the result has zero or one points, it will be returned as a POINT. If it
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_multi": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				multi, err := geomfn.Multi(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: multi}, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns the geometry as a new multi-geometry, e.g converts a POINT to a MULTIPOINT. If the input ` +
+					`is already a multitype or collection, it is returned as is.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	"st_collectionextract": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"type", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+				shapeType := args[1].(*tree.DInt)
+				res, err := geomfn.CollectionExtract(g.Geometry, geopb.ShapeType(*shapeType))
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: res}, nil
+			},
+			Info: infoBuilder{
+				info: `Given a collection, returns a multitype consisting only of elements of the specified type. ` +
+					`If there are no elements of the given type, an EMPTY geometry is returned. Types are specified as ` +
+					`1=POINT, 2=LINESTRING, 3=POLYGON - other types are not supported.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_collectionhomogenize": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.CollectionHomogenize(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: ret}, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns the "simplest" representation of a collection's contents. Collections of a single ` +
+					`type will be returned as an appopriate multitype, or a singleton if it only contains a ` +
+					`single geometry.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Unary predicates
