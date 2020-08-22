@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -1044,6 +1045,15 @@ func setupAndInitializeLoggingAndProfiling(
 			return nil, err
 		}
 
+		// Enable redactable logs if no other instruction given by the
+		// user. We do this only if we have a logging directory, because
+		// it's not safe to enable redaction markers on stderr.
+		if rl := fl.Lookup(logflags.RedactableLogsName); !rl.Changed {
+			if err := rl.Value.Set("true"); err != nil {
+				return nil, err
+			}
+		}
+
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
 		log.StartGCDaemon(ctx)
@@ -1065,6 +1075,13 @@ func setupAndInitializeLoggingAndProfiling(
 	// is valid.
 	if _, err := log.SetupRedactionAndStderrRedirects(); err != nil {
 		return nil, err
+	}
+
+	// Record redaction usage for telemetry.
+	if log.RedactableLogsEnabled() {
+		telemetry.Count("server.logging.redactable_logs.enabled")
+	} else {
+		telemetry.Count("server.logging.redactable_logs.disabled")
 	}
 
 	// We want to be careful to still produce useful debug dumps if the

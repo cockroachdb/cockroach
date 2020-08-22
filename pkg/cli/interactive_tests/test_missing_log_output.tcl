@@ -34,7 +34,7 @@ eexpect ":/# "
 # is only reported on the logger which is writing first after stderr
 # is has been broken, and that may be the secondary logger.
 send "tail -F `find logs/db/logs -type l`\r"
-eexpect "error: write /dev/stderr: broken pipe"
+eexpect "error: write */dev/stderr*: broken pipe"
 interrupt
 eexpect ":/# "
 end_test
@@ -89,7 +89,7 @@ eexpect "CockroachDB node starting"
 system "($argv sql --insecure -e \"select crdb_internal.force_panic('helloworld')\" || true)&"
 # Check the panic is reported on the server's stderr
 eexpect "a SQL panic has occurred"
-eexpect "panic: helloworld"
+eexpect "panic: *helloworld"
 eexpect "stack trace"
 eexpect ":/# "
 # Check the panic is reported on the server log file
