@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -545,7 +545,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := sqlbase.NewMutableExistingTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
+	table := tabledesc.NewMutableExistingTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -798,7 +798,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, key, desc)
 			require.NoError(t, err)
-			table := sqlbase.TableFromDescriptor(desc, ts)
+			table := descpb.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = systemschema.NamespaceTable.CreateAsOfTime
 			table.ModificationTime = systemschema.NamespaceTable.ModificationTime
 			require.True(t, table.Equal(systemschema.NamespaceTable.TableDesc()))
@@ -806,7 +806,7 @@ func TestMigrateNamespaceTableDescriptors(t *testing.T) {
 		{
 			ts, err := txn.GetProtoTs(ctx, deprecatedKey, desc)
 			require.NoError(t, err)
-			table := sqlbase.TableFromDescriptor(desc, ts)
+			table := descpb.TableFromDescriptor(desc, ts)
 			table.CreateAsOfTime = systemschema.DeprecatedNamespaceTable.CreateAsOfTime
 			table.ModificationTime = systemschema.DeprecatedNamespaceTable.ModificationTime
 			require.True(t, table.Equal(systemschema.DeprecatedNamespaceTable.TableDesc()))
@@ -856,7 +856,7 @@ CREATE TABLE system.jobs (
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()
@@ -937,7 +937,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = sqlbase.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewImmutableTableDescriptor(*oldJobsTable.TableDesc())
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()

@@ -8,16 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package sessiondata
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-)
+import "github.com/cockroachdb/cockroach/pkg/security"
 
-// InternalExecutorSessionDataOverride is used by the InternalExecutor interface
+// InternalExecutorOverride is used by the InternalExecutor interface
 // to allow control over some of the session data.
-type InternalExecutorSessionDataOverride struct {
+type InternalExecutorOverride struct {
 	// User represents the user that the query will run under.
 	User string
 	// Database represents the default database for the query.
@@ -25,13 +22,13 @@ type InternalExecutorSessionDataOverride struct {
 	// ApplicationName represents the application that the query runs under.
 	ApplicationName string
 	// SearchPath represents the namespaces to search in.
-	SearchPath *sessiondata.SearchPath
+	SearchPath *SearchPath
 }
 
-// NoSessionDataOverride is the empty InternalExecutorSessionDataOverride which
-// does not override any session data.
-var NoSessionDataOverride = InternalExecutorSessionDataOverride{}
+// NoSessionDataOverride is the empty InternalExecutorOverride which does not
+// override any session data.
+var NoSessionDataOverride = InternalExecutorOverride{}
 
-// NodeUserSessionDataOverride is an InternalExecutorSessionDataOverride which
-// overrides the users to the NodeUser.
-var NodeUserSessionDataOverride = InternalExecutorSessionDataOverride{User: security.NodeUser}
+// NodeUserSessionDataOverride is an InternalExecutorOverride which overrides
+// the users to the NodeUser.
+var NodeUserSessionDataOverride = InternalExecutorOverride{User: security.NodeUser}

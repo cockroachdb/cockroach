@@ -8,13 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schemaexpr
+package schemaexpr_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,7 +38,7 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	builder := MakeCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
+	builder := schemaexpr.MakeCheckConstraintBuilder(ctx, tn, desc, &semaCtx)
 	builder.MarkNameInUse("check_a3")
 
 	testData := []struct {
@@ -156,7 +157,7 @@ func TestCheckConstraintBuilder_DefaultName(t *testing.T) {
 		[]testCol{{"c", types.String}, {"d", types.String}, {"e", types.String}},
 	)
 
-	builder := MakeCheckConstraintBuilder(ctx, tn, &desc, &semaCtx)
+	builder := schemaexpr.MakeCheckConstraintBuilder(ctx, tn, desc, &semaCtx)
 
 	testData := []struct {
 		expr     string

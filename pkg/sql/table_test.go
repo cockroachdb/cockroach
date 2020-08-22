@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -210,7 +210,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		{
 			"a INT PRIMARY KEY",
 			descpb.IndexDescriptor{
-				Name:             sqlbase.PrimaryKeyIndexName,
+				Name:             tabledesc.PrimaryKeyIndexName,
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a"},
@@ -284,7 +284,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 		{
 			"a INT, b INT, PRIMARY KEY (a, b)",
 			descpb.IndexDescriptor{
-				Name:             sqlbase.PrimaryKeyIndexName,
+				Name:             tabledesc.PrimaryKeyIndexName,
 				ID:               1,
 				Unique:           true,
 				ColumnNames:      []string{"a", "b"},
@@ -324,7 +324,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	desc.PrimaryIndex = descpb.IndexDescriptor{}
 
 	err = desc.ValidateTable()
-	if !testutils.IsError(err, sqlbase.ErrMissingPrimaryKey.Error()) {
+	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

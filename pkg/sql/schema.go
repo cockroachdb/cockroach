@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -44,7 +44,7 @@ func (p *planner) schemaExists(
 }
 
 func (p *planner) writeSchemaDesc(
-	ctx context.Context, desc *sqlbase.MutableSchemaDescriptor,
+	ctx context.Context, desc *schemadesc.MutableSchemaDescriptor,
 ) error {
 	desc.MaybeIncrementVersion()
 	p.Descriptors().ResetSchemaCache()
@@ -67,7 +67,7 @@ func (p *planner) writeSchemaDesc(
 }
 
 func (p *planner) writeSchemaDescChange(
-	ctx context.Context, desc *sqlbase.MutableSchemaDescriptor, jobDesc string,
+	ctx context.Context, desc *schemadesc.MutableSchemaDescriptor, jobDesc string,
 ) error {
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
 	if jobExists {

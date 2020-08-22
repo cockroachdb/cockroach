@@ -20,11 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,8 +48,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) *sqlbase.ImmutableTableDescriptor {
-			desc := sqlbase.NewImmutableTableDescriptor(descriptor)
+		mkTable := func(descriptor tbDesc) *tabledesc.ImmutableTableDescriptor {
+			desc := tabledesc.NewImmutableTableDescriptor(descriptor)
 			desc.ModificationTime = ts1
 			return desc
 		}
@@ -62,8 +63,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			return typedesc.NewImmutableTypeDescriptor(desc)
 		}
-		mkSchema := func(desc scDesc) *sqlbase.ImmutableSchemaDescriptor {
-			return sqlbase.NewImmutableSchemaDescriptor(desc)
+		mkSchema := func(desc scDesc) *schemadesc.ImmutableSchemaDescriptor {
+			return schemadesc.NewImmutableSchemaDescriptor(desc)
 		}
 		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"

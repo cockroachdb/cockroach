@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package catalog
 
 import (
 	"testing"
@@ -21,6 +21,6 @@ func TestNoLinkForbidden(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/sql/sqlbase", true, []string{"c-deps"}, nil,
+		"github.com/cockroachdb/cockroach/pkg/sql/catalog", true, []string{"c-deps"}, nil,
 	)
 }

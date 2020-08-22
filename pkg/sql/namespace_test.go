@@ -18,10 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,7 +64,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	// Creating the database should fail, because an entry was explicitly added to
 	// the system.namespace_deprecated table.
 	_, err := sqlDB.Exec(`CREATE DATABASE test`)
-	if !testutils.IsError(err, sqlbase.NewDatabaseAlreadyExistsError("test").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewDatabaseAlreadyExistsError("test").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -133,7 +134,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	}
 	mKey := catalogkeys.MakeDescMetadataKey(codec, descpb.ID(idCounter))
 	// Fill the dummy descriptor with garbage.
-	desc := sqlbase.InitTableDescriptor(
+	desc := tabledesc.InitTableDescriptor(
 		descpb.ID(idCounter),
 		dbID,
 		keys.PublicSchemaID,
@@ -152,18 +153,18 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	// Creating a table should fail now, because an entry was explicitly added to
 	// the old system.namespace_deprecated table.
 	_, err = sqlDB.Exec(`CREATE TABLE test.public.rel(a int)`)
-	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 	// Same applies to a table which doesn't explicitly specify the public schema,
 	// as that is the default.
 	_, err = sqlDB.Exec(`CREATE TABLE test.rel(a int)`)
-	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 	// Can not create a sequence with the same name either.
 	_, err = sqlDB.Exec(`CREATE SEQUENCE test.rel`)
-	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -172,7 +173,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = sqlDB.Exec(`ALTER TABLE rel2 RENAME TO rel`)
-	if testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+	if testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -181,7 +182,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = sqlDB.Exec(`ALTER SEQUENCE rel2 RENAME TO rel`)
-	if !testutils.IsError(err, sqlbase.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 

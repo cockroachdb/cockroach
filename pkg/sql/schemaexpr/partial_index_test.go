@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schemaexpr
+package schemaexpr_test
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -39,7 +40,7 @@ func TestIndexPredicateValidator_Validate(t *testing.T) {
 		[]testCol{{"c", types.String}},
 	)
 
-	validator := MakeIndexPredicateValidator(ctx, tn, &desc, &semaCtx)
+	validator := schemaexpr.MakeIndexPredicateValidator(ctx, tn, desc, &semaCtx)
 
 	testData := []struct {
 		expr          string
@@ -165,7 +166,7 @@ func TestFormatIndexForDisplay(t *testing.T) {
 
 	for testIdx, tc := range testData {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
-			got, err := FormatIndexForDisplay(ctx, &tableDesc, &tc.tableName, &tc.index, &semaCtx)
+			got, err := schemaexpr.FormatIndexForDisplay(ctx, tableDesc, &tc.tableName, &tc.index, &semaCtx)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}

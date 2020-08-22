@@ -18,19 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShouldSplitAtDesc(t *testing.T) {
 	for inner, should := range map[catalog.Descriptor]bool{
-		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{}):                                              true,
-		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}):                           false,
-		sqlbase.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}): true,
-		dbdesc.NewInitialDatabaseDescriptor(42, "db", security.AdminRole):                                          false,
-		typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                                          false,
-		sqlbase.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                                            false,
+		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{}):                                              true,
+		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT"}):                           false,
+		tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{ViewQuery: "SELECT", IsMaterializedView: true}): true,
+		dbdesc.NewInitialDatabaseDescriptor(42, "db", security.AdminRole):                                            false,
+		typedesc.NewMutableCreatedTypeDescriptor(descpb.TypeDescriptor{}):                                            false,
+		schemadesc.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{}):                                           false,
 	} {
 		var rawDesc roachpb.Value
 		require.NoError(t, rawDesc.SetProto(inner.DescriptorProto()))

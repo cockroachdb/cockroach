@@ -19,12 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -46,7 +47,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(required bool) tree.CommonLookupFlags
 	ObjectLookupFlags(required bool, requireMutable bool) tree.ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id descpb.ID) (*sqlbase.ImmutableTableDescriptor, error)
+	LookupTableByID(ctx context.Context, id descpb.ID) (*tabledesc.ImmutableTableDescriptor, error)
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
@@ -82,7 +83,7 @@ func GetObjectNames(
 // if no object is found.
 func ResolveExistingTableObject(
 	ctx context.Context, sc SchemaResolver, tn *tree.TableName, lookupFlags tree.ObjectLookupFlags,
-) (res *sqlbase.ImmutableTableDescriptor, err error) {
+) (res *tabledesc.ImmutableTableDescriptor, err error) {
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	//  passed as an argument to this function.
 	un := tn.ToUnresolvedObjectName()
@@ -91,7 +92,7 @@ func ResolveExistingTableObject(
 		return nil, err
 	}
 	tn.ObjectNamePrefix = prefix
-	return desc.(*sqlbase.ImmutableTableDescriptor), nil
+	return desc.(*tabledesc.ImmutableTableDescriptor), nil
 }
 
 // ResolveMutableExistingTableObject looks up an existing mutable object.
@@ -107,7 +108,7 @@ func ResolveMutableExistingTableObject(
 	tn *tree.TableName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (res *sqlbase.MutableTableDescriptor, err error) {
+) (res *tabledesc.MutableTableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
 		RequireMutable:       true,
@@ -122,7 +123,7 @@ func ResolveMutableExistingTableObject(
 		return nil, err
 	}
 	tn.ObjectNamePrefix = prefix
-	return desc.(*sqlbase.MutableTableDescriptor), nil
+	return desc.(*tabledesc.MutableTableDescriptor), nil
 }
 
 // ResolveMutableType resolves a type descriptor for mutable access. It
@@ -159,7 +160,7 @@ func ResolveExistingObject(
 	resolvedTn := tree.MakeTableNameFromPrefix(prefix, tree.Name(un.Object()))
 	if !found {
 		if lookupFlags.Required {
-			return nil, prefix, sqlbase.NewUndefinedObjectError(&resolvedTn, lookupFlags.DesiredObjectKind)
+			return nil, prefix, sqlerrors.NewUndefinedObjectError(&resolvedTn, lookupFlags.DesiredObjectKind)
 		}
 		return nil, prefix, nil
 	}
@@ -169,7 +170,7 @@ func ResolveExistingObject(
 	case tree.TypeObject:
 		_, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
-			return nil, prefix, sqlbase.NewUndefinedTypeError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
 			return obj.(*typedesc.MutableTypeDescriptor), prefix, nil
@@ -178,7 +179,7 @@ func ResolveExistingObject(
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
-			return nil, prefix, sqlbase.NewUndefinedRelationError(&resolvedTn)
+			return nil, prefix, sqlerrors.NewUndefinedRelationError(&resolvedTn)
 		}
 		goodType := true
 		switch lookupFlags.DesiredTableDescKind {
@@ -192,7 +193,7 @@ func ResolveExistingObject(
 			goodType = table.IsSequence()
 		}
 		if !goodType {
-			return nil, prefix, sqlbase.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
+			return nil, prefix, sqlerrors.NewWrongObjectTypeError(&resolvedTn, lookupFlags.DesiredTableDescKind.String())
 		}
 
 		// If the table does not have a primary key, return an error
@@ -204,10 +205,10 @@ func ResolveExistingObject(
 		}
 
 		if lookupFlags.RequireMutable {
-			return descI.(*sqlbase.MutableTableDescriptor), prefix, nil
+			return descI.(*tabledesc.MutableTableDescriptor), prefix, nil
 		}
 
-		return descI.(*sqlbase.ImmutableTableDescriptor), prefix, nil
+		return descI.(*tabledesc.ImmutableTableDescriptor), prefix, nil
 	default:
 		return nil, prefix, errors.AssertionFailedf(
 			"unknown desired object kind %d", lookupFlags.DesiredObjectKind)

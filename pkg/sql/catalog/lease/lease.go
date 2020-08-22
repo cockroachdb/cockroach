@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -550,7 +550,7 @@ func CountLeases(
 		strings.Join(whereClauses, " OR ")
 	values, err := executor.QueryRowEx(
 		ctx, "count-leases", nil, /* txn */
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		stmt, at.GoTime(),
 	)
 	if err != nil {
@@ -1848,7 +1848,7 @@ func (m *Manager) refreshLeases(
 					}
 				}
 
-				id, version, name, dropped, offline := sqlbase.GetDescriptorMetadata(desc)
+				id, version, name, dropped, offline := descpb.GetDescriptorMetadata(desc)
 				goingOffline := offline || dropped
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
@@ -2018,8 +2018,8 @@ func (m *Manager) watchForRangefeedUpdates(
 		if descriptor.Union == nil {
 			return
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, ev.Value.Timestamp)
-		id, version, name, _, _ := sqlbase.GetDescriptorMetadata(&descriptor)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, ev.Value.Timestamp)
+		id, version, name, _, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				ev.Key, id, name, version)
@@ -2077,8 +2077,8 @@ func (m *Manager) handleUpdatedSystemCfg(
 		if descriptor.Union == nil {
 			return
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, kv.Value.Timestamp)
-		id, version, name, _, _ := sqlbase.GetDescriptorMetadata(&descriptor)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, kv.Value.Timestamp)
+		id, version, name, _, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				kv.Key, id, name, version)

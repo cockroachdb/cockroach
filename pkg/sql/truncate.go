@@ -20,11 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,7 +54,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	toTruncate := make(map[descpb.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
-	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
+	toTraverse := make([]tabledesc.MutableTableDescriptor, 0, len(n.Tables))
 
 	// Collect copies of each interleaved descriptor being truncated before any
 	// modification has been done to them. We need this in order to truncate
@@ -275,7 +276,7 @@ func (p *planner) truncateTable(
 	// Reassign any self references.
 	if err := p.reassignInterleaveIndexReferences(
 		ctx,
-		[]*sqlbase.MutableTableDescriptor{tableDesc},
+		[]*tabledesc.MutableTableDescriptor{tableDesc},
 		tableDesc.ID,
 		indexIDMapping,
 	); err != nil {
@@ -322,7 +323,7 @@ func ClearTableDataInChunks(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
 	const chunkSize = row.TableTruncateChunkSize
@@ -353,13 +354,13 @@ func ClearTableDataInChunks(
 // findAllReferencingInterleaves finds all tables that might interleave or
 // be interleaved by the input table.
 func (p *planner) findAllReferencingInterleaves(
-	ctx context.Context, table *sqlbase.MutableTableDescriptor,
-) ([]*sqlbase.MutableTableDescriptor, error) {
+	ctx context.Context, table *tabledesc.MutableTableDescriptor,
+) ([]*tabledesc.MutableTableDescriptor, error) {
 	refs, err := table.FindAllReferences()
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]*sqlbase.MutableTableDescriptor, 0, len(refs))
+	tables := make([]*tabledesc.MutableTableDescriptor, 0, len(refs))
 	for id := range refs {
 		if id == table.ID {
 			continue
@@ -378,7 +379,7 @@ func (p *planner) findAllReferencingInterleaves(
 // interleave descriptor references according to indexIDMapping.
 func (p *planner) reassignInterleaveIndexReferences(
 	ctx context.Context,
-	tables []*sqlbase.MutableTableDescriptor,
+	tables []*tabledesc.MutableTableDescriptor,
 	truncatedID descpb.ID,
 	indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
@@ -412,7 +413,7 @@ func (p *planner) reassignInterleaveIndexReferences(
 
 func (p *planner) reassignIndexComments(
 	ctx context.Context,
-	table *sqlbase.MutableTableDescriptor,
+	table *tabledesc.MutableTableDescriptor,
 	indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
 	// Check if there are any index comments that need to be updated.
@@ -420,7 +421,7 @@ func (p *planner) reassignIndexComments(
 		ctx,
 		"update-table-comments",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
 		table.ID,
 		keys.IndexCommentType,
@@ -434,7 +435,7 @@ func (p *planner) reassignIndexComments(
 				ctx,
 				"update-table-comments",
 				p.txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
 				new,
 				old,

@@ -29,13 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -265,7 +267,7 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 				return nil, err
 			} else if desc == nil {
 				if flags.Required {
-					return nil, sqlbase.NewUndefinedDatabaseError(name)
+					return nil, sqlerrors.NewUndefinedDatabaseError(name)
 				}
 				return nil, nil
 			}
@@ -309,12 +311,12 @@ func (tc *Collection) GetMutableDatabaseDescriptor(
 //
 func (tc *Collection) GetMutableTableDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.MutableTableDescriptor, error) {
 	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	mutDesc, ok := desc.(*sqlbase.MutableTableDescriptor)
+	mutDesc, ok := desc.(*tabledesc.MutableTableDescriptor)
 	if !ok {
 		return nil, nil
 	}
@@ -322,7 +324,7 @@ func (tc *Collection) GetMutableTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*sqlbase.MutableTableDescriptor), nil
+	return hydrated.(*tabledesc.MutableTableDescriptor), nil
 }
 
 func (tc *Collection) getMutableObjectDescriptor(
@@ -458,7 +460,7 @@ func (tc *Collection) GetDatabaseVersion(
 		db, ok := immut.(*dbdesc.ImmutableDatabaseDescriptor)
 		if !ok {
 			if flags.Required {
-				return nil, sqlbase.NewUndefinedDatabaseError(name)
+				return nil, sqlerrors.NewUndefinedDatabaseError(name)
 			}
 			return nil, nil
 		}
@@ -480,7 +482,7 @@ func (tc *Collection) GetDatabaseVersion(
 		db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 		if !ok {
 			if flags.Required {
-				return nil, sqlbase.NewUndefinedDatabaseError(name)
+				return nil, sqlerrors.NewUndefinedDatabaseError(name)
 			}
 			return nil, nil
 		}
@@ -504,7 +506,7 @@ func (tc *Collection) GetDatabaseVersion(
 	db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedDatabaseError(name)
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
 		return nil, nil
 	}
@@ -548,7 +550,7 @@ func (tc *Collection) getDatabaseVersionDeprecated(
 				return nil, err
 			} else if desc == nil {
 				if flags.Required {
-					return nil, sqlbase.NewUndefinedDatabaseError(name)
+					return nil, sqlerrors.NewUndefinedDatabaseError(name)
 				}
 				return nil, nil
 			}
@@ -586,15 +588,15 @@ func (tc *Collection) getDatabaseVersionDeprecated(
 //
 func (tc *Collection) GetTableVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TableName, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTableDescriptor, error) {
+) (*tabledesc.ImmutableTableDescriptor, error) {
 	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedRelationError(tn)
+			return nil, sqlerrors.NewUndefinedRelationError(tn)
 		}
 		return nil, nil
 	}
@@ -602,7 +604,7 @@ func (tc *Collection) GetTableVersion(
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*sqlbase.ImmutableTableDescriptor), nil
+	return hydrated.(*tabledesc.ImmutableTableDescriptor), nil
 }
 
 func (tc *Collection) getObjectVersion(
@@ -726,13 +728,13 @@ func (tc *Collection) GetDatabaseVersionByID(
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, dbID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 		}
 		return nil, err
 	}
 	db, ok := desc.(*dbdesc.ImmutableDatabaseDescriptor)
 	if !ok {
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", dbID))
 	}
 	return db, nil
 }
@@ -740,25 +742,25 @@ func (tc *Collection) GetDatabaseVersionByID(
 // GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
 func (tc *Collection) GetTableVersionByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*sqlbase.ImmutableTableDescriptor, error) {
+) (*tabledesc.ImmutableTableDescriptor, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, tableID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlbase.NewUndefinedRelationError(
+			return nil, sqlerrors.NewUndefinedRelationError(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
 	}
-	table, ok := desc.(*sqlbase.ImmutableTableDescriptor)
+	table, ok := desc.(*tabledesc.ImmutableTableDescriptor)
 	if !ok {
-		return nil, sqlbase.NewUndefinedRelationError(
+		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
 	}
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*sqlbase.ImmutableTableDescriptor), nil
+	return hydrated.(*tabledesc.ImmutableTableDescriptor), nil
 }
 
 func (tc *Collection) getDescriptorVersionByID(
@@ -823,17 +825,17 @@ func (tc *Collection) getDescriptorVersionByID(
 // table descriptor of the table modified in the same transaction.
 func (tc *Collection) GetMutableTableVersionByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.MutableTableDescriptor, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, tableID, txn)
 	if err != nil {
 		return nil, err
 	}
-	table := desc.(*sqlbase.MutableTableDescriptor)
+	table := desc.(*tabledesc.MutableTableDescriptor)
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
 	if err != nil {
 		return nil, err
 	}
-	return hydrated.(*sqlbase.MutableTableDescriptor), nil
+	return hydrated.(*tabledesc.MutableTableDescriptor), nil
 }
 
 func (tc *Collection) getMutableDescriptorByID(
@@ -856,12 +858,12 @@ func (tc *Collection) getMutableDescriptorByID(
 // GetMutableSchemaDescriptorByID gets a MutableSchemaDescriptor by ID.
 func (tc *Collection) GetMutableSchemaDescriptorByID(
 	ctx context.Context, scID descpb.ID, txn *kv.Txn,
-) (*sqlbase.MutableSchemaDescriptor, error) {
+) (*schemadesc.MutableSchemaDescriptor, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, scID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*sqlbase.MutableSchemaDescriptor), nil
+	return desc.(*schemadesc.MutableSchemaDescriptor), nil
 }
 
 // ResolveSchemaByID looks up a schema by ID.
@@ -903,7 +905,7 @@ func (tc *Collection) ResolveSchemaByID(
 		return catalog.ResolvedSchema{}, err
 	}
 
-	schemaDesc, ok := desc.(*sqlbase.ImmutableSchemaDescriptor)
+	schemaDesc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
 	if !ok {
 		return catalog.ResolvedSchema{}, pgerror.Newf(pgcode.WrongObjectType, "descriptor %d was not a schema", schemaID)
 	}
@@ -924,7 +926,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 	ctx context.Context, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (catalog.TableDescriptor, error) {
 	switch t := desc.(type) {
-	case *sqlbase.MutableTableDescriptor:
+	case *tabledesc.MutableTableDescriptor:
 		// It is safe to hydrate directly into MutableTableDescriptor since it is
 		// not shared. When hydrating mutable descriptors, use the mutable access
 		// method to access types.
@@ -947,7 +949,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		return desc, typedesc.HydrateTypesInTableDescriptor(ctx, t.TableDesc(), typedesc.TypeLookupFunc(getType))
-	case *sqlbase.ImmutableTableDescriptor:
+	case *tabledesc.ImmutableTableDescriptor:
 		// ImmutableTableDescriptors need to be copied before hydration, because
 		// they are potentially read by multiple threads. If there aren't any user
 		// defined types in the descriptor, then return early.
@@ -983,7 +985,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, typedesc.TypeLookupFunc(getType)); err != nil {
 			return nil, err
 		}
-		return sqlbase.NewImmutableTableDescriptor(*descBase), nil
+		return tabledesc.NewImmutableTableDescriptor(*descBase), nil
 	default:
 		return desc, nil
 	}
@@ -1122,9 +1124,9 @@ func (tc *Collection) GetDescriptorsWithNewVersion() []lease.IDVersion {
 
 // GetUncommittedTables returns all the tables updated or created in the
 // transaction.
-func (tc *Collection) GetUncommittedTables() (tables []*sqlbase.ImmutableTableDescriptor) {
+func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.ImmutableTableDescriptor) {
 	for _, desc := range tc.uncommittedDescriptors {
-		if table, ok := desc.immutable.(*sqlbase.ImmutableTableDescriptor); ok {
+		if table, ok := desc.immutable.(*tabledesc.ImmutableTableDescriptor); ok {
 			tables = append(tables, table)
 		}
 	}
@@ -1145,7 +1147,7 @@ func (tc *Collection) GetMutableTypeDescriptor(
 	mutDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedTypeError(tn)
+			return nil, sqlerrors.NewUndefinedTypeError(tn)
 		}
 		return nil, nil
 	}
@@ -1175,7 +1177,7 @@ func (tc *Collection) GetTypeVersion(
 	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
 	if !ok {
 		if flags.Required {
-			return nil, sqlbase.NewUndefinedTypeError(tn)
+			return nil, sqlerrors.NewUndefinedTypeError(tn)
 		}
 		return nil, nil
 	}
@@ -1238,7 +1240,7 @@ func (tc *Collection) getUncommittedDatabaseIDDeprecated(
 		if requestedDbName == db.name {
 			if db.dropped {
 				if required {
-					return true, descpb.InvalidID, sqlbase.NewUndefinedDatabaseError(requestedDbName)
+					return true, descpb.InvalidID, sqlerrors.NewUndefinedDatabaseError(requestedDbName)
 				}
 				return true, descpb.InvalidID, nil
 			}
@@ -1276,7 +1278,7 @@ func (tc *Collection) getUncommittedDescriptor(
 				// Name has gone away.
 				if required {
 					// If it's required here, say it doesn't exist.
-					err = sqlbase.NewUndefinedRelationError(tree.NewUnqualifiedTableName(tree.Name(name)))
+					err = sqlerrors.NewUndefinedRelationError(tree.NewUnqualifiedTableName(tree.Name(name)))
 				}
 				// The desc collection knows better; the caller has to avoid
 				// going to KV in any case: refuseFurtherLookup = true
@@ -1305,10 +1307,10 @@ func (tc *Collection) getUncommittedDescriptor(
 }
 
 // GetUncommittedTableByID returns an uncommitted table by its ID.
-func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *sqlbase.MutableTableDescriptor {
+func (tc *Collection) GetUncommittedTableByID(id descpb.ID) *tabledesc.MutableTableDescriptor {
 	desc := tc.getUncommittedDescriptorByID(id)
 	if desc != nil {
-		if table, ok := desc.(*sqlbase.MutableTableDescriptor); ok {
+		if table, ok := desc.(*tabledesc.MutableTableDescriptor); ok {
 			return table
 		}
 	}
@@ -1340,14 +1342,14 @@ func (tc *Collection) GetAllDescriptors(
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
 		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
-		schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
+		schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
 			case *typedesc.ImmutableTypeDescriptor:
 				typDescs[desc.GetID()] = desc
-			case *sqlbase.ImmutableSchemaDescriptor:
+			case *schemadesc.ImmutableSchemaDescriptor:
 				schemaDescs[desc.GetID()] = desc
 			}
 		}
@@ -1377,7 +1379,7 @@ func (tc *Collection) GetAllDescriptors(
 			// Now hydrate all table descriptors.
 			for i := range descs {
 				desc := descs[i]
-				if tblDesc, ok := desc.(*sqlbase.ImmutableTableDescriptor); ok {
+				if tblDesc, ok := desc.(*tabledesc.ImmutableTableDescriptor); ok {
 					if err := typedesc.HydrateTypesInTableDescriptor(
 						ctx,
 						tblDesc.TableDesc(),

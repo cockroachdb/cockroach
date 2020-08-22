@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -599,7 +599,7 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 // will be transferred to the correct scope by buildAggregateFunction.
 func (s *scope) startAggFunc() *scope {
 	if s.inAgg {
-		panic(sqlbase.NewAggInAggError())
+		panic(sqlerrors.NewAggInAggError())
 	}
 	s.inAgg = true
 
@@ -642,7 +642,7 @@ func (s *scope) endAggFunc(cols opt.ColSet) (g *groupby) {
 // aggregate functions.
 func (s *scope) verifyAggregateContext() {
 	if s.inAgg {
-		panic(sqlbase.NewAggInAggError())
+		panic(sqlerrors.NewAggInAggError())
 	}
 
 	switch s.context {

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -362,7 +362,7 @@ func descriptorsMatchingTargets(
 				return ret, err
 			}
 			if !found {
-				return ret, sqlbase.NewInvalidWildcardError(tree.ErrString(p))
+				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
 			}
 			desc := descI.(catalog.DatabaseDescriptor)
 
@@ -574,12 +574,12 @@ func getAllDescChanges(
 				// descriptors to use during restore.
 				// Note that the modification time of descriptors on disk is usually 0.
 				// See the comment on MaybeSetDescriptorModificationTime... for more.
-				sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
+				descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
 
 				// Collect the prior IDs of table descriptors, as the ID may have been
 				// changed during truncate.
 				r.Desc = &desc
-				t := sqlbase.TableFromDescriptor(&desc, rev.Timestamp)
+				t := descpb.TableFromDescriptor(&desc, rev.Timestamp)
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
@@ -757,9 +757,9 @@ func CheckObjectExists(
 		// Find what object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, id, catalogkv.Immutable)
 		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
+		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
 	}
 	return nil
 }

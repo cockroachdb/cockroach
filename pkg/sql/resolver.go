@@ -21,13 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -495,7 +497,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
+	return tabledesc.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -518,7 +520,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *sqlbase.MutableTableDescriptor
+	newTableDesc *tabledesc.MutableTableDescriptor
 }
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
@@ -552,7 +554,7 @@ type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor
-	schemaDescs map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor
+	schemaDescs map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.ImmutableTypeDescriptor
@@ -576,11 +578,11 @@ func newInternalLookupCtxFromDescriptors(
 		case *descpb.Descriptor_Database:
 			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
 		case *descpb.Descriptor_Table:
-			descs[i] = sqlbase.NewImmutableTableDescriptor(*t.Table)
+			descs[i] = tabledesc.NewImmutableTableDescriptor(*t.Table)
 		case *descpb.Descriptor_Type:
 			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
 		case *descpb.Descriptor_Schema:
-			descs[i] = sqlbase.NewImmutableSchemaDescriptor(*t.Schema)
+			descs[i] = schemadesc.NewImmutableSchemaDescriptor(*t.Schema)
 		}
 	}
 	return newInternalLookupCtx(descs, prefix)
@@ -591,7 +593,7 @@ func newInternalLookupCtx(
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
-	schemaDescs := make(map[descpb.ID]*sqlbase.ImmutableSchemaDescriptor)
+	schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
 	var tbIDs, typIDs, dbIDs []descpb.ID
@@ -604,7 +606,7 @@ func newInternalLookupCtx(
 			if prefix == nil || prefix.GetID() == desc.GetID() {
 				dbIDs = append(dbIDs, desc.GetID())
 			}
-		case *sqlbase.ImmutableTableDescriptor:
+		case *tabledesc.ImmutableTableDescriptor:
 			tbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
@@ -616,7 +618,7 @@ func newInternalLookupCtx(
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
-		case *sqlbase.ImmutableSchemaDescriptor:
+		case *schemadesc.ImmutableSchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
@@ -637,7 +639,7 @@ func (l *internalLookupCtx) getDatabaseByID(
 ) (*dbdesc.ImmutableDatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
 }
@@ -645,7 +647,7 @@ func (l *internalLookupCtx) getDatabaseByID(
 func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
 	tb, ok := l.tbDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedRelationError(
+		return nil, sqlerrors.NewUndefinedRelationError(
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
 	return tb, nil
@@ -653,10 +655,10 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 
 func (l *internalLookupCtx) getSchemaByID(
 	id descpb.ID,
-) (*sqlbase.ImmutableSchemaDescriptor, error) {
+) (*schemadesc.ImmutableSchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
-		return nil, sqlbase.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
 	return sc, nil
 }
@@ -827,6 +829,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 
 type simpleSchemaResolver interface {
 	getDatabaseByID(id descpb.ID) (*dbdesc.ImmutableDatabaseDescriptor, error)
-	getSchemaByID(id descpb.ID) (*sqlbase.ImmutableSchemaDescriptor, error)
+	getSchemaByID(id descpb.ID) (*schemadesc.ImmutableSchemaDescriptor, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

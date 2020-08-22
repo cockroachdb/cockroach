@@ -22,13 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
@@ -111,7 +111,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	return val, nil
 }
 
-func boundsExceededError(descriptor *sqlbase.ImmutableTableDescriptor) error {
+func boundsExceededError(descriptor *tabledesc.ImmutableTableDescriptor) error {
 	seqOpts := descriptor.SequenceOpts
 	isAscending := seqOpts.Increment > 0
 
@@ -211,7 +211,7 @@ func MakeSequenceKeyVal(
 
 // GetSequenceValue returns the current value of the sequence.
 func (p *planner) GetSequenceValue(
-	ctx context.Context, codec keys.SQLCodec, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, codec keys.SQLCodec, desc *tabledesc.ImmutableTableDescriptor,
 ) (int64, error) {
 	if desc.SequenceOpts == nil {
 		return 0, errors.New("descriptor is not a sequence")
@@ -463,10 +463,10 @@ func addSequenceOwner(
 func maybeAddSequenceDependencies(
 	ctx context.Context,
 	sc resolver.SchemaResolver,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
-	backrefs map[descpb.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descpb.ID]*tabledesc.MutableTableDescriptor,
 ) ([]*MutableTableDescriptor, error) {
 	seqNames, err := sequence.GetUsedSequenceNames(expr)
 	if err != nil {
@@ -558,7 +558,7 @@ func (p *planner) dropSequencesOwnedByCol(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func (p *planner) removeSequenceDependencies(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, col *descpb.ColumnDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, col *descpb.ColumnDescriptor,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.

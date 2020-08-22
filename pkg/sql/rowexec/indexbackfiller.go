@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,7 +39,7 @@ type indexBackfiller struct {
 
 	adder kvserverbase.BulkAdder
 
-	desc *sqlbase.ImmutableTableDescriptor
+	desc *tabledesc.ImmutableTableDescriptor
 }
 
 var _ execinfra.Processor = &indexBackfiller{}
@@ -70,7 +70,7 @@ func newIndexBackfiller(
 	output execinfra.RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
-		desc: sqlbase.NewImmutableTableDescriptor(spec.Table),
+		desc: tabledesc.NewImmutableTableDescriptor(spec.Table),
 		backfiller: backfiller{
 			name:        "Index",
 			filter:      backfill.IndexMutationFilter,
@@ -130,8 +130,8 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 		return orig
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic(sqlbase.IncludeConstraints)
-	immutable := sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
+	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
+	immutable := tabledesc.NewImmutableTableDescriptor(*desc.TableDesc())
 	if err != nil {
 		return err
 	}

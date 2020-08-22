@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -239,9 +239,9 @@ func backupShowerDefault(
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
 					if descriptor.GetDatabase() != nil {
-						id := sqlbase.GetDescriptorID(descriptor)
+						id := descpb.GetDescriptorID(descriptor)
 						if _, ok := descs[id]; !ok {
-							descs[id] = sqlbase.GetDescriptorName(descriptor)
+							descs[id] = descpb.GetDescriptorName(descriptor)
 						}
 					}
 				}
@@ -274,7 +274,7 @@ func backupShowerDefault(
 				var row tree.Datums
 				for i := range manifest.Descriptors {
 					descriptor := &manifest.Descriptors[i]
-					if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
+					if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 						dbName := descs[table.ParentID]
 						row = tree.Datums{
 							tree.NewDString(dbName),
@@ -291,7 +291,7 @@ func backupShowerDefault(
 								IgnoreComments: true,
 							}
 							schema, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-								sqlbase.NewImmutableTableDescriptor(*table), displayOptions)
+								tabledesc.NewImmutableTableDescriptor(*table), displayOptions)
 							if err != nil {
 								continue
 							}
@@ -331,7 +331,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 	} else if typ := descriptor.GetType(); typ != nil {
 		privDesc = typ.GetPrivileges()
 		objectType = privilege.Type
-	} else if table := sqlbase.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
+	} else if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
 		privDesc = table.GetPrivileges()
 		objectType = privilege.Table
 	}
@@ -353,7 +353,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 			privStringBuilder.WriteString(priv)
 		}
 		privStringBuilder.WriteString(" ON ")
-		privStringBuilder.WriteString(sqlbase.GetDescriptorName(descriptor))
+		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
 		privStringBuilder.WriteString(" TO ")
 		privStringBuilder.WriteString(user)
 		privStringBuilder.WriteString("; ")

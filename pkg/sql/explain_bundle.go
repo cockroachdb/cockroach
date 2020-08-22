@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -429,7 +429,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 		c.ctx,
 		"stmtEnvCollector",
 		nil, /* txn */
-		sqlbase.NoSessionDataOverride,
+		sessiondata.NoSessionDataOverride,
 		query,
 	)
 	if err != nil {

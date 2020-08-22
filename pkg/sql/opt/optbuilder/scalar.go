@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -480,7 +480,7 @@ func (b *Builder) buildFunction(
 ) (out opt.ScalarExpr) {
 	if f.WindowDef != nil {
 		if inScope.inAgg {
-			panic(sqlbase.NewWindowInAggError())
+			panic(sqlerrors.NewWindowInAggError())
 		}
 	}
 

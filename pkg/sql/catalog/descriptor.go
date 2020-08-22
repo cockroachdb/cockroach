@@ -119,6 +119,7 @@ type TableDescriptor interface {
 
 	GetPublicColumns() []descpb.ColumnDescriptor
 	ForeachPublicColumn(f func(col *descpb.ColumnDescriptor) error) error
+	ForeachNonDropColumn(f func(col *descpb.ColumnDescriptor) error) error
 	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	FindColumnByName(name tree.Name) (*descpb.ColumnDescriptor, bool, error)
 	FindActiveColumnByID(id descpb.ColumnID) (*descpb.ColumnDescriptor, error)

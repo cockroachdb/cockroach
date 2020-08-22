@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase
+package tabledesc
 
 import (
 	"context"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -473,6 +474,27 @@ func (desc *ImmutableTableDescriptor) ForeachPublicColumn(
 	return nil
 }
 
+// ForeachNonDropColumn runs a function on all public columns and columns
+// currently being added.
+func (desc *ImmutableTableDescriptor) ForeachNonDropColumn(
+	f func(column *descpb.ColumnDescriptor) error,
+) error {
+	if err := desc.ForeachPublicColumn(f); err != nil {
+		return err
+	}
+
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		mutCol := mut.GetColumn()
+		if mut.Direction == descpb.DescriptorMutation_ADD && mutCol != nil {
+			if err := f(mutCol); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // ForeachNonDropIndex runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *ImmutableTableDescriptor) ForeachNonDropIndex(
@@ -604,27 +626,6 @@ func maybeFillInDescriptor(
 		return PostDeserializationTableDescriptorChanges{}, err
 	}
 	return changes, nil
-}
-
-// MapDescGetter is a protoGetter that has a hard-coded map of keys to proto
-// messages.
-type MapDescGetter map[descpb.ID]catalog.Descriptor
-
-// GetDesc implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-	desc := m[id]
-	return desc, nil
-}
-
-// GetDescs implements the catalog.DescGetter interface.
-func (m MapDescGetter) GetDescs(
-	ctx context.Context, ids []descpb.ID,
-) ([]catalog.Descriptor, error) {
-	ret := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		ret[i], _ = m.GetDesc(ctx, id)
-	}
-	return ret, nil
 }
 
 func indexHasDeprecatedForeignKeyRepresentation(idx *descpb.IndexDescriptor) bool {
@@ -1615,7 +1616,7 @@ func (desc *ImmutableTableDescriptor) validateCrossReferences(
 func (desc *ImmutableTableDescriptor) ValidateIndexNameIsUnique(indexName string) error {
 	for _, index := range desc.AllNonDropIndexes() {
 		if indexName == index.Name {
-			return NewRelationAlreadyExistsError(indexName)
+			return sqlerrors.NewRelationAlreadyExistsError(indexName)
 		}
 	}
 	return nil

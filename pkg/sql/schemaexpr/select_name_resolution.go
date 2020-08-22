@@ -11,7 +11,7 @@
 // This file implements the select code that deals with column references
 // and resolving column names in expressions.
 
-package sqlbase
+package schemaexpr
 
 import (
 	"context"
@@ -91,17 +91,6 @@ func (v *NameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 
 // VisitPost implements tree.Visitor.
 func (*NameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
-// ResolveNames is a wrapper around ResolveNamesUsingVisitor.
-func ResolveNames(
-	expr tree.Expr,
-	source *colinfo.DataSourceInfo,
-	ivarHelper tree.IndexedVarHelper,
-	searchPath sessiondata.SearchPath,
-) (tree.Expr, error) {
-	var v NameResolutionVisitor
-	return ResolveNamesUsingVisitor(&v, expr, source, ivarHelper, searchPath)
-}
 
 // ResolveNamesUsingVisitor resolves the names in the given expression.
 func ResolveNamesUsingVisitor(

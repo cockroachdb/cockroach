@@ -166,8 +166,8 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl.makeRowErr": true,
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl.wrapRowErr": true,
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.NewSyntaxErrorf":          true,
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.NewDependentObjectErrorf": true,
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors.NewSyntaxErrorf":          true,
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors.NewDependentObjectErrorf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.newSourceNotFoundError": true,
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree.decorateTypeCheckError": true,

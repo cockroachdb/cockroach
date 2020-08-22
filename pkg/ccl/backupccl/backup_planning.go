@@ -32,12 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -180,9 +180,9 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		rawTbl := sqlbase.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
-			tbl := sqlbase.NewImmutableTableDescriptor(*rawTbl)
+			tbl := tabledesc.NewImmutableTableDescriptor(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
@@ -735,7 +735,7 @@ func backupPlanHook(
 			dbsInPrev := make(map[descpb.ID]struct{})
 			rawDescs := prevBackups[len(prevBackups)-1].Descriptors
 			for i := range rawDescs {
-				if t := sqlbase.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
+				if t := descpb.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}
@@ -913,7 +913,7 @@ func backupPlanHook(
 			DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 				for i := range backupManifest.Descriptors {
 					sqlDescIDs = append(sqlDescIDs,
-						sqlbase.GetDescriptorID(&backupManifest.Descriptors[i]))
+						descpb.GetDescriptorID(&backupManifest.Descriptors[i]))
 				}
 				return sqlDescIDs
 			}(),

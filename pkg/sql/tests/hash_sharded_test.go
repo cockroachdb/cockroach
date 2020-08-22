@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,7 +28,7 @@ import (
 // getShardColumnID fetches the id of the shard column associated with the given sharded
 // index.
 func getShardColumnID(
-	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc *tabledesc.ImmutableTableDescriptor, shardedIndexName string,
 ) descpb.ColumnID {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {
@@ -47,7 +47,7 @@ func getShardColumnID(
 // 2. A hidden check constraint was created on the aforementioned shard column.
 // 3. The first column in the index set is the aforementioned shard column.
 func verifyTableDescriptorState(
-	t *testing.T, tableDesc *sqlbase.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc *tabledesc.ImmutableTableDescriptor, shardedIndexName string,
 ) {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {

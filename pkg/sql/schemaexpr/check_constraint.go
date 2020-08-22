@@ -15,9 +15,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -26,7 +26,7 @@ import (
 type CheckConstraintBuilder struct {
 	ctx       context.Context
 	tableName tree.TableName
-	desc      *sqlbase.MutableTableDescriptor
+	desc      catalog.TableDescriptor
 	semaCtx   *tree.SemaContext
 
 	// inUseNames keeps track of names that have been generated previously
@@ -42,7 +42,7 @@ type CheckConstraintBuilder struct {
 func MakeCheckConstraintBuilder(
 	ctx context.Context,
 	tableName tree.TableName,
-	desc *sqlbase.MutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 ) CheckConstraintBuilder {
 	return CheckConstraintBuilder{
