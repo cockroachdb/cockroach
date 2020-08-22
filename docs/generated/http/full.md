@@ -1431,7 +1431,9 @@ information about the resources on a node used by that table.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | If left empty, hot ranges for all nodes/stores will be returned. |
+| node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is posssible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.
+
+If left empty, the request is forwarded to every node in the cluster. |
 
 
 
@@ -1446,8 +1448,8 @@ information about the resources on a node used by that table.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| node_id | [int32](#cockroach.server.serverpb.HotRangesResponse-int32) |  | NodeID is the node that submitted all the requests. |
-| hot_ranges_by_node_id | [HotRangesResponse.HotRangesByNodeIdEntry](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.HotRangesByNodeIdEntry) | repeated |  |
+| node_id | [int32](#cockroach.server.serverpb.HotRangesResponse-int32) |  | NodeID is the node that received the HotRangesRequest and forwarded requests to the selected target node(s). |
+| hot_ranges_by_node_id | [HotRangesResponse.HotRangesByNodeIdEntry](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.HotRangesByNodeIdEntry) | repeated | HotRangesByNodeID contains a hot range report for each selected target node ID in the HotRangesRequest. |
 
 
 
@@ -1471,8 +1473,10 @@ information about the resources on a node used by that table.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| error_message | [string](#cockroach.server.serverpb.HotRangesResponse-string) |  |  |
-| stores | [HotRangesResponse.StoreResponse](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.StoreResponse) | repeated |  |
+| error_message | [string](#cockroach.server.serverpb.HotRangesResponse-string) |  | ErrorMessage is set to a non-empty string if this target node was unable to produce a hot range report.
+
+The contents of this string indicates the cause of the failure. |
+| stores | [HotRangesResponse.StoreResponse](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.StoreResponse) | repeated | Stores contains the hot ranges report if no error was encountered. There is one part to the report for each store in the target node. |
 
 
 
@@ -1483,8 +1487,8 @@ information about the resources on a node used by that table.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| store_id | [int32](#cockroach.server.serverpb.HotRangesResponse-int32) |  |  |
-| hot_ranges | [HotRangesResponse.HotRange](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.HotRange) | repeated |  |
+| store_id | [int32](#cockroach.server.serverpb.HotRangesResponse-int32) |  | StoreID identifies the store for which the report was produced. |
+| hot_ranges | [HotRangesResponse.HotRange](#cockroach.server.serverpb.HotRangesResponse-cockroach.server.serverpb.HotRangesResponse.HotRange) | repeated | HotRanges is the hot ranges report for this store on the target node. |
 
 
 
@@ -1495,8 +1499,10 @@ information about the resources on a node used by that table.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponse-cockroach.roachpb.RangeDescriptor) |  |  |
-| queries_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  |  |
+| desc | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.HotRangesResponse-cockroach.roachpb.RangeDescriptor) |  | Desc is the descriptor of the range for which the report was produced.
+
+Note: this field is generally RESERVED and will likely be removed or replaced in a later version. See: https://github.com/cockroachdb/cockroach/issues/53212 |
+| queries_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | QueriesPerSecond is the recent number of queries per second on this range. |
 
 
 

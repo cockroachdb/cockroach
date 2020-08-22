@@ -692,34 +692,80 @@ message ProblemRangesResponse {
   ];
 }
 
+// HotRangesRequest queries one or more cluster nodes for a list
+// of ranges currently considered “hot” by the node(s).
+//
+// The server responds with a HotRangesResponse payload.
 message HotRangesRequest {
-  // If left empty, hot ranges for all nodes/stores will be returned.
+  // NodeID indicates which node to query for a hot range report.
+  // It is posssible to populate any node ID; if the node receiving
+  // the request is not the target node, it will forward the
+  // request to the target node.
+  //
+  // If left empty, the request is forwarded to every node
+  // in the cluster.
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
+// HotRangesResponse is the payload produced in response
+// to a HotRangesRequest.
 message HotRangesResponse {
-  message HotRange {
-    cockroach.roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-    double queries_per_second = 2;
-  }
-  message StoreResponse {
-    int32 store_id = 1 [
-      (gogoproto.customname) = "StoreID",
-      (gogoproto.casttype) =
-          "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
-    ];
-    repeated HotRange hot_ranges = 2 [(gogoproto.nullable) = false];
-  }
-  message NodeResponse {
-    string error_message = 1;
-    repeated StoreResponse stores = 2;
-  }
-  // NodeID is the node that submitted all the requests.
+  // NodeID is the node that received the HotRangesRequest and
+  // forwarded requests to the selected target node(s).
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
+
+  // HotRange is a hot range report for a single store on one of the
+  // target node(s) selected in a HotRangesRequest.
+  message HotRange {
+    // Desc is the descriptor of the range for which the report
+    // was produced.
+    //
+    // Note: this field is generally RESERVED and will likely be removed
+    // or replaced in a later version.
+    // See: https://github.com/cockroachdb/cockroach/issues/53212
+    cockroach.roachpb.RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+
+    // QueriesPerSecond is the recent number of queries per second
+    // on this range.
+    double queries_per_second = 2;
+  }
+
+  // StoreResponse contains the part of a hot ranges report that
+  // pertains to a single store on a target node.
+  message StoreResponse {
+    // StoreID identifies the store for which the report was
+    // produced.
+    int32 store_id = 1 [
+      (gogoproto.customname) = "StoreID",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+    ];
+
+    // HotRanges is the hot ranges report for this store
+    // on the target node.
+    repeated HotRange hot_ranges = 2 [(gogoproto.nullable) = false];
+  }
+
+  // NodeResponse is a hot range report for a single target node.
+  message NodeResponse {
+    // ErrorMessage is set to a non-empty string if this target
+    // node was unable to produce a hot range report.
+    //
+    // The contents of this string indicates the cause of the failure.
+    string error_message = 1;
+
+    // Stores contains the hot ranges report if no error was encountered.
+    // There is one part to the report for each store in the
+    // target node.
+    repeated StoreResponse stores = 2;
+  }
+
+  // HotRangesByNodeID contains a hot range report for each selected
+  // target node ID in the HotRangesRequest.
   map<int32, NodeResponse> hot_ranges_by_node_id = 2 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
     (gogoproto.customname) = "HotRangesByNodeID",
