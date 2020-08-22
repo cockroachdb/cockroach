@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -34,14 +33,14 @@ type DescriptorTableRow struct {
 }
 
 // NewDescGetter creates a sqlbase.MapProtoGetter from a descriptor table.
-func NewDescGetter(rows []DescriptorTableRow) (sqlbase.MapDescGetter, error) {
-	pg := sqlbase.MapDescGetter{}
+func NewDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
+	pg := catalog.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
 			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
 		}
-		sqlbase.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.Background(), &d, r.ModTime)
 		pg[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(context.TODO(), &d)
 	}
 	return pg, nil

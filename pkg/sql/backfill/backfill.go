@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -25,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,7 +68,7 @@ type ColumnBackfiller struct {
 }
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
-func (cb *ColumnBackfiller) initCols(desc *sqlbase.ImmutableTableDescriptor) {
+func (cb *ColumnBackfiller) initCols(desc *tabledesc.ImmutableTableDescriptor) {
 	if len(desc.Mutations) > 0 {
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
@@ -89,7 +90,7 @@ func (cb *ColumnBackfiller) init(
 	evalCtx *tree.EvalContext,
 	defaultExprs []tree.TypedExpr,
 	computedExprs []tree.TypedExpr,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.evalCtx = evalCtx
 	cb.updateCols = append(cb.added, cb.dropped...)
@@ -138,7 +139,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.initCols(desc)
 	defaultExprs, err := schemaexpr.MakeDefaultExprs(
@@ -167,7 +168,7 @@ func (cb *ColumnBackfiller) InitForLocalUse(
 // necessary due to the different procedure for accessing user defined type
 // metadata as part of a distributed flow.
 func (cb *ColumnBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	cb.initCols(desc)
 	evalCtx := flowCtx.NewEvalCtx()
@@ -218,7 +219,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
@@ -289,10 +290,10 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		for j, e := range cb.updateExprs {
 			val, err := e.Eval(cb.evalCtx)
 			if err != nil {
-				return roachpb.Key{}, sqlbase.NewInvalidSchemaDefinitionError(err)
+				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
 			if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
-				return roachpb.Key{}, sqlbase.NewNonNullViolationError(cb.added[j].Name)
+				return roachpb.Key{}, sqlerrors.NewNonNullViolationError(cb.added[j].Name)
 			}
 
 			// Added computed column values should be usable for the next
@@ -335,17 +336,17 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 
 // ConvertBackfillError returns a cleaner SQL error for a failed Batch.
 func ConvertBackfillError(
-	ctx context.Context, tableDesc *sqlbase.ImmutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.ImmutableTableDescriptor, b *kv.Batch,
 ) error {
 	// A backfill on a new schema element has failed and the batch contains
 	// information useful in printing a sensible error. However
 	// ConvertBatchError() will only work correctly if the schema elements
 	// are "live" in the tableDesc.
-	desc, err := tableDesc.MakeFirstMutationPublic(sqlbase.IncludeConstraints)
+	desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
 	if err != nil {
 		return err
 	}
-	return row.ConvertBatchError(ctx, sqlbase.NewImmutableTableDescriptor(*desc.TableDesc()), b)
+	return row.ConvertBatchError(ctx, tabledesc.NewImmutableTableDescriptor(*desc.TableDesc()), b)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -387,7 +388,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
 	ib.initCols(desc)
@@ -423,7 +424,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 // due to the different procedure for accessing user defined type metadata as
 // part of a distributed flow.
 func (ib *IndexBackfiller) InitForDistributedUse(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *sqlbase.ImmutableTableDescriptor,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	// Initialize ib.cols and ib.colIdxMap.
 	ib.initCols(desc)
@@ -474,7 +475,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 // initCols is a helper to populate column metadata of an IndexBackfiller. It
 // populates the cols and colIdxMap fields.
-func (ib *IndexBackfiller) initCols(desc *sqlbase.ImmutableTableDescriptor) {
+func (ib *IndexBackfiller) initCols(desc *tabledesc.ImmutableTableDescriptor) {
 	ib.cols = desc.Columns
 
 	// If there are ongoing mutations, add columns that are being added and in
@@ -501,7 +502,7 @@ func (ib *IndexBackfiller) initCols(desc *sqlbase.ImmutableTableDescriptor) {
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
 // populates the added field. It returns a set of column ordinals that must be
 // fetched in order to backfill the added indexes.
-func (ib *IndexBackfiller) initIndexes(desc *sqlbase.ImmutableTableDescriptor) util.FastIntSet {
+func (ib *IndexBackfiller) initIndexes(desc *tabledesc.ImmutableTableDescriptor) util.FastIntSet {
 	var valNeededForCol util.FastIntSet
 	mutationID := desc.Mutations[0].MutationID
 
@@ -532,7 +533,7 @@ func (ib *IndexBackfiller) init(
 	evalCtx *tree.EvalContext,
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	valNeededForCol util.FastIntSet,
-	desc *sqlbase.ImmutableTableDescriptor,
+	desc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
@@ -574,7 +575,7 @@ func (ib *IndexBackfiller) init(
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
@@ -678,7 +679,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
 	txn *kv.Txn,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,

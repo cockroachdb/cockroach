@@ -29,14 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -360,7 +361,7 @@ func WriteDescriptors(
 				}
 			}
 			if updatedPrivileges != nil {
-				if mut, ok := table.(*sqlbase.MutableTableDescriptor); ok {
+				if mut, ok := table.(*tabledesc.MutableTableDescriptor); ok {
 					mut.Privileges = updatedPrivileges
 				} else {
 					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
@@ -804,18 +805,18 @@ func createImportingDescriptors(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var schemas []*sqlbase.MutableSchemaDescriptor
+	var schemas []*schemadesc.MutableSchemaDescriptor
 	var types []*typedesc.MutableTypeDescriptor
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
 	// tables as the slice of interfaces.
-	var mutableTables []*sqlbase.MutableTableDescriptor
+	var mutableTables []*tabledesc.MutableTableDescriptor
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			mut := sqlbase.NewMutableCreatedTableDescriptor(*desc.TableDesc())
+			mut := tabledesc.NewMutableCreatedTableDescriptor(*desc.TableDesc())
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
@@ -826,7 +827,7 @@ func createImportingDescriptors(
 				databases = append(databases, rewriteDesc)
 			}
 		case catalog.SchemaDescriptor:
-			schemas = append(schemas, sqlbase.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
+			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
 			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
 		}
@@ -880,7 +881,7 @@ func createImportingDescriptors(
 	}
 
 	// Collect all schemas that are going to be restored.
-	var schemasToWrite []*sqlbase.MutableSchemaDescriptor
+	var schemasToWrite []*schemadesc.MutableSchemaDescriptor
 	var writtenSchemas []catalog.SchemaDescriptor
 	for i := range schemas {
 		sc := schemas[i]
@@ -1175,7 +1176,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		b := txn.NewBatch()
 		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
-			newTableDesc := sqlbase.NewMutableExistingTableDescriptor(*tbl.TableDesc())
+			newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.TableDesc())
 			newTableDesc.Version++
 			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1302,7 +1303,7 @@ func (r *restoreResumer) dropDescriptors(
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
-		tableToDrop := sqlbase.NewMutableExistingTableDescriptor(*tbl)
+		tableToDrop := tabledesc.NewMutableExistingTableDescriptor(*tbl)
 		prev := tableToDrop.Immutable().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP

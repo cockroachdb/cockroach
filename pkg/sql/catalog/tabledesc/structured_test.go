@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlbase_test
+package tabledesc_test
 
 import (
 	"context"
@@ -21,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	. "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -972,7 +973,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		descs := MapDescGetter{}
+		descs := catalog.MapDescGetter{}
 		descs[1] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{ID: 1})
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
@@ -1398,6 +1399,49 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 	if c, ok := after["fk"]; !ok || !c.Unvalidated {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", c)
+	}
+}
+
+func TestKeysPerRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO(dan): This server is only used to turn a CREATE TABLE statement into
+	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
+	// sqlbase. If/when that happens, use it here instead of this server.
+	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	tests := []struct {
+		createTable string
+		indexID     descpb.IndexID
+		expected    int
+	}{
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 1, 1},                                     // Primary index
+		{"(a INT PRIMARY KEY, b INT, INDEX (b))", 2, 1},                                     // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 1, 2},             // Primary index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (b))", 2, 1},             // 'b' index
+		{"(a INT PRIMARY KEY, b INT, FAMILY (a), FAMILY (b), INDEX (a) STORING (b))", 2, 2}, // 'a' index
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+			tableName := fmt.Sprintf("t%d", i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
+
+			desc := catalogkv.TestingGetImmutableTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			require.NotNil(t, desc)
+			keys, err := desc.KeysPerRow(test.indexID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.expected != keys {
+				t.Errorf("expected %d keys got %d", test.expected, keys)
+			}
+		})
 	}
 }
 

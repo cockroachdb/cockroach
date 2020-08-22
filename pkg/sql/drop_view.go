@@ -16,9 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -133,7 +134,7 @@ func descInSlice(descID descpb.ID, td []toDelete) bool {
 
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,
-	from *sqlbase.MutableTableDescriptor,
+	from *tabledesc.MutableTableDescriptor,
 	ref descpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
@@ -168,7 +169,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 // Returns the names of any additional views that were also dropped
 // due to `cascade` behavior.
 func (p *planner) removeDependentView(
-	ctx context.Context, tableDesc, viewDesc *sqlbase.MutableTableDescriptor, jobDesc string,
+	ctx context.Context, tableDesc, viewDesc *tabledesc.MutableTableDescriptor, jobDesc string,
 ) ([]string, error) {
 	// In the table whose index is being removed, filter out all back-references
 	// that refer to the view that's being removed.
@@ -182,7 +183,7 @@ func (p *planner) removeDependentView(
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
 	ctx context.Context,
-	viewDesc *sqlbase.MutableTableDescriptor,
+	viewDesc *tabledesc.MutableTableDescriptor,
 	queueJob bool,
 	jobDesc string,
 	behavior tree.DropBehavior,
@@ -247,7 +248,7 @@ func (p *planner) getViewDescForCascade(
 	objName string,
 	parentID, viewID descpb.ID,
 	behavior tree.DropBehavior,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.MutableTableDescriptor, error) {
 	viewDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, viewID, p.txn)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
@@ -260,13 +261,13 @@ func (p *planner) getViewDescForCascade(
 			viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
-				return nil, sqlbase.NewDependentObjectErrorf(
+				return nil, sqlerrors.NewDependentObjectErrorf(
 					"cannot drop %s %q because a view depends on it", typeName, objName)
 			}
 			viewName = viewFQName.FQString()
 		}
 		return nil, errors.WithHintf(
-			sqlbase.NewDependentObjectErrorf("cannot drop %s %q because view %q depends on it",
+			sqlerrors.NewDependentObjectErrorf("cannot drop %s %q because view %q depends on it",
 				typeName, objName, viewName),
 			"you can drop %s instead.", viewName)
 	}

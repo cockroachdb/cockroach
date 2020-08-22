@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -608,7 +608,7 @@ func (n *numberedDiskRowIterator) tryAddCacheHelper(
 			rowBytesUsage = int(row.Size())
 		}
 		if err := n.memAcc.Grow(ctx, int64(rowBytesUsage)); err != nil {
-			if sqlbase.IsOutOfMemoryError(err) {
+			if sqlerrors.IsOutOfMemoryError(err) {
 				// Could not grow the memory to handle this row, so reduce the
 				// maxCacheSize (max count of entries), to the current number of
 				// entries in the cache. The assumption here is that rows in the cache

@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -46,7 +46,7 @@ func gcIndexes(
 		return false, err
 	}
 
-	var parentTable *sqlbase.ImmutableTableDescriptor
+	var parentTable *tabledesc.ImmutableTableDescriptor
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		parentTable, err = catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
 		return err
@@ -86,7 +86,7 @@ func gcIndexes(
 func clearIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	index descpb.IndexDescriptor,
 ) error {
 	log.Infof(ctx, "clearing index %d from table %d", index.ID, tableDesc.ID)
@@ -113,7 +113,7 @@ func clearIndex(
 func completeDroppedIndex(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	table *sqlbase.ImmutableTableDescriptor,
+	table *tabledesc.ImmutableTableDescriptor,
 	indexID descpb.IndexID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {

@@ -24,10 +24,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -92,7 +93,7 @@ func getZoneConfig(
 		if err := descVal.GetProto(&desc); err != nil {
 			return 0, nil, 0, nil, err
 		}
-		if tableDesc := sqlbase.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
+		if tableDesc := descpb.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
 			dbID, zone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
@@ -138,7 +139,7 @@ func completeZoneConfig(
 		if err := descVal.GetProto(&desc); err != nil {
 			return err
 		}
-		if tableDesc := sqlbase.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
+		if tableDesc := descpb.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
 			_, dbzone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
 			if err != nil {
 				return err
@@ -242,9 +243,9 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 		return pgerror.Newf(
 			pgcode.InvalidCatalogName, "zone %q does not exist", zs.NamedZone)
 	} else if zs.Database != "" {
-		return sqlbase.NewUndefinedDatabaseError(string(zs.Database))
+		return sqlerrors.NewUndefinedDatabaseError(string(zs.Database))
 	} else {
-		return sqlbase.NewUndefinedRelationError(&zs.TableOrIndex)
+		return sqlerrors.NewUndefinedRelationError(&zs.TableOrIndex)
 	}
 }
 
@@ -327,7 +328,7 @@ func resolveSubzone(
 
 	partitionName := string(zs.Partition)
 	if partitionName != "" {
-		if partitioning := sqlbase.FindIndexPartitionByName(index, partitionName); partitioning == nil {
+		if partitioning := tabledesc.FindIndexPartitionByName(index, partitionName); partitioning == nil {
 			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
 		}
 	}

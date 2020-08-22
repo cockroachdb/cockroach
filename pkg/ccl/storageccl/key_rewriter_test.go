@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +61,7 @@ func TestPrefixRewriter(t *testing.T) {
 func TestKeyRewriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := sqlbase.NewMutableCreatedTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
+	desc := tabledesc.NewMutableCreatedTableDescriptor(systemschema.NamespaceTable.TableDescriptor)
 	oldID := desc.ID
 	newID := desc.ID + 1
 	desc.ID = newID
@@ -119,7 +119,7 @@ func TestKeyRewriter(t *testing.T) {
 
 	t.Run("multi", func(t *testing.T) {
 		desc.ID = oldID + 10
-		desc2 := sqlbase.NewMutableCreatedTableDescriptor(desc.TableDescriptor)
+		desc2 := tabledesc.NewMutableCreatedTableDescriptor(desc.TableDescriptor)
 		desc2.ID += 10
 		newKr, err := MakeKeyRewriterFromRekeys([]roachpb.ImportRequest_TableRekey{
 			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
@@ -148,9 +148,9 @@ func TestKeyRewriter(t *testing.T) {
 }
 
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
-	desc := sqlbase.NewImmutableTableDescriptor(*tableDesc).DescriptorProto()
+	desc := tabledesc.NewImmutableTableDescriptor(*tableDesc).DescriptorProto()
 	// Set the timestamp to a non-zero value.
-	sqlbase.TableFromDescriptor(desc, hlc.Timestamp{WallTime: 1})
+	descpb.TableFromDescriptor(desc, hlc.Timestamp{WallTime: 1})
 	bytes, err := protoutil.Marshal(desc)
 	if err != nil {
 		t.Fatal(err)

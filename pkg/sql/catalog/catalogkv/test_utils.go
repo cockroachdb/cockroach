@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // TestingGetTableDescriptor retrieves a table descriptor directly from the KV
@@ -30,7 +30,7 @@ import (
 // removing it altogether.
 func TestingGetTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *sqlbase.ImmutableTableDescriptor {
+) *tabledesc.ImmutableTableDescriptor {
 	return TestingGetImmutableTableDescriptor(kvDB, codec, database, table)
 }
 
@@ -38,10 +38,10 @@ func TestingGetTableDescriptor(
 // directly from the KV layer.
 func TestingGetImmutableTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *sqlbase.ImmutableTableDescriptor {
+) *tabledesc.ImmutableTableDescriptor {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TableObject, false /* mutable */, database, table,
-	).(*sqlbase.ImmutableTableDescriptor)
+	).(*tabledesc.ImmutableTableDescriptor)
 	if !ok {
 		return nil
 	}
@@ -52,10 +52,10 @@ func TestingGetImmutableTableDescriptor(
 // directly from the KV layer.
 func TestingGetMutableExistingTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *sqlbase.MutableTableDescriptor {
+) *tabledesc.MutableTableDescriptor {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TableObject, true /* mutable */, database, table,
-	).(*sqlbase.MutableTableDescriptor)
+	).(*tabledesc.MutableTableDescriptor)
 	if !ok {
 		return nil
 	}

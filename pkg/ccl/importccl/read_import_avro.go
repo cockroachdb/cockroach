@@ -17,11 +17,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -448,7 +448,7 @@ var _ inputConverter = &avroInputReader{}
 
 func newAvroInputReader(
 	kvCh chan row.KVBatch,
-	tableDesc *sqlbase.ImmutableTableDescriptor,
+	tableDesc *tabledesc.ImmutableTableDescriptor,
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,

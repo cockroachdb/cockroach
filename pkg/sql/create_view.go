@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,11 +66,11 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.
-	backRefMutables := make(map[descpb.ID]*sqlbase.MutableTableDescriptor, len(n.planDeps))
+	backRefMutables := make(map[descpb.ID]*tabledesc.MutableTableDescriptor, len(n.planDeps))
 	for id, updated := range n.planDeps {
 		backRefMutable := params.p.Descriptors().GetUncommittedTableByID(id)
 		if backRefMutable == nil {
-			backRefMutable = sqlbase.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
+			backRefMutable = tabledesc.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
 		}
 		if !persistence.IsTemporary() && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
@@ -82,12 +83,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		backRefMutables[id] = backRefMutable
 	}
 
-	var replacingDesc *sqlbase.MutableTableDescriptor
+	var replacingDesc *tabledesc.MutableTableDescriptor
 
 	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName)
 	if err != nil {
 		switch {
-		case !sqlbase.IsRelationAlreadyExistsError(err):
+		case !sqlerrors.IsRelationAlreadyExistsError(err):
 			return err
 		case n.ifNotExists:
 			return nil
@@ -120,7 +121,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
-	var newDesc *sqlbase.MutableTableDescriptor
+	var newDesc *tabledesc.MutableTableDescriptor
 
 	// If replacingDesc != nil, we found an existing view while resolving
 	// the name for our view. So instead of creating a new view, replace
@@ -281,8 +282,8 @@ func makeViewTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	persistence tree.Persistence,
-) (sqlbase.MutableTableDescriptor, error) {
-	desc := sqlbase.InitTableDescriptor(
+) (tabledesc.MutableTableDescriptor, error) {
+	desc := tabledesc.InitTableDescriptor(
 		id,
 		parentID,
 		schemaID,
@@ -293,7 +294,7 @@ func makeViewTableDesc(
 	)
 	desc.ViewQuery = viewQuery
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
-		return sqlbase.MutableTableDescriptor{}, err
+		return tabledesc.MutableTableDescriptor{}, err
 	}
 
 	return desc, nil
@@ -307,9 +308,9 @@ func makeViewTableDesc(
 func (p *planner) replaceViewDesc(
 	ctx context.Context,
 	n *createViewNode,
-	toReplace *sqlbase.MutableTableDescriptor,
-	backRefMutables map[descpb.ID]*sqlbase.MutableTableDescriptor,
-) (*sqlbase.MutableTableDescriptor, error) {
+	toReplace *tabledesc.MutableTableDescriptor,
+	backRefMutables map[descpb.ID]*tabledesc.MutableTableDescriptor,
+) (*tabledesc.MutableTableDescriptor, error) {
 	// Set the query to the new query.
 	toReplace.ViewQuery = n.viewQuery
 	// Reset the columns to add the new result columns onto.
@@ -380,14 +381,14 @@ func addResultColumns(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	desc *sqlbase.MutableTableDescriptor,
+	desc *tabledesc.MutableTableDescriptor,
 	resultColumns colinfo.ResultColumns,
 ) error {
 	for _, colRes := range resultColumns {
 		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		// The new types in the CREATE VIEW column specs never use
 		// SERIAL so we need not process SERIAL types here.
-		col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
+		col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, &columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return err
 		}

@@ -12,14 +12,17 @@ package schemaexpr
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // DequalifyAndValidateExpr validates that an expression has the given type
@@ -60,7 +63,7 @@ func DequalifyAndValidateExpr(
 		return "", colIDs, err
 	}
 
-	typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+	typedExpr, err := SanitizeVarFreeExpr(
 		ctx,
 		replacedExpr,
 		typ,
@@ -190,7 +193,8 @@ func newNameResolver(
 // resolveNames returns an expression equivalent to the input expression with
 // unresolved names replaced with IndexedVars.
 func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
-	return sqlbase.ResolveNames(expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
+	var v NameResolutionVisitor
+	return ResolveNamesUsingVisitor(&v, expr, nr.source, *nr.ivarHelper, nr.evalCtx.SessionData.SearchPath)
 }
 
 // addColumn adds a new column to the nameResolver so that it can be resolved in
@@ -231,4 +235,59 @@ func (nrc *nameResolverIVarContainer) IndexedVarResolvedType(idx int) *types.T {
 // IndexVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (nrc *nameResolverIVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return nil
+}
+
+// SanitizeVarFreeExpr verifies that an expression is valid, has the correct
+// type and contains no variable expressions. It returns the type-checked and
+// constant-folded expression.
+func SanitizeVarFreeExpr(
+	ctx context.Context,
+	expr tree.Expr,
+	expectedType *types.T,
+	context string,
+	semaCtx *tree.SemaContext,
+	maxVolatility tree.Volatility,
+) (tree.TypedExpr, error) {
+	if tree.ContainsVars(expr) {
+		return nil, pgerror.Newf(pgcode.Syntax,
+			"variable sub-expressions are not allowed in %s", context)
+	}
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called from another context
+	// which uses the properties field.
+	defer semaCtx.Properties.Restore(semaCtx.Properties)
+
+	// Ensure that the expression doesn't contain special functions.
+	flags := tree.RejectSpecial
+
+	switch maxVolatility {
+	case tree.VolatilityImmutable:
+		flags |= tree.RejectStableOperators
+		fallthrough
+
+	case tree.VolatilityStable:
+		flags |= tree.RejectVolatileFunctions
+
+	case tree.VolatilityVolatile:
+		// Allow anything (no flags needed).
+
+	default:
+		panic(errors.AssertionFailedf("maxVolatility %s not supported", maxVolatility))
+	}
+	semaCtx.Properties.Require(context, flags)
+
+	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, expectedType)
+	if err != nil {
+		return nil, err
+	}
+
+	actualType := typedExpr.ResolvedType()
+	if !expectedType.Equivalent(actualType) && typedExpr != tree.DNull {
+		// The expression must match the column type exactly unless it is a constant
+		// NULL value.
+		return nil, fmt.Errorf("expected %s expression to have type %s, but '%s' has type %s",
+			context, expectedType, expr, actualType)
+	}
+	return typedExpr, nil
 }

@@ -20,12 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/sort"
 	"github.com/cockroachdb/errors"
 )
 
@@ -223,7 +224,7 @@ func (mc *MemRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 func (mc *MemRowContainer) Sort(ctx context.Context) {
 	mc.invertSorting = false
 	cancelChecker := cancelchecker.NewCancelChecker(ctx)
-	sqlbase.Sort(mc, cancelChecker)
+	sort.Sort(mc, cancelChecker)
 }
 
 // Reorder implements ReorderableRowContainer. We don't need to create a new
@@ -573,7 +574,7 @@ func (f *DiskBackedRowContainer) UsingDisk() bool {
 // memory error. Returns whether the DiskBackedRowContainer spilled to disk and
 // an error if one occurred while doing so.
 func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if !sqlbase.IsOutOfMemoryError(err) {
+	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
@@ -833,7 +834,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 						// the cache overhead.
 						usage := sizeOfInt + int64(row.Size())
 						if err := f.cacheMemAcc.Grow(ctx, usage); err != nil {
-							if sqlbase.IsOutOfMemoryError(err) {
+							if sqlerrors.IsOutOfMemoryError(err) {
 								// We hit the memory limit, so we need to cap the cache size
 								// and reuse the memory underlying first row in the cache.
 								if f.indexedRowsCache.Len() == 0 {
@@ -889,7 +890,7 @@ func (f *DiskBackedIndexedRowContainer) reuseFirstRowInCache(
 		if delta > 0 {
 			// New row takes up more memory than the old one.
 			if err := f.cacheMemAcc.Grow(ctx, delta); err != nil {
-				if sqlbase.IsOutOfMemoryError(err) {
+				if sqlerrors.IsOutOfMemoryError(err) {
 					// We need to actually reduce the cache size, so we remove the first
 					// row and adjust the memory account, maxCacheSize, and
 					// f.firstCachedRowPos accordingly.

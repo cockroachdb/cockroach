@@ -20,9 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,7 +40,7 @@ type dropTableNode struct {
 
 type toDelete struct {
 	tn   tree.ObjectName
-	desc *sqlbase.MutableTableDescriptor
+	desc *tabledesc.MutableTableDescriptor
 }
 
 // DropTable drops a table.
@@ -164,7 +165,7 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType tree.RequiredTableKind,
-) (*sqlbase.MutableTableDescriptor, error) {
+) (*tabledesc.MutableTableDescriptor, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
@@ -183,7 +184,7 @@ func (p *planner) prepareDrop(
 // as prepareDrop requires resolving a TableName when DropDatabase already
 // has it resolved.
 func (p *planner) prepareDropWithTableDesc(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
 }
@@ -249,7 +250,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyRef
 // table's parent (either database or schema) is being dropped.
 func (p *planner) dropTableImpl(
 	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	droppingParent bool,
 	jobDesc string,
 ) ([]string, error) {
@@ -344,7 +345,7 @@ func (p *planner) dropTableImpl(
 
 // unsplitRangesForTable unsplit any manually split ranges within the table span.
 func (p *planner) unsplitRangesForTable(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	// Gate this on being the system tenant because secondary tenants aren't
 	// allowed to scan the meta ranges directly.
@@ -379,7 +380,7 @@ func (p *planner) unsplitRangesForTable(
 // drain the old map.
 func (p *planner) initiateDropTable(
 	ctx context.Context,
-	tableDesc *sqlbase.MutableTableDescriptor,
+	tableDesc *tabledesc.MutableTableDescriptor,
 	queueJob bool,
 	jobDesc string,
 	drainName bool,
@@ -447,9 +448,11 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKForBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *descpb.ForeignKeyConstraint,
+	ctx context.Context,
+	tableDesc *tabledesc.MutableTableDescriptor,
+	ref *descpb.ForeignKeyConstraint,
 ) error {
-	var originTableDesc *sqlbase.MutableTableDescriptor
+	var originTableDesc *tabledesc.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
 	if tableDesc.ID == ref.OriginTableID {
 		originTableDesc = tableDesc
@@ -476,7 +479,7 @@ func (p *planner) removeFKForBackReference(
 // remove the foreign key constraint that corresponds to the supplied
 // backreference, which is a member of the supplied referencedTableDesc.
 func removeFKForBackReferenceFromTable(
-	originTableDesc *sqlbase.MutableTableDescriptor,
+	originTableDesc *tabledesc.MutableTableDescriptor,
 	backref *descpb.ForeignKeyConstraint,
 	referencedTableDesc catalog.TableDescriptor,
 ) error {
@@ -505,9 +508,11 @@ func removeFKForBackReferenceFromTable(
 // removeFKBackReference removes the FK back reference from the table that is
 // referenced by the input constraint.
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, ref *descpb.ForeignKeyConstraint,
+	ctx context.Context,
+	tableDesc *tabledesc.MutableTableDescriptor,
+	ref *descpb.ForeignKeyConstraint,
 ) error {
-	var referencedTableDesc *sqlbase.MutableTableDescriptor
+	var referencedTableDesc *tabledesc.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
@@ -534,7 +539,7 @@ func (p *planner) removeFKBackReference(
 // remove the foreign key backreference that corresponds to the supplied fk,
 // which is a member of the supplied originTableDesc.
 func removeFKBackReferenceFromTable(
-	referencedTableDesc *sqlbase.MutableTableDescriptor,
+	referencedTableDesc *tabledesc.MutableTableDescriptor,
 	fkName string,
 	originTableDesc catalog.TableDescriptor,
 ) error {
@@ -559,13 +564,13 @@ func removeFKBackReferenceFromTable(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *descpb.IndexDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, idx *descpb.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
-	var t *sqlbase.MutableTableDescriptor
+	var t *tabledesc.MutableTableDescriptor
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
 	} else {
@@ -620,13 +625,13 @@ func removeMatchingReferences(
 }
 
 func (p *planner) removeTableComments(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
 		ctx,
 		"delete-table-comments",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"DELETE FROM system.comments WHERE object_id=$1",
 		tableDesc.ID)
 	if err != nil {

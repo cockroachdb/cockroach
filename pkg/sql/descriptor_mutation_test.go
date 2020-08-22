@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -40,11 +40,11 @@ type mutationTest struct {
 	testing.TB
 	*sqlutils.SQLRunner
 	kvDB      *kv.DB
-	tableDesc *sqlbase.MutableTableDescriptor
+	tableDesc *tabledesc.MutableTableDescriptor
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *sqlbase.MutableTableDescriptor,
+	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *tabledesc.MutableTableDescriptor,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,

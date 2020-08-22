@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,15 +56,15 @@ CREATE INDEX ON t.t1 (x);
 	// downgradeForeignKey downgrades a table descriptor's foreign key representation
 	// to the pre-19.2 table descriptor format where foreign key information
 	// is stored on the index.
-	downgradeForeignKey := func(tbl *sqlbase.ImmutableTableDescriptor) *sqlbase.ImmutableTableDescriptor {
+	downgradeForeignKey := func(tbl *tabledesc.ImmutableTableDescriptor) *tabledesc.ImmutableTableDescriptor {
 		// Downgrade the outbound foreign keys.
 		for i := range tbl.OutboundFKs {
 			fk := &tbl.OutboundFKs[i]
-			idx, err := sqlbase.FindFKOriginIndex(tbl, fk.OriginColumnIDs)
+			idx, err := tabledesc.FindFKOriginIndex(tbl, fk.OriginColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var referencedTbl *sqlbase.ImmutableTableDescriptor
+			var referencedTbl *tabledesc.ImmutableTableDescriptor
 			err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				referencedTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.ReferencedTableID)
 				return err
@@ -72,7 +72,7 @@ CREATE INDEX ON t.t1 (x);
 			if err != nil {
 				t.Fatal(err)
 			}
-			refIdx, err := sqlbase.FindFKReferencedIndex(referencedTbl, fk.ReferencedColumnIDs)
+			refIdx, err := tabledesc.FindFKReferencedIndex(referencedTbl, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -91,18 +91,18 @@ CREATE INDEX ON t.t1 (x);
 		// Downgrade the inbound foreign keys.
 		for i := range tbl.InboundFKs {
 			fk := &tbl.InboundFKs[i]
-			idx, err := sqlbase.FindFKReferencedIndex(desc, fk.ReferencedColumnIDs)
+			idx, err := tabledesc.FindFKReferencedIndex(desc, fk.ReferencedColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var originTbl *sqlbase.ImmutableTableDescriptor
+			var originTbl *tabledesc.ImmutableTableDescriptor
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 				originTbl, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, fk.OriginTableID)
 				return err
 			}); err != nil {
 				t.Fatal(err)
 			}
-			originIdx, err := sqlbase.FindFKOriginIndex(originTbl, fk.OriginColumnIDs)
+			originIdx, err := tabledesc.FindFKOriginIndex(originTbl, fk.OriginColumnIDs)
 			if err != nil {
 				t.Fatal(err)
 			}

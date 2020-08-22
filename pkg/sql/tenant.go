@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +74,7 @@ func CreateTenantRecord(
 
 	// Insert into the tenant table and detect collisions.
 	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "create-tenant", txn, sqlbase.NodeUserSessionDataOverride,
+		ctx, "create-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`, tenID, active, tenInfoArg,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
@@ -147,7 +147,7 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	}
 	// Mark the tenant as active.
 	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "activate-tenant", txn, sqlbase.NodeUserSessionDataOverride,
+		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.tenants SET active = true WHERE id = $1`, tenID,
 	); err != nil {
 		return errors.Wrap(err, "activating tenant")
@@ -170,7 +170,7 @@ func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, te
 	// Query the tenant's active status. If it is marked as inactive, it is
 	// already destroyed.
 	if row, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "destroy-tenant", txn, sqlbase.NodeUserSessionDataOverride,
+		ctx, "destroy-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT active FROM system.tenants WHERE id = $1`, tenID,
 	); err != nil {
 		return errors.Wrap(err, "deleting tenant")
@@ -182,7 +182,7 @@ func DestroyTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, te
 
 	// Mark the tenant as inactive.
 	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "destroy-tenant", txn, sqlbase.NodeUserSessionDataOverride,
+		ctx, "destroy-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.tenants SET active = false WHERE id = $1`, tenID,
 	); err != nil {
 		return errors.Wrap(err, "deleting tenant")

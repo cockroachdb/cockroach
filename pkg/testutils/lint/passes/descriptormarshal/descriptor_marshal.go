@@ -25,7 +25,7 @@ import (
 )
 
 // Doc documents this pass.
-const Doc = `check for correct unmarshaling of sqlbase descriptors`
+const Doc = `check for correct unmarshaling of descpb descriptors`
 
 // TODO(ajwerner): write an Analyzer which determines whether a function passes
 // a pointer to a struct which contains a descpb.Descriptor to a function
@@ -70,7 +70,7 @@ var Analyzer = &analysis.Analyzer{
 			}
 			pass.Report(analysis.Diagnostic{
 				Pos: n.Pos(),
-				Message: fmt.Sprintf("Illegal call to Descriptor.GetTable() in %s, see Descriptor.Table()",
+				Message: fmt.Sprintf("Illegal call to Descriptor.GetTable() in %s, see descpb.TableFromDescriptor()",
 					containing.Name()),
 			})
 		})
@@ -79,8 +79,8 @@ var Analyzer = &analysis.Analyzer{
 }
 
 var allowedFunctions = []string{
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase.TableFromDescriptor",
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase_test.TestDefaultExprNil",
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.TableFromDescriptor",
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc_test.TestDefaultExprNil",
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl.readBackupManifest",
 }
 

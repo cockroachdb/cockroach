@@ -24,11 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -74,7 +76,7 @@ func (p *planner) createDatabase(
 			// Noop.
 			return nil, false, nil
 		}
-		return nil, false, sqlbase.NewDatabaseAlreadyExistsError(dbName)
+		return nil, false, sqlerrors.NewDatabaseAlreadyExistsError(dbName)
 	} else if err != nil {
 		return nil, false, err
 	}
@@ -158,7 +160,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *sqlbase.MutableTableDescriptor:
+	case *tabledesc.MutableTableDescriptor:
 		isTable = true
 		if err := desc.ValidateTable(); err != nil {
 			return err
@@ -177,7 +179,7 @@ func (p *planner) createDescriptorWithID(
 				return err
 			}
 		}
-	case *sqlbase.MutableSchemaDescriptor:
+	case *schemadesc.MutableSchemaDescriptor:
 		// TODO (lucy): Call AddUncommittedDescriptor when we're ready.
 	default:
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
@@ -190,7 +192,7 @@ func (p *planner) createDescriptorWithID(
 		// Queue a schema change job to eventually make the table public.
 		if err := p.createOrUpdateSchemaChangeJob(
 			ctx,
-			mutDesc.(*sqlbase.MutableTableDescriptor),
+			mutDesc.(*tabledesc.MutableTableDescriptor),
 			jobDesc,
 			descpb.InvalidMutationID); err != nil {
 			return err

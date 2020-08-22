@@ -33,10 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -709,7 +709,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	const numRows = 2*row.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
-	var descs []*sqlbase.ImmutableTableDescriptor
+	var descs []*tabledesc.ImmutableTableDescriptor
 	for i := 0; i < numTables; i++ {
 		tableName := fmt.Sprintf("test%d", i)
 		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
@@ -828,7 +828,7 @@ func TestDropTableDeleteData(t *testing.T) {
 }
 
 func writeTableDesc(
-	ctx context.Context, db *kv.DB, tableDesc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, db *kv.DB, tableDesc *tabledesc.MutableTableDescriptor,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
@@ -891,7 +891,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		tableDesc = desc.(*sqlbase.MutableTableDescriptor)
+		tableDesc = desc.(*tabledesc.MutableTableDescriptor)
 		return nil
 	}); err != nil {
 		t.Fatal(err)

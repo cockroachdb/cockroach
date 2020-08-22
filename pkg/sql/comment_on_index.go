@@ -16,14 +16,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
 type commentOnIndexNode struct {
 	n         *tree.CommentOnIndex
-	tableDesc *sqlbase.MutableTableDescriptor
+	tableDesc *tabledesc.MutableTableDescriptor
 	indexDesc *descpb.IndexDescriptor
 }
 
@@ -83,7 +84,7 @@ func (p *planner) upsertIndexComment(
 		ctx,
 		"set-index-comment",
 		p.Txn(),
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
 		keys.IndexCommentType,
 		tableID,
@@ -100,7 +101,7 @@ func (p *planner) removeIndexComment(
 		ctx,
 		"delete-index-comment",
 		p.txn,
-		sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
 		keys.IndexCommentType,
 		tableID,

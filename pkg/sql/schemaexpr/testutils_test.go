@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schemaexpr
+package schemaexpr_test
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -27,7 +28,7 @@ type testCol struct {
 // less verbose way.
 func testTableDesc(
 	name string, columns []testCol, mutationColumns []testCol,
-) sqlbase.MutableTableDescriptor {
+) catalog.TableDescriptor {
 	cols := make([]descpb.ColumnDescriptor, len(columns))
 	for i := range columns {
 		cols[i] = descpb.ColumnDescriptor{
@@ -51,7 +52,7 @@ func testTableDesc(
 			Direction: descpb.DescriptorMutation_ADD,
 		}
 	}
-	return *sqlbase.NewMutableCreatedTableDescriptor(descpb.TableDescriptor{
+	return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
 		Name:      name,
 		ID:        1,
 		Columns:   cols,

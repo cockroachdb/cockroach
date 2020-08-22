@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -48,7 +48,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				ctx,
 				"read-histogram",
 				p.txn,
-				sqlbase.InternalExecutorSessionDataOverride{User: security.RootUser},
+				sessiondata.InternalExecutorOverride{User: security.RootUser},
 				`SELECT histogram
 				 FROM system.table_statistics
 				 WHERE "statisticID" = $1`,

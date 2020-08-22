@@ -18,11 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sequence"
@@ -182,7 +183,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 							dependentDesc.ID,
 							err,
 						)
-						return sqlbase.NewDependentObjectErrorf(
+						return sqlerrors.NewDependentObjectErrorf(
 							"cannot rename database because a relation depends on relation %q",
 							tbTableName.String())
 					}
@@ -195,7 +196,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					)
 					dependentDescQualifiedString = dependentDescTableName.String()
 				}
-				depErr := sqlbase.NewDependentObjectErrorf(
+				depErr := sqlerrors.NewDependentObjectErrorf(
 					"cannot rename database because relation %q depends on relation %q",
 					dependentDescQualifiedString,
 					tbTableName.String(),
@@ -239,7 +240,7 @@ func isAllowedDependentDescInRenameDatabase(
 	ctx context.Context,
 	dependedOn *descpb.TableDescriptor_Reference,
 	tbDesc catalog.TableDescriptor,
-	dependentDesc *sqlbase.ImmutableTableDescriptor,
+	dependentDesc *tabledesc.ImmutableTableDescriptor,
 	dbName string,
 ) (bool, string, error) {
 	// If it is a sequence, and it does not contain the database name, then we have

@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -167,7 +167,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc *sqlbase.ImmutableTableDescriptor, pk int,
+	ts *server.TestServer, tableDesc *tabledesc.ImmutableTableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
@@ -321,7 +321,7 @@ func TestMixedDirections(t *testing.T) {
 
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *kv.DB, t *testing.T,
-) ([]roachpb.RangeDescriptor, *sqlbase.ImmutableTableDescriptor) {
+) ([]roachpb.RangeDescriptor, *tabledesc.ImmutableTableDescriptor) {
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	return nil
 }
 
-func makeSpan(tableDesc *sqlbase.ImmutableTableDescriptor, i, j int) roachpb.Span {
+func makeSpan(tableDesc *tabledesc.ImmutableTableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
 		key, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {

@@ -42,9 +42,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -206,7 +206,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		table := sqlbase.NewImmutableTableDescriptor(*sqlbase.TableFromDescriptor(&desc, hlc.Timestamp{}))
+		table := tabledesc.NewImmutableTableDescriptor(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
 
 		fn := func(kv storage.MVCCKeyValue) (string, error) {
 			var v roachpb.Value

@@ -12,13 +12,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/errors"
 )
 
 // ValidateTable validates that a table descriptor can be watched by a CHANGEFEED.
 func ValidateTable(
-	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.ImmutableTableDescriptor,
+	targets jobspb.ChangefeedTargets, tableDesc *tabledesc.ImmutableTableDescriptor,
 ) error {
 	t, ok := targets[tableDesc.ID]
 	if !ok {

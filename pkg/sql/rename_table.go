@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -31,7 +32,7 @@ import (
 type renameTableNode struct {
 	n            *tree.RenameTable
 	oldTn, newTn *tree.TableName
-	tableDesc    *sqlbase.MutableTableDescriptor
+	tableDesc    *tabledesc.MutableTableDescriptor
 }
 
 // RenameTable renames the table, view or sequence.
@@ -63,7 +64,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	if tableDesc.State != descpb.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedRelationError(&oldTn)
+		return nil, sqlerrors.NewUndefinedRelationError(&oldTn)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
@@ -159,9 +160,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		desc, err := catalogkv.GetAnyDescriptorByID(
 			params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
 	} else if err != nil {
 		return err
 	}
@@ -194,9 +195,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
 		if err != nil {
-			return sqlbase.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
+			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
 		}
-		return sqlbase.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
+		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
 	} else if err != nil {
 		return err
 	}
@@ -225,14 +226,14 @@ func (p *planner) dependentViewError(
 		viewFQName, err := p.getQualifiedTableName(ctx, viewDesc)
 		if err != nil {
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
-			return sqlbase.NewDependentObjectErrorf(
+			return sqlerrors.NewDependentObjectErrorf(
 				"cannot %s %s %q because a view depends on it",
 				op, typeName, objName)
 		}
 		viewName = viewFQName.FQString()
 	}
 	return errors.WithHintf(
-		sqlbase.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
+		sqlerrors.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
 			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
 }

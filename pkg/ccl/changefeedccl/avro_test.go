@@ -24,11 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -84,7 +85,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 		var row rowenc.EncDatumRow
 		for colIdx, expr := range rowTuple {
 			col := tableDesc.GetColumnAtIdx(colIdx)
-			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
+			typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 				ctx, expr, col.Type, "avro", &semaCtx, tree.VolatilityStable)
 			if err != nil {
 				return nil, err
@@ -122,7 +123,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 		}
 		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
 	}
-	return tableToAvroSchema(sqlbase.NewImmutableTableDescriptor(tableDesc), avroSchemaNoSuffix)
+	return tableToAvroSchema(tabledesc.NewImmutableTableDescriptor(tableDesc), avroSchemaNoSuffix)
 }
 
 func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, error) {
@@ -133,7 +134,7 @@ func avroFieldMetadataToColDesc(metadata string) (*descpb.ColumnDescriptor, erro
 	def := parsed.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	col, _, _, err := sqlbase.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
+	col, _, _, err := tabledesc.MakeColumnDefDescs(ctx, def, &semaCtx, &tree.EvalContext{})
 	return col, err
 }
 

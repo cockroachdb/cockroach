@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -76,7 +78,7 @@ func (p *planner) ReparentDatabase(
 	}
 
 	// Ensure the database has a valid schema name.
-	if err := sqlbase.IsSchemaNameValid(db.Name); err != nil {
+	if err := schemadesc.IsSchemaNameValid(db.Name); err != nil {
 		return nil, err
 	}
 
@@ -100,7 +102,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	schema := sqlbase.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
+	schema := schemadesc.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,
@@ -157,7 +159,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		}
 		if found {
 			// Remap the ID's on the table.
-			tbl, ok := desc.(*sqlbase.MutableTableDescriptor)
+			tbl, ok := desc.(*tabledesc.MutableTableDescriptor)
 			if !ok {
 				return errors.AssertionFailedf("%q was not a MutableTableDescriptor", objName.Object())
 			}
@@ -182,7 +184,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 					}
 					names = append(names, fqName.String())
 				}
-				return sqlbase.NewDependentObjectErrorf(
+				return sqlerrors.NewDependentObjectErrorf(
 					"could not convert database %q into schema because %q has dependent objects %v",
 					n.db.Name,
 					tblName.String(),
