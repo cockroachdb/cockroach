@@ -341,6 +341,19 @@ func Length(ewkb geopb.EWKB) (float64, error) {
 	return float64(length), nil
 }
 
+// IsSimple returns whether the EWKB is simple.
+func IsSimple(ewkb geopb.EWKB) (bool, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return false, err
+	}
+	var ret C.char
+	if err := statusToError(C.CR_GEOS_IsSimple(g, goToCSlice(ewkb), &ret)); err != nil {
+		return false, err
+	}
+	return ret == 1, nil
+}
+
 // Centroid returns the centroid of an EWKB.
 func Centroid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	g, err := ensureInitInternal()

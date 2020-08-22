@@ -37,7 +37,7 @@ system
 test
 
 query TT
-SELECT job_type, status FROM [SHOW JOBS]
+SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root'
 ----
 SCHEMA CHANGE       succeeded
 SCHEMA CHANGE GC    running

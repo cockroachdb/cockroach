@@ -178,8 +178,11 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	if err != nil {
 		return err
 	}
-	if err := s.Unpause("FULL backup completed"); err != nil {
-		return err
+	s.ClearScheduleStatus()
+	if s.HasRecurringSchedule() {
+		if err := s.ScheduleNextRun(); err != nil {
+			return err
+		}
 	}
 	if err := s.Update(ctx, ex, txn); err != nil {
 		return err

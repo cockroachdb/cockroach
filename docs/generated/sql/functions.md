@@ -1322,9 +1322,17 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <p>This function variant will attempt to utilize any available geospatial index.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td></tr>
+<tr><td><a name="st_isclosed"></a><code>st_isclosed(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is closed as defined by whether the start and end points are coincident. Points are considered closed, empty geometries are not. For collections and multi-types, all members must be closed, as must all polygon rings.</p>
+</span></td></tr>
 <tr><td><a name="st_iscollection"></a><code>st_iscollection(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is of a collection type (including multi-types).</p>
 </span></td></tr>
 <tr><td><a name="st_isempty"></a><code>st_isempty(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is empty.</p>
+</span></td></tr>
+<tr><td><a name="st_isring"></a><code>st_isring(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is a single linestring that is closed and simple, as defined by ST_IsClosed and ST_IsSimple.</p>
+<p>This function utilizes the GEOS module.</p>
+</span></td></tr>
+<tr><td><a name="st_issimple"></a><code>st_issimple(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the geometry has no anomalous geometric points, e.g. that it intersects with or lies tangent to itself.</p>
+<p>This function utilizes the GEOS module.</p>
 </span></td></tr>
 <tr><td><a name="st_isvalid"></a><code>st_isvalid(geometry: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the geometry is valid as defined by the OGC spec.</p>
 <p>This function utilizes the GEOS module.</p>

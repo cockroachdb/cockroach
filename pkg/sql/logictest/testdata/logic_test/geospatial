@@ -971,26 +971,48 @@ Square (right)                            1     1     0     0     4     4
 Square overlapping left and right square  1.1   1.1   0     0     4.2   4.2
 
 # Unary predicates
-query TBB
+query TBBBB
 SELECT
   dsc,
   ST_IsEmpty(geom),
-  ST_IsCollection(geom)
+  ST_IsCollection(geom),
+  ST_IsClosed(geom),
+  ST_IsSimple(geom)
 FROM geom_operators_test
 ORDER BY dsc
 ----
-Empty GeometryCollection                  true   true
-Empty LineString                          true   false
-Empty Point                               true   false
-Faraway point                             false  false
-Line going through left and right square  false  false
-NULL                                      NULL   NULL
-Nested Geometry Collection                false  true
-Point middle of Left Square               false  false
-Point middle of Right Square              false  false
-Square (left)                             false  false
-Square (right)                            false  false
-Square overlapping left and right square  false  false
+Empty GeometryCollection                  true   true   false  true
+Empty LineString                          true   false  false  true
+Empty Point                               true   false  false  true
+Faraway point                             false  false  true   true
+Line going through left and right square  false  false  false  true
+NULL                                      NULL   NULL   NULL   NULL
+Nested Geometry Collection                false  true   true   true
+Point middle of Left Square               false  false  true   true
+Point middle of Right Square              false  false  true   true
+Square (left)                             false  false  true   true
+Square (right)                            false  false  true   true
+Square overlapping left and right square  false  false  true   true
+
+query BBB
+SELECT
+  ST_IsRing(geom),
+  ST_IsClosed(geom),
+  ST_IsSimple(geom)
+FROM ( VALUES
+  ('LINESTRING EMPTY'::geometry),
+  ('LINESTRING(0 0, 1 1)'::geometry),
+  ('LINESTRING(0 0, 1 1, 0 0)'::geometry),
+  ('LINESTRING(0 0, 0 1, 1 1, 1 0, 0 0)'::geometry)
+) tbl(geom)
+----
+false  false  true
+false  false  true
+false  true   false
+true   true   true
+
+statement error st_isring\(\): should only be called on a linear feature: geom: unsupported type \*geom.Point
+SELECT ST_IsRing('POINT(0 0)')
 
 # Topology operators
 
