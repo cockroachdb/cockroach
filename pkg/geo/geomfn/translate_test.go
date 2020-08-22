@@ -72,13 +72,13 @@ func TestTranslate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			got, err := Translate(geometry, tc.deltas)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -118,7 +118,7 @@ func TestTranslateCollection(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			geometry, err = Translate(geometry, tc.deltas)
@@ -138,7 +138,7 @@ func TestTranslateCollection(t *testing.T) {
 
 func TestTranslateErrorMismatchedDeltas(t *testing.T) {
 	deltas := []float64{1, 1, 1}
-	geometry, err := geo.NewGeometryFromPointCoords(0, 0)
+	geometry, err := geo.MakeGeometryFromPointCoords(0, 0)
 	require.NoError(t, err)
 
 	_, err = Translate(geometry, deltas)

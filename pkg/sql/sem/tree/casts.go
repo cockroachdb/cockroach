@@ -730,7 +730,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDGeography(d.Contents)
 		case *DGeography:
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				d.Geography,
+				&d.Geography,
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -743,7 +743,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				return nil, err
 			}
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				g,
+				&g,
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -775,7 +775,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDGeometry(d.Contents)
 		case *DGeometry:
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				d.Geometry,
+				&d.Geometry,
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -784,7 +784,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d, nil
 		case *DGeography:
 			if err := geo.GeospatialTypeFitsColumnMetadata(
-				d.Geography,
+				&d.Geography,
 				t.InternalType.GeoMetadata.SRID,
 				t.InternalType.GeoMetadata.ShapeType,
 			); err != nil {
@@ -806,7 +806,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return &DGeometry{g}, nil
 		case *DBox2D:
-			g, err := geo.NewGeometryFromGeomT(d.ToGeomT(geopb.DefaultGeometrySRID))
+			g, err := geo.MakeGeometryFromGeomT(d.ToGeomT(geopb.DefaultGeometrySRID))
 			if err != nil {
 				return nil, err
 			}

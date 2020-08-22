@@ -21,7 +21,7 @@ import (
 // IsClosed returns whether the given geometry has equal start and end points.
 // Collections and multi-types must contain all-closed geometries. Empty
 // geometries are not closed.
-func IsClosed(g *geo.Geometry) (bool, error) {
+func IsClosed(g geo.Geometry) (bool, error) {
 	t, err := g.AsGeomT()
 	if err != nil {
 		return false, err
@@ -76,7 +76,7 @@ func isClosedFromGeomT(t geom.T) (bool, error) {
 }
 
 // IsCollection returns whether the given geometry is of a collection type.
-func IsCollection(g *geo.Geometry) (bool, error) {
+func IsCollection(g geo.Geometry) (bool, error) {
 	switch g.ShapeType() {
 	case geopb.ShapeType_MultiPoint, geopb.ShapeType_MultiLineString, geopb.ShapeType_MultiPolygon,
 		geopb.ShapeType_GeometryCollection:
@@ -87,13 +87,13 @@ func IsCollection(g *geo.Geometry) (bool, error) {
 }
 
 // IsEmpty returns whether the given geometry is empty.
-func IsEmpty(g *geo.Geometry) (bool, error) {
+func IsEmpty(g geo.Geometry) (bool, error) {
 	return g.Empty(), nil
 }
 
 // IsRing returns whether the given geometry is a ring, i.e. that it is a
 // simple and closed line.
-func IsRing(g *geo.Geometry) (bool, error) {
+func IsRing(g geo.Geometry) (bool, error) {
 	// We explicitly check for empty geometries before checking the type,
 	// to follow PostGIS behavior where all empty geometries return false.
 	if g.Empty() {
@@ -118,6 +118,6 @@ func IsRing(g *geo.Geometry) (bool, error) {
 
 // IsSimple returns whether the given geometry is simple, i.e. that it does not
 // intersect or lie tangent to itself.
-func IsSimple(g *geo.Geometry) (bool, error) {
+func IsSimple(g geo.Geometry) (bool, error) {
 	return geos.IsSimple(g.EWKB())
 }

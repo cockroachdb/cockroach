@@ -71,13 +71,13 @@ func TestScale(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
 			got, err := Scale(geometry, tc.factors)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -126,19 +126,19 @@ func TestScaleRelativeToOrigin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
-			factor, err := geo.NewGeometryFromGeomT(tc.factor)
+			factor, err := geo.MakeGeometryFromGeomT(tc.factor)
 			require.NoError(t, err)
 
-			origin, err := geo.NewGeometryFromGeomT(tc.origin)
+			origin, err := geo.MakeGeometryFromGeomT(tc.origin)
 			require.NoError(t, err)
 
 			got, err := ScaleRelativeToOrigin(geometry, factor, origin)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -179,13 +179,13 @@ func TestCollectionScaleRelativeToOrigin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
-			factor, err := geo.NewGeometryFromGeomT(tc.factor)
+			factor, err := geo.MakeGeometryFromGeomT(tc.factor)
 			require.NoError(t, err)
 
-			origin, err := geo.NewGeometryFromGeomT(tc.origin)
+			origin, err := geo.MakeGeometryFromGeomT(tc.origin)
 			require.NoError(t, err)
 
 			geometry, err = ScaleRelativeToOrigin(geometry, factor, origin)
@@ -228,13 +228,13 @@ func TestInvalidParametersWhenScalingRelativeToOrigin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			geometry, err := geo.NewGeometryFromGeomT(tc.input)
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
 			require.NoError(t, err)
 
-			factor, err := geo.NewGeometryFromGeomT(tc.factor)
+			factor, err := geo.MakeGeometryFromGeomT(tc.factor)
 			require.NoError(t, err)
 
-			origin, err := geo.NewGeometryFromGeomT(tc.origin)
+			origin, err := geo.MakeGeometryFromGeomT(tc.origin)
 			require.NoError(t, err)
 
 			_, err = ScaleRelativeToOrigin(geometry, factor, origin)

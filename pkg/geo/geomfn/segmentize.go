@@ -25,23 +25,23 @@ import (
 // minimum number of new segments with equal length is created,
 // between given two-points such that each segment has length less
 // than or equal to given maximum segment length.
-func Segmentize(g *geo.Geometry, segmentMaxLength float64) (*geo.Geometry, error) {
+func Segmentize(g geo.Geometry, segmentMaxLength float64) (geo.Geometry, error) {
 	geometry, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 	switch geometry := geometry.(type) {
 	case *geom.Point, *geom.MultiPoint:
 		return g, nil
 	default:
 		if segmentMaxLength <= 0 {
-			return nil, errors.Newf("maximum segment length must be positive")
+			return geo.Geometry{}, errors.Newf("maximum segment length must be positive")
 		}
 		segGeometry, err := geosegmentize.SegmentizeGeom(geometry, segmentMaxLength, segmentizeCoords)
 		if err != nil {
-			return nil, err
+			return geo.Geometry{}, err
 		}
-		return geo.NewGeometryFromGeomT(segGeometry)
+		return geo.MakeGeometryFromGeomT(segGeometry)
 	}
 }
 

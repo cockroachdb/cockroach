@@ -16,18 +16,18 @@ import (
 )
 
 // Reverse returns a modified geometry by reversing the order of its vertexes
-func Reverse(geometry *geo.Geometry) (*geo.Geometry, error) {
+func Reverse(geometry geo.Geometry) (geo.Geometry, error) {
 	g, err := geometry.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	g, err = reverse(g)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
-	return geo.NewGeometryFromGeomT(g)
+	return geo.MakeGeometryFromGeomT(g)
 }
 
 func reverse(g geom.T) (geom.T, error) {

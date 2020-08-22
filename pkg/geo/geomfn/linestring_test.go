@@ -54,16 +54,16 @@ func TestSetPoint(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
 			require.NoError(t, err)
 
-			p, err := geo.NewGeometryFromGeomT(tc.point)
+			p, err := geo.MakeGeometryFromGeomT(tc.point)
 			require.NoError(t, err)
 
 			got, err := SetPoint(ls, tc.index, p)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -95,10 +95,10 @@ func TestSetPoint(t *testing.T) {
 
 	for i, tc := range errTestCases {
 		t.Run(fmt.Sprintf("error-%d", i), func(t *testing.T) {
-			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
 			require.NoError(t, err)
 
-			p, err := geo.NewGeometryFromGeomT(tc.point)
+			p, err := geo.MakeGeometryFromGeomT(tc.point)
 			require.NoError(t, err)
 
 			wantErr := fmt.Sprintf("index %d out of range of LineString with %d coordinates", tc.index, tc.lineString.NumCoords())
@@ -133,13 +133,13 @@ func TestRemovePoint(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
 			require.NoError(t, err)
 
 			got, err := RemovePoint(ls, tc.index)
 			require.NoError(t, err)
 
-			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
 			require.NoError(t, err)
 
 			require.Equal(t, want, got)
@@ -171,7 +171,7 @@ func TestRemovePoint(t *testing.T) {
 
 	for i, tc := range errTestCases {
 		t.Run(fmt.Sprintf("error-%d", i), func(t *testing.T) {
-			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			ls, err := geo.MakeGeometryFromGeomT(tc.lineString)
 			require.NoError(t, err)
 
 			_, err = RemovePoint(ls, tc.index)

@@ -115,7 +115,7 @@ var CommuteRelationshipMap = map[RelationshipType]RelationshipType{
 type GeographyIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
 	// it to the index.
-	InvertedIndexKeys(c context.Context, g *geo.Geography) ([]Key, error)
+	InvertedIndexKeys(c context.Context, g geo.Geography) ([]Key, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -127,34 +127,34 @@ type GeographyIndex interface {
 
 	// Covers returns the index spans to read and union for the relationship
 	// ST_Covers(g, x), where x are the indexed geometries.
-	Covers(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+	Covers(c context.Context, g geo.Geography) (UnionKeySpans, error)
 
 	// CoveredBy returns the index entries to read and the expression to compute
 	// for ST_CoveredBy(g, x), where x are the indexed geometries.
-	CoveredBy(c context.Context, g *geo.Geography) (RPKeyExpr, error)
+	CoveredBy(c context.Context, g geo.Geography) (RPKeyExpr, error)
 
 	// Intersects returns the index spans to read and union for the relationship
 	// ST_Intersects(g, x), where x are the indexed geometries.
-	Intersects(c context.Context, g *geo.Geography) (UnionKeySpans, error)
+	Intersects(c context.Context, g geo.Geography) (UnionKeySpans, error)
 
 	// DWithin returns the index spans to read and union for the relationship
 	// ST_DWithin(g, x, distanceMeters). That is, there exists a part of
 	// geometry g that is within distanceMeters of x, where x is an indexed
 	// geometry. This function assumes a sphere.
 	DWithin(
-		c context.Context, g *geo.Geography, distanceMeters float64,
+		c context.Context, g geo.Geography, distanceMeters float64,
 		useSphereOrSpheroid geogfn.UseSphereOrSpheroid,
 	) (UnionKeySpans, error)
 
 	// TestingInnerCovering returns an inner covering of g.
-	TestingInnerCovering(g *geo.Geography) s2.CellUnion
+	TestingInnerCovering(g geo.Geography) s2.CellUnion
 }
 
 // GeometryIndex is an index over 2D cartesian coordinates.
 type GeometryIndex interface {
 	// InvertedIndexKeys returns the keys to store this object under when adding
 	// it to the index.
-	InvertedIndexKeys(c context.Context, g *geo.Geometry) ([]Key, error)
+	InvertedIndexKeys(c context.Context, g geo.Geometry) ([]Key, error)
 
 	// Acceleration for topological relationships (see
 	// https://postgis.net/docs/reference.html#Spatial_Relationships). Distance
@@ -166,29 +166,29 @@ type GeometryIndex interface {
 
 	// Covers returns the index spans to read and union for the relationship
 	// ST_Covers(g, x), where x are the indexed geometries.
-	Covers(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+	Covers(c context.Context, g geo.Geometry) (UnionKeySpans, error)
 
 	// CoveredBy returns the index entries to read and the expression to compute
 	// for ST_CoveredBy(g, x), where x are the indexed geometries.
-	CoveredBy(c context.Context, g *geo.Geometry) (RPKeyExpr, error)
+	CoveredBy(c context.Context, g geo.Geometry) (RPKeyExpr, error)
 
 	// Intersects returns the index spans to read and union for the relationship
 	// ST_Intersects(g, x), where x are the indexed geometries.
-	Intersects(c context.Context, g *geo.Geometry) (UnionKeySpans, error)
+	Intersects(c context.Context, g geo.Geometry) (UnionKeySpans, error)
 
 	// DWithin returns the index spans to read and union for the relationship
 	// ST_DWithin(g, x, distance). That is, there exists a part of geometry g
 	// that is within distance units of x, where x is an indexed geometry.
-	DWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
+	DWithin(c context.Context, g geo.Geometry, distance float64) (UnionKeySpans, error)
 
 	// DFullyWithin returns the index spans to read and union for the
 	// relationship ST_DFullyWithin(g, x, distance). That is, the maximum distance
 	// across every pair of points comprising geometries g and x is within distance
 	// units, where x is an indexed geometry.
-	DFullyWithin(c context.Context, g *geo.Geometry, distance float64) (UnionKeySpans, error)
+	DFullyWithin(c context.Context, g geo.Geometry, distance float64) (UnionKeySpans, error)
 
 	// TestingInnerCovering returns an inner covering of g.
-	TestingInnerCovering(g *geo.Geometry) s2.CellUnion
+	TestingInnerCovering(g geo.Geometry) s2.CellUnion
 }
 
 // RelationshipType stores a type of geospatial relationship query that can

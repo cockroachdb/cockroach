@@ -21,7 +21,7 @@ import (
 // Length returns the length of a given Geometry.
 // Note only (MULTI)LINESTRING objects have a length.
 // (MULTI)POLYGON objects should use Perimeter.
-func Length(g *geo.Geometry) (float64, error) {
+func Length(g geo.Geometry) (float64, error) {
 	geomRepr, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -66,7 +66,7 @@ func lengthFromGeomT(geomRepr geom.T) (float64, error) {
 // Perimeter returns the perimeter of a given Geometry.
 // Note only (MULTI)POLYGON objects have a perimeter.
 // (MULTI)LineString objects should use Length.
-func Perimeter(g *geo.Geometry) (float64, error) {
+func Perimeter(g geo.Geometry) (float64, error) {
 	geomRepr, err := g.AsGeomT()
 	if err != nil {
 		return 0, err
@@ -109,12 +109,12 @@ func perimeterFromGeomT(geomRepr geom.T) (float64, error) {
 }
 
 // Area returns the area of a given Geometry.
-func Area(g *geo.Geometry) (float64, error) {
+func Area(g geo.Geometry) (float64, error) {
 	return geos.Area(g.EWKB())
 }
 
 // Dimension returns the topological dimension of a given Geometry.
-func Dimension(g *geo.Geometry) (int, error) {
+func Dimension(g geo.Geometry) (int, error) {
 	t, err := g.AsGeomT()
 	if err != nil {
 		return 0, err

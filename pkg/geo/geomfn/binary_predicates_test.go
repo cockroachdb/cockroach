@@ -31,8 +31,8 @@ var (
 
 func TestCovers(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, true},
@@ -56,8 +56,8 @@ func TestCovers(t *testing.T) {
 
 func TestCoveredBy(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},
@@ -81,8 +81,8 @@ func TestCoveredBy(t *testing.T) {
 
 func TestContains(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, true},
@@ -108,8 +108,8 @@ func TestContains(t *testing.T) {
 
 func TestContainsProperly(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRect, false},
@@ -133,8 +133,8 @@ func TestContainsProperly(t *testing.T) {
 
 func TestCrosses(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},
@@ -160,8 +160,8 @@ func TestCrosses(t *testing.T) {
 
 func TestDisjoint(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},
@@ -184,8 +184,8 @@ func TestDisjoint(t *testing.T) {
 
 func TestEquals(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{emptyLine, emptyRect, true},
@@ -213,8 +213,8 @@ func TestEquals(t *testing.T) {
 
 func TestIntersects(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, leftRectPoint, false},
@@ -241,8 +241,8 @@ func TestIntersects(t *testing.T) {
 
 func TestOverlaps(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},
@@ -267,8 +267,8 @@ func TestOverlaps(t *testing.T) {
 
 func TestTouches(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},
@@ -292,8 +292,8 @@ func TestTouches(t *testing.T) {
 
 func TestWithin(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected bool
 	}{
 		{rightRect, rightRectPoint, false},

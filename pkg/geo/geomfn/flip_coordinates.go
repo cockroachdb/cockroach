@@ -16,22 +16,22 @@ import (
 )
 
 // FlipCoordinates returns a modified Geometry whose X, Y coordinates are flipped.
-func FlipCoordinates(geometry *geo.Geometry) (*geo.Geometry, error) {
+func FlipCoordinates(geometry geo.Geometry) (geo.Geometry, error) {
 	if geometry.Empty() {
 		return geometry, nil
 	}
 
 	g, err := geometry.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	g, err = flipCoordinates(g)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
-	return geo.NewGeometryFromGeomT(g)
+	return geo.MakeGeometryFromGeomT(g)
 }
 
 func flipCoordinates(g geom.T) (geom.T, error) {

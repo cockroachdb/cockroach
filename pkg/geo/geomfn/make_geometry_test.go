@@ -238,11 +238,14 @@ func TestMakePolygon(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			outer, err := geo.MustParseGeometry(tc.outer).CloneWithSRID(tc.outerSRID)
+			outer := geo.MustParseGeometry(tc.outer)
+			var err error
+			outer, err = outer.CloneWithSRID(tc.outerSRID)
 			require.NoError(t, err)
-			interior := make([]*geo.Geometry, 0, len(tc.interior))
+			interior := make([]geo.Geometry, 0, len(tc.interior))
 			for i, g := range tc.interior {
-				interiorRing, err := geo.MustParseGeometry(g).CloneWithSRID(tc.interiorSRIDs[i])
+				interiorRing := geo.MustParseGeometry(g)
+				interiorRing, err = interiorRing.CloneWithSRID(tc.interiorSRIDs[i])
 				require.NoError(t, err)
 				interior = append(interior, interiorRing)
 			}
@@ -252,7 +255,8 @@ func TestMakePolygon(t *testing.T) {
 				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
-				expected, err := geo.MustParseGeometry(tc.expected).CloneWithSRID(tc.expectedSRID)
+				expected := geo.MustParseGeometry(tc.expected)
+				expected, err := expected.CloneWithSRID(tc.expectedSRID)
 				require.NoError(t, err)
 				assert.Equal(t, expected, polygon)
 			}
