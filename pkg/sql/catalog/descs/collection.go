@@ -1139,12 +1139,12 @@ func (tc *Collection) GetUncommittedTables() (tables []*tabledesc.Immutable) {
 // for accessing types.
 func (tc *Collection) GetMutableTypeDescriptor(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*typedesc.MutableTypeDescriptor, error) {
+) (*typedesc.Mutable, error) {
 	desc, err := tc.getMutableObjectDescriptor(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	mutDesc, ok := desc.(*typedesc.MutableTypeDescriptor)
+	mutDesc, ok := desc.(*typedesc.Mutable)
 	if !ok {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedTypeError(tn)
@@ -1158,23 +1158,23 @@ func (tc *Collection) GetMutableTypeDescriptor(
 // but for accessing types.
 func (tc *Collection) GetMutableTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
-) (*typedesc.MutableTypeDescriptor, error) {
+) (*typedesc.Mutable, error) {
 	desc, err := tc.getMutableDescriptorByID(ctx, typeID, txn)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*typedesc.MutableTypeDescriptor), nil
+	return desc.(*typedesc.Mutable), nil
 }
 
 // GetTypeVersion is the equivalent of GetTableVersion but for accessing types.
 func (tc *Collection) GetTypeVersion(
 	ctx context.Context, txn *kv.Txn, tn *tree.TypeName, flags tree.ObjectLookupFlags,
-) (*typedesc.ImmutableTypeDescriptor, error) {
+) (*typedesc.Immutable, error) {
 	desc, err := tc.getObjectVersion(ctx, txn, tn, flags)
 	if err != nil {
 		return nil, err
 	}
-	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.Immutable)
 	if !ok {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedTypeError(tn)
@@ -1188,7 +1188,7 @@ func (tc *Collection) GetTypeVersion(
 // types.
 func (tc *Collection) GetTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*typedesc.ImmutableTypeDescriptor, error) {
+) (*typedesc.Immutable, error) {
 	desc, err := tc.getDescriptorVersionByID(ctx, txn, typeID, flags.CommonLookupFlags, true /* setTxnDeadline */)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
@@ -1197,7 +1197,7 @@ func (tc *Collection) GetTypeVersionByID(
 		}
 		return nil, err
 	}
-	typ, ok := desc.(*typedesc.ImmutableTypeDescriptor)
+	typ, ok := desc.(*typedesc.Immutable)
 	if !ok {
 		return nil, pgerror.Newf(
 			pgcode.UndefinedObject, "type with ID %d does not exist", typeID)
@@ -1341,13 +1341,13 @@ func (tc *Collection) GetAllDescriptors(
 		// There could be tables with user defined types that need hydrating,
 		// so collect the needed information to set up metadata in those types.
 		dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
-		typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
+		typDescs := make(map[descpb.ID]*typedesc.Immutable)
 		schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 		for _, desc := range descs {
 			switch desc := desc.(type) {
 			case *dbdesc.ImmutableDatabaseDescriptor:
 				dbDescs[desc.GetID()] = desc
-			case *typedesc.ImmutableTypeDescriptor:
+			case *typedesc.Immutable:
 				typDescs[desc.GetID()] = desc
 			case *schemadesc.Immutable:
 				schemaDescs[desc.GetID()] = desc
@@ -1586,7 +1586,7 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*typedesc.ImmutableTypeDescriptor), nil
+	return name, desc.(*typedesc.Immutable), nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.

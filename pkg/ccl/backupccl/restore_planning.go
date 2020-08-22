@@ -161,7 +161,7 @@ func allocateDescriptorRewrites(
 	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
-	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
+	typesByID map[descpb.ID]*typedesc.Mutable,
 	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts tree.RestoreOptions,
@@ -541,7 +541,7 @@ func allocateDescriptorRewrites(
 						return err
 					}
 					// If the collided object isn't a type, then error out.
-					existingType, isType := desc.(*typedesc.ImmutableTypeDescriptor)
+					existingType, isType := desc.(*typedesc.Immutable)
 					if !isType {
 						return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
@@ -737,9 +737,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
 
 // rewriteTypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
-func rewriteTypeDescs(
-	types []*typedesc.MutableTypeDescriptor, descriptorRewrites DescRewriteMap,
-) error {
+func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteMap) error {
 	for _, typ := range types {
 		rewrite, ok := descriptorRewrites[typ.ID]
 		if !ok {
@@ -1311,7 +1309,7 @@ func doRestorePlan(
 	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
 	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
 	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
-	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
+	typesByID := make(map[descpb.ID]*typedesc.Mutable)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.MutableDatabaseDescriptor:
@@ -1320,7 +1318,7 @@ func doRestorePlan(
 			schemasByID[desc.ID] = desc
 		case *tabledesc.Mutable:
 			tablesByID[desc.ID] = desc
-		case *typedesc.MutableTypeDescriptor:
+		case *typedesc.Mutable:
 			typesByID[desc.ID] = desc
 		}
 	}
@@ -1357,7 +1355,7 @@ func doRestorePlan(
 	for _, desc := range filteredTablesByID {
 		tables = append(tables, desc)
 	}
-	var types []*typedesc.MutableTypeDescriptor
+	var types []*typedesc.Mutable
 	for _, desc := range typesByID {
 		types = append(types, desc)
 	}

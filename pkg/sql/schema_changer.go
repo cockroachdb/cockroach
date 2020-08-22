@@ -1230,7 +1230,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// don't install any backreferences.
 		if !scTable.Dropped() {
 			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				return descs[id].(*typedesc.MutableTypeDescriptor), nil
+				return descs[id].(*typedesc.Mutable), nil
 			})
 			if err != nil {
 				return err
@@ -1238,10 +1238,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for _, id := range referencedTypeIDs {
-				descs[id].(*typedesc.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.Mutable).RemoveReferencingDescriptorID(scTable.ID)
 			}
 			for _, id := range newReferencedTypeIDs {
-				descs[id].(*typedesc.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.Mutable).AddReferencingDescriptorID(scTable.ID)
 			}
 		}
 

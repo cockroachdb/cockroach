@@ -307,7 +307,7 @@ func unwrapDescriptor(
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return typedesc.NewImmutableTypeDescriptor(*typ), nil
+		return typedesc.NewImmutable(*typ), nil
 	case schema != nil:
 		return schemadesc.NewImmutable(*schema), nil
 	default:
@@ -342,7 +342,7 @@ func unwrapDescriptorMutable(
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
+		return typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
 		return schemadesc.NewMutableExisting(*schema), nil
 	default:
@@ -642,7 +642,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 	case database != nil:
 		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
 	case typ != nil:
-		return typedesc.NewMutableExistingTypeDescriptor(*typ)
+		return typedesc.NewExistingMutable(*typ)
 	case schema != nil:
 		return schemadesc.NewMutableExisting(*schema)
 	default:

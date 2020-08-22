@@ -226,9 +226,9 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 				continue
 			}
 			// Remap the ID's on the type.
-			typ, ok := desc.(*typedesc.MutableTypeDescriptor)
+			typ, ok := desc.(*typedesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("%q was not a MutableTypeDescriptor", objName.Object())
+				return errors.AssertionFailedf("%q was not a Mutable", objName.Object())
 			}
 			typ.AddDrainingName(descpb.NameInfo{
 				ParentID:       typ.ParentID,

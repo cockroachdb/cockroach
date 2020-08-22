@@ -213,7 +213,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 					return err
 				}
 			}
-		case *typedesc.MutableTypeDescriptor:
+		case *typedesc.Mutable:
 			err := p.writeTypeSchemaChange(ctx, d, fmt.Sprintf("updating privileges for type %d", d.ID))
 			if err != nil {
 				return err

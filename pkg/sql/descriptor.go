@@ -152,7 +152,7 @@ func (p *planner) createDescriptorWithID(
 	}
 	isTable := false
 	switch desc := mutDesc.(type) {
-	case *typedesc.MutableTypeDescriptor:
+	case *typedesc.Mutable:
 		dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
 		if err := desc.Validate(ctx, dg); err != nil {
 			return err

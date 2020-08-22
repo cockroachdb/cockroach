@@ -195,8 +195,8 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		a := typedesc.NewImmutableTypeDescriptor(test.a)
-		b := typedesc.NewImmutableTypeDescriptor(test.b)
+		a := typedesc.NewImmutable(test.a)
+		b := typedesc.NewImmutable(test.b)
 		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestValidateTypeDesc(t *testing.T) {
 		ID:   101,
 		Name: "schema",
 	})
-	descs[102] = typedesc.NewImmutableTypeDescriptor(descpb.TypeDescriptor{
+	descs[102] = typedesc.NewImmutable(descpb.TypeDescriptor{
 		ID:   102,
 		Name: "type",
 	})
@@ -388,7 +388,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		desc := typedesc.NewImmutableTypeDescriptor(test.desc)
+		desc := typedesc.NewImmutable(test.desc)
 		if err := desc.Validate(ctx, descs); err == nil {
 			t.Errorf("expected err: %s but found nil: %v", test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {

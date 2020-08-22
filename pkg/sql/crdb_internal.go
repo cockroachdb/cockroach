@@ -1477,7 +1477,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typeDesc *typedesc.ImmutableTypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typeDesc *typedesc.Immutable) error {
 			switch typeDesc.Kind {
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels []string

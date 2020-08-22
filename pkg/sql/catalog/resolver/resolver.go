@@ -131,7 +131,7 @@ func ResolveMutableExistingTableObject(
 // object name.
 func ResolveMutableType(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
-) (*tree.TypeName, *typedesc.MutableTypeDescriptor, error) {
+) (*tree.TypeName, *typedesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{Required: required},
 		RequireMutable:    true,
@@ -142,7 +142,7 @@ func ResolveMutableType(
 		return nil, nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), un.Object())
-	return &tn, desc.(*typedesc.MutableTypeDescriptor), nil
+	return &tn, desc.(*typedesc.Mutable), nil
 }
 
 // ResolveExistingObject resolves an object with the given flags.
@@ -173,9 +173,9 @@ func ResolveExistingObject(
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
-			return obj.(*typedesc.MutableTypeDescriptor), prefix, nil
+			return obj.(*typedesc.Mutable), prefix, nil
 		}
-		return obj.(*typedesc.ImmutableTypeDescriptor), prefix, nil
+		return obj.(*typedesc.Immutable), prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {

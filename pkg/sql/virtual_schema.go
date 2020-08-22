@@ -362,7 +362,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		}
 
 		return virtualTypeEntry{
-			desc:    typedesc.MakeSimpleAliasTypeDescriptor(typ),
+			desc:    typedesc.MakeSimpleAlias(typ),
 			mutable: flags.RequireMutable,
 		}, nil
 	default:
@@ -390,7 +390,7 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *typedesc.ImmutableTypeDescriptor
+	desc    *typedesc.Immutable
 	mutable bool
 }
 
