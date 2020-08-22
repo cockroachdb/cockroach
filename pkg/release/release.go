@@ -421,6 +421,7 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 				log.Fatal(err)
 			}
 			zipHeader.Name = filepath.Join(targetArchiveBase, f.ArchiveFilePath)
+			zipHeader.Method = zip.Deflate
 
 			zfw, err := zw.CreateHeader(zipHeader)
 			if err != nil {
@@ -435,8 +436,8 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 		}
 	} else {
 		gzw := gzip.NewWriter(&body)
+		tw := tar.NewWriter(gzw)
 		for _, f := range o.Files {
-			tw := tar.NewWriter(gzw)
 
 			file, err := os.Open(f.LocalAbsolutePath)
 			if err != nil {
@@ -462,9 +463,9 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 			if _, err := io.Copy(tw, file); err != nil {
 				log.Fatal(err)
 			}
-			if err := tw.Close(); err != nil {
-				log.Fatal(err)
-			}
+		}
+		if err := tw.Close(); err != nil {
+			log.Fatal(err)
 		}
 		if err := gzw.Close(); err != nil {
 			log.Fatal(err)
