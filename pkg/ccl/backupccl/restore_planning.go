@@ -159,7 +159,7 @@ func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
 	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
-	schemasByID map[descpb.ID]*schemadesc.MutableSchemaDescriptor,
+	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.MutableTableDescriptor,
 	typesByID map[descpb.ID]*typedesc.MutableTypeDescriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
@@ -771,9 +771,7 @@ func rewriteTypeDescs(
 
 // rewriteSchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
 // using the input ID rewrite mapping.
-func rewriteSchemaDescs(
-	schemas []*schemadesc.MutableSchemaDescriptor, descriptorRewrites DescRewriteMap,
-) error {
+func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRewriteMap) error {
 	for _, sc := range schemas {
 		rewrite, ok := descriptorRewrites[sc.ID]
 		if !ok {
@@ -1311,14 +1309,14 @@ func doRestorePlan(
 	}
 
 	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
-	schemasByID := make(map[descpb.ID]*schemadesc.MutableSchemaDescriptor)
+	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
 	tablesByID := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
 	typesByID := make(map[descpb.ID]*typedesc.MutableTypeDescriptor)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.MutableDatabaseDescriptor:
 			databasesByID[desc.GetID()] = desc
-		case *schemadesc.MutableSchemaDescriptor:
+		case *schemadesc.Mutable:
 			schemasByID[desc.ID] = desc
 		case *tabledesc.MutableTableDescriptor:
 			tablesByID[desc.ID] = desc
@@ -1351,7 +1349,7 @@ func doRestorePlan(
 		return err
 	}
 
-	var schemas []*schemadesc.MutableSchemaDescriptor
+	var schemas []*schemadesc.Mutable
 	for i := range schemasByID {
 		schemas = append(schemas, schemasByID[i])
 	}

@@ -217,7 +217,7 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "db",
 		ID:   100,
 	})
-	descs[101] = schemadesc.NewImmutableSchemaDescriptor(descpb.SchemaDescriptor{
+	descs[101] = schemadesc.NewImmutable(descpb.SchemaDescriptor{
 		ID:   101,
 		Name: "schema",
 	})

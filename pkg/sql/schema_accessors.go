@@ -74,5 +74,5 @@ type (
 	TableNames = tree.TableNames
 	// MutableSchemaDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableSchemaDescriptor = schemadesc.MutableSchemaDescriptor
+	MutableSchemaDescriptor = schemadesc.Mutable
 )

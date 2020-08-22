@@ -1027,15 +1027,13 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 	return table, nil
 }
 
-func (r oneAtATimeSchemaResolver) getSchemaByID(
-	id descpb.ID,
-) (*schemadesc.ImmutableSchemaDescriptor, error) {
+func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
 	// TODO (rohany): This should use the descs.Collection.
 	desc, err := catalogkv.GetAnyDescriptorByID(r.ctx, r.p.txn, r.p.ExecCfg().Codec, id, catalogkv.Immutable)
 	if err != nil {
 		return nil, err
 	}
-	sc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
+	sc, ok := desc.(*schemadesc.Immutable)
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}

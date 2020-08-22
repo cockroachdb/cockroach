@@ -43,9 +43,7 @@ func (p *planner) schemaExists(
 	return exists, nil
 }
 
-func (p *planner) writeSchemaDesc(
-	ctx context.Context, desc *schemadesc.MutableSchemaDescriptor,
-) error {
+func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable) error {
 	desc.MaybeIncrementVersion()
 	p.Descriptors().ResetSchemaCache()
 	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
@@ -67,7 +65,7 @@ func (p *planner) writeSchemaDesc(
 }
 
 func (p *planner) writeSchemaDescChange(
-	ctx context.Context, desc *schemadesc.MutableSchemaDescriptor, jobDesc string,
+	ctx context.Context, desc *schemadesc.Mutable, jobDesc string,
 ) error {
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[desc.ID]
 	if jobExists {

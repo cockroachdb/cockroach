@@ -309,7 +309,7 @@ func unwrapDescriptor(
 	case typ != nil:
 		return typedesc.NewImmutableTypeDescriptor(*typ), nil
 	case schema != nil:
-		return schemadesc.NewImmutableSchemaDescriptor(*schema), nil
+		return schemadesc.NewImmutable(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -344,7 +344,7 @@ func unwrapDescriptorMutable(
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
 	case schema != nil:
-		return schemadesc.NewMutableExistingSchemaDescriptor(*schema), nil
+		return schemadesc.NewMutableExisting(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -535,12 +535,12 @@ func MustGetDatabaseDescByID(
 // returning an error if the descriptor is not found.
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*schemadesc.ImmutableSchemaDescriptor, error) {
+) (*schemadesc.Immutable, error) {
 	desc, err := GetAnyDescriptorByID(ctx, txn, codec, id, Immutable)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	sc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
+	sc, ok := desc.(*schemadesc.Immutable)
 	if !ok {
 		return nil, errors.Newf("descriptor with id %d was not a schema", id)
 	}
@@ -644,7 +644,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 	case typ != nil:
 		return typedesc.NewMutableExistingTypeDescriptor(*typ)
 	case schema != nil:
-		return schemadesc.NewMutableExistingSchemaDescriptor(*schema)
+		return schemadesc.NewMutableExisting(*schema)
 	default:
 		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
 		return nil // unreachable

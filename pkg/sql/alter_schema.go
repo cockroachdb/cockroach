@@ -30,7 +30,7 @@ import (
 type alterSchemaNode struct {
 	n    *tree.AlterSchema
 	db   *dbdesc.MutableDatabaseDescriptor
-	desc *schemadesc.MutableSchemaDescriptor
+	desc *schemadesc.Mutable
 }
 
 // Use to satisfy the linter.
@@ -77,7 +77,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
 	db *dbdesc.MutableDatabaseDescriptor,
-	scDesc *schemadesc.MutableSchemaDescriptor,
+	scDesc *schemadesc.Mutable,
 	newOwner string,
 	jobDesc string,
 ) error {
@@ -111,7 +111,7 @@ func (p *planner) alterSchemaOwner(
 func (p *planner) renameSchema(
 	ctx context.Context,
 	db *dbdesc.MutableDatabaseDescriptor,
-	desc *schemadesc.MutableSchemaDescriptor,
+	desc *schemadesc.Mutable,
 	newName string,
 	jobDesc string,
 ) error {
