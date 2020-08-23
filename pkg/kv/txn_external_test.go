@@ -109,7 +109,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 					},
 				},
 			}
-			tci := serverutils.StartTestCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
+			tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{ServerArgs: args})
 			tc := tci.(*testcluster.TestCluster)
 			defer tc.Stopper().Stop(ctx)
 

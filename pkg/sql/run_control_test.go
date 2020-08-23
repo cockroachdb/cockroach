@@ -45,7 +45,7 @@ func TestCancelSelectQuery(t *testing.T) {
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -106,7 +106,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -417,7 +417,7 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 	ctx := context.Background()
 
 	numNodes := 2
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -511,7 +511,7 @@ func TestCancelMultipleSessions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -566,7 +566,7 @@ func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -601,7 +601,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -662,7 +662,7 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -722,7 +722,7 @@ func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -786,7 +786,7 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})

@@ -42,7 +42,7 @@ import (
 type TestServerInterface interface {
 	Stopper() *stop.Stopper
 
-	Start(params base.TestServerArgs) error
+	Start() error
 
 	// Node returns the server.Node as an interface{}.
 	Node() interface{}
@@ -225,16 +225,34 @@ func InitTestServerFactory(impl TestServerFactory) {
 	srvFactoryImpl = impl
 }
 
-// StartServer creates a test server and sets up a gosql DB connection.
-// The server should be stopped by calling server.Stopper().Stop().
+// StartServer creates and starts a test server, and sets up a gosql DB
+// connection to it. The server should be stopped by calling
+// server.Stopper().Stop().
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
-	server, err := StartServerRaw(params)
-	if err != nil {
+	server := NewServer(params)
+	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
+	goDB := OpenDBConn(t, server, params, server.Stopper())
+	return server, goDB, server.DB()
+}
 
+// NewServer creates a test server.
+func NewServer(params base.TestServerArgs) TestServerInterface {
+	if srvFactoryImpl == nil {
+		panic("TestServerFactory not initialized. One needs to be injected " +
+			"from the package's TestMain()")
+	}
+
+	return srvFactoryImpl.New(params).(TestServerInterface)
+}
+
+// OpenDBConn sets up a gosql DB connection to the given server.
+func OpenDBConn(
+	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
+) *gosql.DB {
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
 		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
@@ -245,24 +263,21 @@ func StartServer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.Stopper().AddCloser(
+
+	stopper.AddCloser(
 		stop.CloserFn(func() {
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
-	return server, goDB, server.DB()
+	return goDB
 }
 
 // StartServerRaw creates and starts a TestServer.
 // Generally StartServer() should be used. However this function can be used
 // directly when opening a connection to the server is not desired.
 func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
-	if srvFactoryImpl == nil {
-		panic("TestServerFactory not initialized. One needs to be injected " +
-			"from the package's TestMain()")
-	}
-	server := srvFactoryImpl.New(args).(TestServerInterface)
-	if err := server.Start(args); err != nil {
+	server := NewServer(args)
+	if err := server.Start(); err != nil {
 		return nil, err
 	}
 	return server, nil
