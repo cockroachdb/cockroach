@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -70,6 +71,10 @@ const (
 
 	dateBasedFolderName = "/20060102/150405.00"
 	latestFileName      = "LATEST"
+	// backupSentinelWriteFile is a file that's located in the base of a
+	// collection indicating the schedule that's currently working on that
+	// collection. This locks out other schedules from interfering.
+	backupScheduleLockFile = "COCKROACH-SCHEDULE-LOCK"
 )
 
 // BackupFileDescriptors is an alias on which to implement sort's interface.
@@ -946,5 +951,67 @@ func verifyWriteableDestination(
 			BackupSentinelWriteFile, baseURI, err)
 	}
 
+	return nil
+}
+
+func checkLockForSchedule(
+	ctx context.Context,
+	user string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	collectionURI string,
+	scheduleID int64,
+) error {
+	collectionStore, err := makeCloudStorage(ctx, collectionURI, user)
+	if err != nil {
+		return err
+	}
+	defer collectionStore.Close()
+
+	r, err := collectionStore.ReadFile(ctx, backupScheduleLockFile)
+	if err != nil {
+		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			// No lock file found.
+			return nil
+		} else {
+			return errors.Wrapf(err,
+				"%s returned an unexpected error when checking for the existence of %s file",
+				collectionURI, backupScheduleLockFile)
+		}
+	}
+	defer r.Close()
+
+	scheduleWithLockBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return errors.Wrap(err, "reading schedule lock file")
+	}
+	scheduleWithLock, err := strconv.Atoi(string(scheduleWithLockBytes))
+	if err != nil {
+		return errors.Wrapf(err, "malformed %s file in %s; expected a schedule ID",
+			backupScheduleLockFile, collectionURI)
+	}
+	if int(scheduleID) != scheduleWithLock {
+		return errors.Newf("schedule %d already has a lock on this collection; to overwride it with ignore_existing_schedules")
+	}
+
+	return nil
+}
+
+func writeLockForSchedule(
+	ctx context.Context,
+	user string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	collectionURI string,
+	scheduleID int64,
+) error {
+	collectionStore, err := makeCloudStorage(ctx, collectionURI, user)
+	if err != nil {
+		return err
+	}
+	defer collectionStore.Close()
+
+	scheduleIDBytes := []byte(strconv.Itoa(int(scheduleID)))
+	if err := collectionStore.WriteFile(ctx, backupScheduleLockFile, bytes.NewReader(scheduleIDBytes)); err != nil {
+		return errors.Wrapf(err, "writing schedule file to %s", collectionURI)
+	}
 	return nil
 }

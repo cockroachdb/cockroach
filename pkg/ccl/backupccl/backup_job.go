@@ -423,6 +423,13 @@ func (b *backupResumer) Resume(
 	if err := createCheckpointIfNotExists(ctx, p.ExecCfg().Settings, defaultStore, details.Encryption); err != nil {
 		return errors.Wrapf(err, "creating checkpoint to %s", details.URI)
 	}
+	if createdBy := b.job.CreatedBy(); createdBy != nil {
+		makeCloudStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+		if err := writeLockForSchedule(ctx, p.User(), makeCloudStore,
+			details.CollectionURI, createdBy.ID); err != nil {
+			return err
+		}
+	}
 
 	ptsID := details.ProtectedTimestampRecord
 	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {

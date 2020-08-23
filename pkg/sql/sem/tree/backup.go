@@ -40,6 +40,7 @@ type BackupOptions struct {
 	EncryptionPassphrase   Expr
 	Detached               bool
 	EncryptionKMSURI       StringOrPlaceholderOptList
+	IgnoreExistingSchedule bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -227,6 +228,11 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("kms=")
 		o.EncryptionKMSURI.Format(ctx)
 	}
+
+	if o.IgnoreExistingSchedule {
+		maybeAddSep()
+		ctx.WriteString("ignore_existing_schedule")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -260,6 +266,14 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("kms specified multiple times")
 	}
 
+	if o.IgnoreExistingSchedule {
+		if other.IgnoreExistingSchedule {
+			return errors.New("ignore_existing_schedule option specified multiple times")
+		}
+	} else {
+		o.IgnoreExistingSchedule = other.IgnoreExistingSchedule
+	}
+
 	return nil
 }
 
@@ -268,7 +282,8 @@ func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
 		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
-		o.EncryptionPassphrase == options.EncryptionPassphrase
+		o.EncryptionPassphrase == options.EncryptionPassphrase &&
+		o.IgnoreExistingSchedule == options.IgnoreExistingSchedule
 }
 
 // Format implements the NodeFormatter interface.

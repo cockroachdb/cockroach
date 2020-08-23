@@ -859,6 +859,12 @@ func backupPlanHook(
 		if err := verifyWriteableDestination(ctx, p.User(), makeCloudStorage, baseURI); err != nil {
 			return err
 		}
+		if !backupStmt.Options.IgnoreExistingSchedule && backupStmt.CreatedByInfo != nil {
+			if err := checkLockForSchedule(ctx, p.User(), makeCloudStorage, collectionURI,
+				backupStmt.CreatedByInfo.ID); err != nil {
+				return err
+			}
+		}
 
 		backupDetails := jobspb.BackupDetails{
 			StartTime:        startTime,

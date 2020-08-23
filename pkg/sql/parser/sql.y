@@ -2207,6 +2207,10 @@ backup_options:
 	{
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
 	}
+| IGNORE_EXISTING_SCHEDULE
+  {
+    $$.val = &tree.BackupOptions{IgnoreExistingSchedule: true}
+  }
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL
 // %Text:
