@@ -70,6 +70,8 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		err = params.p.renameType(params.ctx, n, t.NewName)
 	case *tree.AlterTypeSetSchema:
 		err = params.p.setTypeSchema(params.ctx, n, t.Schema)
+	case *tree.AlterTypeOwner:
+		err = params.p.alterTypeOwner(params.ctx, n, t.Owner)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -286,6 +288,50 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 
 	return p.performRenameTypeDesc(
 		ctx, arrayDesc, arrayDesc.Name, desiredSchemaID, tree.AsStringWithFQNames(n.n, p.Ann()),
+	)
+}
+
+func (p *planner) alterTypeOwner(ctx context.Context, n *alterTypeNode, newOwner string) error {
+	typeDesc := n.desc
+	privs := typeDesc.GetPrivileges()
+
+	hasOwnership, err := p.HasOwnership(ctx, typeDesc)
+	if err != nil {
+		return err
+	}
+
+	if err := p.checkCanAlterToNewOwner(ctx, typeDesc, privs, newOwner, hasOwnership); err != nil {
+		return err
+	}
+
+	// Ensure the new owner has CREATE privilege on the type's schema.
+	if err := p.canCreateOnSchema(ctx, typeDesc.GetParentSchemaID(), newOwner); err != nil {
+		return err
+	}
+
+	// If the owner we want to set to is the current owner, do a no-op.
+	if newOwner == privs.Owner {
+		return nil
+	}
+
+	privs.SetOwner(newOwner)
+
+	if err := p.writeTypeSchemaChange(
+		ctx, typeDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
+	); err != nil {
+		return err
+	}
+
+	// Also have to change the owner of the implicit array type.
+	arrayDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, n.desc.ArrayTypeID)
+	if err != nil {
+		return err
+	}
+
+	arrayDesc.Privileges.SetOwner(newOwner)
+
+	return p.writeTypeSchemaChange(
+		ctx, arrayDesc, tree.AsStringWithFQNames(n.n, p.Ann()),
 	)
 }
 

@@ -2017,7 +2017,12 @@ alter_type_stmt:
   }
 | ALTER TYPE type_name OWNER TO role_spec
   {
-    return unimplementedWithIssueDetail(sqllex, 48700, "ALTER TYPE OWNER TO")
+    $$.val = &tree.AlterType{
+      Type: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterTypeOwner{
+        Owner: $6,
+      },
+    }
   }
 | ALTER TYPE type_name RENAME ATTRIBUTE column_name TO column_name opt_drop_behavior
   {
