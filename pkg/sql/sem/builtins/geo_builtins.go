@@ -3708,6 +3708,29 @@ Bottom Left.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_flipcoordinates": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := args[0].(*tree.DGeometry)
+
+				ret, err := geomfn.FlipCoordinates(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Returns a new geometry with the X and Y axes flipped.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 
 	//
 	// BoundingBox
