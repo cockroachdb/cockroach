@@ -105,8 +105,9 @@ func newTestRegistration(
 			span,
 			ts,
 			makeIteratorConstructor(catchup),
+			nil, /* cleanup */
 			withDiff,
-			5,
+			5, /* bufferSz */
 			NewMetrics(),
 			s,
 			errC,

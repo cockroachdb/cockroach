@@ -56,6 +56,7 @@ type registration struct {
 	span                   roachpb.Span
 	catchupTimestamp       hlc.Timestamp
 	catchupIterConstructor func() storage.SimpleIterator
+	cleanup                func()
 	withDiff               bool
 	metrics                *Metrics
 
@@ -87,6 +88,7 @@ func newRegistration(
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchupIterConstructor func() storage.SimpleIterator,
+	cleanup func(),
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
@@ -97,6 +99,7 @@ func newRegistration(
 		span:                   span,
 		catchupTimestamp:       startTS,
 		catchupIterConstructor: catchupIterConstructor,
+		cleanup:                cleanup,
 		withDiff:               withDiff,
 		metrics:                metrics,
 		stream:                 stream,
@@ -212,6 +215,9 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 	if !r.mu.disconnected {
 		if r.mu.outputLoopCancelFn != nil {
 			r.mu.outputLoopCancelFn()
+		}
+		if r.cleanup != nil {
+			r.cleanup()
 		}
 		r.mu.disconnected = true
 		r.errC <- pErr

@@ -358,8 +358,13 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // events that are consumed concurrently with this call. The channel will be
 // provided an error when the registration closes.
 //
+// If the rangefeed is successfully registered (true is returned), the
+// optionally provided cleanup function will be called when the rangefeed
+// exits
+//
 // The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp.
+// engine which occurred after the provided start timestamp. If the registration
+// succeeds,
 //
 // If the method returns false, the processor will have been stopped, so calling
 // Stop is not necessary. If the method returns true, it will also return an
@@ -371,6 +376,7 @@ func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchupIterConstructor IteratorConstructor,
+	cleanup func(),
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
@@ -381,9 +387,8 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
-	)
+		span.AsRawSpanWithNoLocals(), startTS, catchupIterConstructor, cleanup,
+		withDiff, p.Config.EventChanCap, p.Metrics, stream, errC)
 	select {
 	case p.regC <- r:
 		// Wait for response.

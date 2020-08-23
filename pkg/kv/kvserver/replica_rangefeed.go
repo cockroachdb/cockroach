@@ -110,16 +110,6 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 	).GoError()
 }
 
-type iteratorWithCloser struct {
-	storage.SimpleIterator
-	close func()
-}
-
-func (i iteratorWithCloser) Close() {
-	i.SimpleIterator.Close()
-	i.close()
-}
-
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
@@ -170,14 +160,8 @@ func (r *Replica) RangeFeed(
 		if err := lim.Begin(ctx); err != nil {
 			return roachpb.NewError(err)
 		}
-		// Finish the iterator limit, but only if we exit before
-		// creating the iterator itself.
+		// Finish the iterator limit, but only if we fail to register the rangefeed.
 		iterSemRelease = lim.Finish
-		defer func() {
-			if iterSemRelease != nil {
-				iterSemRelease()
-			}
-		}()
 	}
 
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
@@ -194,8 +178,7 @@ func (r *Replica) RangeFeed(
 	var catchUpIterFunc rangefeed.IteratorConstructor
 	if usingCatchupIter {
 		catchUpIterFunc = func() storage.SimpleIterator {
-
-			innerIter := r.Engine().NewIterator(storage.IterOptions{
+			return r.Engine().NewIterator(storage.IterOptions{
 				UpperBound: args.Span.EndKey,
 				// RangeFeed originally intended to use the time-bound iterator
 				// performance optimization. However, they've had correctness issues in
@@ -206,22 +189,20 @@ func (r *Replica) RangeFeed(
 				// workable. See #35122 for details.
 				// MinTimestampHint: args.Timestamp,
 			})
-			catchUpIter := iteratorWithCloser{
-				SimpleIterator: innerIter,
-				close:          iterSemRelease,
-			}
-			// Responsibility for releasing the semaphore now passes to the iterator.
-			iterSemRelease = nil
-			return catchUpIter
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIterFunc, args.WithDiff, lockedStream, errC,
+		ctx, rSpan, args.Timestamp, catchUpIterFunc, iterSemRelease, args.WithDiff, lockedStream, errC,
 	)
 	r.raftMu.Unlock()
 
-	// When this function returns, attempt to clean up the rangefeed.
-	defer r.maybeDisconnectEmptyRangefeed(p)
+	if p == nil {
+		// Registration failed, release the semaphore.
+		iterSemRelease()
+	} else {
+		// When this function returns, attempt to clean up the rangefeed.
+		defer r.maybeDisconnectEmptyRangefeed(p)
+	}
 
 	// Block on the registration's error channel. Note that the registration
 	// observes stream.Context().Done.
@@ -292,12 +273,15 @@ const defaultEventChanCap = 4096
 
 // registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
 // provided span. It initializes a rangefeed for the Replica if one is not
-// already running. Requires raftMu be locked.
+// already running. Requires raftMu be locked. The return value will be nil
+// if the rangefeed is not successfully registered. If the rangefeed is
+// successfully registered, the cleanup function will be called when it exits.
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	ctx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchupIter rangefeed.IteratorConstructor,
+	cleanup func(),
 	withDiff bool,
 	stream rangefeed.Stream,
 	errC chan<- *roachpb.Error,
@@ -308,7 +292,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	r.rangefeedMu.Lock()
 	p := r.rangefeedMu.proc
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+		reg, filter := p.Register(span, startTS, catchupIter, nil, withDiff, stream, errC)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -361,7 +345,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchupIter, withDiff, stream, errC)
+	reg, filter := p.Register(span, startTS, catchupIter, nil, withDiff, stream, errC)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
