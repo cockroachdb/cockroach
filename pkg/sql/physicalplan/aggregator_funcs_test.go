@@ -409,7 +409,7 @@ func TestDistAggregationTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	const numRows = 100
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Create a table with a few columns:

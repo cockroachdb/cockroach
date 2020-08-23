@@ -34,7 +34,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(
