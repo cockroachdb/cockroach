@@ -454,7 +454,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 func TestAdminAPINonTableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -495,7 +495,7 @@ func TestAdminAPINonTableStats(t *testing.T) {
 func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -1710,7 +1710,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
@@ -1806,7 +1806,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	skip.UnderShort(b, "TODO: fix benchmark")
-	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
@@ -1836,7 +1836,7 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 func TestEnqueueRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -1930,7 +1930,7 @@ func TestEnqueueRange(t *testing.T) {
 func TestStatsforSpanOnLocalMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 	firstServer := testCluster.Server(0)
 	adminServer := firstServer.(*TestServer).Server.admin

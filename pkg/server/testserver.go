@@ -273,7 +273,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 //   ts := s.(*server.TestServer)
 //
 type TestServer struct {
-	Cfg *Config
+	Cfg    *Config
+	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
 	*Server
 	// authClient is an http.Client that has been authenticated to access the
@@ -387,11 +388,12 @@ func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 // TestServer.ServingRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start(params base.TestServerArgs) error {
+func (ts *TestServer) Start() error {
 	if ts.Cfg == nil {
 		panic("Cfg not set")
 	}
 
+	params := ts.params
 	if params.Stopper == nil {
 		params.Stopper = stop.NewStopper()
 	}
@@ -1257,5 +1259,5 @@ var TestServerFactory = testServerFactoryImpl{}
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) interface{} {
 	cfg := makeTestConfigFromParams(params)
-	return &TestServer{Cfg: &cfg}
+	return &TestServer{Cfg: &cfg, params: params}
 }

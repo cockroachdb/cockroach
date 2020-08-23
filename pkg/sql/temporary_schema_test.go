@@ -219,7 +219,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 			},
 		},
 	}
-	tc := serverutils.StartTestCluster(
+	tc := serverutils.StartNewTestCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{
@@ -290,7 +290,7 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	numNodes := 3
-	tc := serverutils.StartTestCluster(
+	tc := serverutils.StartNewTestCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{

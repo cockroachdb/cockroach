@@ -3840,7 +3840,7 @@ func setupClusterWithSubsumedRange(
 			},
 		},
 	}
-	tc = serverutils.StartTestCluster(t, numNodes, clusterArgs)
+	tc = serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
 	ts := tc.Server(0)
 	stores, _ := ts.GetStores().(*kvserver.Stores)
 	store, err := stores.GetStore(ts.GetFirstStoreID())

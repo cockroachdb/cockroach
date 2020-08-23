@@ -535,7 +535,7 @@ func TestRaceWithBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -709,7 +709,7 @@ func TestDropWhileBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -808,7 +808,7 @@ func TestBackfillErrors(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ int64) error { <-blockGC; return nil }},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -3439,7 +3439,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -3748,7 +3748,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -4381,7 +4381,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		},
 	}
 
-	tc = serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
@@ -4426,7 +4426,7 @@ func TestAddComputedColumn(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 	db = tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -4605,7 +4605,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -4766,7 +4766,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -5603,7 +5603,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartNewTestCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,

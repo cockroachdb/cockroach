@@ -3523,7 +3523,7 @@ func TestTenantID(t *testing.T) {
 		_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
 		sawSnapshot := make(chan struct{}, 1)
 		blockSnapshot := make(chan struct{})
-		tc.AddServer(t, base.TestServerArgs{
+		tc.AddAndStartServer(t, base.TestServerArgs{
 			RaftConfig: raftConfig,
 			Insecure:   true,
 			Knobs: base.TestingKnobs{
@@ -3578,7 +3578,7 @@ func TestTenantID(t *testing.T) {
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
-		tc.AddServer(t, stickySpecTestServerArgs)
+		tc.AddAndStartServer(t, stickySpecTestServerArgs)
 		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
 		ri := repl.State()
 		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)

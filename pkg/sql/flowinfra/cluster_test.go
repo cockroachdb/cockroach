@@ -50,7 +50,7 @@ func TestClusterFlow(t *testing.T) {
 	const numRows = 100
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartTestCluster(t, 3, args)
+	tc := serverutils.StartNewTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	sumDigitsFn := func(row int) tree.Datum {
@@ -328,7 +328,7 @@ func ignoreMetricsMeta(metas []execinfrapb.ProducerMetadata) []execinfrapb.Produ
 func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Set up the following network - a simplification of the one described in
@@ -556,7 +556,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	var foundReq int64 // written atomically
 	var expectedGateway roachpb.NodeID
 
-	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -615,7 +615,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -669,7 +669,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartTestCluster(b, 3, args)
+	tc := serverutils.StartNewTestCluster(b, 3, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	for _, numNodes := range []int{1, 3} {

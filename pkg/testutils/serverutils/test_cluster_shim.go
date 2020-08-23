@@ -28,6 +28,12 @@ import (
 
 // TestClusterInterface defines TestCluster functionality used by tests.
 type TestClusterInterface interface {
+	// Start is used to start up the servers that were instantiated when
+	// creating this cluster.
+	Start(t testing.TB, args base.TestClusterArgs)
+
+	// NumServers returns the number of servers this test cluster is configured
+	// with.
 	NumServers() int
 
 	// Server returns the TestServerInterface corresponding to a specific node.
@@ -118,8 +124,8 @@ type TestClusterInterface interface {
 // TestClusterFactory encompasses the actual implementation of the shim
 // service.
 type TestClusterFactory interface {
-	// New instantiates a test server.
-	StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface
+	// NewTestCluster creates a test cluster without starting it.
+	NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface
 }
 
 var clusterFactoryImpl TestClusterFactory
@@ -131,14 +137,25 @@ func InitTestClusterFactory(impl TestClusterFactory) {
 	clusterFactoryImpl = impl
 }
 
-// StartTestCluster starts up a TestCluster made up of numNodes in-memory
-// testing servers. The cluster should be stopped using Stopper().Stop().
-func StartTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
+// StartNewTestCluster creates and starts up a TestCluster made up of numNodes
+// in-memory testing servers. The cluster should be stopped using
+// Stopper().Stop().
+func StartNewTestCluster(
+	t testing.TB, numNodes int, args base.TestClusterArgs,
+) TestClusterInterface {
+	cluster := NewTestCluster(t, numNodes, args)
+	cluster.Start(t, args)
+	return cluster
+}
+
+// NewTestCluster creates TestCluster made up of numNodes in-memory testing
+// servers. It can be started using the return type.
+func NewTestCluster(t testing.TB, numNodes int, args base.TestClusterArgs) TestClusterInterface {
 	if clusterFactoryImpl == nil {
 		panic("TestClusterFactory not initialized. One needs to be injected " +
 			"from the package's TestMain()")
 	}
-	return clusterFactoryImpl.StartTestCluster(t, numNodes, args)
+	return clusterFactoryImpl.NewTestCluster(t, numNodes, args)
 }
 
 // KeyAndTargets contains replica startKey and targets.

@@ -133,7 +133,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 
 	// Restart the store and verify that both the system-config and node-liveness
 	// data is gossiped.
-	tc.AddServer(t, serverArgs)
+	tc.AddAndStartServer(t, serverArgs)
 	tc.StopServer(0)
 
 	testutils.SucceedsSoon(t, func() error {
