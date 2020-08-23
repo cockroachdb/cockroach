@@ -127,14 +127,25 @@ func readBackupManifestFromStore(
 
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
 	r, err := exportStore.ReadFile(ctx, BackupManifestName)
-	if err != nil {
-		if errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-			return false, nil
-		}
+	if err == nil {
+		r.Close()
+		return true, nil
+	}
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
 		return false, err
 	}
-	r.Close()
-	return true, nil
+
+	// Also check for the new name.
+	r, err = exportStore.ReadFile(ctx, BackupNewManifestName)
+	if err == nil {
+		r.Close()
+		return true, nil
+	}
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		return false, err
+	}
+
+	return false, nil
 }
 
 // compressData compresses data buffer and returns compressed
@@ -516,6 +527,11 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 	if err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
+	prevNew, err := store.ListFiles(ctx, "[0-9]*/[0-9]*.[0-9][0-9]/"+BackupNewManifestName)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading previous backup layers")
+	}
+	prev = append(prev, prevNew...)
 	sort.Strings(prev)
 	return prev, nil
 }
@@ -883,21 +899,17 @@ func createCheckpointIfNotExists(
 func checkForPreviousBackup(
 	ctx context.Context, exportStore cloud.ExternalStorage, readable string,
 ) error {
-	r, err := exportStore.ReadFile(ctx, BackupManifestName)
-	if err == nil {
-		r.Close()
+	containsBackup, err := containsManifest(ctx, exportStore)
+	if err != nil {
+		return err
+	}
+	if containsBackup {
 		return pgerror.Newf(pgcode.FileAlreadyExists,
-			"%s already contains a %s file",
-			readable, BackupManifestName)
+			"%s already contains a backup file (either %s or %s)",
+			readable, BackupManifestName, BackupNewManifestName)
 	}
 
-	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
-		return errors.Wrapf(err,
-			"%s returned an unexpected error when checking for the existence of %s file",
-			readable, BackupManifestName)
-	}
-
-	r, err = exportStore.ReadFile(ctx, BackupManifestCheckpointName)
+	r, err := exportStore.ReadFile(ctx, BackupManifestCheckpointName)
 	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,
