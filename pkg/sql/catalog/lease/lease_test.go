@@ -1888,7 +1888,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -2321,7 +2321,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 		},
 	}
 	// Start a second server with our knobs.
-	tc.AddServer(t, args)
+	tc.AddAndStartServer(t, args)
 	defer tc.Stopper().Stop(ctx)
 
 	db1 := tc.ServerConn(0)

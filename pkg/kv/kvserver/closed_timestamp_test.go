@@ -1137,7 +1137,7 @@ func setupClusterForClosedTimestampTesting(
 	kvTableDesc roachpb.RangeDescriptor,
 	repls []*kvserver.Replica,
 ) {
-	tc = serverutils.StartTestCluster(t, numNodes, clusterArgs)
+	tc = serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
 	db0 = tc.ServerConn(0)
 
 	if _, err := db0.Exec(fmt.Sprintf(`

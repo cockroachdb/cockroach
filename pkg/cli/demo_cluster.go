@@ -172,7 +172,7 @@ func (c *transientCluster) start(
 		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
 		if demoCtx.simulateLatency {
 			go func(i int) {
-				if err := serv.Start(args); err != nil {
+				if err := serv.Start(); err != nil {
 					errCh <- err
 				} else {
 					// Block until the ReadyFn has been called before continuing.
@@ -182,7 +182,7 @@ func (c *transientCluster) start(
 			}(i)
 			<-servRPCReadyCh
 		} else {
-			if err := serv.Start(args); err != nil {
+			if err := serv.Start(); err != nil {
 				return err
 			}
 			// Block until the ReadyFn has been called before continuing.
@@ -476,7 +476,7 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 		close(readyCh)
 	}
 
-	if err := serv.Start(args); err != nil {
+	if err := serv.Start(); err != nil {
 		return err
 	}
 

@@ -591,7 +591,7 @@ func TestShowQueries(t *testing.T) {
 		}
 	}
 
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -658,7 +658,7 @@ func TestShowSessions(t *testing.T) {
 
 	var conn *gosql.DB
 
-	tc := serverutils.StartTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	conn = tc.ServerConn(0)
