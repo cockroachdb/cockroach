@@ -107,6 +107,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		Name:       n.db.Name,
 		ID:         id,
 		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
+		Version:    1,
 	})
 	// Add the new schema to the parent database's name map.
 	if n.newParent.Schemas == nil {
