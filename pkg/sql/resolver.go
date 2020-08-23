@@ -68,6 +68,34 @@ func (p *planner) ResolveMutableDatabaseDescriptor(
 	return desc.(*dbdesc.Mutable), nil
 }
 
+// ResolveUncachedSchemaDescriptor looks up a schema from the store.
+func (p *planner) ResolveUncachedSchemaDescriptor(
+	ctx context.Context, dbID descpb.ID, name string, required bool,
+) (found bool, schema catalog.ResolvedSchema, err error) {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		found, schema, err = p.LogicalSchemaAccessor().GetSchema(
+			ctx, p.txn, p.ExecCfg().Codec, dbID, name,
+			tree.SchemaLookupFlags{
+				CommonLookupFlags: p.CommonLookupFlags(required),
+				RequireMutable:    true,
+			},
+		)
+	})
+	return found, schema, err
+}
+
+// ResolveUncachedSchemaDescriptor looks up a mutable descriptor for a schema
+// from the store.
+func (p *planner) ResolveMutableSchemaDescriptor(
+	ctx context.Context, dbID descpb.ID, name string, required bool,
+) (found bool, schema catalog.ResolvedSchema, err error) {
+	return p.LogicalSchemaAccessor().GetSchema(
+		ctx, p.txn, p.ExecCfg().Codec, dbID, name, tree.SchemaLookupFlags{
+			CommonLookupFlags: p.CommonLookupFlags(required),
+			RequireMutable:    true,
+		})
+}
+
 // runWithOptions sets the provided resolution flags for the
 // duration of the call of the passed argument fn.
 //
@@ -141,7 +169,8 @@ func (p *planner) LookupSchema(
 		return false, nil, err
 	}
 	var resolvedSchema catalog.ResolvedSchema
-	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName)
+	found, resolvedSchema, err = sc.GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID(), scName,
+		tree.SchemaLookupFlags{CommonLookupFlags: p.CommonLookupFlags(false /*required*/)})
 	if err != nil {
 		return false, nil, err
 	}
