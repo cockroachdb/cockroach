@@ -48,7 +48,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 
 	// Collect all schemas to be deleted.
 	for _, scName := range n.Names {
-		found, sc, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.ID, scName)
+		found, sc, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, scName, false /* required */)
 		if err != nil {
 			return nil, err
 		}
@@ -101,10 +101,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	for i := range n.d.schemasToDelete {
 		sc := n.d.schemasToDelete[i]
 		schemaIDs[i] = sc.ID
-		mutDesc, err := params.p.Descriptors().GetMutableSchemaDescriptorByID(ctx, sc.ID, params.p.txn)
-		if err != nil {
-			return err
-		}
+		mutDesc := sc.Desc.(*MutableSchemaDescriptor)
 		mutDesc.DrainingNames = append(mutDesc.DrainingNames, descpb.NameInfo{
 			ParentID:       n.db.ID,
 			ParentSchemaID: keys.RootNamespaceID,

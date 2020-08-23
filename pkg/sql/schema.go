@@ -47,7 +47,6 @@ func (p *planner) writeSchemaDesc(
 	ctx context.Context, desc *schemadesc.MutableSchemaDescriptor,
 ) error {
 	desc.MaybeIncrementVersion()
-	p.Descriptors().ResetSchemaCache()
 	if err := p.Descriptors().AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
