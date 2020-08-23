@@ -15,12 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // TestingKnobs configures a LimiterFactory for testing.
 type TestingKnobs struct {
-	TimeSource quotapool.TimeSource
+	TimeSource timeutil.TimeSource
 }
 
 // LimiterFactory constructs and manages per-tenant Limiters.
