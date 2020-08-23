@@ -184,7 +184,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		t.Fatalf("replica count, want 1, current %d", len(desc.InternalReplicas))
 	}
 
-	tc.AddServer(t, base.TestServerArgs{})
+	tc.AddAndStartServer(t, base.TestServerArgs{})
 
 	if err := tc.Servers[0].Stores().VisitStores(func(s *kvserver.Store) error {
 		return s.ForceReplicationScanAndProcess()
@@ -209,7 +209,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 		t.Fatalf("expected %d replicas in purgatory, but found %d", expected, n)
 	}
 
-	tc.AddServer(t, base.TestServerArgs{})
+	tc.AddAndStartServer(t, base.TestServerArgs{})
 
 	// Now wait until the replicas have been up-replicated to the
 	// desired number.

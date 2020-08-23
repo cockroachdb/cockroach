@@ -929,9 +929,9 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
 
 	log.Infof(ctx, "starting 3 more nodes")
-	tc.AddServer(t, serverArgs)
-	tc.AddServer(t, serverArgs)
-	tc.AddServer(t, serverArgs)
+	tc.AddAndStartServer(t, serverArgs)
+	tc.AddAndStartServer(t, serverArgs)
+	tc.AddAndStartServer(t, serverArgs)
 
 	log.Infof(ctx, "waiting for node statuses")
 	tc.WaitForNodeStatuses(t)

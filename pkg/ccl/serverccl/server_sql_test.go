@@ -40,7 +40,7 @@ func TestSQLServer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	db := serverutils.StartTenant(
@@ -65,7 +65,7 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	// StartTenant with the default permissions to
@@ -83,7 +83,7 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	_, err := tc.Server(0).StartTenant(base.TestTenantArgs{

@@ -37,7 +37,7 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)

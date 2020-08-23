@@ -27,7 +27,7 @@ import (
 )
 
 func BenchmarkSequenceIncrement(b *testing.B) {
-	cluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
+	cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	sqlDB := cluster.ServerConn(0)
@@ -54,7 +54,7 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 }
 
 func BenchmarkUniqueRowID(b *testing.B) {
-	cluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
+	cluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	sqlDB := cluster.ServerConn(0)

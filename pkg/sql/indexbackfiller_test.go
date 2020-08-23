@@ -61,7 +61,7 @@ func TestIndexBackfiller(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartTestCluster(t, 3,
+	tc := serverutils.StartNewTestCluster(t, 3,
 		base.TestClusterArgs{
 			ServerArgs: params,
 		})

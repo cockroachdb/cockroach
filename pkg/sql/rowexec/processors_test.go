@@ -548,7 +548,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 
 	blockedRead.unblockCond = sync.NewCond(&blockedRead.Mutex)
 
-	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -773,7 +773,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		}(nodeIdx)
 	}
 
-	tc := serverutils.StartTestCluster(t, numNodes, testClusterArgs)
+	tc := serverutils.StartNewTestCluster(t, numNodes, testClusterArgs)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
