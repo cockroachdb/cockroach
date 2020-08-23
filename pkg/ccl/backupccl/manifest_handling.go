@@ -12,6 +12,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -44,6 +47,10 @@ const (
 	// BackupNewManifestName is a future name for the serialized BackupManifest
 	// proto.
 	BackupNewManifestName = "BACKUP_MANIFEST"
+	// BackupManifestChecksumSuffix indicates where the checksum for the manifest
+	// is stored if present. It can be found in the name of the backup manifest +
+	// this suffix.
+	BackupManifestChecksumSuffix = "-CHECKSUM"
 
 	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
@@ -151,9 +158,9 @@ func compressData(descBuf []byte) ([]byte, error) {
 	return gzipBuf.Bytes(), nil
 }
 
-// DecompressData decompresses gzip data buffer and
+// decompressData decompresses gzip data buffer and
 // returns decompressed bytes.
-func DecompressData(descBytes []byte) ([]byte, error) {
+func decompressData(descBytes []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewBuffer(descBytes))
 	if err != nil {
 		return nil, err
@@ -179,8 +186,10 @@ func readBackupManifest(
 	if err != nil {
 		return BackupManifest{}, err
 	}
+
+	var encryptionKey []byte
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, exportStore.Settings(),
+		encryptionKey, err = getEncryptionKey(ctx, encryption, exportStore.Settings(),
 			exportStore.ExternalIOConf())
 		if err != nil {
 			return BackupManifest{}, err
@@ -193,12 +202,36 @@ func readBackupManifest(
 
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
-		descBytes, err = DecompressData(descBytes)
+		descBytes, err = decompressData(descBytes)
 		if err != nil {
 			return BackupManifest{}, errors.Wrap(
 				err, "decompressing backup manifest")
 		}
 	}
+
+	checksumFile, err := exportStore.ReadFile(ctx, filename+BackupManifestChecksumSuffix)
+	if err == nil {
+		// If there is a checksum file present, check that it matches.
+		defer checksumFile.Close()
+		checksumFileData, err := ioutil.ReadAll(checksumFile)
+		if err != nil {
+			return BackupManifest{}, errors.Wrap(err, "reading checksum file")
+		}
+		checksum, err := getChecksum(descBytes, encryptionKey)
+		if err != nil {
+			return BackupManifest{}, errors.Wrap(err, "calculating checksum of manifest")
+		}
+		if !bytes.Equal(checksumFileData, checksum) {
+			return BackupManifest{}, errors.Newf("checksum mismatch; expected %s, got %s",
+				hex.EncodeToString(checksumFileData), hex.EncodeToString(checksum))
+		}
+	} else {
+		// If we don't have a checksum file, carry on. This might be an old version.
+		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			return BackupManifest{}, err
+		}
+	}
+
 	var backupManifest BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
@@ -225,7 +258,7 @@ func readBackupManifest(
 			t.ModificationTime = hlc.Timestamp{WallTime: 1}
 		}
 	}
-	return backupManifest, err
+	return backupManifest, nil
 }
 
 func readBackupPartitionDescriptor(
@@ -257,7 +290,7 @@ func readBackupPartitionDescriptor(
 
 	fileType := http.DetectContentType(descBytes)
 	if fileType == ZipType {
-		descBytes, err = DecompressData(descBytes)
+		descBytes, err = decompressData(descBytes)
 		if err != nil {
 			return BackupPartitionDescriptor{}, errors.Wrap(
 				err, "decompressing backup partition descriptor")
@@ -319,23 +352,51 @@ func writeBackupManifest(
 	if err != nil {
 		return err
 	}
+	// Get the encryption key early, so that we can calculate the checksum.
+	var encryptionKey []byte
+	if encryption != nil {
+		encryptionKey, err = getEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
+		if err != nil {
+			return err
+		}
+	}
+	checksum, err := getChecksum(descBuf, encryptionKey)
+	if err != nil {
+		return errors.Wrap(err, "calculating checksum")
+	}
+
 	descBuf, err = compressData(descBuf)
 	if err != nil {
 		return errors.Wrap(err, "compressing backup manifest")
 	}
 
 	if encryption != nil {
-		encryptionKey, err := getEncryptionKey(ctx, encryption, settings, exportStore.ExternalIOConf())
-		if err != nil {
-			return err
-		}
 		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
 	}
 
-	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
+	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
+		return err
+	}
+	// Write the checksum file after we've successfully wrote the manifest.
+	if err := exportStore.WriteFile(ctx, filename+BackupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+		return errors.Wrap(err, "writing manifest checksum")
+	}
+
+	return nil
+}
+
+// getChecksum returns a 32 bit keyed-checksum for the given data.
+func getChecksum(data, key []byte) ([]byte, error) {
+	const checksumSizeBytes = 4
+	hash := hmac.New(sha256.New, key)
+	if _, err := hash.Write(data); err != nil {
+		return nil, errors.Wrap(err,
+			`"It never returns an error." -- https://golang.org/pkg/hash`)
+	}
+	return hash.Sum(nil)[:checksumSizeBytes], nil
 }
 
 func getEncryptionKey(

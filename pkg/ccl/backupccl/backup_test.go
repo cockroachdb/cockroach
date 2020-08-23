@@ -1392,7 +1392,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
 		if fileType == ZipType {
-			backupManifestBytes, err = DecompressData(backupManifestBytes)
+			backupManifestBytes, err = decompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
 		var backupManifest BackupManifest
@@ -3569,7 +3569,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		}
 		fileType := http.DetectContentType(backupManifestBytes)
 		if fileType == ZipType {
-			backupManifestBytes, err = DecompressData(backupManifestBytes)
+			backupManifestBytes, err = decompressData(backupManifestBytes)
 			require.NoError(t, err)
 		}
 		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
@@ -5800,4 +5800,74 @@ func TestBackupDoesNotHangOnIntent(t *testing.T) {
 
 	// observe that the backup aborted our txn.
 	require.Error(t, tx.Commit())
+}
+
+// TestManifestBitFlip tests that we can detect a corrupt manifest when:
+// - A bit was flipped before compressing
+// - A bit was flipped on disk while in storage
+func TestManifestBitFlip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	_, _, sqlDB, rawDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 1, InitNone)
+	defer cleanupFn()
+	sqlDB.Exec(t, `CREATE DATABASE r1; CREATE DATABASE r2; CREATE DATABASE r3;`)
+	t.Run("flip-bit-in-decompressed-manifest", func(t *testing.T) {
+		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://0/bit_flip_unencrypted'`)
+		flipBitInManifests(t, rawDir, true /* afterDecompression */)
+		sqlDB.ExpectErr(t, `checksum mismatch`,
+			`RESTORE data.* FROM 'nodelocal://0/bit_flip_unencrypted' WITH into_db='r1'`)
+	})
+
+	t.Run("flip-bit-in-manifest-on-disk", func(t *testing.T) {
+		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://0/bit_flip_unencrypted_2'`)
+		flipBitInManifests(t, rawDir, false /* afterDecompression */)
+		// The bit flip here will be detected when trying to decompress.
+		// The specific error seems to depend on OS.
+		sqlDB.ExpectErr(t, `decompressing backup manifest`,
+			`RESTORE data.* FROM 'nodelocal://0/bit_flip_unencrypted_2' WITH into_db='r2'`)
+	})
+
+	t.Run("flip-bit-in-manifest-on-disk-encrypted", func(t *testing.T) {
+		sqlDB.Exec(t, `BACKUP DATABASE data TO 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase='abc'`)
+		flipBitInManifests(t, rawDir, false /* afterDecompression */)
+		sqlDB.ExpectErr(t, `message authentication failed`,
+			`RESTORE data.* FROM 'nodelocal://0/bit_flip_encrypted' WITH encryption_passphrase='abc', into_db='r3'`)
+	})
+
+	// TODO(pbardea): Add test where we unencrypt the file and flip a bit in the
+	// descriptor and re-encrypt.
+}
+
+// flipBitInManifests flips a bit in every backup manifest it sees. If
+// afterDecompression is set to true, then the bit is contents are decompressed,
+// a bit is flipped, and the corrupt data is re-compressed. This simulates a
+// corruption in the data that will not be caught during the decompression
+// layer.
+func flipBitInManifests(t *testing.T, rawDir string, afterDecompression bool) {
+	foundManifest := false
+	err := filepath.Walk(rawDir, func(path string, info os.FileInfo, err error) error {
+		log.Infof(context.Background(), "visiting %s", path)
+		if filepath.Base(path) == BackupManifestName {
+			foundManifest = true
+			data, err := ioutil.ReadFile(path)
+			require.NoError(t, err)
+			if afterDecompression {
+				decompressedData, err := decompressData(data)
+				require.NoError(t, err)
+				decompressedData[20] ^= 1
+				data, err = compressData(decompressedData)
+				require.NoError(t, err)
+			} else {
+				data[20] ^= 1
+			}
+			if err := ioutil.WriteFile(path, data, 0644 /* perm */); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	if !foundManifest {
+		t.Fatal("found no manifest")
+	}
 }
