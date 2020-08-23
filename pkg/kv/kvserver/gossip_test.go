@@ -182,9 +182,9 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.JoinAddr = tc.Servers[1].ServingRPCAddr()
 	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
-	tc.AddServer(t, newServerArgs)
+	tc.AddAndStartServer(t, newServerArgs)
 
-	tc.WaitForStores(t, tc.Server(1).GossipI().(*gossip.Gossip))
+	tc.WaitForNStores(t, tc.NumServers(), tc.Server(1).GossipI().(*gossip.Gossip))
 
 	// Ensure that all servers still running are responsive. If the two remaining
 	// original nodes don't refresh their connection to the address of the first

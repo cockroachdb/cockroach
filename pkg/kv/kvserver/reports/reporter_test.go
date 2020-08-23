@@ -45,7 +45,7 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 	skip.UnderStressRace(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartTestCluster(t, 5, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
 			1: {Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "r1"}}}},
@@ -122,7 +122,7 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
-	tc := serverutils.StartTestCluster(t, 6, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 6, base.TestClusterArgs{
 		// We're going to do our own replication.
 		// All the system ranges will start with a single replica on node 1.
 		ReplicationMode: base.ReplicationManual,
@@ -304,7 +304,7 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := serverutils.StartTestCluster(t, 4, base.TestClusterArgs{
+	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		// We're going to do our own replication.
 		// All the system ranges will start with a single replica on node 1.
 		ReplicationMode: base.ReplicationManual,

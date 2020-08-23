@@ -183,7 +183,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		log.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
 	}
 
-	t.cluster = serverutils.StartTestCluster(t, spec.ClusterSize, base.TestClusterArgs{})
+	t.cluster = serverutils.StartNewTestCluster(t, spec.ClusterSize, base.TestClusterArgs{})
 
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		server := t.cluster.Server(i)

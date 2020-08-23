@@ -1554,7 +1554,7 @@ func TestStatusAPITransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
@@ -1676,7 +1676,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServerProto := testCluster.Server(0)

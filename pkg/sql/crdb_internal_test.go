@@ -99,7 +99,7 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 	assert.NoError(t, tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 2))
 
 	// NodeID=2, StoreID=3
-	tc.AddServer(t,
+	tc.AddAndStartServer(t,
 		base.TestServerArgs{
 			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "2"}}},
 		},
@@ -110,7 +110,7 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 	assert.NoError(t, tc.Servers[0].DB().Put(ctx, keys.StoreIDGenerator, 1))
 
 	// NodeID=3, StoreID=2
-	tc.AddServer(t,
+	tc.AddAndStartServer(t,
 		base.TestServerArgs{
 			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "3"}}},
 		},
