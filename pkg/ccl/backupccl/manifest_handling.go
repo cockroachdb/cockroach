@@ -919,22 +919,31 @@ func checkForPreviousBackup(
 // We don't require DELETE permissions on their backup directory, so we do not
 // enforce that this file be deleted.
 func verifyWriteableDestination(
-	ctx context.Context, exportStore cloud.ExternalStorage, writeable string,
+	ctx context.Context,
+	user string,
+	makeCloudStorage cloud.ExternalStorageFromURIFactory,
+	baseURI string,
 ) error {
+	baseStore, err := makeCloudStorage(ctx, baseURI, user)
+	if err != nil {
+		return err
+	}
+	defer baseStore.Close()
+
 	// Write arbitrary bytes to a sentinel file in the backup directory to ensure
 	// that we're able to write to this directory.
 	arbitraryBytes := bytes.NewReader([]byte("✇"))
-	if err := exportStore.WriteFile(ctx, BackupSentinelWriteFile, arbitraryBytes); err != nil {
-		return errors.Wrapf(err, "writing sentinel file to %s", writeable)
+	if err := baseStore.WriteFile(ctx, BackupSentinelWriteFile, arbitraryBytes); err != nil {
+		return errors.Wrapf(err, "writing sentinel file to %s", baseURI)
 	}
 
-	if err := exportStore.Delete(ctx, BackupSentinelWriteFile); err != nil {
+	if err := baseStore.Delete(ctx, BackupSentinelWriteFile); err != nil {
 		// Don't require that we're able to clean up the sentinel file. Nothing
 		// should check for it's existence so it should be fine to leave it around.
 		// Let's still log if we can't clean up.
 		log.Warningf(ctx,
 			"could not clean up sentinel backup %s file in %s: %+v",
-			BackupSentinelWriteFile, writeable, err)
+			BackupSentinelWriteFile, baseURI, err)
 	}
 
 	return nil

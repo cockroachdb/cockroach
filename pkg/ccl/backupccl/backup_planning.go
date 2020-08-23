@@ -852,7 +852,11 @@ func backupPlanHook(
 		}
 		// TODO (pbardea): For partitioned backups, also add verification for other
 		// stores we are writing to in addition to the default.
-		if err := verifyWriteableDestination(ctx, defaultStore, defaultURI); err != nil {
+		baseURI := collectionURI
+		if baseURI == "" {
+			baseURI = defaultURI
+		}
+		if err := verifyWriteableDestination(ctx, p.User(), makeCloudStorage, baseURI); err != nil {
 			return err
 		}
 

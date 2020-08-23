@@ -485,10 +485,8 @@ func getRelevantDescChanges(
 			return nil, err
 		}
 		for _, i := range starting {
-			// TODO(ajwerner,pbardea): Determine whether schemas need any special
-			// treatment here.
 			switch desc := i.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
@@ -521,7 +519,7 @@ func getRelevantDescChanges(
 		} else if change.Desc != nil {
 			desc := catalogkv.UnwrapDescriptorRaw(ctx, change.Desc)
 			switch desc := desc.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
 					interestingIDs[desc.GetID()] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
