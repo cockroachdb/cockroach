@@ -183,3 +183,12 @@ func TestingResetActive() {
 	defer logging.mu.Unlock()
 	logging.mu.active = false
 }
+
+// RedactableLogsEnabled reports whether redaction markers were
+// actually enabled for the main logger. This is used for flag
+// telemetry; a better API would be needed for more fine grained
+// information, as each different logger may have a different
+// redaction setting.
+func RedactableLogsEnabled() bool {
+	return mainLog.redactableLogs.Get()
+}
