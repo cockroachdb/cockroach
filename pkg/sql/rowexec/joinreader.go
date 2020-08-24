@@ -107,6 +107,7 @@ var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
 var _ execinfrapb.MetadataSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
+var _ execinfra.IOReader = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -613,12 +614,17 @@ func (jr *joinReader) outputStatsToTrace() {
 	}
 }
 
+// GetBytesRead is part of the execinfra.IOReader interface.
+func (jr *joinReader) GetBytesRead() int64 {
+	return jr.fetcher.GetBytesRead()
+}
+
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
-	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
+	meta.Metrics.BytesRead = jr.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta,
 			execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs},

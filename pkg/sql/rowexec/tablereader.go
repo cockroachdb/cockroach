@@ -61,6 +61,7 @@ var _ execinfra.RowSource = &tableReader{}
 var _ execinfrapb.MetadataSource = &tableReader{}
 var _ execinfra.Releasable = &tableReader{}
 var _ execinfra.OpNode = &tableReader{}
+var _ execinfra.IOReader = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -301,9 +302,14 @@ func (tr *tableReader) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, &TableReaderStats{
 			InputStats: is,
-			BytesRead:  tr.fetcher.GetBytesRead(),
+			BytesRead:  tr.GetBytesRead(),
 		})
 	}
+}
+
+// GetBytesRead is part of the execinfra.IOReader interface.
+func (tr *tableReader) GetBytesRead() int64 {
+	return tr.fetcher.GetBytesRead()
 }
 
 func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
