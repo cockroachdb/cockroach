@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -162,6 +163,13 @@ func (ep *DummySessionAccessor) SetSessionVar(_ context.Context, _, _ string) er
 
 // HasAdminRole is part of the tree.EvalSessionAccessor interface.
 func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
+	return false, errors.WithStack(errEvalSessionVar)
+}
+
+// HasRoleOption is part of the tree.EvalSessionAccessor interface.
+func (ep *DummySessionAccessor) HasRoleOption(
+	ctx context.Context, roleOption roleoption.Option,
+) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
 }
 

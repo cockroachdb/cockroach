@@ -1015,7 +1015,10 @@ var crdbInternalLocalTxnsTable = virtualSchemaTable{
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.node_transactions"); err != nil {
 			return err
 		}
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err
@@ -1035,7 +1038,10 @@ var crdbInternalClusterTxnsTable = virtualSchemaTable{
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.cluster_transactions"); err != nil {
 			return err
 		}
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err
@@ -1105,13 +1111,24 @@ CREATE TABLE crdb_internal.%s (
   phase            STRING          -- the current execution phase
 )`
 
-func (p *planner) makeSessionsRequest(ctx context.Context) serverpb.ListSessionsRequest {
+func (p *planner) makeSessionsRequest(ctx context.Context) (serverpb.ListSessionsRequest, error) {
 	req := serverpb.ListSessionsRequest{Username: p.SessionData().User}
-	if err := p.RequireAdminRole(ctx, "list sessions"); err == nil {
-		// The root user can see all sessions.
-		req.Username = ""
+	hasAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return serverpb.ListSessionsRequest{}, err
 	}
-	return req
+	if hasAdmin {
+		req.Username = ""
+	} else {
+		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return serverpb.ListSessionsRequest{}, err
+		}
+		if hasViewActivity {
+			req.Username = ""
+		}
+	}
+	return req, nil
 }
 
 func getSessionID(session serverpb.Session) tree.Datum {
@@ -1145,7 +1162,10 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	comment: "running queries visible by current user (RAM; local node only)",
 	schema:  fmt.Sprintf(queriesSchemaPattern, "node_queries"),
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err
@@ -1164,7 +1184,10 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	comment: "running queries visible by current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err
@@ -1276,7 +1299,10 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	comment: "running sessions visible by current user (RAM; local node only)",
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err
@@ -1295,7 +1321,10 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	comment: "running sessions visible to current user (cluster RPC; expensive!)",
 	schema:  fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		req := p.makeSessionsRequest(ctx)
+		req, err := p.makeSessionsRequest(ctx)
+		if err != nil {
+			return err
+		}
 		ss, err := p.extendedEvalCtx.StatusServer.OptionalErr()
 		if err != nil {
 			return err

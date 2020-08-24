@@ -110,7 +110,7 @@ type UnresolvedObjectName struct {
 	// (the number of parts specified) is populated in NumParts above.
 	Parts [3]string
 
-	// UnresolvedObjectName can be annotated with a *TableName.
+	// UnresolvedObjectName can be annotated with a *tree.TableName.
 	AnnotatedNode
 }
 

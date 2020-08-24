@@ -365,7 +365,7 @@ CREATE TABLE test.tt (x test.t);
 		t.Fatal(err)
 	}
 	// Ensure that we can clone this table.
-	_ = protoutil.Clone(desc.TableDesc()).(*TableDescriptor)
+	_ = protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor)
 }
 
 // TestSerializedUDTsInTableDescriptor tests that expressions containing
@@ -378,19 +378,19 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	getDefault := func(desc *TableDescriptor) string {
+	getDefault := func(desc *tabledesc.Immutable) string {
 		return *desc.Columns[0].DefaultExpr
 	}
-	getComputed := func(desc *TableDescriptor) string {
+	getComputed := func(desc *tabledesc.Immutable) string {
 		return *desc.Columns[0].ComputeExpr
 	}
-	getCheck := func(desc *TableDescriptor) string {
+	getCheck := func(desc *tabledesc.Immutable) string {
 		return desc.Checks[0].Expr
 	}
 	testdata := []struct {
 		colSQL       string
 		expectedExpr string
-		getExpr      func(desc *TableDescriptor) string
+		getExpr      func(desc *tabledesc.Immutable) string
 	}{
 		// Test a simple UDT as the default value.
 		{
@@ -456,7 +456,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 			t.Fatal(err)
 		}
 		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-		found := tc.getExpr(desc.TableDesc())
+		found := tc.getExpr(desc)
 		if tc.expectedExpr != found {
 			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
 		}

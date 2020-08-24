@@ -203,7 +203,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 // not* re-use a pre-existing shard column.
 func (p *planner) setupFamilyAndConstraintForShard(
 	ctx context.Context,
-	tableDesc *MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	shardCol *descpb.ColumnDescriptor,
 	idxColumns []string,
 	buckets int32,
@@ -349,10 +349,8 @@ func MakeIndexDescriptor(
 	}
 
 	if n.Predicate != nil {
-		// TODO(mgartner): remove this once partial indexes are fully supported.
-		if !params.SessionData().PartialIndexes {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"session variable experimental_partial_indexes is set to false, cannot create a partial index")
+		if n.Inverted {
+			return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
 		}
 
 		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)

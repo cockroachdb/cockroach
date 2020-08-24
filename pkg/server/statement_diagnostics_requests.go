@@ -68,7 +68,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.admin.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -93,7 +93,7 @@ func (s *statusServer) StatementDiagnosticsRequests(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.admin.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -162,7 +162,7 @@ func (s *statusServer) StatementDiagnostics(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.admin.requireAdminUser(ctx); err != nil {
+	if _, err := s.admin.requireViewActivityPermission(ctx); err != nil {
 		return nil, err
 	}
 

@@ -230,7 +230,7 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 // filterImplicitlyDeletedObjects takes a list of table descriptors and removes
 // any descriptor that will be implicitly deleted.
 func filterImplicitlyDeletedObjects(
-	tables []toDelete, implicitDeleteObjects map[descpb.ID]*MutableTableDescriptor,
+	tables []toDelete, implicitDeleteObjects map[descpb.ID]*tabledesc.Mutable,
 ) []toDelete {
 	filteredDeleteList := make([]toDelete, 0, len(tables))
 	for _, toDel := range tables {
@@ -248,8 +248,8 @@ func filterImplicitlyDeletedObjects(
 // filter on it later.
 func (p *planner) accumulateAllObjectsToDelete(
 	ctx context.Context, objects []toDelete,
-) ([]*MutableTableDescriptor, map[descpb.ID]*MutableTableDescriptor, error) {
-	implicitDeleteObjects := make(map[descpb.ID]*MutableTableDescriptor)
+) ([]*tabledesc.Mutable, map[descpb.ID]*tabledesc.Mutable, error) {
+	implicitDeleteObjects := make(map[descpb.ID]*tabledesc.Mutable)
 	for _, toDel := range objects {
 		err := p.accumulateCascadingViews(ctx, implicitDeleteObjects, toDel.desc)
 		if err != nil {
@@ -263,7 +263,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 			}
 		}
 	}
-	allObjectsToDelete := make([]*MutableTableDescriptor, 0,
+	allObjectsToDelete := make([]*tabledesc.Mutable, 0,
 		len(objects)+len(implicitDeleteObjects))
 	for _, desc := range implicitDeleteObjects {
 		allObjectsToDelete = append(allObjectsToDelete, desc)
@@ -280,9 +280,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 // of the table referenced by desc being dropped, and adds them to the
 // dependentObjects map.
 func (p *planner) accumulateOwnedSequences(
-	ctx context.Context,
-	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *tabledesc.Mutable,
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
@@ -309,9 +307,7 @@ func (p *planner) accumulateOwnedSequences(
 // references, which means this list can't be constructed by simply scanning
 // the namespace table.
 func (p *planner) accumulateCascadingViews(
-	ctx context.Context,
-	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *tabledesc.Mutable,
+	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
@@ -2403,7 +2404,28 @@ func (s *adminServer) requireAdminUser(ctx context.Context) (userName string, er
 		return "", err
 	}
 	if !isAdmin {
-		return "", errInsufficientPrivilege
+		return "", errRequiresAdmin
+	}
+	return userName, nil
+}
+
+func (s *adminServer) requireViewActivityPermission(
+	ctx context.Context,
+) (userName string, err error) {
+	userName, isAdmin, err := s.getUserAndRole(ctx)
+	if err != nil {
+		return "", err
+	}
+	if !isAdmin {
+		hasViewActivity, err := s.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
+		if err != nil {
+			return "", err
+		}
+		if !hasViewActivity {
+			return "", status.Errorf(
+				codes.PermissionDenied, "this operation requires the %s role option",
+				roleoption.VIEWACTIVITY)
+		}
 	}
 	return userName, nil
 }
@@ -2419,20 +2441,23 @@ func (s *adminServer) getUserAndRole(
 	return userName, isAdmin, err
 }
 
-func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (bool, error) {
-	if sessionUser == security.RootUser {
+func (s *adminServer) hasAdminRole(ctx context.Context, user string) (bool, error) {
+	if user == security.RootUser {
 		// Shortcut.
 		return true, nil
 	}
-	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
+	rows, _, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "check-is-admin", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: sessionUser},
+		sessiondata.InternalExecutorOverride{User: user},
 		"SELECT crdb_internal.is_admin()")
 	if err != nil {
 		return false, err
 	}
-	if len(rows) != 1 || len(cols) != 1 {
+	if len(rows) != 1 {
 		return false, errors.AssertionFailedf("hasAdminRole: expected 1 row, got %d", len(rows))
+	}
+	if len(rows[0]) != 1 {
+		return false, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(rows[0]))
 	}
 	dbDatum, ok := tree.AsDBool(rows[0][0])
 	if !ok {
@@ -2441,4 +2466,36 @@ func (s *adminServer) hasAdminRole(ctx context.Context, sessionUser string) (boo
 	return bool(dbDatum), nil
 }
 
-var errInsufficientPrivilege = status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+func (s *adminServer) hasRoleOption(
+	ctx context.Context, user string, roleOption roleoption.Option,
+) (bool, error) {
+	if user == security.RootUser {
+		// Shortcut.
+		return true, nil
+	}
+	rows, _, err := s.server.sqlServer.internalExecutor.QueryWithCols(
+		ctx, "check-role-option", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: user},
+		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
+	if err != nil {
+		return false, err
+	}
+	if len(rows) != 1 {
+		return false, errors.AssertionFailedf("hasRoleOption: expected 1 row, got %d", len(rows))
+	}
+	if len(rows[0]) != 1 {
+		return false, errors.AssertionFailedf("hasRoleOption: expected 1 column, got %d", len(rows[0]))
+	}
+	dbDatum, ok := tree.AsDBool(rows[0][0])
+	if !ok {
+		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", rows[0][0])
+	}
+	return bool(dbDatum), nil
+}
+
+var errRequiresAdmin = status.Error(codes.PermissionDenied, "this operation requires admin privilege")
+
+func errRequiresRoleOption(option roleoption.Option) error {
+	return status.Errorf(
+		codes.PermissionDenied, "this operation requires %s privilege", option)
+}

@@ -489,8 +489,6 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
 		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
 		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
-		// TODO(mgartner): remove this once partial indexes are fully supported.
-		{sessionSetting: "experimental_partial_indexes", clusterSetting: partialIndexClusterMode},
 	}
 
 	for _, s := range relevantSettings {

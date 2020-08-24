@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -229,13 +228,6 @@ var optUseMultiColStatsClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.optimizer_use_multicol_stats.enabled",
 	"default value for optimizer_use_multicol_stats session setting; enables usage of multi-column stats in the optimizer by default",
 	true,
-)
-
-// TODO(mgartner): Remove this setting once partial indexes are fully supported.
-var partialIndexClusterMode = settings.RegisterBoolSetting(
-	"sql.defaults.experimental_partial_indexes.enabled",
-	"default value for experimental_partial_indexes session setting; disables creation of partial indexes by default",
-	false,
 )
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(
@@ -1302,8 +1294,9 @@ type registrySession interface {
 	serialize() serverpb.Session
 }
 
-// CancelQuery looks up the associated query in the session registry and cancels it.
-func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
+// CancelQuery looks up the associated query in the session registry and cancels
+// it. The caller is responsible for all permission checks.
+func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
 		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
@@ -1313,11 +1306,6 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for _, session := range r.sessions {
-		if !(username == security.RootUser || username == session.user()) {
-			// Skip this session.
-			continue
-		}
-
 		if session.cancelQuery(queryID) {
 			return true, nil
 		}
@@ -1326,19 +1314,15 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
-// CancelSession looks up the specified session in the session registry and cancels it.
-func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) (bool, error) {
+// CancelSession looks up the specified session in the session registry and
+// cancels it. The caller is responsible for all permission checks.
+func (r *SessionRegistry) CancelSession(sessionIDBytes []byte) (bool, error) {
 	sessionID := BytesToClusterWideID(sessionIDBytes)
 
 	r.Lock()
 	defer r.Unlock()
 
 	for id, session := range r.sessions {
-		if !(username == security.RootUser || username == session.user()) {
-			// Skip this session.
-			continue
-		}
-
 		if id == sessionID {
 			session.cancelSession()
 			return true, nil
@@ -2117,11 +2101,6 @@ func (m *sessionDataMutator) SetOptimizerUseHistograms(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseMultiColStats(val bool) {
 	m.data.OptimizerUseMultiColStats = val
-}
-
-// TODO(mgartner): remove this once partial indexes are fully supported.
-func (m *sessionDataMutator) SetPartialIndexes(val bool) {
-	m.data.PartialIndexes = val
 }
 
 func (m *sessionDataMutator) SetImplicitSelectForUpdate(val bool) {

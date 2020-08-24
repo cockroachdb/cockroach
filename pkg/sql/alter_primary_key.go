@@ -332,7 +332,7 @@ func (p *planner) AlterPrimaryKey(
 // * The primary key is not the default rowid primary key.
 // * The new primary key isn't the same hash sharded old primary key with a
 //   different bucket count.
-func shouldCopyPrimaryKey(desc *MutableTableDescriptor, newPK *descpb.IndexDescriptor) bool {
+func shouldCopyPrimaryKey(desc *tabledesc.Mutable, newPK *descpb.IndexDescriptor) bool {
 	oldPK := desc.PrimaryIndex
 	if !desc.HasPrimaryKey() {
 		return false
