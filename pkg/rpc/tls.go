@@ -55,6 +55,7 @@ func wrapError(err error) error {
 // the certificate manager.
 type SecurityContext struct {
 	security.CertsLocator
+	security.TLSSettings
 	config *base.Config
 	tenID  roachpb.TenantID
 	lazy   struct {
@@ -68,9 +69,12 @@ type SecurityContext struct {
 // MakeSecurityContext makes a SecurityContext.
 //
 // TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
-func MakeSecurityContext(cfg *base.Config, tenID roachpb.TenantID) SecurityContext {
+func MakeSecurityContext(
+	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
+) SecurityContext {
 	return SecurityContext{
 		CertsLocator: security.MakeCertsLocator(cfg.SSLCertsDir),
+		TLSSettings:  tlsSettings,
 		config:       cfg,
 		tenID:        tenID,
 	}
@@ -86,7 +90,7 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 			opts = append(opts, security.ForTenant(ctx.tenID.ToUint64()))
 		}
 		ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err =
-			security.NewCertificateManager(ctx.config.SSLCertsDir, opts...)
+			security.NewCertificateManager(ctx.config.SSLCertsDir, ctx, opts...)
 
 		if ctx.lazy.certificateManager.err == nil && !ctx.config.Insecure {
 			infos, err := ctx.lazy.certificateManager.cm.ListCertificates()
