@@ -521,7 +521,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 	// Find the backup times in the collection and try RESTORE'ing to each, and
 	// within each also check if we can restore to individual times captured with
 	// incremental backups that were appended to that backup.
-	full1, full2 := findFullBackupPaths(tmpDir, path.Join(tmpDir, "[0-9]*", "[0-9]*", "BACKUP"))
+	full1, full2 := findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/BACKUP"))
 	runRestores(collections, full1, full2)
 
 	// Find the full-backups written to the specified subdirectories, and within
@@ -563,7 +563,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
-	matches, err := filepath.Glob(path.Join(tmpDir, "[0-9]*", "[0-9]*", "BACKUP"))
+	matches, err := filepath.Glob(path.Join(tmpDir, "*/*/*/BACKUP"))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 	for i := range matches {
@@ -2077,7 +2077,7 @@ CREATE TABLE d.t1 (x d.farewell);
 			sqlDB.Exec(t, `DROP DATABASE d;`)
 			sqlDB.Exec(t,
 				fmt.Sprintf(`
-RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup' 
+RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
   AS OF SYSTEM TIME %s
 `, ts1))
 			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
