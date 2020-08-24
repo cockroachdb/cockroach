@@ -3168,6 +3168,28 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_sharedpaths": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.SharedPaths(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				geom := tree.NewDGeometry(ret)
+				return geom, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a collection containing paths shared by the two input geometries.
+
+Those going in the same direction are in the first element of the collection, 
+those going in the opposite direction are in the second element. 
+The paths themselves are given in the direction of the first geometry.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 
 	//
 	// Transformations
@@ -3970,6 +3992,7 @@ Bottom Left.`,
 	//
 	// Schema changes
 	//
+
 	"addgeometrycolumn": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.SQLClass,

@@ -77,3 +77,19 @@ func Union(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) {
 	}
 	return geo.ParseGeometryFromEWKB(retEWKB)
 }
+
+// SharedPaths Returns a geometry collection containing paths shared by the two input geometries.
+func SharedPaths(a *geo.Geometry, b *geo.Geometry) (*geo.Geometry, error) {
+	if a.SRID() != b.SRID() {
+		return nil, geo.NewMismatchingSRIDsError(a, b)
+	}
+	paths, err := geos.SharedPaths(a.EWKB(), b.EWKB())
+	if err != nil {
+		return nil, err
+	}
+	gm, err := geo.ParseGeometryFromEWKB(paths)
+	if err != nil {
+		return nil, err
+	}
+	return gm, nil
+}

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -180,4 +181,66 @@ func TestUnion(t *testing.T) {
 		_, err := Union(mismatchingSRIDGeometryA, mismatchingSRIDGeometryB)
 		requireMismatchingSRIDError(t, err)
 	})
+}
+
+func TestSharedPaths(t *testing.T) {
+	type args struct {
+		a *geo.Geometry
+		b *geo.Geometry
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *geo.Geometry
+		wantErr error
+	}{
+		{
+			name: "shared path between a MultiLineString and LineString",
+			args: args{
+				a: geo.MustParseGeometry("MULTILINESTRING((26 125,26 200,126 200,126 125,26 125)," +
+					"(51 150,101 150,76 175,51 150))"),
+				b: geo.MustParseGeometry("LINESTRING(151 100,126 156.25,126 125,90 161, 76 175)"),
+			},
+			want: geo.MustParseGeometry("GEOMETRYCOLLECTION(MULTILINESTRING((126 156.25,126 125)," +
+				"(101 150,90 161),(90 161,76 175)),MULTILINESTRING EMPTY)"),
+		},
+		{
+			name: "shared path between a Linestring and MultiLineString",
+			args: args{
+				a: geo.MustParseGeometry("LINESTRING(76 175,90 161,126 125,126 156.25,151 100)"),
+				b: geo.MustParseGeometry("MULTILINESTRING((26 125,26 200,126 200,126 125,26 125), " +
+					"(51 150,101 150,76 175,51 150))"),
+			},
+			want: geo.MustParseGeometry("GEOMETRYCOLLECTION(MULTILINESTRING EMPTY," +
+				"MULTILINESTRING((76 175,90 161),(90 161,101 150),(126 125,126 156.25)))"),
+		},
+		{
+			name: "shared path between non-lineal geometry",
+			args: args{
+				a: geo.MustParseGeometry("MULTIPOINT((0 0), (3 2))"),
+				b: geo.MustParseGeometry("MULTIPOINT((0 1), (1 2))"),
+			},
+			want:    nil,
+			wantErr: errors.New("geos error: IllegalArgumentException: Geometry is not lineal"),
+		},
+		{
+			name: "no shared path between two Linestring",
+			args: args{
+				a: geo.MustParseGeometry("LINESTRING(0 0, 10 0)"),
+				b: geo.MustParseGeometry("LINESTRING(-10 5, 10 5)"),
+			},
+			want: geo.MustParseGeometry("GEOMETRYCOLLECTION(MULTILINESTRING EMPTY, MULTILINESTRING EMPTY)"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := SharedPaths(tt.args.a, tt.args.b)
+			if tt.wantErr != nil && tt.wantErr.Error() != err.Error() {
+				t.Errorf("SharedPaths() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			require.Equal(t, tt.want, got)
+		})
+	}
+
 }
