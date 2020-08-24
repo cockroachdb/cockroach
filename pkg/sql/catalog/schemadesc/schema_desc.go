@@ -24,105 +24,105 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var _ catalog.SchemaDescriptor = (*ImmutableSchemaDescriptor)(nil)
-var _ catalog.SchemaDescriptor = (*MutableSchemaDescriptor)(nil)
+var _ catalog.SchemaDescriptor = (*Immutable)(nil)
+var _ catalog.SchemaDescriptor = (*Mutable)(nil)
+var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// ImmutableSchemaDescriptor wraps a Schema descriptor and provides methods
-// on it.
-type ImmutableSchemaDescriptor struct {
+// Immutable wraps a Schema descriptor and provides methods on it.
+type Immutable struct {
 	descpb.SchemaDescriptor
 }
 
-// MutableSchemaDescriptor is a mutable reference to a SchemaDescriptor.
+// Mutable is a mutable reference to a SchemaDescriptor.
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
 // where we anticipate having a mutable copy of Schema descriptors. There's a
-// large amount of space to question this `Mutable|Immutable` version of each
+// large amount of space to question this `Mutable|ImmutableCopy` version of each
 // descriptor type. Maybe it makes no sense but we're running with it for the
 // moment. This is an intermediate state on the road to descriptors being
 // handled outside of the catalog entirely as interfaces.
-type MutableSchemaDescriptor struct {
-	ImmutableSchemaDescriptor
+type Mutable struct {
+	Immutable
 
-	ClusterVersion *ImmutableSchemaDescriptor
+	ClusterVersion *Immutable
 }
 
-// NewMutableExistingSchemaDescriptor returns a MutableSchemaDescriptor from the
+// NewMutableExisting returns a Mutable from the
 // given schema descriptor with the cluster version also set to the descriptor.
 // This is for schemas that already exist.
-func NewMutableExistingSchemaDescriptor(desc descpb.SchemaDescriptor) *MutableSchemaDescriptor {
-	return &MutableSchemaDescriptor{
-		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(*protoutil.Clone(&desc).(*descpb.SchemaDescriptor)),
-		ClusterVersion:            NewImmutableSchemaDescriptor(desc),
+func NewMutableExisting(desc descpb.SchemaDescriptor) *Mutable {
+	return &Mutable{
+		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.SchemaDescriptor)),
+		ClusterVersion: NewImmutable(desc),
 	}
 }
 
-// NewImmutableSchemaDescriptor makes a new Schema descriptor.
-func NewImmutableSchemaDescriptor(desc descpb.SchemaDescriptor) *ImmutableSchemaDescriptor {
-	m := makeImmutableSchemaDescriptor(desc)
+// NewImmutable makes a new Schema descriptor.
+func NewImmutable(desc descpb.SchemaDescriptor) *Immutable {
+	m := makeImmutable(desc)
 	return &m
 }
 
-func makeImmutableSchemaDescriptor(desc descpb.SchemaDescriptor) ImmutableSchemaDescriptor {
-	return ImmutableSchemaDescriptor{SchemaDescriptor: desc}
+func makeImmutable(desc descpb.SchemaDescriptor) Immutable {
+	return Immutable{SchemaDescriptor: desc}
 }
 
 // Reference these functions to defeat the linter.
 var (
-	_ = NewImmutableSchemaDescriptor
+	_ = NewImmutable
 )
 
-// NewMutableCreatedSchemaDescriptor returns a MutableSchemaDescriptor from the
+// NewMutableCreatedSchemaDescriptor returns a Mutable from the
 // given SchemaDescriptor with the cluster version being the zero schema. This
 // is for a schema that is created within the current transaction.
-func NewMutableCreatedSchemaDescriptor(desc descpb.SchemaDescriptor) *MutableSchemaDescriptor {
-	return &MutableSchemaDescriptor{
-		ImmutableSchemaDescriptor: makeImmutableSchemaDescriptor(desc),
+func NewMutableCreatedSchemaDescriptor(desc descpb.SchemaDescriptor) *Mutable {
+	return &Mutable{
+		Immutable: makeImmutable(desc),
 	}
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) SetDrainingNames(names []descpb.NameInfo) {
+func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
 // GetParentSchemaID implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) GetParentSchemaID() descpb.ID {
+func (desc *Immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *ImmutableSchemaDescriptor) GetAuditMode() descpb.TableDescriptor_AuditMode {
+func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *ImmutableSchemaDescriptor) TypeName() string {
+func (desc *Immutable) TypeName() string {
 	return "schema"
 }
 
 // SchemaDesc implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) SchemaDesc() *descpb.SchemaDescriptor {
+func (desc *Immutable) SchemaDesc() *descpb.SchemaDescriptor {
 	return &desc.SchemaDescriptor
 }
 
 // Adding implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) Adding() bool {
+func (desc *Immutable) Adding() bool {
 	return false
 }
 
 // Offline implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) Offline() bool {
+func (desc *Immutable) Offline() bool {
 	return false
 }
 
 // GetOfflineReason implements the Descriptor interface.
-func (desc *ImmutableSchemaDescriptor) GetOfflineReason() string {
+func (desc *Immutable) GetOfflineReason() string {
 	return ""
 }
 
 // DescriptorProto wraps a SchemaDescriptor in a Descriptor.
-func (desc *ImmutableSchemaDescriptor) DescriptorProto() *descpb.Descriptor {
+func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Schema{
 			Schema: &desc.SchemaDescriptor,
@@ -131,10 +131,10 @@ func (desc *ImmutableSchemaDescriptor) DescriptorProto() *descpb.Descriptor {
 }
 
 // NameResolutionResult implements the ObjectDescriptor interface.
-func (desc *ImmutableSchemaDescriptor) NameResolutionResult() {}
+func (desc *Immutable) NameResolutionResult() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) MaybeIncrementVersion() {
+func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
 	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
@@ -144,7 +144,7 @@ func (desc *MutableSchemaDescriptor) MaybeIncrementVersion() {
 }
 
 // OriginalName implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) OriginalName() string {
+func (desc *Mutable) OriginalName() string {
 	if desc.ClusterVersion == nil {
 		return ""
 	}
@@ -152,7 +152,7 @@ func (desc *MutableSchemaDescriptor) OriginalName() string {
 }
 
 // OriginalID implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) OriginalID() descpb.ID {
+func (desc *Mutable) OriginalID() descpb.ID {
 	if desc.ClusterVersion == nil {
 		return descpb.InvalidID
 	}
@@ -160,28 +160,28 @@ func (desc *MutableSchemaDescriptor) OriginalID() descpb.ID {
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) OriginalVersion() descpb.DescriptorVersion {
+func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	if desc.ClusterVersion == nil {
 		return 0
 	}
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableSchemaDescriptor(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))
+	return NewImmutable(*protoutil.Clone(desc.SchemaDesc()).(*descpb.SchemaDescriptor))
 }
 
 // IsNew implements the MutableDescriptor interface.
-func (desc *MutableSchemaDescriptor) IsNew() bool {
+func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
 
 // SetName sets the name of the schema. It handles installing a draining name
 // for the old name of the descriptor.
-func (desc *MutableSchemaDescriptor) SetName(name string) {
+func (desc *Mutable) SetName(name string) {
 	desc.DrainingNames = append(desc.DrainingNames, descpb.NameInfo{
 		ParentID:       desc.ParentID,
 		ParentSchemaID: keys.RootNamespaceID,

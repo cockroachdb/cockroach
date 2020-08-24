@@ -83,7 +83,7 @@ func TestKVFeed(t *testing.T) {
 		spans              []roachpb.Span
 		events             []roachpb.RangeFeedEvent
 
-		descs []*tabledesc.ImmutableTableDescriptor
+		descs []*tabledesc.Immutable
 
 		expScans  []hlc.Timestamp
 		expEvents int
@@ -192,7 +192,7 @@ func TestKVFeed(t *testing.T) {
 				ts(2),
 				ts(3),
 			},
-			descs: []*tabledesc.ImmutableTableDescriptor{
+			descs: []*tabledesc.Immutable{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -216,7 +216,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*tabledesc.ImmutableTableDescriptor{
+			descs: []*tabledesc.Immutable{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1)),
 			},
@@ -241,7 +241,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			descs: []*tabledesc.ImmutableTableDescriptor{
+			descs: []*tabledesc.Immutable{
 				makeTableDesc(42, 1, ts(1), 2),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1)),
 			},
@@ -267,9 +267,7 @@ type rawTableFeed struct {
 	events []schemafeed.TableEvent
 }
 
-func newRawTableFeed(
-	descs []*tabledesc.ImmutableTableDescriptor, initialHighWater hlc.Timestamp,
-) rawTableFeed {
+func newRawTableFeed(descs []*tabledesc.Immutable, initialHighWater hlc.Timestamp) rawTableFeed {
 	sort.Slice(descs, func(i, j int) bool {
 		if descs[i].ID != descs[j].ID {
 			return descs[i].ID < descs[j].ID

@@ -33,8 +33,8 @@ import (
 
 type reparentDatabaseNode struct {
 	n         *tree.ReparentDatabase
-	db        *dbdesc.MutableDatabaseDescriptor
-	newParent *dbdesc.MutableDatabaseDescriptor
+	db        *dbdesc.Mutable
+	newParent *dbdesc.Mutable
 }
 
 func (p *planner) ReparentDatabase(
@@ -159,9 +159,9 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		}
 		if found {
 			// Remap the ID's on the table.
-			tbl, ok := desc.(*tabledesc.MutableTableDescriptor)
+			tbl, ok := desc.(*tabledesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("%q was not a MutableTableDescriptor", objName.Object())
+				return errors.AssertionFailedf("%q was not a Mutable", objName.Object())
 			}
 
 			// If this table has any dependents, then we can't proceed (similar to the
@@ -226,9 +226,9 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 				continue
 			}
 			// Remap the ID's on the type.
-			typ, ok := desc.(*typedesc.MutableTypeDescriptor)
+			typ, ok := desc.(*typedesc.Mutable)
 			if !ok {
-				return errors.AssertionFailedf("%q was not a MutableTypeDescriptor", objName.Object())
+				return errors.AssertionFailedf("%q was not a Mutable", objName.Object())
 			}
 			typ.AddDrainingName(descpb.NameInfo{
 				ParentID:       typ.ParentID,

@@ -25,7 +25,7 @@ import (
 
 type alterIndexNode struct {
 	n         *tree.AlterIndex
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 	indexDesc *descpb.IndexDescriptor
 }
 

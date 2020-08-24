@@ -52,7 +52,7 @@ func testTableDesc(
 			Direction: descpb.DescriptorMutation_ADD,
 		}
 	}
-	return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{
+	return tabledesc.NewImmutable(descpb.TableDescriptor{
 		Name:      name,
 		ID:        1,
 		Columns:   cols,

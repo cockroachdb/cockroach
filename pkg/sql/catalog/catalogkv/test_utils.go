@@ -30,7 +30,7 @@ import (
 // removing it altogether.
 func TestingGetTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *tabledesc.ImmutableTableDescriptor {
+) *tabledesc.Immutable {
 	return TestingGetImmutableTableDescriptor(kvDB, codec, database, table)
 }
 
@@ -38,24 +38,24 @@ func TestingGetTableDescriptor(
 // directly from the KV layer.
 func TestingGetImmutableTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *tabledesc.ImmutableTableDescriptor {
+) *tabledesc.Immutable {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TableObject, false /* mutable */, database, table,
-	).(*tabledesc.ImmutableTableDescriptor)
+	).(*tabledesc.Immutable)
 	if !ok {
 		return nil
 	}
 	return desc
 }
 
-// TestingGetMutableExistingTableDescriptor retrieves a MutableTableDescriptor
+// TestingGetMutableExistingTableDescriptor retrieves a Mutable
 // directly from the KV layer.
 func TestingGetMutableExistingTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
-) *tabledesc.MutableTableDescriptor {
+) *tabledesc.Mutable {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TableObject, true /* mutable */, database, table,
-	).(*tabledesc.MutableTableDescriptor)
+	).(*tabledesc.Mutable)
 	if !ok {
 		return nil
 	}
@@ -67,10 +67,10 @@ func TestingGetMutableExistingTableDescriptor(
 // This function should be moved wherever TestingGetTableDescriptor is moved.
 func TestingGetTypeDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) *typedesc.ImmutableTypeDescriptor {
+) *typedesc.Immutable {
 	desc, ok := testingGetObjectDescriptor(
 		kvDB, codec, tree.TypeObject, false /* mutable */, database, object,
-	).(*typedesc.ImmutableTypeDescriptor)
+	).(*typedesc.Immutable)
 	if !ok {
 		return nil
 	}

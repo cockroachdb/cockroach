@@ -28,7 +28,7 @@ import (
 // Builder is a single struct for generating key spans from Constraints, Datums and encDatums.
 type Builder struct {
 	codec         keys.SQLCodec
-	table         *tabledesc.ImmutableTableDescriptor
+	table         *tabledesc.Immutable
 	index         *descpb.IndexDescriptor
 	indexColTypes []*types.T
 	indexColDirs  []descpb.IndexDescriptor_Direction
@@ -52,7 +52,7 @@ var _ = (*Builder).UnsetNeededFamilies
 
 // MakeBuilder creates a Builder for a table and index.
 func MakeBuilder(
-	codec keys.SQLCodec, table *tabledesc.ImmutableTableDescriptor, index *descpb.IndexDescriptor,
+	codec keys.SQLCodec, table *tabledesc.Immutable, index *descpb.IndexDescriptor,
 ) *Builder {
 	s := &Builder{
 		codec:          codec,

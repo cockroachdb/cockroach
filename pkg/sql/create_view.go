@@ -43,7 +43,7 @@ type createViewNode struct {
 	replace      bool
 	persistence  tree.Persistence
 	materialized bool
-	dbDesc       *dbdesc.ImmutableDatabaseDescriptor
+	dbDesc       *dbdesc.Immutable
 	columns      colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
@@ -66,11 +66,11 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.
-	backRefMutables := make(map[descpb.ID]*tabledesc.MutableTableDescriptor, len(n.planDeps))
+	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
 	for id, updated := range n.planDeps {
 		backRefMutable := params.p.Descriptors().GetUncommittedTableByID(id)
 		if backRefMutable == nil {
-			backRefMutable = tabledesc.NewMutableExistingTableDescriptor(*updated.desc.TableDesc())
+			backRefMutable = tabledesc.NewExistingMutable(*updated.desc.TableDesc())
 		}
 		if !persistence.IsTemporary() && backRefMutable.Temporary {
 			// This notice is sent from pg, let's imitate.
@@ -83,7 +83,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		backRefMutables[id] = backRefMutable
 	}
 
-	var replacingDesc *tabledesc.MutableTableDescriptor
+	var replacingDesc *tabledesc.Mutable
 
 	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName)
 	if err != nil {
@@ -121,7 +121,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	privs := createInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User)
 
-	var newDesc *tabledesc.MutableTableDescriptor
+	var newDesc *tabledesc.Mutable
 
 	// If replacingDesc != nil, we found an existing view while resolving
 	// the name for our view. So instead of creating a new view, replace
@@ -282,7 +282,7 @@ func makeViewTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	persistence tree.Persistence,
-) (tabledesc.MutableTableDescriptor, error) {
+) (tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
 		parentID,
@@ -294,7 +294,7 @@ func makeViewTableDesc(
 	)
 	desc.ViewQuery = viewQuery
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
-		return tabledesc.MutableTableDescriptor{}, err
+		return tabledesc.Mutable{}, err
 	}
 
 	return desc, nil
@@ -308,9 +308,9 @@ func makeViewTableDesc(
 func (p *planner) replaceViewDesc(
 	ctx context.Context,
 	n *createViewNode,
-	toReplace *tabledesc.MutableTableDescriptor,
-	backRefMutables map[descpb.ID]*tabledesc.MutableTableDescriptor,
-) (*tabledesc.MutableTableDescriptor, error) {
+	toReplace *tabledesc.Mutable,
+	backRefMutables map[descpb.ID]*tabledesc.Mutable,
+) (*tabledesc.Mutable, error) {
 	// Set the query to the new query.
 	toReplace.ViewQuery = n.viewQuery
 	// Reset the columns to add the new result columns onto.
@@ -381,7 +381,7 @@ func addResultColumns(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 	resultColumns colinfo.ResultColumns,
 ) error {
 	for _, colRes := range resultColumns {

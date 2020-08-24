@@ -299,10 +299,10 @@ func WriteDescriptors(
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				if mut, ok := desc.(*dbdesc.MutableDatabaseDescriptor); ok {
+				if mut, ok := desc.(*dbdesc.Mutable); ok {
 					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 						desc.GetID(), desc)
 				}
 			}
@@ -361,10 +361,10 @@ func WriteDescriptors(
 				}
 			}
 			if updatedPrivileges != nil {
-				if mut, ok := table.(*tabledesc.MutableTableDescriptor); ok {
+				if mut, ok := table.(*tabledesc.Mutable); ok {
 					mut.Privileges = updatedPrivileges
 				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected MutableTableDescriptor",
+					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 						table.GetID(), table)
 				}
 			}
@@ -805,31 +805,31 @@ func createImportingDescriptors(
 ) {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
-	var schemas []*schemadesc.MutableSchemaDescriptor
-	var types []*typedesc.MutableTypeDescriptor
+	var schemas []*schemadesc.Mutable
+	var types []*typedesc.Mutable
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
 	// tables as the slice of interfaces.
-	var mutableTables []*tabledesc.MutableTableDescriptor
+	var mutableTables []*tabledesc.Mutable
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			mut := tabledesc.NewMutableCreatedTableDescriptor(*desc.TableDesc())
+			mut := tabledesc.NewCreatedMutable(*desc.TableDesc())
 			tables = append(tables, mut)
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				rewriteDesc := dbdesc.NewInitialDatabaseDescriptorWithPrivileges(
+				rewriteDesc := dbdesc.NewInitialWithPrivileges(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
 		case catalog.SchemaDescriptor:
 			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
-			types = append(types, typedesc.NewMutableCreatedTypeDescriptor(*desc.TypeDesc()))
+			types = append(types, typedesc.NewCreatedMutable(*desc.TypeDesc()))
 		}
 	}
 	tempSystemDBID := keys.MinNonPredefinedUserDescID
@@ -839,7 +839,7 @@ func createImportingDescriptors(
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, dbdesc.NewInitialDatabaseDescriptor(
+		databases = append(databases, dbdesc.NewInitial(
 			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
 	}
 
@@ -862,7 +862,7 @@ func createImportingDescriptors(
 	// For each type, we might be writing the type in the backup, or we could be
 	// remapping to an existing type descriptor. Split up the descriptors into
 	// these two groups.
-	var typesToWrite []*typedesc.MutableTypeDescriptor
+	var typesToWrite []*typedesc.Mutable
 	existingTypeIDs := make(map[descpb.ID]struct{})
 	for i := range types {
 		typ := types[i]
@@ -881,7 +881,7 @@ func createImportingDescriptors(
 	}
 
 	// Collect all schemas that are going to be restored.
-	var schemasToWrite []*schemadesc.MutableSchemaDescriptor
+	var schemasToWrite []*schemadesc.Mutable
 	var writtenSchemas []catalog.SchemaDescriptor
 	for i := range schemas {
 		sc := schemas[i]
@@ -948,7 +948,7 @@ func createImportingDescriptors(
 					if err != nil {
 						return err
 					}
-					typDesc := desc.(*typedesc.MutableTypeDescriptor)
+					typDesc := desc.(*typedesc.Mutable)
 					typDesc.AddReferencingDescriptorID(table.GetID())
 					if err := catalogkv.WriteDescToBatch(
 						ctx,
@@ -1176,7 +1176,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		b := txn.NewBatch()
 		newTables := make([]*descpb.TableDescriptor, 0, len(details.TableDescs))
 		for _, tbl := range r.tables {
-			newTableDesc := tabledesc.NewMutableExistingTableDescriptor(*tbl.TableDesc())
+			newTableDesc := tabledesc.NewExistingMutable(*tbl.TableDesc())
 			newTableDesc.Version++
 			newTableDesc.State = descpb.TableDescriptor_PUBLIC
 			newTableDesc.OfflineReason = ""
@@ -1303,8 +1303,8 @@ func (r *restoreResumer) dropDescriptors(
 	tablesToGC := make([]descpb.ID, 0, len(details.TableDescs))
 	for _, tbl := range details.TableDescs {
 		tablesToGC = append(tablesToGC, tbl.ID)
-		tableToDrop := tabledesc.NewMutableExistingTableDescriptor(*tbl)
-		prev := tableToDrop.Immutable().(catalog.TableDescriptor)
+		tableToDrop := tabledesc.NewExistingMutable(*tbl)
+		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
 		tableToDrop.Version++
 		tableToDrop.State = descpb.TableDescriptor_DROP
 		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)

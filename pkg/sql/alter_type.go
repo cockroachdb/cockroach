@@ -26,7 +26,7 @@ import (
 
 type alterTypeNode struct {
 	n    *tree.AlterType
-	desc *typedesc.MutableTypeDescriptor
+	desc *typedesc.Mutable
 }
 
 // alterTypeNode implements planNode. We set n here to satisfy the linter.
@@ -194,7 +194,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 // newName and newSchemaID may be the same as the current name and schemaid.
 func (p *planner) performRenameTypeDesc(
 	ctx context.Context,
-	desc *typedesc.MutableTypeDescriptor,
+	desc *typedesc.Mutable,
 	newName string,
 	newSchemaID descpb.ID,
 	jobDesc string,

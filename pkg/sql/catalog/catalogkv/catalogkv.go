@@ -292,24 +292,24 @@ func unwrapDescriptor(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		immTable, err := tabledesc.NewFilledInImmutableTableDescriptor(ctx, dg, table)
+		immTable, err := tabledesc.NewFilledInImmutable(ctx, dg, table)
 		if err != nil {
 			return nil, err
 		}
 		if err := immTable.Validate(ctx, dg); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutableTableDescriptor(*table), nil
+		return tabledesc.NewImmutable(*table), nil
 	case database != nil:
-		dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*database)
+		dbDesc := dbdesc.NewImmutable(*database)
 		if err := dbDesc.Validate(); err != nil {
 			return nil, err
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return typedesc.NewImmutableTypeDescriptor(*typ), nil
+		return typedesc.NewImmutable(*typ), nil
 	case schema != nil:
-		return schemadesc.NewImmutableSchemaDescriptor(*schema), nil
+		return schemadesc.NewImmutable(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -327,7 +327,7 @@ func unwrapDescriptorMutable(
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		mutTable, err := tabledesc.NewFilledInMutableExistingTableDescriptor(ctx, dg, false /* skipFKsWithMissingTable */, table)
+		mutTable, err := tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
 		if err != nil {
 			return nil, err
 		}
@@ -336,15 +336,15 @@ func unwrapDescriptorMutable(
 		}
 		return mutTable, nil
 	case database != nil:
-		dbDesc := dbdesc.NewMutableExistingDatabaseDescriptor(*database)
+		dbDesc := dbdesc.NewExistingMutable(*database)
 		if err := dbDesc.Validate(); err != nil {
 			return nil, err
 		}
 		return dbDesc, nil
 	case typ != nil:
-		return typedesc.NewMutableExistingTypeDescriptor(*typ), nil
+		return typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
-		return schemadesc.NewMutableExistingSchemaDescriptor(*schema), nil
+		return schemadesc.NewMutableExisting(*schema), nil
 	default:
 		return nil, nil
 	}
@@ -496,51 +496,51 @@ func GetDatabaseID(
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		DatabaseDescriptorKind, false /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Immutable), nil
 }
 
 // MustGetTableDescByID looks up the table descriptor given its ID,
 // returning an error if the table is not found.
 func MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		TableDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*tabledesc.ImmutableTableDescriptor), nil
+	return desc.(*tabledesc.Immutable), nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		DatabaseDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Immutable), nil
 }
 
 // MustGetSchemaDescByID looks up the schema descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*schemadesc.ImmutableSchemaDescriptor, error) {
+) (*schemadesc.Immutable, error) {
 	desc, err := GetAnyDescriptorByID(ctx, txn, codec, id, Immutable)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	sc, ok := desc.(*schemadesc.ImmutableSchemaDescriptor)
+	sc, ok := desc.(*schemadesc.Immutable)
 	if !ok {
 		return nil, errors.Newf("descriptor with id %d was not a schema", id)
 	}
@@ -553,7 +553,7 @@ func MustGetSchemaDescByID(
 // rather than making a round trip for each ID.
 func GetDatabaseDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
-) ([]*dbdesc.ImmutableDatabaseDescriptor, error) {
+) ([]*dbdesc.Immutable, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
 		key := catalogkeys.MakeDescMetadataKey(codec, id)
@@ -562,7 +562,7 @@ func GetDatabaseDescriptorsFromIDs(
 	if err := txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	results := make([]*dbdesc.ImmutableDatabaseDescriptor, 0, len(ids))
+	results := make([]*dbdesc.Immutable, 0, len(ids))
 	for i := range b.Results {
 		result := &b.Results[i]
 		if result.Err != nil {
@@ -590,7 +590,7 @@ func GetDatabaseDescriptorsFromIDs(
 			)
 		}
 		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
-		results = append(results, dbdesc.NewImmutableDatabaseDescriptor(*db))
+		results = append(results, dbdesc.NewImmutable(*db))
 	}
 	return results, nil
 }
@@ -638,13 +638,13 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
 	switch {
 	case table != nil:
-		return tabledesc.NewMutableExistingTableDescriptor(*table)
+		return tabledesc.NewExistingMutable(*table)
 	case database != nil:
-		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
+		return dbdesc.NewExistingMutable(*database)
 	case typ != nil:
-		return typedesc.NewMutableExistingTypeDescriptor(*typ)
+		return typedesc.NewExistingMutable(*typ)
 	case schema != nil:
-		return schemadesc.NewMutableExistingSchemaDescriptor(*schema)
+		return schemadesc.NewMutableExisting(*schema)
 	default:
 		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
 		return nil // unreachable

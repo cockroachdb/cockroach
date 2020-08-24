@@ -59,7 +59,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*dbdesc.MutableDatabaseDescriptor, bool, error) {
+) (*dbdesc.Mutable, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -86,7 +86,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
+	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -152,7 +152,7 @@ func (p *planner) createDescriptorWithID(
 	}
 	isTable := false
 	switch desc := mutDesc.(type) {
-	case *typedesc.MutableTypeDescriptor:
+	case *typedesc.Mutable:
 		dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
 		if err := desc.Validate(ctx, dg); err != nil {
 			return err
@@ -160,7 +160,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *tabledesc.MutableTableDescriptor:
+	case *tabledesc.Mutable:
 		isTable = true
 		if err := desc.ValidateTable(); err != nil {
 			return err
@@ -168,7 +168,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *dbdesc.MutableDatabaseDescriptor:
+	case *dbdesc.Mutable:
 		if err := desc.Validate(); err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ func (p *planner) createDescriptorWithID(
 				return err
 			}
 		}
-	case *schemadesc.MutableSchemaDescriptor:
+	case *schemadesc.Mutable:
 		// TODO (lucy): Call AddUncommittedDescriptor when we're ready.
 	default:
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
@@ -192,7 +192,7 @@ func (p *planner) createDescriptorWithID(
 		// Queue a schema change job to eventually make the table public.
 		if err := p.createOrUpdateSchemaChangeJob(
 			ctx,
-			mutDesc.(*tabledesc.MutableTableDescriptor),
+			mutDesc.(*tabledesc.Mutable),
 			jobDesc,
 			descpb.InvalidMutationID); err != nil {
 			return err

@@ -36,7 +36,7 @@ import (
 
 func descForTable(
 	t *testing.T, create string, parent, id descpb.ID, fks fkHandler,
-) *tabledesc.MutableTableDescriptor {
+) *tabledesc.Mutable {
 	t.Helper()
 	parsed, err := parser.Parse(create)
 	if err != nil {

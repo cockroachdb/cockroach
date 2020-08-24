@@ -33,7 +33,7 @@ func RevertTables(
 	ctx context.Context,
 	db *kv.DB,
 	execCfg *ExecutorConfig,
-	tables []*tabledesc.ImmutableTableDescriptor,
+	tables []*tabledesc.Immutable,
 	targetTime hlc.Timestamp,
 	batchSize int64,
 ) error {

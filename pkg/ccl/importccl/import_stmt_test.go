@@ -1735,7 +1735,7 @@ func TestImportCSVStmt(t *testing.T) {
 		// it was created in.
 		dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
 		tableID := descpb.ID(dbID + 1)
-		var td *tabledesc.ImmutableTableDescriptor
+		var td *tabledesc.Immutable
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			td, err = catalogkv.MustGetTableDescByID(ctx, txn, keys.SystemSQLCodec, tableID)
 			return err
@@ -3223,7 +3223,7 @@ func BenchmarkCSVConvertRecord(b *testing.B) {
 
 	importCtx := &parallelImportContext{
 		evalCtx:   &evalCtx,
-		tableDesc: tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor),
+		tableDesc: tableDesc.ImmutableCopy().(*tabledesc.Immutable),
 		kvCh:      kvCh,
 	}
 
@@ -3873,7 +3873,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(*tabledesc.Immutable), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -3976,7 +3976,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 0,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil /* targetCols */, &evalCtx)
+		tableDesc.ImmutableCopy().(*tabledesc.Immutable), nil /* targetCols */, &evalCtx)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

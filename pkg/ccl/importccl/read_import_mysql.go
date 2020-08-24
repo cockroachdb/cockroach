@@ -71,7 +71,7 @@ func newMysqldumpReader(
 			converters[name] = nil
 			continue
 		}
-		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewImmutableTableDescriptor(*table.Desc),
+		conv, err := row.NewDatumRowConverter(ctx, tabledesc.NewImmutable(*table.Desc),
 			nil /* targetColNames */, evalCtx, kvCh)
 		if err != nil {
 			return nil, err
@@ -290,13 +290,13 @@ func readMysqlCreateTable(
 	match string,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-) ([]*tabledesc.MutableTableDescriptor, error) {
+) ([]*tabledesc.Mutable, error) {
 	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
 
-	var ret []*tabledesc.MutableTableDescriptor
+	var ret []*tabledesc.Mutable
 	var fkDefs []delayedFK
 	var found bool
 	var names []string
@@ -367,7 +367,7 @@ func mysqlTableToCockroach(
 	in *mysql.TableSpec,
 	fks fkHandler,
 	seqVals map[descpb.ID]int64,
-) ([]*tabledesc.MutableTableDescriptor, []delayedFK, error) {
+) ([]*tabledesc.Mutable, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
 	}
@@ -398,7 +398,7 @@ func mysqlTableToCockroach(
 		}
 	}
 
-	var seqDesc *tabledesc.MutableTableDescriptor
+	var seqDesc *tabledesc.Mutable
 	// If we have an auto-increment seq, create it and increment the id.
 	owner := security.AdminRole
 	if seqName != "" {
@@ -531,9 +531,9 @@ func mysqlTableToCockroach(
 	}
 	fks.resolver[desc.Name] = desc
 	if seqDesc != nil {
-		return []*tabledesc.MutableTableDescriptor{seqDesc, desc}, fkDefs, nil
+		return []*tabledesc.Mutable{seqDesc, desc}, fkDefs, nil
 	}
-	return []*tabledesc.MutableTableDescriptor{desc}, fkDefs, nil
+	return []*tabledesc.Mutable{desc}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
@@ -551,7 +551,7 @@ func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
 }
 
 type delayedFK struct {
-	tbl *tabledesc.MutableTableDescriptor
+	tbl *tabledesc.Mutable
 	def *tree.ForeignKeyConstraintTableDef
 }
 
@@ -560,7 +560,7 @@ func addDelayedFKs(
 ) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.MutableTableDescriptor{}, sql.NewTable, tree.ValidationDefault, evalCtx,
+			ctx, nil, resolver, def.tbl, def.def, map[descpb.ID]*tabledesc.Mutable{}, sql.NewTable, tree.ValidationDefault, evalCtx,
 		); err != nil {
 			return err
 		}

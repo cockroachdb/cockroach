@@ -109,7 +109,7 @@ func (r schemaChangeGCResumer) Resume(
 		if err := sql.TruncateInterleavedIndexes(
 			ctx,
 			execCfg,
-			tabledesc.NewImmutableTableDescriptor(*details.InterleavedTable),
+			tabledesc.NewImmutable(*details.InterleavedTable),
 			details.InterleavedIndexes,
 		); err != nil {
 			return err

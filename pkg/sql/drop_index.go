@@ -135,9 +135,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 // dropShardColumnAndConstraint drops the given shard column and its associated check
 // constraint.
 func (n *dropIndexNode) dropShardColumnAndConstraint(
-	params runParams,
-	tableDesc *tabledesc.MutableTableDescriptor,
-	shardColDesc *descpb.ColumnDescriptor,
+	params runParams, tableDesc *tabledesc.Mutable, shardColDesc *descpb.ColumnDescriptor,
 ) error {
 	validChecks := tableDesc.Checks[:0]
 	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
@@ -189,7 +187,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 //
 // Assumes that the given index is sharded.
 func (n *dropIndexNode) maybeDropShardColumn(
-	params runParams, tableDesc *tabledesc.MutableTableDescriptor, shardColName string,
+	params runParams, tableDesc *tabledesc.Mutable, shardColName string,
 ) error {
 	shardColDesc, dropped, err := tableDesc.FindColumnByName(tree.Name(shardColName))
 	if err != nil {
@@ -236,7 +234,7 @@ func (p *planner) dropIndexByName(
 	ctx context.Context,
 	tn *tree.TableName,
 	idxName tree.UnrestrictedName,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	ifExists bool,
 	behavior tree.DropBehavior,
 	constraintBehavior dropIndexConstraintBehavior,

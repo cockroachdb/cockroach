@@ -35,7 +35,7 @@ import (
 )
 
 type initFetcherArgs struct {
-	tableDesc       *tabledesc.ImmutableTableDescriptor
+	tableDesc       *tabledesc.Immutable
 	indexIdx        int
 	valNeededForCol util.FastIntSet
 	spans           roachpb.Spans

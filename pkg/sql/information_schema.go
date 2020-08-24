@@ -205,7 +205,7 @@ var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#administrable_role_authorizations") + `
 https://www.postgresql.org/docs/9.5/infoschema-administrable-role-authorizations.html`,
 	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
-	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -237,7 +237,7 @@ var informationSchemaApplicableRoles = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#applicable_roles") + `
 https://www.postgresql.org/docs/9.5/infoschema-applicable-roles.html`,
 	schema: vtable.InformationSchemaApplicableRoles,
-	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -265,10 +265,10 @@ var informationSchemaCheckConstraints = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#check_constraints") + `
 https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 	schema: vtable.InformationSchemaCheckConstraints,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *dbdesc.ImmutableDatabaseDescriptor,
+			db *dbdesc.Immutable,
 			scName string,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -334,9 +334,9 @@ var informationSchemaColumnPrivileges = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#column_privileges") + `
 https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor,
+			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
@@ -373,9 +373,9 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#columns") + `
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor,
+			db *dbdesc.Immutable, scName string, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
@@ -468,7 +468,7 @@ https://www.postgresql.org/docs/9.5/infoschema-enabled-roles.html`,
 CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, _ *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -607,9 +607,9 @@ CREATE TABLE information_schema.constraint_column_usage (
 	CONSTRAINT_SCHEMA  STRING NOT NULL,
 	CONSTRAINT_NAME    STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *dbdesc.ImmutableDatabaseDescriptor,
+			db *dbdesc.Immutable,
 			scName string,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -629,7 +629,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 					// For foreign key constraint, constraint_column_usage
 					// identifies the table/columns that the foreign key
 					// references.
-					conTable = tabledesc.NewImmutableTableDescriptor(*con.ReferencedTable)
+					conTable = tabledesc.NewImmutable(*con.ReferencedTable)
 					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
 					if err != nil {
 						return err
@@ -672,9 +672,9 @@ CREATE TABLE information_schema.key_column_usage (
 	ORDINAL_POSITION   INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *dbdesc.ImmutableDatabaseDescriptor,
+			db *dbdesc.Immutable,
 			scName string,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -764,7 +764,7 @@ CREATE TABLE information_schema.parameters (
 	DTD_IDENTIFIER STRING,
 	PARAMETER_DEFAULT STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
@@ -822,9 +822,9 @@ CREATE TABLE information_schema.referential_constraints (
 	TABLE_NAME                STRING NOT NULL,
 	REFERENCED_TABLE_NAME     STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
-			db *dbdesc.ImmutableDatabaseDescriptor,
+			db *dbdesc.Immutable,
 			scName string,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
@@ -974,7 +974,7 @@ CREATE TABLE information_schema.routines (
 	RESULT_CAST_MAXIMUM_CARDINALITY INT,
 	RESULT_CAST_DTD_IDENTIFIER STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 }
@@ -985,9 +985,9 @@ var informationSchemaSchemataTable = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#schemata") + `
 https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	schema: vtable.InformationSchemaSchemata,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(db *dbdesc.ImmutableDatabaseDescriptor) error {
+			func(db *dbdesc.Immutable) error {
 				return forEachSchemaName(ctx, p, db, func(sc string, userDefined bool) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
@@ -1013,9 +1013,9 @@ CREATE TABLE information_schema.schema_privileges (
 	PRIVILEGE_TYPE  STRING NOT NULL,
 	IS_GRANTABLE    STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(db *dbdesc.ImmutableDatabaseDescriptor) error {
+			func(db *dbdesc.Immutable) error {
 				return forEachSchemaName(ctx, p, db, func(scName string, _ bool) error {
 					privs := db.Privileges.Show(privilege.Schema)
 					dbNameStr := tree.NewDString(db.GetName())
@@ -1077,9 +1077,9 @@ CREATE TABLE information_schema.sequences (
     INCREMENT                STRING NOT NULL,
     CYCLE_OPTION             STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -1122,9 +1122,9 @@ CREATE TABLE information_schema.statistics (
 	STORING       STRING NOT NULL,
 	IMPLICIT      STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.GetName())
@@ -1219,11 +1219,11 @@ CREATE TABLE information_schema.table_constraints (
 	IS_DEFERRABLE      STRING NOT NULL,
 	INITIALLY_DEFERRED STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
-				db *dbdesc.ImmutableDatabaseDescriptor,
+				db *dbdesc.Immutable,
 				scName string,
 				table catalog.TableDescriptor,
 				tableLookup tableLookupFn,
@@ -1297,9 +1297,9 @@ CREATE TABLE information_schema.user_privileges (
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(dbDesc *dbdesc.ImmutableDatabaseDescriptor) error {
+			func(dbDesc *dbdesc.Immutable) error {
 				dbNameStr := tree.NewDString(dbDesc.GetName())
 				for _, u := range []string{security.RootUser, security.AdminRole} {
 					grantee := tree.NewDString(u)
@@ -1340,13 +1340,10 @@ CREATE TABLE information_schema.table_privileges (
 
 // populateTablePrivileges is used to populate both table_privileges and role_table_grants.
 func populateTablePrivileges(
-	ctx context.Context,
-	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
-	addRow func(...tree.Datum) error,
+	ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error,
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+		func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.GetName())
@@ -1384,12 +1381,12 @@ var informationSchemaTablesTable = virtualSchemaTable{
 ` + base.DocsURL("information-schema.html#tables") + `
 https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 	schema: vtable.InformationSchemaTables,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, addTablesTableRow(addRow))
 	},
 	indexes: []virtualIndex{
 		{
-			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.ImmutableDatabaseDescriptor,
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.Immutable,
 				addRow func(...tree.Datum) error) (bool, error) {
 				// This index is on the TABLE_NAME column.
 				name := tree.MustBeDString(constraint)
@@ -1412,11 +1409,11 @@ https://www.postgresql.org/docs/9.5/infoschema-tables.html`,
 func addTablesTableRow(
 	addRow func(...tree.Datum) error,
 ) func(
-	db *dbdesc.ImmutableDatabaseDescriptor,
+	db *dbdesc.Immutable,
 	scName string,
 	table catalog.TableDescriptor,
 ) error {
-	return func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+	return func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 		if table.IsSequence() {
 			return nil
 		}
@@ -1464,9 +1461,9 @@ CREATE TABLE information_schema.views (
     IS_TRIGGER_DELETABLE       STRING NOT NULL,
     IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
 )`,
-	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(db *dbdesc.ImmutableDatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db *dbdesc.Immutable, scName string, table catalog.TableDescriptor) error {
 				if !table.IsView() {
 					return nil
 				}
@@ -1498,7 +1495,7 @@ CREATE TABLE information_schema.views (
 func forEachSchemaName(
 	ctx context.Context,
 	p *planner,
-	db *dbdesc.ImmutableDatabaseDescriptor,
+	db *dbdesc.Immutable,
 	fn func(scName string, userDefined bool) error,
 ) error {
 	userDefinedSchemas := make(map[string]struct{})
@@ -1536,11 +1533,11 @@ func forEachSchemaName(
 func forEachDatabaseDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	requiresPrivileges bool,
-	fn func(*dbdesc.ImmutableDatabaseDescriptor) error,
+	fn func(*dbdesc.Immutable) error,
 ) error {
-	var dbDescs []*dbdesc.ImmutableDatabaseDescriptor
+	var dbDescs []*dbdesc.Immutable
 	if dbContext == nil {
 		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
@@ -1578,8 +1575,8 @@ func forEachDatabaseDesc(
 func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
-	fn func(db *dbdesc.ImmutableDatabaseDescriptor, sc string, typ *typedesc.ImmutableTypeDescriptor) error,
+	dbContext *dbdesc.Immutable,
+	fn func(db *dbdesc.Immutable, sc string, typ *typedesc.Immutable) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -1622,13 +1619,13 @@ func forEachTypeDesc(
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
 	// TODO(ajwerner): Introduce TableDescriptor.
-	fn func(*dbdesc.ImmutableDatabaseDescriptor, string, catalog.TableDescriptor) error,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
-		db *dbdesc.ImmutableDatabaseDescriptor,
+		db *dbdesc.Immutable,
 		scName string,
 		table catalog.TableDescriptor,
 		_ tableLookupFn,
@@ -1653,14 +1650,14 @@ const (
 func forEachTableDescAll(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	fn func(*dbdesc.ImmutableDatabaseDescriptor, string, catalog.TableDescriptor) error,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescAllWithTableLookup(ctx,
 		p, dbContext, virtualOpts,
 		func(
-			db *dbdesc.ImmutableDatabaseDescriptor,
+			db *dbdesc.Immutable,
 			scName string,
 			table catalog.TableDescriptor,
 			_ tableLookupFn,
@@ -1674,9 +1671,9 @@ func forEachTableDescAll(
 func forEachTableDescAllWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	fn func(*dbdesc.ImmutableDatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx,
 		p, dbContext, virtualOpts, true /* allowAdding */, fn)
@@ -1694,15 +1691,15 @@ func forEachTableDescAllWithTableLookup(
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
-	fn func(*dbdesc.ImmutableDatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn)
 }
 
 func getSchemaNames(
-	ctx context.Context, p *planner, dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	ctx context.Context, p *planner, dbContext *dbdesc.Immutable,
 ) (map[descpb.ID]string, error) {
 	if dbContext != nil {
 		return p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbContext.GetID())
@@ -1732,10 +1729,10 @@ func getSchemaNames(
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
-	dbContext *dbdesc.ImmutableDatabaseDescriptor,
+	dbContext *dbdesc.Immutable,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	fn func(*dbdesc.ImmutableDatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(*dbdesc.Immutable, string, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -1748,7 +1745,7 @@ func forEachTableDescWithTableLookupInternal(
 		vt := p.getVirtualTabler()
 		vEntries := vt.getEntries()
 		vSchemaNames := vt.getSchemaNames()
-		iterate := func(dbDesc *dbdesc.ImmutableDatabaseDescriptor) error {
+		iterate := func(dbDesc *dbdesc.Immutable) error {
 			for _, virtSchemaName := range vSchemaNames {
 				e := vEntries[virtSchemaName]
 				for _, tName := range e.orderedDefNames {
@@ -1881,9 +1878,7 @@ func forEachRoleMembership(
 	return nil
 }
 
-func userCanSeeDatabase(
-	ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor,
-) bool {
+func userCanSeeDatabase(ctx context.Context, p *planner, db *dbdesc.Immutable) bool {
 	return p.CheckAnyPrivilege(ctx, db) == nil
 }
 

@@ -58,7 +58,7 @@ type rowFetcher interface {
 func initRowFetcher(
 	flowCtx *execinfra.FlowCtx,
 	fetcher *row.Fetcher,
-	desc *tabledesc.ImmutableTableDescriptor,
+	desc *tabledesc.Immutable,
 	indexIdx int,
 	colIdxMap map[descpb.ColumnID]int,
 	reverseScan bool,

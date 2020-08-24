@@ -224,7 +224,7 @@ func readPostgresCreateTable(
 	walltime int64,
 	fks fkHandler,
 	max int,
-) ([]*tabledesc.MutableTableDescriptor, error) {
+) ([]*tabledesc.Mutable, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
 	// later because MakeSimpleTableDescriptor calls the sql package which calls
@@ -239,7 +239,7 @@ func readPostgresCreateTable(
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
-			ret := make([]*tabledesc.MutableTableDescriptor, 0, len(createTbl))
+			ret := make([]*tabledesc.Mutable, 0, len(createTbl))
 			owner := security.AdminRole
 			if params.SessionData() != nil {
 				owner = params.SessionData().User
@@ -263,7 +263,7 @@ func readPostgresCreateTable(
 				fks.resolver[desc.Name] = desc
 				ret = append(ret, desc)
 			}
-			backrefs := make(map[descpb.ID]*tabledesc.MutableTableDescriptor)
+			backrefs := make(map[descpb.ID]*tabledesc.Mutable)
 			for _, create := range createTbl {
 				if create == nil {
 					continue
@@ -549,7 +549,7 @@ func newPgDumpReader(
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			tableDesc := tabledesc.NewImmutableTableDescriptor(*table.Desc)
+			tableDesc := tabledesc.NewImmutable(*table.Desc)
 			colSubMap := make(map[string]int, len(table.TargetCols))
 			targetCols := make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
@@ -566,7 +566,7 @@ func newPgDumpReader(
 			colMap[conv] = colSubMap
 			tableDescs[name] = tableDesc
 		} else if table.Desc.IsSequence() {
-			seqDesc := tabledesc.NewImmutableTableDescriptor(*table.Desc)
+			seqDesc := tabledesc.NewImmutable(*table.Desc)
 			tableDescs[name] = seqDesc
 		}
 	}

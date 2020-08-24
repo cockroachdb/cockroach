@@ -35,14 +35,14 @@ import (
 
 type workloadReader struct {
 	evalCtx *tree.EvalContext
-	table   *tabledesc.ImmutableTableDescriptor
+	table   *tabledesc.Immutable
 	kvCh    chan row.KVBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan row.KVBatch, table *tabledesc.ImmutableTableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan row.KVBatch, table *tabledesc.Immutable, evalCtx *tree.EvalContext,
 ) *workloadReader {
 	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
@@ -177,7 +177,7 @@ func (w *workloadReader) readFiles(
 
 // WorkloadKVConverter converts workload.BatchedTuples to []roachpb.KeyValues.
 type WorkloadKVConverter struct {
-	tableDesc      *tabledesc.ImmutableTableDescriptor
+	tableDesc      *tabledesc.Immutable
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
@@ -193,7 +193,7 @@ type WorkloadKVConverter struct {
 // range of batches, emitted converted kvs to the given channel.
 func NewWorkloadKVConverter(
 	fileID int32,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,

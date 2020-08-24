@@ -231,7 +231,7 @@ func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
 	allDescs []descpb.Descriptor,
-	desc *tabledesc.ImmutableTableDescriptor,
+	desc *tabledesc.Immutable,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	var stmt string

@@ -47,7 +47,7 @@ var ScrubTypes = []*types.T{
 
 type scrubTableReader struct {
 	tableReader
-	tableDesc tabledesc.ImmutableTableDescriptor
+	tableDesc tabledesc.Immutable
 	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -78,7 +78,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = tabledesc.MakeImmutableTableDescriptor(spec.Table)
+	tr.tableDesc = tabledesc.MakeImmutable(spec.Table)
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(

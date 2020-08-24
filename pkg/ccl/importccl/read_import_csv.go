@@ -36,7 +36,7 @@ func newCSVInputReader(
 	opts roachpb.CSVOptions,
 	walltime int64,
 	parallelism int,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	targetCols tree.NameList,
 	evalCtx *tree.EvalContext,
 ) *csvInputReader {

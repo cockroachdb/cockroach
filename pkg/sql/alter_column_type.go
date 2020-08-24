@@ -55,7 +55,7 @@ var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
 // which conversion to use and applies the type conversion.
 func AlterColumnType(
 	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	t *tree.AlterTableAlterColumnType,
 	params runParams,
@@ -136,7 +136,7 @@ func AlterColumnType(
 
 func alterColumnTypeGeneral(
 	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	col *descpb.ColumnDescriptor,
 	toType *types.T,
 	using tree.Expr,

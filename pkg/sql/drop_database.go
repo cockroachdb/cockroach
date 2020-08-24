@@ -37,7 +37,7 @@ import (
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *dbdesc.MutableDatabaseDescriptor
+	dbDesc *dbdesc.Mutable
 	d      *dropCascadeState
 }
 
@@ -282,7 +282,7 @@ func (p *planner) accumulateAllObjectsToDelete(
 func (p *planner) accumulateOwnedSequences(
 	ctx context.Context,
 	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
@@ -311,7 +311,7 @@ func (p *planner) accumulateOwnedSequences(
 func (p *planner) accumulateCascadingViews(
 	ctx context.Context,
 	dependentObjects map[descpb.ID]*MutableTableDescriptor,
-	desc *tabledesc.MutableTableDescriptor,
+	desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ID, p.txn)

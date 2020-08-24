@@ -40,7 +40,7 @@ func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	exprStr string,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
@@ -229,7 +229,7 @@ func nonMatchingRowQuery(
 // reuse an existing client.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
-	srcTable *tabledesc.MutableTableDescriptor,
+	srcTable *tabledesc.Mutable,
 	fk *descpb.ForeignKeyConstraint,
 	ie *InternalExecutor,
 	txn *kv.Txn,
@@ -315,7 +315,7 @@ func formatValues(colNames []string, values tree.Datums) string {
 }
 
 // checkSet contains a subset of checks, as ordinals into
-// ImmutableTableDescriptor.ActiveChecks. These checks have boolean columns
+// Immutable.ActiveChecks. These checks have boolean columns
 // produced as input to mutations, indicating the result of evaluating the
 // check.
 //

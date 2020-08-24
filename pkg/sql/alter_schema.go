@@ -29,8 +29,8 @@ import (
 
 type alterSchemaNode struct {
 	n    *tree.AlterSchema
-	db   *dbdesc.MutableDatabaseDescriptor
-	desc *schemadesc.MutableSchemaDescriptor
+	db   *dbdesc.Mutable
+	desc *schemadesc.Mutable
 }
 
 // Use to satisfy the linter.
@@ -76,8 +76,8 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 
 func (p *planner) alterSchemaOwner(
 	ctx context.Context,
-	db *dbdesc.MutableDatabaseDescriptor,
-	scDesc *schemadesc.MutableSchemaDescriptor,
+	db *dbdesc.Mutable,
+	scDesc *schemadesc.Mutable,
 	newOwner string,
 	jobDesc string,
 ) error {
@@ -109,11 +109,7 @@ func (p *planner) alterSchemaOwner(
 }
 
 func (p *planner) renameSchema(
-	ctx context.Context,
-	db *dbdesc.MutableDatabaseDescriptor,
-	desc *schemadesc.MutableSchemaDescriptor,
-	newName string,
-	jobDesc string,
+	ctx context.Context, db *dbdesc.Mutable, desc *schemadesc.Mutable, newName string, jobDesc string,
 ) error {
 	// Check that there isn't a name collision with the new name.
 	found, err := p.schemaExists(ctx, db.ID, newName)

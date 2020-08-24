@@ -171,7 +171,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *dbdesc.MutableDatabaseDescriptor:
+		case *dbdesc.Mutable:
 			if p.Descriptors().DatabaseLeasingUnsupported() {
 				if err := d.Validate(); err != nil {
 					return err
@@ -198,7 +198,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				}
 			}
 
-		case *tabledesc.MutableTableDescriptor:
+		case *tabledesc.Mutable:
 			// TODO (lucy): This should probably have a single consolidated job like
 			// DROP DATABASE.
 			if err := p.createOrUpdateSchemaChangeJob(
@@ -213,7 +213,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 					return err
 				}
 			}
-		case *typedesc.MutableTypeDescriptor:
+		case *typedesc.Mutable:
 			err := p.writeTypeSchemaChange(ctx, d, fmt.Sprintf("updating privileges for type %d", d.ID))
 			if err != nil {
 				return err

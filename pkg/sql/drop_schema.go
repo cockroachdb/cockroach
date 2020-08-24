@@ -31,7 +31,7 @@ import (
 
 type dropSchemaNode struct {
 	n  *tree.DropSchema
-	db *dbdesc.MutableDatabaseDescriptor
+	db *dbdesc.Mutable
 	d  *dropCascadeState
 }
 
@@ -163,7 +163,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 func (p *planner) createDropSchemaJob(
 	schemas []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
-	typesToDrop []*typedesc.MutableTypeDescriptor,
+	typesToDrop []*typedesc.Mutable,
 	jobDesc string,
 ) error {
 	typeIDs := make([]descpb.ID, 0, len(typesToDrop))

@@ -97,7 +97,7 @@ type PlanHookState interface {
 		ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
 	) (table *MutableTableDescriptor, err error)
 	ShowCreate(
-		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.ImmutableTableDescriptor, displayOptions ShowCreateDisplayOptions,
+		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.Immutable, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
 }
 

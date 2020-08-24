@@ -152,7 +152,7 @@ func createSchemaChangeJobsFromMutations(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	username string,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 ) ([]*jobs.StartableJob, error) {
 	mutationJobs := make([]descpb.TableDescriptor_MutationJob, 0, len(tableDesc.Mutations))
 	newJobs := make([]*jobs.StartableJob, 0, len(tableDesc.Mutations))

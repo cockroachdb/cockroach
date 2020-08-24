@@ -45,7 +45,7 @@ func MakeInserter(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	insertCols []descpb.ColumnDescriptor,
 	alloc *rowenc.DatumAlloc,
 ) (Inserter, error) {

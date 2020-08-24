@@ -280,9 +280,9 @@ func newZigzagJoiner(
 	z := &zigzagJoiner{}
 
 	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := make([]tabledesc.ImmutableTableDescriptor, len(spec.Tables))
+	tables := make([]tabledesc.Immutable, len(spec.Tables))
 	for i := range spec.Tables {
-		tables[i] = tabledesc.MakeImmutableTableDescriptor(spec.Tables[i])
+		tables[i] = tabledesc.MakeImmutable(spec.Tables[i])
 	}
 	leftColumnTypes := tables[0].ColumnTypes()
 	rightColumnTypes := tables[1].ColumnTypes()
@@ -368,7 +368,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
 	alloc      *rowenc.DatumAlloc
-	table      *tabledesc.ImmutableTableDescriptor
+	table      *tabledesc.Immutable
 	index      *descpb.IndexDescriptor
 	indexTypes []*types.T
 	indexDirs  []descpb.IndexDescriptor_Direction
@@ -405,7 +405,7 @@ func (z *zigzagJoiner) setupInfo(
 	spec *execinfrapb.ZigzagJoinerSpec,
 	side int,
 	colOffset int,
-	tables []tabledesc.ImmutableTableDescriptor,
+	tables []tabledesc.Immutable,
 ) error {
 	z.side = side
 	info := z.infos[side]

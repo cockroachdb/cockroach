@@ -149,7 +149,7 @@ func (s *SystemConfig) getSystemTenantDesc(key roachpb.Key) *roachpb.Value {
 		// configs through proper channels.
 		//
 		// Getting here outside tests is impossible.
-		desc := tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{}).DescriptorProto()
+		desc := tabledesc.NewImmutable(descpb.TableDescriptor{}).DescriptorProto()
 		var val roachpb.Value
 		if err := val.SetProto(desc); err != nil {
 			panic(err)

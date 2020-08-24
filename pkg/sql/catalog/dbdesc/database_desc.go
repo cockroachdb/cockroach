@@ -23,37 +23,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ catalog.DatabaseDescriptor = (*ImmutableDatabaseDescriptor)(nil)
+var _ catalog.DatabaseDescriptor = (*Immutable)(nil)
+var _ catalog.DatabaseDescriptor = (*Mutable)(nil)
+var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// ImmutableDatabaseDescriptor wraps a database descriptor and provides methods
+// Immutable wraps a database descriptor and provides methods
 // on it.
-type ImmutableDatabaseDescriptor struct {
+type Immutable struct {
 	descpb.DatabaseDescriptor
 }
 
-// MutableDatabaseDescriptor wraps a database descriptor and provides methods
+// Mutable wraps a database descriptor and provides methods
 // on it. It can be mutated and generally has not been committed.
-type MutableDatabaseDescriptor struct {
-	ImmutableDatabaseDescriptor
+type Mutable struct {
+	Immutable
 
-	ClusterVersion *ImmutableDatabaseDescriptor
+	ClusterVersion *Immutable
 }
 
-// NewInitialDatabaseDescriptor constructs a new DatabaseDescriptor for an
-// initial version from an id and name.
-func NewInitialDatabaseDescriptor(
-	id descpb.ID, name string, owner string,
-) *MutableDatabaseDescriptor {
-	return NewInitialDatabaseDescriptorWithPrivileges(id, name,
+// NewInitial constructs a new Mutable for an initial version from an id and
+// name with default privileges.
+func NewInitial(id descpb.ID, name string, owner string) *Mutable {
+	return NewInitialWithPrivileges(id, name,
 		descpb.NewDefaultPrivilegeDescriptor(owner))
 }
 
-// NewInitialDatabaseDescriptorWithPrivileges constructs a new DatabaseDescriptor for an
-// initial version from an id and name.
-func NewInitialDatabaseDescriptorWithPrivileges(
+// NewInitialWithPrivileges constructs a new Mutable for an initial version
+// from an id and name and custom privileges.
+func NewInitialWithPrivileges(
 	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor,
-) *MutableDatabaseDescriptor {
-	return NewMutableCreatedDatabaseDescriptor(descpb.DatabaseDescriptor{
+) *Mutable {
+	return NewCreatedMutable(descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
@@ -61,90 +61,86 @@ func NewInitialDatabaseDescriptorWithPrivileges(
 	})
 }
 
-func makeImmutableDatabaseDescriptor(desc descpb.DatabaseDescriptor) ImmutableDatabaseDescriptor {
-	return ImmutableDatabaseDescriptor{DatabaseDescriptor: desc}
+func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
+	return Immutable{DatabaseDescriptor: desc}
 }
 
-// NewImmutableDatabaseDescriptor makes a new database descriptor.
-func NewImmutableDatabaseDescriptor(desc descpb.DatabaseDescriptor) *ImmutableDatabaseDescriptor {
-	ret := makeImmutableDatabaseDescriptor(desc)
+// NewImmutable makes a new immutable database descriptor.
+func NewImmutable(desc descpb.DatabaseDescriptor) *Immutable {
+	ret := makeImmutable(desc)
 	return &ret
 }
 
-// NewMutableCreatedDatabaseDescriptor returns a MutableDatabaseDescriptor from
-// the given database descriptor with a nil cluster version. This is for a
-// database that is created in the same transaction.
-func NewMutableCreatedDatabaseDescriptor(
-	desc descpb.DatabaseDescriptor,
-) *MutableDatabaseDescriptor {
-	return &MutableDatabaseDescriptor{
-		ImmutableDatabaseDescriptor: makeImmutableDatabaseDescriptor(desc),
+// NewCreatedMutable returns a Mutable from the given database descriptor with
+// a nil cluster version. This is for a database that is created in the same
+// transaction.
+func NewCreatedMutable(desc descpb.DatabaseDescriptor) *Mutable {
+	return &Mutable{
+		Immutable: makeImmutable(desc),
 	}
 }
 
-// NewMutableExistingDatabaseDescriptor returns a MutableDatabaseDescriptor from the
-// given database descriptor with the cluster version also set to the descriptor.
-// This is for databases that already exist.
-func NewMutableExistingDatabaseDescriptor(
-	desc descpb.DatabaseDescriptor,
-) *MutableDatabaseDescriptor {
-	return &MutableDatabaseDescriptor{
-		ImmutableDatabaseDescriptor: makeImmutableDatabaseDescriptor(*protoutil.Clone(&desc).(*descpb.DatabaseDescriptor)),
-		ClusterVersion:              NewImmutableDatabaseDescriptor(desc),
+// NewExistingMutable returns a Mutable from the given database descriptor with
+// the cluster version also set to the descriptor. This is for databases that
+// already exist.
+func NewExistingMutable(desc descpb.DatabaseDescriptor) *Mutable {
+	return &Mutable{
+		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.DatabaseDescriptor)),
+		ClusterVersion: NewImmutable(desc),
 	}
 }
 
 // TypeName returns the plain type of this descriptor.
-func (desc *ImmutableDatabaseDescriptor) TypeName() string {
+func (desc *Immutable) TypeName() string {
 	return "database"
 }
 
 // DatabaseDesc implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) DatabaseDesc() *descpb.DatabaseDescriptor {
+func (desc *Immutable) DatabaseDesc() *descpb.DatabaseDescriptor {
 	return &desc.DatabaseDescriptor
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) SetDrainingNames(names []descpb.NameInfo) {
+func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
 // GetParentID implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) GetParentID() descpb.ID {
+func (desc *Immutable) GetParentID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // GetParentSchemaID implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) GetParentSchemaID() descpb.ID {
+func (desc *Immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // NameResolutionResult implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) NameResolutionResult() {}
+func (desc *Immutable) NameResolutionResult() {}
 
 // GetAuditMode is part of the DescriptorProto interface.
 // This is a stub until per-database auditing is enabled.
-func (desc *ImmutableDatabaseDescriptor) GetAuditMode() descpb.TableDescriptor_AuditMode {
+func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
 // Adding implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) Adding() bool {
+func (desc *Immutable) Adding() bool {
 	return false
 }
 
 // Offline implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) Offline() bool {
+func (desc *Immutable) Offline() bool {
 	return false
 }
 
 // GetOfflineReason implements the Descriptor interface.
-func (desc *ImmutableDatabaseDescriptor) GetOfflineReason() string {
+func (desc *Immutable) GetOfflineReason() string {
 	return ""
 }
 
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
-func (desc *ImmutableDatabaseDescriptor) DescriptorProto() *descpb.Descriptor {
+func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
 			Database: &desc.DatabaseDescriptor,
@@ -153,14 +149,14 @@ func (desc *ImmutableDatabaseDescriptor) DescriptorProto() *descpb.Descriptor {
 }
 
 // SetName sets the name on the descriptor.
-func (desc *MutableDatabaseDescriptor) SetName(name string) {
+func (desc *Mutable) SetName(name string) {
 	desc.Name = name
 }
 
 // Validate validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *ImmutableDatabaseDescriptor) Validate() error {
+func (desc *Immutable) Validate() error {
 	if err := catalog.ValidateName(desc.GetName(), "descriptor"); err != nil {
 		return err
 	}
@@ -183,10 +179,10 @@ func (desc *ImmutableDatabaseDescriptor) Validate() error {
 //  to have this implementation only visible there? Maybe by creating a type
 //  alias for database descriptor in the backupccl package, and then defining
 //  SchemaMeta on it?
-func (desc *ImmutableDatabaseDescriptor) SchemaMeta() {}
+func (desc *Immutable) SchemaMeta() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
+func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
 	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
@@ -196,7 +192,7 @@ func (desc *MutableDatabaseDescriptor) MaybeIncrementVersion() {
 }
 
 // OriginalName implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) OriginalName() string {
+func (desc *Mutable) OriginalName() string {
 	if desc.ClusterVersion == nil {
 		return ""
 	}
@@ -204,7 +200,7 @@ func (desc *MutableDatabaseDescriptor) OriginalName() string {
 }
 
 // OriginalID implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) OriginalID() descpb.ID {
+func (desc *Mutable) OriginalID() descpb.ID {
 	if desc.ClusterVersion == nil {
 		return descpb.InvalidID
 	}
@@ -212,27 +208,27 @@ func (desc *MutableDatabaseDescriptor) OriginalID() descpb.ID {
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) OriginalVersion() descpb.DescriptorVersion {
+func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	if desc.ClusterVersion == nil {
 		return 0
 	}
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableDatabaseDescriptor(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	return NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
 }
 
 // IsNew implements the MutableDescriptor interface.
-func (desc *MutableDatabaseDescriptor) IsNew() bool {
+func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
 
 // AddDrainingName adds a draining name to the DatabaseDescriptor's slice of
 // draining names.
-func (desc *MutableDatabaseDescriptor) AddDrainingName(name descpb.NameInfo) {
+func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }

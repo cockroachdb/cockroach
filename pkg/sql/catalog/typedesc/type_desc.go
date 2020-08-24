@@ -33,14 +33,15 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-var _ catalog.TypeDescriptor = (*ImmutableTypeDescriptor)(nil)
-var _ catalog.TypeDescriptor = (*MutableTypeDescriptor)(nil)
+var _ catalog.TypeDescriptor = (*Immutable)(nil)
+var _ catalog.TypeDescriptor = (*Mutable)(nil)
+var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
-// for the input type. It is intended to be used as an intermediate for name
-// resolution, and should not be serialized and stored on disk.
-func MakeSimpleAliasTypeDescriptor(typ *types.T) *ImmutableTypeDescriptor {
-	return NewImmutableTypeDescriptor(descpb.TypeDescriptor{
+// MakeSimpleAlias creates a type descriptor that is an alias for the input
+// type. It is intended to be used as an intermediate for name resolution, and
+// should not be serialized and stored on disk.
+func MakeSimpleAlias(typ *types.T) *Immutable {
+	return NewImmutable(descpb.TypeDescriptor{
 		ParentID:       descpb.InvalidID,
 		ParentSchemaID: descpb.InvalidID,
 		Name:           typ.Name(),
@@ -51,27 +52,27 @@ func MakeSimpleAliasTypeDescriptor(typ *types.T) *ImmutableTypeDescriptor {
 }
 
 // NameResolutionResult implements the NameResolutionResult interface.
-func (desc *ImmutableTypeDescriptor) NameResolutionResult() {}
+func (desc *Immutable) NameResolutionResult() {}
 
-// MutableTypeDescriptor is a custom type for TypeDescriptors undergoing
+// Mutable is a custom type for TypeDescriptors undergoing
 // any types of modifications.
-type MutableTypeDescriptor struct {
+type Mutable struct {
 
 	// TODO(ajwerner): Decide whether we're okay embedding the
-	// ImmutableTypeDescriptor or whether we should be embedding some other base
+	// Immutable or whether we should be embedding some other base
 	// struct that implements the various methods. For now we have the trap that
 	// the code really wants direct field access and moving all access to
 	// getters on an interface is a bigger task.
-	ImmutableTypeDescriptor
+	Immutable
 
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
-	ClusterVersion *ImmutableTypeDescriptor
+	ClusterVersion *Immutable
 }
 
-// ImmutableTypeDescriptor is a custom type for wrapping TypeDescriptors
+// Immutable is a custom type for wrapping TypeDescriptors
 // when used in a read only way.
-type ImmutableTypeDescriptor struct {
+type Immutable struct {
 	descpb.TypeDescriptor
 
 	// The fields below are used to fill user defined type metadata for ENUMs.
@@ -80,34 +81,33 @@ type ImmutableTypeDescriptor struct {
 	readOnlyMembers []bool
 }
 
-// NewMutableCreatedTypeDescriptor returns a MutableTypeDescriptor from the
-// given type descriptor with the cluster version being the zero type. This
-// is for a type that is created in the same transaction.
-func NewMutableCreatedTypeDescriptor(desc descpb.TypeDescriptor) *MutableTypeDescriptor {
-	return &MutableTypeDescriptor{
-		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(desc),
+// NewCreatedMutable returns a Mutable from the given type descriptor with the
+// cluster version being the zero type. This is for a type that is created in
+// the same transaction.
+func NewCreatedMutable(desc descpb.TypeDescriptor) *Mutable {
+	return &Mutable{
+		Immutable: makeImmutable(desc),
 	}
 }
 
-// NewMutableExistingTypeDescriptor returns a MutableTypeDescriptor from the
-// given type descriptor with the cluster version also set to the descriptor.
-// This is for types that already exist.
-func NewMutableExistingTypeDescriptor(desc descpb.TypeDescriptor) *MutableTypeDescriptor {
-	return &MutableTypeDescriptor{
-		ImmutableTypeDescriptor: makeImmutableTypeDescriptor(*protoutil.Clone(&desc).(*descpb.TypeDescriptor)),
-		ClusterVersion:          NewImmutableTypeDescriptor(desc),
+// NewExistingMutable returns a Mutable from the given type descriptor with the
+// cluster version also set to the descriptor. This is for types that already
+// exist.
+func NewExistingMutable(desc descpb.TypeDescriptor) *Mutable {
+	return &Mutable{
+		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.TypeDescriptor)),
+		ClusterVersion: NewImmutable(desc),
 	}
 }
 
-// NewImmutableTypeDescriptor returns an ImmutableTypeDescriptor from the
-// given TypeDescriptor.
-func NewImmutableTypeDescriptor(desc descpb.TypeDescriptor) *ImmutableTypeDescriptor {
-	m := makeImmutableTypeDescriptor(desc)
+// NewImmutable returns an Immutable from the given TypeDescriptor.
+func NewImmutable(desc descpb.TypeDescriptor) *Immutable {
+	m := makeImmutable(desc)
 	return &m
 }
 
-func makeImmutableTypeDescriptor(desc descpb.TypeDescriptor) ImmutableTypeDescriptor {
-	immutDesc := ImmutableTypeDescriptor{TypeDescriptor: desc}
+func makeImmutable(desc descpb.TypeDescriptor) Immutable {
+	immutDesc := Immutable{TypeDescriptor: desc}
 
 	// Initialize metadata specific to the TypeDescriptor kind.
 	switch immutDesc.Kind {
@@ -150,27 +150,27 @@ func GetArrayTypeDescID(t *types.T) descpb.ID {
 }
 
 // TypeDesc implements the Descriptor interface.
-func (desc *ImmutableTypeDescriptor) TypeDesc() *descpb.TypeDescriptor {
+func (desc *Immutable) TypeDesc() *descpb.TypeDescriptor {
 	return &desc.TypeDescriptor
 }
 
 // Adding implements the Descriptor interface.
-func (desc *ImmutableTypeDescriptor) Adding() bool {
+func (desc *Immutable) Adding() bool {
 	return false
 }
 
 // Offline implements the Descriptor interface.
-func (desc *ImmutableTypeDescriptor) Offline() bool {
+func (desc *Immutable) Offline() bool {
 	return false
 }
 
 // GetOfflineReason implements the Descriptor interface.
-func (desc *ImmutableTypeDescriptor) GetOfflineReason() string {
+func (desc *Immutable) GetOfflineReason() string {
 	return ""
 }
 
 // DescriptorProto returns a Descriptor for serialization.
-func (desc *ImmutableTypeDescriptor) DescriptorProto() *descpb.Descriptor {
+func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Type{
 			Type: &desc.TypeDescriptor,
@@ -179,22 +179,22 @@ func (desc *ImmutableTypeDescriptor) DescriptorProto() *descpb.Descriptor {
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) SetDrainingNames(names []descpb.NameInfo) {
+func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }
 
 // GetAuditMode implements the DescriptorProto interface.
-func (desc *ImmutableTypeDescriptor) GetAuditMode() descpb.TableDescriptor_AuditMode {
+func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
 // TypeName implements the DescriptorProto interface.
-func (desc *ImmutableTypeDescriptor) TypeName() string {
+func (desc *Immutable) TypeName() string {
 	return "type"
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) MaybeIncrementVersion() {
+func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
 	if desc.ClusterVersion == nil || desc.Version == desc.ClusterVersion.Version+1 {
 		return
@@ -204,7 +204,7 @@ func (desc *MutableTypeDescriptor) MaybeIncrementVersion() {
 }
 
 // OriginalName implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) OriginalName() string {
+func (desc *Mutable) OriginalName() string {
 	if desc.ClusterVersion == nil {
 		return ""
 	}
@@ -212,7 +212,7 @@ func (desc *MutableTypeDescriptor) OriginalName() string {
 }
 
 // OriginalID implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) OriginalID() descpb.ID {
+func (desc *Mutable) OriginalID() descpb.ID {
 	if desc.ClusterVersion == nil {
 		return descpb.InvalidID
 	}
@@ -220,29 +220,29 @@ func (desc *MutableTypeDescriptor) OriginalID() descpb.ID {
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) OriginalVersion() descpb.DescriptorVersion {
+func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	if desc.ClusterVersion == nil {
 		return 0
 	}
 	return desc.ClusterVersion.Version
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableTypeDescriptor(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	return NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
 }
 
 // IsNew implements the MutableDescriptor interface.
-func (desc *MutableTypeDescriptor) IsNew() bool {
+func (desc *Mutable) IsNew() bool {
 	return desc.ClusterVersion == nil
 }
 
 // AddEnumValue adds an enum member to the type.
 // AddEnumValue assumes that the type is an enum, and that the new value
 // doesn't exist already in the enum.
-func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) error {
+func (desc *Mutable) AddEnumValue(node *tree.AlterTypeAddValue) error {
 	getPhysicalRep := func(idx int) []byte {
 		if idx < 0 || idx >= len(desc.EnumMembers) {
 			return nil
@@ -305,7 +305,7 @@ func (desc *MutableTypeDescriptor) AddEnumValue(node *tree.AlterTypeAddValue) er
 
 // AddReferencingDescriptorID adds a new referencing descriptor ID to the
 // TypeDescriptor. It ensures that duplicates are not added.
-func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new descpb.ID) {
+func (desc *Mutable) AddReferencingDescriptorID(new descpb.ID) {
 	for _, id := range desc.ReferencingDescriptorIDs {
 		if new == id {
 			return
@@ -316,7 +316,7 @@ func (desc *MutableTypeDescriptor) AddReferencingDescriptorID(new descpb.ID) {
 
 // RemoveReferencingDescriptorID removes the desired referencing descriptor ID
 // from the TypeDescriptor. It has no effect if the requested ID is not present.
-func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove descpb.ID) {
+func (desc *Mutable) RemoveReferencingDescriptorID(remove descpb.ID) {
 	for i, id := range desc.ReferencingDescriptorIDs {
 		if id == remove {
 			desc.ReferencingDescriptorIDs = append(desc.ReferencingDescriptorIDs[:i], desc.ReferencingDescriptorIDs[i+1:]...)
@@ -326,13 +326,13 @@ func (desc *MutableTypeDescriptor) RemoveReferencingDescriptorID(remove descpb.I
 }
 
 // SetParentSchemaID sets the SchemaID of the type.
-func (desc *MutableTypeDescriptor) SetParentSchemaID(schemaID descpb.ID) {
+func (desc *Mutable) SetParentSchemaID(schemaID descpb.ID) {
 	desc.ParentSchemaID = schemaID
 }
 
 // AddDrainingName adds a draining name to the TypeDescriptor's slice of
 // draining names.
-func (desc *MutableTypeDescriptor) AddDrainingName(name descpb.NameInfo) {
+func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 	desc.DrainingNames = append(desc.DrainingNames, name)
 }
 
@@ -347,7 +347,7 @@ func (e EnumMembers) Less(i, j int) bool {
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
 // Validate performs validation on the TypeDescriptor.
-func (desc *ImmutableTypeDescriptor) Validate(ctx context.Context, dg catalog.DescGetter) error {
+func (desc *Immutable) Validate(ctx context.Context, dg catalog.DescGetter) error {
 	// Validate local properties of the descriptor.
 	if err := catalog.ValidateName(desc.Name, "type"); err != nil {
 		return err
@@ -479,7 +479,7 @@ func (t TypeLookupFunc) GetTypeDescriptor(
 }
 
 // MakeTypesT creates a types.T from the input type descriptor.
-func (desc *ImmutableTypeDescriptor) MakeTypesT(
+func (desc *Immutable) MakeTypesT(
 	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) (*types.T, error) {
 	switch t := desc.Kind; t {
@@ -541,7 +541,7 @@ func HydrateTypesInTableDescriptor(
 // HydrateTypeInfoWithName fills in user defined type metadata for
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
-func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
+func (desc *Immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
 	typ.TypeMeta.Name = &types.UserDefinedTypeName{
@@ -589,7 +589,7 @@ func (desc *ImmutableTypeDescriptor) HydrateTypeInfoWithName(
 // IsCompatibleWith returns whether the type "desc" is compatible with "other".
 // As of now "compatibility" entails that disk encoded data of "desc" can be
 // interpreted and used by "other".
-func (desc *ImmutableTypeDescriptor) IsCompatibleWith(other *ImmutableTypeDescriptor) error {
+func (desc *Immutable) IsCompatibleWith(other *Immutable) error {
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM:
 		if other.Kind != descpb.TypeDescriptor_ENUM {
@@ -626,7 +626,7 @@ func (desc *ImmutableTypeDescriptor) IsCompatibleWith(other *ImmutableTypeDescri
 
 // HasPendingSchemaChanges returns whether or not this descriptor has schema
 // changes that need to be completed.
-func (desc *ImmutableTypeDescriptor) HasPendingSchemaChanges() bool {
+func (desc *Immutable) HasPendingSchemaChanges() bool {
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM:
 		// If there are any non-public enum members, then a type schema change is
@@ -644,7 +644,7 @@ func (desc *ImmutableTypeDescriptor) HasPendingSchemaChanges() bool {
 
 // GetIDClosure returns all type descriptor IDs that are referenced by this
 // type descriptor.
-func (desc *ImmutableTypeDescriptor) GetIDClosure() map[descpb.ID]struct{} {
+func (desc *Immutable) GetIDClosure() map[descpb.ID]struct{} {
 	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
 	ret[desc.ID] = struct{}{}

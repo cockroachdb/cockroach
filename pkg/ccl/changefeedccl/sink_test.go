@@ -54,8 +54,8 @@ func TestKafkaSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.ImmutableTableDescriptor {
-		return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{Name: name})
+	table := func(name string) *tabledesc.Immutable {
+		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 
 	ctx := context.Background()
@@ -144,8 +144,8 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.ImmutableTableDescriptor {
-		return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{Name: name})
+	table := func(name string) *tabledesc.Immutable {
+		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 
 	ctx := context.Background()
@@ -183,8 +183,8 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	table := func(name string) *tabledesc.ImmutableTableDescriptor {
-		return tabledesc.NewImmutableTableDescriptor(descpb.TableDescriptor{Name: name})
+	table := func(name string) *tabledesc.Immutable {
+		return tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})
 	}
 
 	ctx := context.Background()
