@@ -14,6 +14,7 @@ package geo
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
@@ -244,7 +245,7 @@ func adjustSpatialObject(
 	if err != nil {
 		return geopb.SpatialObject{}, err
 	}
-	adjustGeomSRID(t, srid)
+	AdjustGeomTSRID(t, srid)
 	return spatialObjectFromGeomT(t, soType)
 }
 
@@ -266,6 +267,12 @@ func (g *Geometry) EWKB() geopb.EWKB {
 // SpatialObject returns the SpatialObject representation of the Geometry.
 func (g *Geometry) SpatialObject() geopb.SpatialObject {
 	return g.spatialObject
+}
+
+// SpatialObjectRef return a pointer to the SpatialObject representation of the
+// Geometry.
+func (g *Geometry) SpatialObjectRef() *geopb.SpatialObject {
+	return &g.spatialObject
 }
 
 // EWKBHex returns the EWKBHex representation of the Geometry.
@@ -339,7 +346,7 @@ func (g *Geometry) Compare(o *Geometry) int {
 	if lhs < rhs {
 		return -1
 	}
-	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+	return compareSpatialObjectBytes(g.SpatialObjectRef(), o.SpatialObjectRef())
 }
 
 //
@@ -504,6 +511,12 @@ func (g *Geography) SpatialObject() geopb.SpatialObject {
 	return g.spatialObject
 }
 
+// SpatialObjectRef returns a pointer to the SpatialObject representation of the
+// Geography.
+func (g *Geography) SpatialObjectRef() *geopb.SpatialObject {
+	return &g.spatialObject
+}
+
 // EWKBHex returns the EWKBHex representation of the Geography.
 func (g *Geography) EWKBHex() string {
 	return g.spatialObject.EWKBHex()
@@ -577,12 +590,35 @@ func (g *Geography) Compare(o *Geography) int {
 	if lhs < rhs {
 		return -1
 	}
-	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+	return compareSpatialObjectBytes(g.SpatialObjectRef(), o.SpatialObjectRef())
 }
 
 //
 // Common
 //
+
+// AdjustGeomTSRID adjusts the SRID of a given geom.T.
+// Ideally SetSRID is an interface of geom.T, but that is not the case.
+func AdjustGeomTSRID(t geom.T, srid geopb.SRID) {
+	switch t := t.(type) {
+	case *geom.Point:
+		t.SetSRID(int(srid))
+	case *geom.LineString:
+		t.SetSRID(int(srid))
+	case *geom.Polygon:
+		t.SetSRID(int(srid))
+	case *geom.GeometryCollection:
+		t.SetSRID(int(srid))
+	case *geom.MultiPoint:
+		t.SetSRID(int(srid))
+	case *geom.MultiLineString:
+		t.SetSRID(int(srid))
+	case *geom.MultiPolygon:
+		t.SetSRID(int(srid))
+	default:
+		panic(fmt.Errorf("geo: unknown geom type: %v", t))
+	}
+}
 
 // IsLinearRingCCW returns whether a given linear ring is counter clock wise.
 // See 2.07 of http://www.faqs.org/faqs/graphics/algorithms-faq/.
@@ -883,12 +919,12 @@ func GeomTContainsEmpty(g geom.T) bool {
 // compareSpatialObjectBytes compares the SpatialObject if they were serialized.
 // This is used for comparison operations, and must be kept consistent with the indexing
 // encoding.
-func compareSpatialObjectBytes(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
-	marshalledLHS, err := protoutil.Marshal(&lhs)
+func compareSpatialObjectBytes(lhs *geopb.SpatialObject, rhs *geopb.SpatialObject) int {
+	marshalledLHS, err := protoutil.Marshal(lhs)
 	if err != nil {
 		panic(err)
 	}
-	marshalledRHS, err := protoutil.Marshal(&rhs)
+	marshalledRHS, err := protoutil.Marshal(rhs)
 	if err != nil {
 		panic(err)
 	}

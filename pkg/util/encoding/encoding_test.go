@@ -1234,12 +1234,12 @@ func TestEncodeDecodeGeometry(t *testing.T) {
 						if dir == Ascending {
 							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
 							require.NoError(t, err)
-							_, decoded, err = DecodeGeoAscending(b)
+							_, err = DecodeGeoAscending(b, &decoded)
 							require.NoError(t, err)
 						} else {
 							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
 							require.NoError(t, err)
-							_, decoded, err = DecodeGeoDescending(b)
+							_, err = DecodeGeoDescending(b, &decoded)
 							require.NoError(t, err)
 						}
 						require.Equal(t, spatialObject, decoded)
@@ -1290,12 +1290,12 @@ func TestEncodeDecodeGeography(t *testing.T) {
 						if dir == Ascending {
 							b, err = EncodeGeoAscending(b, parsed.SpaceCurveIndex(), &spatialObject)
 							require.NoError(t, err)
-							_, decoded, err = DecodeGeoAscending(b)
+							_, err = DecodeGeoAscending(b, &decoded)
 							require.NoError(t, err)
 						} else {
 							b, err = EncodeGeoDescending(b, parsed.SpaceCurveIndex(), &spatialObject)
 							require.NoError(t, err)
-							_, decoded, err = DecodeGeoDescending(b)
+							_, err = DecodeGeoDescending(b, &decoded)
 							require.NoError(t, err)
 						}
 						require.Equal(t, spatialObject, decoded)

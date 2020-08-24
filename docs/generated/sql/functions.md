@@ -1093,6 +1093,10 @@ from the given Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_clipbybox2d"></a><code>st_clipbybox2d(geometry: geometry, box2d: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Clips the geometry to conform to the bounding box specified by box2d.</p>
 </span></td></tr>
+<tr><td><a name="st_collectionextract"></a><code>st_collectionextract(geometry: geometry, type: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Given a collection, returns a multitype consisting only of elements of the specified type. If there are no elements of the given type, an EMPTY geometry is returned. Types are specified as 1=POINT, 2=LINESTRING, 3=POLYGON - other types are not supported.</p>
+</span></td></tr>
+<tr><td><a name="st_collectionhomogenize"></a><code>st_collectionhomogenize(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the “simplest” representation of a collection’s contents. Collections of a single type will be returned as an appopriate multitype, or a singleton if it only contains a single geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_combinebbox"></a><code>st_combinebbox(box2d: box2d, geometry: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Combines the current bounding box with the bounding box of the Geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_contains"></a><code>st_contains(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if no points of geometry_b lie in the exterior of geometry_a, and there is at least one point in the interior of geometry_b that lies in the interior of geometry_a.</p>
@@ -1220,6 +1224,10 @@ Bottom Left.</p>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta units across all dimensions.</p>
 </span></td></tr>
 <tr><td><a name="st_expand"></a><code>st_expand(box2d: box2d, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; box2d</code></td><td><span class="funcdesc"><p>Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.</p>
+</span></td></tr>
+<tr><td><a name="st_expand"></a><code>st_expand(geometry: geometry, delta: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Extends the bounding box represented by the geometry by delta units across all dimensions, returning a Polygon representing the new bounding box.</p>
+</span></td></tr>
+<tr><td><a name="st_expand"></a><code>st_expand(geometry: geometry, delta_x: <a href="float.html">float</a>, delta_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Extends the bounding box represented by the geometry by delta_x units in the x dimension and delta_y units in the y dimension, returning a Polygon representing the new bounding box.</p>
 </span></td></tr>
 <tr><td><a name="st_exteriorring"></a><code>st_exteriorring(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the exterior ring of a Polygon as a LineString. Returns NULL if the shape is not a Polygon.</p>
 </span></td></tr>
@@ -1436,6 +1444,8 @@ calculated, the result is transformed back into a Geography with SRID 4326.</p>
 <tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(val: <a href="bytes.html">bytes</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation. If the shape underneath is not MultiPolygon, NULL is returned.</p>
 </span></td></tr>
 <tr><td><a name="st_mpolyfromwkb"></a><code>st_mpolyfromwkb(wkb: <a href="bytes.html">bytes</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKB (or EWKB) representation with an SRID. If the shape underneath is not MultiPolygon, NULL is returned.</p>
+</span></td></tr>
+<tr><td><a name="st_multi"></a><code>st_multi(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the geometry as a new multi-geometry, e.g converts a POINT to a MULTIPOINT. If the input is already a multitype or collection, it is returned as is.</p>
 </span></td></tr>
 <tr><td><a name="st_multilinefromtext"></a><code>st_multilinefromtext(str: <a href="string.html">string</a>, srid: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the Geometry from a WKT or EWKT representation with an SRID. If the shape underneath is not MultiLineString, NULL is returned. If the SRID is present in both the EWKT and the argument, the argument value is used.</p>
 </span></td></tr>
