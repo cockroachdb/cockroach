@@ -1945,8 +1945,11 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// covering" here means that not all columns in the ON condition are
 			// available.
 			//
-			// TODO(rytaft): We could create a semi/anti join on top of an inner/left
-			//  join if we wrap it with a DISTINCT ON the key of the left side.
+			// For semi joins, we may still be able to generate an inverted join
+			// by converting it to an inner join using the ConvertSemiToInnerJoin
+			// rule. Any semi join that could use an inverted index would already be
+			// transformed into an inner join by ConvertSemiToInnerJoin, so semi
+			// joins can be ignored here.
 			continue
 		}
 

@@ -87,6 +87,37 @@
     (OutputCols $left)
 )
 
+# ConvertSemiToInnerJoin applies in the cases where CommuteSemiJoin does not:
+# when the ON condition is not a simple equality. In this case, we must perform
+# a DisinctOn operation *after* the inner join, followed by a project to remove
+# the right-side columns.
+#
+# Similar to CommuteSemiJoin, this rule allows semi joins to be commuted. This
+# rule is also useful because it allows us to generate lookup joins and
+# inverted lookup joins for cases where the index is not covering.
+[ConvertSemiToInnerJoin, Explore]
+(SemiJoin
+    $left:*
+    $right:*
+    $on:* & ^(IsSimpleEquality $on)
+    $private:* & (NoJoinHints $private)
+)
+=>
+(Project
+    (DistinctOn
+        (InnerJoin
+            $newLeft:(EnsureKey $left)
+            $right
+            $on
+            $private
+        )
+        (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+        (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
+    )
+    []
+    (OutputCols $left)
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]
