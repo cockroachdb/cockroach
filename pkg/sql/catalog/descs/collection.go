@@ -245,6 +245,52 @@ type Collection struct {
 	databaseLeasingUnsupported bool
 }
 
+// getLeasedDescriptorByName return a leased descriptor valid for the
+// transaction, acquiring one if necessary. Due to a bug in lease acquisition
+// for dropped descriptors, the descriptor may have to be read from the store,
+// in which case shouldReadFromStore will be true.
+func (tc *Collection) getLeasedDescriptorByName(
+	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) (desc catalog.Descriptor, shouldReadFromStore bool, err error) {
+	// First, look to see if we already have the descriptor.
+	// This ensures that, once a SQL transaction resolved name N to id X, it will
+	// continue to use N to refer to X even if N is renamed during the
+	// transaction.
+	if desc = tc.leasedDescriptors.getByName(parentID, parentSchemaID, name); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		return desc, false, nil
+	}
+
+	readTimestamp := txn.ReadTimestamp()
+	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
+	if err != nil {
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if catalog.HasInactiveDescriptorError(err) ||
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, true, nil
+		}
+		// Lease acquisition failed with some other error. This we don't
+		// know how to deal with, so propagate the error.
+		return nil, false, err
+	}
+
+	if expiration.LessEq(readTimestamp) {
+		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	}
+
+	tc.leasedDescriptors.add(desc)
+	log.VEventf(ctx, 2, "added descriptor '%s' to collection: %+v", name, desc)
+
+	// If the descriptor we just acquired expires before the txn's deadline,
+	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
+	// timestamp, so we need to set a deadline on the transaction to prevent it
+	// from committing beyond the version's expiration time.
+	txn.UpdateDeadlineMaybe(ctx, expiration)
+	return desc, false, nil
+}
+
 // GetMutableDatabaseDescriptor returns a mutable database descriptor.
 func (tc *Collection) GetMutableDatabaseDescriptor(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
@@ -429,9 +475,6 @@ func (tc *Collection) ResolveSchema(
 // It might also add a transaction deadline to the transaction that is
 // enforced at the KV layer to ensure that the transaction doesn't violate
 // the validity window of the table descriptor version returned.
-//
-// TODO (lucy): This logic is quite similar to GetObjectVersion. Think about
-// unifying once we also have support for schemas.
 func (tc *Collection) GetDatabaseVersion(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
@@ -473,35 +516,13 @@ func (tc *Collection) GetDatabaseVersion(
 		return readFromStore()
 	}
 
-	// First, look to see if we already have the descriptor.
-	// This ensures that, once a SQL transaction resolved name N to id X, it will
-	// continue to use N to refer to X even if N is renamed during the
-	// transaction.
-	if desc := tc.leasedDescriptors.getByName(keys.RootNamespaceID, keys.RootNamespaceID, name); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-		db, ok := desc.(*dbdesc.Immutable)
-		if !ok {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedDatabaseError(name)
-			}
-			return nil, nil
-		}
-		return db, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, keys.RootNamespaceID, keys.RootNamespaceID, name)
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+		ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 	if err != nil {
-		// Read the descriptor from the store in the face of some specific errors
-		// because of a known limitation of AcquireByName. See the known
-		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return readFromStore()
-		}
-		// Lease acquisition failed with some other error. This we don't
-		// know how to deal with, so propagate the error.
 		return nil, err
+	}
+	if shouldReadFromStore {
+		return readFromStore()
 	}
 	db, ok := desc.(*dbdesc.Immutable)
 	if !ok {
@@ -510,19 +531,6 @@ func (tc *Collection) GetDatabaseVersion(
 		}
 		return nil, nil
 	}
-
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
-	}
-
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added database descriptor '%s' to collection: %+v", name, desc)
-
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return db, nil
 }
 
@@ -677,42 +685,13 @@ func (tc *Collection) getObjectVersion(
 		return readObjectFromStore()
 	}
 
-	// First, look to see if we already have the descriptor.
-	// This ensures that, once a SQL transaction resolved name N to id X, it will
-	// continue to use N to refer to X even if N is renamed during the
-	// transaction.
-	if desc := tc.leasedDescriptors.getByName(dbID, schemaID, name.Object()); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-		return desc, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, schemaID, name.Object())
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, name.Object())
 	if err != nil {
-		// Read the descriptor from the store in the face of some specific errors
-		// because of a known limitation of AcquireByName. See the known
-		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return readObjectFromStore()
-		}
-		// Lease acquisition failed with some other error. This we don't
-		// know how to deal with, so propagate the error.
 		return nil, err
 	}
-
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	if shouldReadFromStore {
+		return readObjectFromStore()
 	}
-
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor '%s' to collection", name)
-
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return desc, nil
 }
 
