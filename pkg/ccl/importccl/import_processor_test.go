@@ -844,6 +844,30 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	assert.Zero(t, importSummary.Rows)
 }
 
+func TestImportWithPartialIndexesErrs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				RegistryLiveness: jobs.NewFakeNodeLiveness(1),
+				DistSQL: &execinfra.TestingKnobs{
+					BulkAdderFlushesEveryBatch: true,
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING, INDEX (data) WHERE id > 0)")
+	defer sqlDB.Exec(t, `DROP TABLE t`)
+
+	sqlDB.ExpectErr(t, "cannot import into table with partial indexes", `IMPORT INTO t (id, data) CSV DATA ('https://foo.bar')`)
+}
+
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
 	return func(_ context.Context, es roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		uri, err := url.Parse(es.HttpPath.BaseUri)
