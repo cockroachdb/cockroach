@@ -201,9 +201,7 @@ func (e errTableVersionMismatch) Error() string {
 
 // refreshMaterializedView updates the physical data for a materialized view.
 func (sc *SchemaChanger) refreshMaterializedView(
-	ctx context.Context,
-	table *tabledesc.MutableTableDescriptor,
-	refresh *descpb.MaterializedViewRefresh,
+	ctx context.Context, table *tabledesc.Mutable, refresh *descpb.MaterializedViewRefresh,
 ) error {
 	// The data for the materialized view is stored under the current set of
 	// indexes in table. We want to keep all of that data untouched, and write
@@ -333,7 +331,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 // this writing) this code path is only used for standalone CREATE
 // TABLE AS statements, which cannot be traced.
 func (sc *SchemaChanger) maybeBackfillCreateTableAs(
-	ctx context.Context, table *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, table *tabledesc.Immutable,
 ) error {
 	if !(table.Adding() && table.IsAs()) {
 		return nil
@@ -344,7 +342,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 }
 
 func (sc *SchemaChanger) maybeBackfillMaterializedView(
-	ctx context.Context, table *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, table *tabledesc.Immutable,
 ) error {
 	if !(table.Adding() && table.MaterializedView()) {
 		return nil
@@ -356,7 +354,7 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 
 // maybe make a table PUBLIC if it's in the ADD state.
 func (sc *SchemaChanger) maybeMakeAddTablePublic(
-	ctx context.Context, table *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, table *tabledesc.Immutable,
 ) error {
 	if table.Adding() {
 		log.Info(ctx, "making table public")
@@ -432,7 +430,7 @@ func drainNamesForDescriptor(
 			// If the descriptor to drain is a schema, then we need to delete the
 			// draining names from the parent database's schema mapping.
 			if isSchema {
-				db := descs[desc.GetParentID()].(*dbdesc.MutableDatabaseDescriptor)
+				db := descs[desc.GetParentID()].(*dbdesc.Mutable)
 				for _, name := range namesToReclaim {
 					delete(db.Schemas, name.Name)
 				}
@@ -591,7 +589,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		return nil
 	}
 
-	tableDesc, ok := desc.(*tabledesc.ImmutableTableDescriptor)
+	tableDesc, ok := desc.(*tabledesc.Immutable)
 	if !ok {
 		// If our descriptor is not a table, then just drain leases.
 		if err := waitToUpdateLeases(false /* refreshStats */); err != nil {
@@ -1232,7 +1230,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// don't install any backreferences.
 		if !scTable.Dropped() {
 			newReferencedTypeIDs, err := scTable.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				return descs[id].(*typedesc.MutableTypeDescriptor), nil
+				return descs[id].(*typedesc.Mutable), nil
 			})
 			if err != nil {
 				return err
@@ -1240,10 +1238,10 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for _, id := range referencedTypeIDs {
-				descs[id].(*typedesc.MutableTypeDescriptor).RemoveReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.Mutable).RemoveReferencingDescriptorID(scTable.ID)
 			}
 			for _, id := range newReferencedTypeIDs {
-				descs[id].(*typedesc.MutableTypeDescriptor).AddReferencingDescriptorID(scTable.ID)
+				descs[id].(*typedesc.Mutable).AddReferencingDescriptorID(scTable.ID)
 			}
 		}
 
@@ -1301,7 +1299,7 @@ func maybeUpdateZoneConfigsForPKChange(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	table *tabledesc.MutableTableDescriptor,
+	table *tabledesc.Mutable,
 	swapInfo *descpb.PrimaryKeySwap,
 ) error {
 	if !execCfg.Codec.ForSystemTenant() {
@@ -1555,7 +1553,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 // updateJobForRollback updates the schema change job in the case of a rollback.
 func (sc *SchemaChanger) updateJobForRollback(
-	ctx context.Context, txn *kv.Txn, tableDesc *tabledesc.ImmutableTableDescriptor,
+	ctx context.Context, txn *kv.Txn, tableDesc *tabledesc.Immutable,
 ) error {
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
@@ -1636,7 +1634,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 // references one of the reversed columns. Execute this as a breadth
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
-	ctx context.Context, desc *tabledesc.MutableTableDescriptor, columns map[string]struct{},
+	ctx context.Context, desc *tabledesc.Mutable, columns map[string]struct{},
 ) (map[descpb.MutationID]struct{}, error) {
 	dropMutations := make(map[descpb.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations

@@ -16,13 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 )
 
-func (desc *ImmutableTableDescriptor) ValidateCrossReferences(
-	ctx context.Context, dg catalog.DescGetter,
-) error {
+func (desc *Immutable) ValidateCrossReferences(ctx context.Context, dg catalog.DescGetter) error {
 	return desc.validateCrossReferences(ctx, dg)
 }
 
-func (desc *ImmutableTableDescriptor) ValidatePartitioning() error {
+func (desc *Immutable) ValidatePartitioning() error {
 	return desc.validatePartitioning()
 }
 

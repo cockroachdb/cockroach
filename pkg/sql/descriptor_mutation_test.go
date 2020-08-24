@@ -40,11 +40,11 @@ type mutationTest struct {
 	testing.TB
 	*sqlutils.SQLRunner
 	kvDB      *kv.DB
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *tabledesc.MutableTableDescriptor,
+	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *tabledesc.Mutable,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,

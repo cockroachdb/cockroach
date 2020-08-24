@@ -40,10 +40,10 @@ type deleteRangeNode struct {
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
-	desc *tabledesc.ImmutableTableDescriptor
+	desc *tabledesc.Immutable
 	// interleavedDesc are the table descriptors of any child interleaved tables
 	// the delete is operating on.
-	interleavedDesc []*tabledesc.ImmutableTableDescriptor
+	interleavedDesc []*tabledesc.Immutable
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher

@@ -37,7 +37,7 @@ func (p *planner) createDropDatabaseJob(
 	ctx context.Context,
 	databaseID descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
-	typesToDrop []*typedesc.MutableTypeDescriptor,
+	typesToDrop []*typedesc.Mutable,
 	jobDesc string,
 ) error {
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
@@ -106,10 +106,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 // is no existing schema change job for the table, or updates the existing job
 // if there is one.
 func (p *planner) createOrUpdateSchemaChangeJob(
-	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
-	jobDesc string,
-	mutationID descpb.MutationID,
+	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
 	var job *jobs.Job
 	if cachedJob, ok := p.extendedEvalCtx.SchemaChangeJobCache[tableDesc.ID]; ok {
@@ -223,10 +220,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 // table descriptor during a schema change to another table, or from a step in a
 // larger schema change to the same table.
 func (p *planner) writeSchemaChange(
-	ctx context.Context,
-	tableDesc *tabledesc.MutableTableDescriptor,
-	mutationID descpb.MutationID,
-	jobDesc string,
+	ctx context.Context, tableDesc *tabledesc.Mutable, mutationID descpb.MutationID, jobDesc string,
 ) error {
 	if !p.EvalContext().TxnImplicit {
 		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
@@ -243,7 +237,7 @@ func (p *planner) writeSchemaChange(
 }
 
 func (p *planner) writeSchemaChangeToBatch(
-	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch,
 ) error {
 	if !p.EvalContext().TxnImplicit {
 		telemetry.Inc(sqltelemetry.SchemaChangeInExplicitTxnCounter)
@@ -257,7 +251,7 @@ func (p *planner) writeSchemaChangeToBatch(
 }
 
 func (p *planner) writeDropTable(
-	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, queueJob bool, jobDesc string,
+	ctx context.Context, tableDesc *tabledesc.Mutable, queueJob bool, jobDesc string,
 ) error {
 	if queueJob {
 		if err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc, descpb.InvalidMutationID); err != nil {
@@ -267,9 +261,7 @@ func (p *planner) writeDropTable(
 	return p.writeTableDesc(ctx, tableDesc)
 }
 
-func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor,
-) error {
+func (p *planner) writeTableDesc(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 	b := p.txn.NewBatch()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, b); err != nil {
 		return err
@@ -278,7 +270,7 @@ func (p *planner) writeTableDesc(
 }
 
 func (p *planner) writeTableDescToBatch(
-	ctx context.Context, tableDesc *tabledesc.MutableTableDescriptor, b *kv.Batch,
+	ctx context.Context, tableDesc *tabledesc.Mutable, b *kv.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
 		return errors.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)

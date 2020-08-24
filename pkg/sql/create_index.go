@@ -34,7 +34,7 @@ import (
 
 type createIndexNode struct {
 	n         *tree.CreateIndex
-	tableDesc *tabledesc.MutableTableDescriptor
+	tableDesc *tabledesc.Mutable
 }
 
 type indexStorageParamObserver struct {
@@ -260,7 +260,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 // is hash sharded. Note that `tableDesc` will be modified when this method is called for
 // a hash sharded index.
 func MakeIndexDescriptor(
-	params runParams, n *tree.CreateIndex, tableDesc *tabledesc.MutableTableDescriptor,
+	params runParams, n *tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
@@ -381,9 +381,7 @@ func MakeIndexDescriptor(
 
 // validateIndexColumnsExists validates that the columns for an index exist
 // in the table and are not being dropped prior to attempting to add the index.
-func validateIndexColumnsExist(
-	desc *tabledesc.MutableTableDescriptor, columns tree.IndexElemList,
-) error {
+func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemList) error {
 	for _, column := range columns {
 		_, dropping, err := desc.FindColumnByName(column.Column)
 		if err != nil {
@@ -414,7 +412,7 @@ func setupShardedIndex(
 	shardedIndexEnabled bool,
 	columns *tree.IndexElemList,
 	bucketsExpr tree.Expr,
-	tableDesc *tabledesc.MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
 ) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
@@ -457,7 +455,7 @@ func setupShardedIndex(
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	shardBuckets int, desc *tabledesc.MutableTableDescriptor, colNames []string, isNewTable bool,
+	shardBuckets int, desc *tabledesc.Mutable, colNames []string, isNewTable bool,
 ) (col *descpb.ColumnDescriptor, created bool, err error) {
 	shardCol, err := makeShardColumnDesc(colNames, shardBuckets)
 	if err != nil {

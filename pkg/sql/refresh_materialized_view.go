@@ -24,7 +24,7 @@ import (
 
 type refreshMaterializedViewNode struct {
 	n    *tree.RefreshMaterializedView
-	desc *tabledesc.MutableTableDescriptor
+	desc *tabledesc.Mutable
 }
 
 func (p *planner) RefreshMaterializedView(

@@ -50,7 +50,7 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 ) (desc catalog.DatabaseDescriptor, err error) {
 	if name == systemschema.SystemDatabaseName {
 		if flags.RequireMutable {
-			return dbdesc.NewMutableExistingDatabaseDescriptor(
+			return dbdesc.NewExistingMutable(
 				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
 		}
 		return systemschema.MakeSystemDatabaseDesc(), nil

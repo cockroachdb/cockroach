@@ -72,7 +72,7 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.ImmutableDatabaseDescriptor,
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.Immutable,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -97,7 +97,7 @@ type virtualSchemaTable struct {
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
-	populate func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error
 
 	// indexes, if non empty, is a slice of populate methods that also take a
 	// constraint, only generating rows that match the constraint. The order of
@@ -108,7 +108,7 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *dbdesc.ImmutableDatabaseDescriptor) (virtualTableGenerator, cleanupFunc, error)
+	generator func(ctx context.Context, p *planner, db *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error)
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -299,7 +299,7 @@ var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 type virtualSchemaEntry struct {
 	// TODO(ajwerner): Use a descpb.SchemaDescriptor here as part of the
 	// user-defined schema work.
-	desc            *dbdesc.ImmutableDatabaseDescriptor
+	desc            *dbdesc.Immutable
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
@@ -328,7 +328,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
 				return mutableVirtualDefEntry{
-					desc: tabledesc.NewMutableExistingTableDescriptor(*def.desc.TableDesc()),
+					desc: tabledesc.NewExistingMutable(*def.desc.TableDesc()),
 				}, nil
 			}
 			return &def, nil
@@ -362,7 +362,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 		}
 
 		return virtualTypeEntry{
-			desc:    typedesc.MakeSimpleAliasTypeDescriptor(typ),
+			desc:    typedesc.MakeSimpleAlias(typ),
 			mutable: flags.RequireMutable,
 		}, nil
 	default:
@@ -372,7 +372,7 @@ func (v virtualSchemaEntry) GetObjectByName(
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *tabledesc.ImmutableTableDescriptor
+	desc                       *tabledesc.Immutable
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -382,7 +382,7 @@ func (e virtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type mutableVirtualDefEntry struct {
-	desc *tabledesc.MutableTableDescriptor
+	desc *tabledesc.Mutable
 }
 
 func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
@@ -390,7 +390,7 @@ func (e mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *typedesc.ImmutableTypeDescriptor
+	desc    *typedesc.Immutable
 	mutable bool
 }
 
@@ -456,7 +456,7 @@ func (e virtualDefEntry) getPlanInfo(
 	}
 
 	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
-		var dbDesc *dbdesc.ImmutableDatabaseDescriptor
+		var dbDesc *dbdesc.Immutable
 		if dbName != "" {
 			dbDescI, err := p.LogicalSchemaAccessor().GetDatabaseDesc(ctx, p.txn, p.ExecCfg().Codec,
 				dbName, tree.DatabaseLookupFlags{
@@ -467,7 +467,7 @@ func (e virtualDefEntry) getPlanInfo(
 			if err != nil {
 				return nil, err
 			}
-			dbDesc = dbDescI.(*dbdesc.ImmutableDatabaseDescriptor)
+			dbDesc = dbDescI.(*dbdesc.Immutable)
 		} else {
 			if !e.validWithNoDatabaseContext {
 				return nil, errInvalidDbPrefix
@@ -530,7 +530,7 @@ func (e virtualDefEntry) getPlanInfo(
 func (e virtualDefEntry) makeConstrainedRowsGenerator(
 	ctx context.Context,
 	p *planner,
-	dbDesc *dbdesc.ImmutableDatabaseDescriptor,
+	dbDesc *dbdesc.Immutable,
 	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
 	columnIdxMap map[descpb.ColumnID]int,
@@ -641,7 +641,7 @@ func NewVirtualSchemaHolder(
 
 			entry := virtualDefEntry{
 				virtualDef:                 def,
-				desc:                       tabledesc.NewImmutableTableDescriptor(tableDesc),
+				desc:                       tabledesc.NewImmutable(tableDesc),
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
 			}
@@ -674,8 +674,8 @@ var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
 	security.PublicRole, privilege.List{privilege.SELECT}, security.NodeUser,
 )
 
-func initVirtualDatabaseDesc(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
-	return dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+func initVirtualDatabaseDesc(id descpb.ID, name string) *dbdesc.Immutable {
+	return dbdesc.NewImmutable(descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
@@ -731,7 +731,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntryByID(id descpb.ID) (virtualDe
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.ImmutableTableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*tabledesc.Immutable, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getVirtualTableEntryByID(id descpb.ID) (virtualDefEntry, error)
@@ -744,7 +744,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

@@ -49,9 +49,7 @@ type indexKeyTest struct {
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(
-	test indexKeyTest,
-) (*tabledesc.ImmutableTableDescriptor, map[descpb.ColumnID]int) {
+func makeTableDescForTest(test indexKeyTest) (*tabledesc.Immutable, map[descpb.ColumnID]int) {
 	primaryColumnIDs := make([]descpb.ColumnID, len(test.primaryValues))
 	secondaryColumnIDs := make([]descpb.ColumnID, len(test.secondaryValues))
 	columns := make([]descpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
@@ -101,14 +99,11 @@ func makeTableDescForTest(
 			Interleave:       makeInterleave(2, test.secondaryInterleaves),
 		}},
 	}
-	return tabledesc.NewImmutableTableDescriptor(tableDesc), colMap
+	return tabledesc.NewImmutable(tableDesc), colMap
 }
 
 func decodeIndex(
-	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
-	index *descpb.IndexDescriptor,
-	key []byte,
+	codec keys.SQLCodec, tableDesc *tabledesc.Immutable, index *descpb.IndexDescriptor, key []byte,
 ) ([]tree.Datum, error) {
 	types, err := colinfo.GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {

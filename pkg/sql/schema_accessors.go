@@ -44,16 +44,16 @@ type (
 	DatabaseDescriptor = descpb.DatabaseDescriptor
 	// MutableDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableDatabaseDescriptor = dbdesc.MutableDatabaseDescriptor
+	MutableDatabaseDescriptor = dbdesc.Mutable
 	// ImmutableDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ImmutableDatabaseDescriptor = dbdesc.ImmutableDatabaseDescriptor
+	ImmutableDatabaseDescriptor = dbdesc.Immutable
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTableDescriptor = tabledesc.MutableTableDescriptor
+	MutableTableDescriptor = tabledesc.Mutable
 	// ImmutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ImmutableTableDescriptor = tabledesc.ImmutableTableDescriptor
+	ImmutableTableDescriptor = tabledesc.Immutable
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	TableDescriptor = descpb.TableDescriptor
@@ -62,7 +62,7 @@ type (
 	TypeDescriptor = descpb.TypeDescriptor
 	// MutableTypeDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTypeDescriptor = typedesc.MutableTypeDescriptor
+	MutableTypeDescriptor = typedesc.Mutable
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	ViewDescriptor = descpb.TableDescriptor
@@ -74,5 +74,5 @@ type (
 	TableNames = tree.TableNames
 	// MutableSchemaDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableSchemaDescriptor = schemadesc.MutableSchemaDescriptor
+	MutableSchemaDescriptor = schemadesc.Mutable
 )

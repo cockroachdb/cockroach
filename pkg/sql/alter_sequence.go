@@ -23,7 +23,7 @@ import (
 
 type alterSequenceNode struct {
 	n       *tree.AlterSequence
-	seqDesc *tabledesc.MutableTableDescriptor
+	seqDesc *tabledesc.Mutable
 }
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.

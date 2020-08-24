@@ -100,7 +100,7 @@ const (
 // ConstraintDetail describes a constraint.
 //
 // TODO(ajwerner): Lift this up a level of abstraction next to the
-// ImmutableTableDescriptor and have it store those for the ReferencedTable.
+// Immutable and have it store those for the ReferencedTable.
 type ConstraintDetail struct {
 	Kind        ConstraintType
 	Columns     []string

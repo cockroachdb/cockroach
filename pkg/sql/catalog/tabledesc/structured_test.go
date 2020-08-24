@@ -53,7 +53,7 @@ func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescript
 func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := NewMutableCreatedTableDescriptor(descpb.TableDescriptor{
+	desc := NewCreatedMutable(descpb.TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Name:     "foo",
@@ -79,7 +79,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := NewMutableCreatedTableDescriptor(descpb.TableDescriptor{
+	expected := NewCreatedMutable(descpb.TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Version:  1,
@@ -645,7 +645,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			desc := NewImmutableTableDescriptor(d.desc)
+			desc := NewImmutable(d.desc)
 			if err := desc.ValidateTable(); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 			} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
@@ -974,12 +974,12 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	for i, test := range tests {
 		descs := catalog.MapDescGetter{}
-		descs[1] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{ID: 1})
+		descs[1] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{ID: 1})
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
-			descs[otherDesc.ID] = NewImmutableTableDescriptor(otherDesc)
+			descs[otherDesc.ID] = NewImmutable(otherDesc)
 		}
-		desc := NewImmutableTableDescriptor(test.desc)
+		desc := NewImmutable(test.desc)
 		if err := desc.ValidateCrossReferences(ctx, descs); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
 		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
@@ -1188,7 +1188,7 @@ func TestValidatePartitioning(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(test.err, func(t *testing.T) {
-			desc := NewImmutableTableDescriptor(test.desc)
+			desc := NewImmutable(test.desc)
 			err := desc.ValidatePartitioning()
 			if !testutils.IsError(err, test.err) {
 				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
@@ -1232,7 +1232,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 func TestFitColumnToFamily(t *testing.T) {
 	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
 
-	makeTestTableDescriptor := func(familyTypes [][]*types.T) *MutableTableDescriptor {
+	makeTestTableDescriptor := func(familyTypes [][]*types.T) *Mutable {
 		nextColumnID := descpb.ColumnID(8)
 		var desc descpb.TableDescriptor
 		for _, fTypes := range familyTypes {
@@ -1247,7 +1247,7 @@ func TestFitColumnToFamily(t *testing.T) {
 			}
 			desc.Families = append(desc.Families, family)
 		}
-		return NewMutableCreatedTableDescriptor(desc)
+		return NewCreatedMutable(desc)
 	}
 
 	emptyFamily := []*types.T{}
@@ -1315,7 +1315,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	tests := []struct {
 		desc       descpb.TableDescriptor
 		expUpgrade bool
-		verify     func(int, *ImmutableTableDescriptor) // nil means no extra verification.
+		verify     func(int, *Immutable) // nil means no extra verification.
 	}{
 		{
 			desc: descpb.TableDescriptor{
@@ -1326,7 +1326,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 				Privileges: descpb.NewDefaultPrivilegeDescriptor("root"),
 			},
 			expUpgrade: true,
-			verify: func(i int, desc *ImmutableTableDescriptor) {
+			verify: func(i int, desc *Immutable) {
 				if len(desc.Families) == 0 {
 					t.Errorf("%d: expected families to be set, but it was empty", i)
 				}
@@ -1346,7 +1346,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		desc, err := NewFilledInImmutableTableDescriptor(context.Background(), nil, &test.desc)
+		desc, err := NewFilledInImmutable(context.Background(), nil, &test.desc)
 		require.NoError(t, err)
 		upgraded := desc.GetPostDeserializationChanges().UpgradedFormatVersion
 		if upgraded != test.expUpgrade {
@@ -1359,7 +1359,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 }
 
 func TestUnvalidateConstraints(t *testing.T) {
-	desc := NewMutableCreatedTableDescriptor(descpb.TableDescriptor{
+	desc := NewCreatedMutable(descpb.TableDescriptor{
 		Name:     "test",
 		ParentID: descpb.ID(1),
 		Columns: []descpb.ColumnDescriptor{
@@ -1381,7 +1381,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
-		return desc.Immutable().(catalog.TableDescriptor), nil
+		return desc.ImmutableCopy().(catalog.TableDescriptor), nil
 	}
 
 	before, err := desc.GetConstraintInfoWithLookup(lookup)

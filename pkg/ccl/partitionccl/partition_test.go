@@ -95,7 +95,7 @@ type partitioningTest struct {
 		createStmt string
 
 		// tableDesc is the TableDescriptor created by `createStmt`.
-		tableDesc *tabledesc.MutableTableDescriptor
+		tableDesc *tabledesc.Mutable
 
 		// zoneConfigStmt contains SQL that effects the zone configs described
 		// by `configs`.

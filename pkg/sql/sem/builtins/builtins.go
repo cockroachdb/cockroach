@@ -300,7 +300,7 @@ var builtins = map[string]builtinDefinition{
 			// In Postgres concat can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
-			// our case, we only take String inputs so our version is Immutable.
+			// our case, we only take String inputs so our version is ImmutableCopy.
 			IgnoreVolatilityCheck: true,
 		},
 	),
@@ -346,7 +346,7 @@ var builtins = map[string]builtinDefinition{
 			// In Postgres concat_ws can take any arguments, converting them to
 			// their text representation. Since the text representation can
 			// depend on the context (e.g. timezone), the function is Stable. In
-			// our case, we only take String inputs so our version is Immutable.
+			// our case, we only take String inputs so our version is ImmutableCopy.
 			IgnoreVolatilityCheck: true,
 		},
 	),

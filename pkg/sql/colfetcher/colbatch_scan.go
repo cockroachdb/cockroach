@@ -133,11 +133,11 @@ func NewColBatchScan(
 	limitHint := execinfra.LimitHint(spec.LimitHint, post)
 
 	returnMutations := spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic
-	// TODO(ajwerner): The need to construct an ImmutableTableDescriptor here
+	// TODO(ajwerner): The need to construct an Immutable here
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just seting the ID and Version in the spec or something like that and
-	// retrieving the hydrated ImmutableTableDescriptor from cache.
-	table := tabledesc.NewImmutableTableDescriptor(spec.Table)
+	// retrieving the hydrated Immutable from cache.
+	table := tabledesc.NewImmutable(spec.Table)
 	typs := table.ColumnTypesWithMutations(returnMutations)
 	columnIdxMap := table.ColumnIdxMapWithMutations(returnMutations)
 	// Add all requested system columns to the output.
@@ -219,7 +219,7 @@ func initCRowFetcher(
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	systemColumnDescs []descpb.ColumnDescriptor,
 ) (index *descpb.IndexDescriptor, isSecondaryIndex bool, err error) {
-	immutDesc := tabledesc.NewImmutableTableDescriptor(*desc)
+	immutDesc := tabledesc.NewImmutable(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err

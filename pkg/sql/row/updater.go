@@ -82,7 +82,7 @@ func MakeUpdater(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	updateCols []descpb.ColumnDescriptor,
 	requestedCols []descpb.ColumnDescriptor,
 	updateType rowUpdaterType,

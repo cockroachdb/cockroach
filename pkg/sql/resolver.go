@@ -40,7 +40,7 @@ var _ resolver.SchemaResolver = &planner{}
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *dbdesc.ImmutableDatabaseDescriptor, err error) {
+) (res *dbdesc.Immutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		var desc catalog.DatabaseDescriptor
 		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
@@ -48,7 +48,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 			tree.DatabaseLookupFlags{CommonLookupFlags: p.CommonLookupFlags(required)},
 		)
 		if desc != nil {
-			res = desc.(*dbdesc.ImmutableDatabaseDescriptor)
+			res = desc.(*dbdesc.Immutable)
 		}
 	})
 	return res, err
@@ -56,7 +56,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 
 func (p *planner) ResolveMutableDatabaseDescriptor(
 	ctx context.Context, name string, required bool,
-) (*dbdesc.MutableDatabaseDescriptor, error) {
+) (*dbdesc.Mutable, error) {
 	desc, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
 		ctx, p.txn, p.ExecCfg().Codec, name, tree.DatabaseLookupFlags{
 			CommonLookupFlags: p.CommonLookupFlags(required),
@@ -65,7 +65,7 @@ func (p *planner) ResolveMutableDatabaseDescriptor(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.MutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Mutable), nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -205,7 +205,7 @@ func (p *planner) ResolveType(
 		return nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
-	tdesc := desc.(*typedesc.ImmutableTypeDescriptor)
+	tdesc := desc.(*typedesc.Immutable)
 
 	// Disllow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
@@ -497,7 +497,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return tabledesc.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
+	return tabledesc.NewExistingMutable(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -520,7 +520,7 @@ func expandTableGlob(
 type fkSelfResolver struct {
 	resolver.SchemaResolver
 	newTableName *tree.TableName
-	newTableDesc *tabledesc.MutableTableDescriptor
+	newTableDesc *tabledesc.Mutable
 }
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
@@ -536,7 +536,7 @@ func (r *fkSelfResolver) LookupObject(
 		if lookupFlags.RequireMutable {
 			return true, table, nil
 		}
-		return true, &table.ImmutableTableDescriptor, nil
+		return true, &table.Immutable, nil
 	}
 	lookupFlags.IncludeOffline = false
 	return r.SchemaResolver.LookupObject(ctx, lookupFlags, dbName, scName, tbName)
@@ -553,11 +553,11 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
-	dbDescs     map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor
-	schemaDescs map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor
+	dbDescs     map[descpb.ID]*dbdesc.Immutable
+	schemaDescs map[descpb.ID]*schemadesc.Immutable
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
-	typDescs    map[descpb.ID]*typedesc.ImmutableTypeDescriptor
+	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
 }
 
@@ -569,56 +569,54 @@ type tableLookupFn = *internalLookupCtx
 // appropriate implementation of Descriptor before constructing a
 // new internalLookupCtx. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	rawDescs []descpb.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
+	rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
 ) *internalLookupCtx {
 	descs := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		desc := &rawDescs[i]
 		switch t := desc.Union.(type) {
 		case *descpb.Descriptor_Database:
-			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
+			descs[i] = dbdesc.NewImmutable(*t.Database)
 		case *descpb.Descriptor_Table:
-			descs[i] = tabledesc.NewImmutableTableDescriptor(*t.Table)
+			descs[i] = tabledesc.NewImmutable(*t.Table)
 		case *descpb.Descriptor_Type:
-			descs[i] = typedesc.NewImmutableTypeDescriptor(*t.Type)
+			descs[i] = typedesc.NewImmutable(*t.Type)
 		case *descpb.Descriptor_Schema:
-			descs[i] = schemadesc.NewImmutableSchemaDescriptor(*t.Schema)
+			descs[i] = schemadesc.NewImmutable(*t.Schema)
 		}
 	}
 	return newInternalLookupCtx(descs, prefix)
 }
 
-func newInternalLookupCtx(
-	descs []catalog.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
-) *internalLookupCtx {
+func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
-	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
-	schemaDescs := make(map[descpb.ID]*schemadesc.ImmutableSchemaDescriptor)
+	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
+	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
-	typDescs := make(map[descpb.ID]*typedesc.ImmutableTypeDescriptor)
+	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs []descpb.ID
 	// Record database descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
-		case *dbdesc.ImmutableDatabaseDescriptor:
+		case *dbdesc.Immutable:
 			dbNames[desc.GetID()] = desc.GetName()
 			dbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.GetID() {
 				dbIDs = append(dbIDs, desc.GetID())
 			}
-		case *tabledesc.ImmutableTableDescriptor:
+		case *tabledesc.Immutable:
 			tbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, desc.ID)
 			}
-		case *typedesc.ImmutableTypeDescriptor:
+		case *typedesc.Immutable:
 			typDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.ParentID {
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
-		case *schemadesc.ImmutableSchemaDescriptor:
+		case *schemadesc.Immutable:
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
@@ -634,9 +632,7 @@ func newInternalLookupCtx(
 	}
 }
 
-func (l *internalLookupCtx) getDatabaseByID(
-	id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -653,9 +649,7 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 	return tb, nil
 }
 
-func (l *internalLookupCtx) getSchemaByID(
-	id descpb.ID,
-) (*schemadesc.ImmutableSchemaDescriptor, error) {
+func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
@@ -735,7 +729,7 @@ func getTableNameFromTableDescriptor(
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
 func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
-) (*typedesc.MutableTypeDescriptor, error) {
+) (*typedesc.Mutable, error) {
 	tn, desc, err := resolver.ResolveMutableType(ctx, p, name, required)
 	if err != nil {
 		return nil, err
@@ -828,7 +822,7 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id descpb.ID) (*dbdesc.ImmutableDatabaseDescriptor, error)
-	getSchemaByID(id descpb.ID) (*schemadesc.ImmutableSchemaDescriptor, error)
+	getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error)
+	getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

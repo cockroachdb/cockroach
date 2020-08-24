@@ -467,7 +467,7 @@ func (m *Manager) PublishMultiple(
 		case err == nil || errors.Is(err, ErrDidntUpdateDescriptor):
 			immutDescs := make(map[descpb.ID]catalog.Descriptor)
 			for id, desc := range descs {
-				immutDescs[id] = desc.Immutable()
+				immutDescs[id] = desc.ImmutableCopy()
 			}
 			return immutDescs, nil
 		case errors.Is(err, errLeaseVersionChanged):

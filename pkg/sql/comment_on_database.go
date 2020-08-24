@@ -23,7 +23,7 @@ import (
 
 type commentOnDatabaseNode struct {
 	n      *tree.CommentOnDatabase
-	dbDesc *dbdesc.ImmutableDatabaseDescriptor
+	dbDesc *dbdesc.Immutable
 }
 
 // CommentOnDatabase add comment on a database.

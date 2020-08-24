@@ -195,8 +195,8 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *dbdesc.ImmutableDatabaseDescriptor
-	table  *tabledesc.ImmutableTableDescriptor
+	db     *dbdesc.Immutable
+	table  *tabledesc.Immutable
 	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual
 	// indexes only support a single indexed column currently.
@@ -261,7 +261,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	v.db = db.(*dbdesc.ImmutableDatabaseDescriptor)
+	v.db = db.(*dbdesc.Immutable)
 	return err
 }
 

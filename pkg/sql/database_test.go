@@ -68,8 +68,8 @@ CREATE SCHEMA sc;
 		t.Fatal(err)
 	}
 
-	getDB := func() *dbdesc.ImmutableDatabaseDescriptor {
-		var db *dbdesc.ImmutableDatabaseDescriptor
+	getDB := func() *dbdesc.Immutable {
+		var db *dbdesc.Immutable
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			dbID, err := catalogkv.GetDatabaseID(ctx, txn, keys.SystemSQLCodec, "d", true /* required */)
 			if err != nil {

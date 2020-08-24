@@ -39,7 +39,7 @@ type indexBackfiller struct {
 
 	adder kvserverbase.BulkAdder
 
-	desc *tabledesc.ImmutableTableDescriptor
+	desc *tabledesc.Immutable
 }
 
 var _ execinfra.Processor = &indexBackfiller{}
@@ -70,7 +70,7 @@ func newIndexBackfiller(
 	output execinfra.RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
-		desc: tabledesc.NewImmutableTableDescriptor(spec.Table),
+		desc: tabledesc.NewImmutable(spec.Table),
 		backfiller: backfiller{
 			name:        "Index",
 			filter:      backfill.IndexMutationFilter,
@@ -131,7 +131,7 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	}
 
 	desc, err := ib.desc.MakeFirstMutationPublic(tabledesc.IncludeConstraints)
-	immutable := tabledesc.NewImmutableTableDescriptor(*desc.TableDesc())
+	immutable := tabledesc.NewImmutable(*desc.TableDesc())
 	if err != nil {
 		return err
 	}

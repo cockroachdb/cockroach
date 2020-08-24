@@ -1390,7 +1390,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		leaseMgr := s.LeaseManager().(*lease.Manager)
 		var version descpb.DescriptorVersion
 		if _, err := leaseMgr.Publish(ctx, id, func(desc catalog.MutableDescriptor) error {
-			table := desc.(*tabledesc.MutableTableDescriptor)
+			table := desc.(*tabledesc.Mutable)
 			// Publish nothing; only update the version.
 			version = table.Version
 			return nil
@@ -5031,7 +5031,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
-	var tableDesc *tabledesc.ImmutableTableDescriptor
+	var tableDesc *tabledesc.Immutable
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
@@ -5101,7 +5101,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *kv.DB
-	var tableDesc *tabledesc.ImmutableTableDescriptor
+	var tableDesc *tabledesc.Immutable
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,

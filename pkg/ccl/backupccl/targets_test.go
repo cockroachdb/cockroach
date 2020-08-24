@@ -37,7 +37,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(ajwerner): There should be a constructor for an ImmutableTableDescriptor
+	// TODO(ajwerner): There should be a constructor for an Immutable
 	// and really all of the leasable descriptor types which includes its initial
 	// DescriptorMeta. This refactoring precedes the actual adoption of
 	// DescriptorMeta.
@@ -48,23 +48,23 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) *tabledesc.ImmutableTableDescriptor {
-			desc := tabledesc.NewImmutableTableDescriptor(descriptor)
+		mkTable := func(descriptor tbDesc) *tabledesc.Immutable {
+			desc := tabledesc.NewImmutable(descriptor)
 			desc.ModificationTime = ts1
 			return desc
 		}
-		mkDB := func(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
-			return &dbdesc.NewInitialDatabaseDescriptor(id, name, security.AdminRole).ImmutableDatabaseDescriptor
+		mkDB := func(id descpb.ID, name string) *dbdesc.Immutable {
+			return &dbdesc.NewInitial(id, name, security.AdminRole).Immutable
 		}
-		mkTyp := func(desc typDesc) *typedesc.ImmutableTypeDescriptor {
+		mkTyp := func(desc typDesc) *typedesc.Immutable {
 			// Set a default parent schema for the type descriptors.
 			if desc.ParentSchemaID == descpb.InvalidID {
 				desc.ParentSchemaID = keys.PublicSchemaID
 			}
-			return typedesc.NewImmutableTypeDescriptor(desc)
+			return typedesc.NewImmutable(desc)
 		}
-		mkSchema := func(desc scDesc) *schemadesc.ImmutableSchemaDescriptor {
-			return schemadesc.NewImmutableSchemaDescriptor(desc)
+		mkSchema := func(desc scDesc) *schemadesc.Immutable {
+			return schemadesc.NewImmutable(desc)
 		}
 		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"

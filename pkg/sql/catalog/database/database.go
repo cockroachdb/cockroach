@@ -74,7 +74,7 @@ func (dc *Cache) setID(name string, id descpb.ID) {
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *Cache) getCachedDatabaseDesc(name string) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+func (dc *Cache) getCachedDatabaseDesc(name string) (*dbdesc.Immutable, error) {
 	dbID, err := dc.GetCachedDatabaseID(name)
 	if dbID == descpb.InvalidID || err != nil {
 		return nil, err
@@ -85,9 +85,7 @@ func (dc *Cache) getCachedDatabaseDesc(name string) (*dbdesc.ImmutableDatabaseDe
 
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
 // given its ID.
-func (dc *Cache) getCachedDatabaseDescByID(
-	id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+func (dc *Cache) getCachedDatabaseDescByID(id descpb.ID) (*dbdesc.Immutable, error) {
 	if id == keys.SystemDatabaseID {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
@@ -110,7 +108,7 @@ func (dc *Cache) getCachedDatabaseDescByID(
 	if dbDesc == nil {
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "[%d] is not a database", id)
 	}
-	database := dbdesc.NewImmutableDatabaseDescriptor(*dbDesc)
+	database := dbdesc.NewImmutable(*dbDesc)
 	if err := database.Validate(); err != nil {
 		return nil, err
 	}
@@ -125,7 +123,7 @@ func (dc *Cache) GetDatabaseDesc(
 	txnRunner func(context.Context, func(context.Context, *kv.Txn) error) error,
 	name string,
 	required bool,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
@@ -151,7 +149,7 @@ func (dc *Cache) GetDatabaseDesc(
 				return err
 			}
 			if descI != nil {
-				desc = descI.(*dbdesc.ImmutableDatabaseDescriptor)
+				desc = descI.(*dbdesc.Immutable)
 			}
 			return nil
 		}); err != nil {
@@ -168,7 +166,7 @@ func (dc *Cache) GetDatabaseDesc(
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *Cache) GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if desc == nil || err != nil {
 		if err != nil {

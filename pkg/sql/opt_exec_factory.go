@@ -129,7 +129,7 @@ func (ef *execFactory) ConstructScan(
 
 func generateScanSpans(
 	codec keys.SQLCodec,
-	tabDesc *tabledesc.ImmutableTableDescriptor,
+	tabDesc *tabledesc.Immutable,
 	indexDesc *descpb.IndexDescriptor,
 	params exec.ScanParams,
 ) (roachpb.Spans, error) {
@@ -781,7 +781,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
 	indexDesc *descpb.IndexDescriptor,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	cols exec.TableColumnOrdinalSet,
 ) (*scanNode, error) {
 
@@ -1646,7 +1646,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	if len(interleavedTables) > 0 {
 		dr.interleavedFastPath = true
-		dr.interleavedDesc = make([]*tabledesc.ImmutableTableDescriptor, len(interleavedTables))
+		dr.interleavedDesc = make([]*tabledesc.Immutable, len(interleavedTables))
 		for i := range dr.interleavedDesc {
 			dr.interleavedDesc[i] = interleavedTables[i].(*optTable).desc
 		}

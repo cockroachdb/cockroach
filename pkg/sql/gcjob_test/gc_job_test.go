@@ -82,21 +82,21 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			myTableID := descpb.ID(keys.MinUserDescID + 3)
 			myOtherTableID := descpb.ID(keys.MinUserDescID + 4)
 
-			var myTableDesc *tabledesc.MutableTableDescriptor
-			var myOtherTableDesc *tabledesc.MutableTableDescriptor
+			var myTableDesc *tabledesc.Mutable
+			var myOtherTableDesc *tabledesc.Mutable
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*tabledesc.MutableTableDescriptor)
+				myTableDesc = myDesc.(*tabledesc.Mutable)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc = myOtherDesc.(*tabledesc.MutableTableDescriptor)
+				myOtherTableDesc = myOtherDesc.(*tabledesc.Mutable)
 				return nil
 			}); err != nil {
 				t.Fatal(err)
@@ -216,7 +216,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myTableDesc = myDesc.(*tabledesc.MutableTableDescriptor)
+				myTableDesc = myDesc.(*tabledesc.Mutable)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
 					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
 				if ttlTime != FUTURE && dropItem == DATABASE {
@@ -227,7 +227,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				myOtherTableDesc = myOtherDesc.(*tabledesc.MutableTableDescriptor)
+				myOtherTableDesc = myOtherDesc.(*tabledesc.Mutable)
 				return nil
 			}); err != nil {
 				t.Fatal(err)

@@ -44,7 +44,7 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	desc  *tabledesc.ImmutableTableDescriptor
+	desc  *tabledesc.Immutable
 	index *descpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
@@ -194,7 +194,7 @@ func (n *scanNode) limitHint() int64 {
 func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
-	desc *tabledesc.ImmutableTableDescriptor,
+	desc *tabledesc.Immutable,
 	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) error {
@@ -257,7 +257,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 
 // initColsForScan initializes cols according to desc and colCfg.
 func initColsForScan(
-	desc *tabledesc.ImmutableTableDescriptor, colCfg scanColumnsConfig,
+	desc *tabledesc.Immutable, colCfg scanColumnsConfig,
 ) (cols []*descpb.ColumnDescriptor, err error) {
 	if colCfg.wantedColumns == nil {
 		return nil, errors.AssertionFailedf("unexpectedly wantedColumns is nil")

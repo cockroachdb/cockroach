@@ -32,7 +32,7 @@ import (
 //    that refers to a primary index key that cannot be found.
 type indexCheckOperation struct {
 	tableName *tree.TableName
-	tableDesc *tabledesc.ImmutableTableDescriptor
+	tableDesc *tabledesc.Immutable
 	indexDesc *descpb.IndexDescriptor
 	asOf      hlc.Timestamp
 
@@ -57,7 +57,7 @@ type indexCheckRun struct {
 
 func newIndexCheckOperation(
 	tableName *tree.TableName,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	indexDesc *descpb.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {

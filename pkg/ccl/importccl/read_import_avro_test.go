@@ -142,7 +142,7 @@ func (g *intArrGen) Gen() interface{} {
 // A testHelper to generate avro data.
 type testHelper struct {
 	schemaJSON  string
-	schemaTable *tabledesc.ImmutableTableDescriptor
+	schemaTable *tabledesc.Immutable
 	codec       *goavro.Codec
 	gens        []avroGen
 	settings    *cluster.Settings
@@ -200,7 +200,7 @@ func newTestHelper(t *testing.T, gens ...avroGen) *testHelper {
 	return &testHelper{
 		schemaJSON: string(schemaJSON),
 		schemaTable: descForTable(t, createStmt, 10, 20, NoFKs).
-			Immutable().(*tabledesc.ImmutableTableDescriptor),
+			ImmutableCopy().(*tabledesc.Immutable),
 		codec:    codec,
 		gens:     gens,
 		settings: st,
@@ -591,7 +591,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(b, err)
 
 	avro, err := newAvroInputReader(kvCh,
-		tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor),
+		tableDesc.ImmutableCopy().(*tabledesc.Immutable),
 		avroOpts, 0, 0, &evalCtx)
 	require.NoError(b, err)
 

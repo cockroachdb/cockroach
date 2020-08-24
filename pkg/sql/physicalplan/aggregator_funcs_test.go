@@ -117,7 +117,7 @@ func checkDistAggregationInfo(
 	ctx context.Context,
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	tableDesc *tabledesc.ImmutableTableDescriptor,
+	tableDesc *tabledesc.Immutable,
 	colIdx int,
 	numRows int,
 	fn execinfrapb.AggregatorSpec_Func,

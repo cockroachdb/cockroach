@@ -29,7 +29,7 @@ type columnBackfiller struct {
 
 	backfill.ColumnBackfiller
 
-	desc *tabledesc.ImmutableTableDescriptor
+	desc *tabledesc.Immutable
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
@@ -44,7 +44,7 @@ func newColumnBackfiller(
 	output execinfra.RowReceiver,
 ) (*columnBackfiller, error) {
 	cb := &columnBackfiller{
-		desc: tabledesc.NewImmutableTableDescriptor(spec.Table),
+		desc: tabledesc.NewImmutable(spec.Table),
 		backfiller: backfiller{
 			name:        "Column",
 			filter:      backfill.ColumnMutationFilter,

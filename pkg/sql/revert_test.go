@@ -80,7 +80,7 @@ func TestRevertTable(t *testing.T) {
 		// Revert the table to ts.
 		desc := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
 		desc.State = descpb.TableDescriptor_OFFLINE // bypass the offline check.
-		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []*tabledesc.ImmutableTableDescriptor{desc}, targetTime, 10))
+		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []*tabledesc.Immutable{desc}, targetTime, 10))
 
 		var reverted int
 		db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)
@@ -109,14 +109,14 @@ func TestRevertTable(t *testing.T) {
 		child := catalogkv.TestingGetTableDescriptor(kv, keys.SystemSQLCodec, "test", "child")
 		child.State = descpb.TableDescriptor_OFFLINE
 		t.Run("reject only parent", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.ImmutableTableDescriptor{desc}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.Immutable{desc}, targetTime, 10))
 		})
 		t.Run("reject only child", func(t *testing.T) {
-			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.ImmutableTableDescriptor{child}, targetTime, 10))
+			require.Error(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.Immutable{child}, targetTime, 10))
 		})
 
 		t.Run("rollback parent and child", func(t *testing.T) {
-			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.ImmutableTableDescriptor{desc, child}, targetTime, sql.RevertTableDefaultBatchSize))
+			require.NoError(t, sql.RevertTables(ctx, kv, &execCfg, []*tabledesc.Immutable{desc, child}, targetTime, sql.RevertTableDefaultBatchSize))
 
 			var reverted, revertedChild int
 			db.QueryRow(t, `SELECT xor_agg(k # rev) FROM test`).Scan(&reverted)

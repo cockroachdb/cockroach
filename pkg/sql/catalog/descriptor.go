@@ -65,7 +65,7 @@ type Descriptor interface {
 }
 
 // DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by ImmutableDatabaseDescriptor.
+// It is implemented by Immutable.
 type DatabaseDescriptor interface {
 	Descriptor
 
@@ -79,7 +79,7 @@ type DatabaseDescriptor interface {
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
-// It is implemented by ImmutableSchemaDescriptor.
+// It is implemented by Immutable.
 type SchemaDescriptor interface {
 	Descriptor
 	SchemaDesc() *descpb.SchemaDescriptor

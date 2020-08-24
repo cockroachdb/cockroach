@@ -28,7 +28,7 @@ import (
 // getShardColumnID fetches the id of the shard column associated with the given sharded
 // index.
 func getShardColumnID(
-	t *testing.T, tableDesc *tabledesc.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc *tabledesc.Immutable, shardedIndexName string,
 ) descpb.ColumnID {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {
@@ -47,7 +47,7 @@ func getShardColumnID(
 // 2. A hidden check constraint was created on the aforementioned shard column.
 // 3. The first column in the index set is the aforementioned shard column.
 func verifyTableDescriptorState(
-	t *testing.T, tableDesc *tabledesc.ImmutableTableDescriptor, shardedIndexName string,
+	t *testing.T, tableDesc *tabledesc.Immutable, shardedIndexName string,
 ) {
 	idx, _, err := tableDesc.FindIndexByName(shardedIndexName)
 	if err != nil {

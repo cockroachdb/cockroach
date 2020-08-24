@@ -134,7 +134,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed: true,
-		resolver: fkResolver(map[string]*tabledesc.MutableTableDescriptor{
+		resolver: fkResolver(map[string]*tabledesc.Mutable{
 			referencedSimple.Name: referencedSimple,
 		}),
 	}
@@ -214,8 +214,8 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
 		tableName := &descpb.AnonymousTable
-		expectedDesc := tabledesc.NewImmutableTableDescriptor(*expected)
-		gotDesc := tabledesc.NewImmutableTableDescriptor(*got)
+		expectedDesc := tabledesc.NewImmutable(*expected)
+		gotDesc := tabledesc.NewImmutable(*got)
 		e, err := schemaexpr.FormatIndexForDisplay(ctx, expectedDesc, tableName, &expected.Indexes[i], &semaCtx)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)

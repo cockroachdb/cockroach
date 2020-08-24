@@ -18,13 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ catalog.TableDescriptor = (*ImmutableTableDescriptor)(nil)
-var _ catalog.TableDescriptor = (*MutableTableDescriptor)(nil)
+var _ catalog.TableDescriptor = (*Immutable)(nil)
+var _ catalog.TableDescriptor = (*Mutable)(nil)
+var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// ImmutableTableDescriptor is a custom type for TableDescriptors
+// Immutable is a custom type for TableDescriptors
 // It holds precomputed values and the underlying TableDescriptor
 // should be const.
-type ImmutableTableDescriptor struct {
+type Immutable struct {
 	descpb.TableDescriptor
 
 	// publicAndNonPublicCols is a list of public and non-public columns.
@@ -61,48 +62,48 @@ type ImmutableTableDescriptor struct {
 }
 
 // NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*ImmutableTableDescriptor) NameResolutionResult() {}
+func (*Immutable) NameResolutionResult() {}
 
 // DescriptorProto prepares desc for serialization.
-func (desc *ImmutableTableDescriptor) DescriptorProto() *descpb.Descriptor {
+func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Table{Table: &desc.TableDescriptor},
 	}
 }
 
 // GetPrimaryIndexID returns the ID of the primary index.
-func (desc *ImmutableTableDescriptor) GetPrimaryIndexID() descpb.IndexID {
+func (desc *Immutable) GetPrimaryIndexID() descpb.IndexID {
 	return desc.PrimaryIndex.ID
 }
 
 // GetPublicNonPrimaryIndexes returns the public non-primary indexes of the descriptor.
-func (desc *ImmutableTableDescriptor) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
+func (desc *Immutable) GetPublicNonPrimaryIndexes() []descpb.IndexDescriptor {
 	return desc.GetIndexes()
 }
 
 // IsTemporary returns true if this is a temporary table.
-func (desc *ImmutableTableDescriptor) IsTemporary() bool {
+func (desc *Immutable) IsTemporary() bool {
 	return desc.GetTemporary()
 }
 
 // GetPublicColumns return the public columns in the descriptor.
-func (desc *ImmutableTableDescriptor) GetPublicColumns() []descpb.ColumnDescriptor {
+func (desc *Immutable) GetPublicColumns() []descpb.ColumnDescriptor {
 	return desc.Columns
 }
 
 // GetColumnAtIdx returns the column at the specified index.
-func (desc *ImmutableTableDescriptor) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
+func (desc *Immutable) GetColumnAtIdx(idx int) *descpb.ColumnDescriptor {
 	return &desc.Columns[idx]
 }
 
-// Immutable implements the MutableDescriptor interface.
-func (desc *MutableTableDescriptor) Immutable() catalog.Descriptor {
+// ImmutableCopy implements the MutableDescriptor interface.
+func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	// TODO (lucy): Should the immutable descriptor constructors always make a
 	// copy, so we don't have to do it here?
-	return NewImmutableTableDescriptor(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
+	return NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
 }
 
 // SetDrainingNames implements the MutableDescriptor interface.
-func (desc *MutableTableDescriptor) SetDrainingNames(names []descpb.NameInfo) {
+func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names
 }

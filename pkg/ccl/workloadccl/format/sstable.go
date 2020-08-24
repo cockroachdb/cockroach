@@ -32,7 +32,7 @@ import (
 // Table.
 func ToTableDescriptor(
 	t workload.Table, tableID descpb.ID, ts time.Time,
-) (*tabledesc.ImmutableTableDescriptor, error) {
+) (*tabledesc.Immutable, error) {
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
 	stmt, err := parser.ParseOne(fmt.Sprintf(`CREATE TABLE "%s" %s`, t.Name, t.Schema))
@@ -49,7 +49,7 @@ func ToTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc.Immutable().(*tabledesc.ImmutableTableDescriptor), nil
+	return tableDesc.ImmutableCopy().(*tabledesc.Immutable), nil
 }
 
 // ToSSTable constructs a single sstable with the kvs necessary to represent a

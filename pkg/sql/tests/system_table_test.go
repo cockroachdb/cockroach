@@ -162,7 +162,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	type testcase struct {
 		id     descpb.ID
 		schema string
-		pkg    *tabledesc.ImmutableTableDescriptor
+		pkg    *tabledesc.Immutable
 	}
 
 	for _, test := range []testcase{
