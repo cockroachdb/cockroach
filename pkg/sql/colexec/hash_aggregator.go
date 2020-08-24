@@ -285,8 +285,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	// for the tuples.
 	op.ht.computeHashAndBuildChains(ctx, b)
 	op.ht.findBuckets(
-		b, op.ht.probeScratch.keys, op.ht.probeScratch.first,
-		op.ht.probeScratch.next, op.ht.checkProbeForDistinct,
+		b, op.ht.keys, op.ht.probeScratch.first, op.ht.probeScratch.next, op.ht.checkProbeForDistinct,
 	)
 
 	// Step 2: now that we have op.ht.probeScratch.headID populated we can
@@ -305,8 +304,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 	// against the heads of the existing groups.
 	if len(op.buckets) > 0 {
 		op.ht.findBuckets(
-			b, op.ht.probeScratch.keys, op.ht.buildScratch.first,
-			op.ht.buildScratch.next, op.ht.checkBuildForAggregation,
+			b, op.ht.keys, op.ht.buildScratch.first, op.ht.buildScratch.next, op.ht.checkBuildForAggregation,
 		)
 		for eqChainsSlot, headID := range op.ht.probeScratch.headID[:eqChainsCount] {
 			if headID != 0 {
@@ -322,8 +320,6 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				op.scratch.eqChains[eqChainsSlot] = op.scratch.eqChains[eqChainsSlot][:0]
 			}
 		}
-		copy(op.ht.probeScratch.headID[:eqChainsCount], zeroUint64Column)
-		copy(op.ht.probeScratch.differs[:eqChainsCount], zeroBoolColumn)
 	}
 
 	// Step 4: now we go over all equality chains and check whether there are

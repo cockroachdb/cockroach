@@ -13008,8 +13008,6 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 				}
 			}
 		}
-		copy(ht.probeScratch.headID[:batchLength], zeroUint64Column)
-		copy(ht.probeScratch.differs[:batchLength], zeroBoolColumn)
 	} else {
 		b.SetSelection(true)
 		sel = b.Selection()
@@ -13028,8 +13026,6 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 				}
 			}
 		}
-		copy(ht.probeScratch.headID[:batchLength], zeroUint64Column)
-		copy(ht.probeScratch.differs[:batchLength], zeroBoolColumn)
 	}
 	b.SetLength(distinctCount)
 }
@@ -13040,10 +13036,7 @@ func (ht *hashTable) updateSel(b coldata.Batch) {
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
 func (ht *hashTable) distinctCheck(nToCheck uint64, probeSel []int) uint64 {
-	probeVecs := ht.probeScratch.keys
-	buildVecs := ht.vals.ColVecs()
-	buildKeyCols := ht.keyCols
-	ht.checkCols(probeVecs, buildVecs, buildKeyCols, nToCheck, probeSel)
+	ht.checkCols(ht.keys, nToCheck, probeSel)
 	// Select the indices that differ and put them into toCheck.
 	nDiffers := uint64(0)
 	for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {

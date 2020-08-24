@@ -281,20 +281,28 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
 	keyLocking := f.getKeyLockingStrength()
 	if f.reverse {
-		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
+		scans := make([]struct {
+			req   roachpb.ReverseScanRequest
+			union roachpb.RequestUnion_ReverseScan
+		}, len(f.spans))
 		for i := range f.spans {
-			scans[i].SetSpan(f.spans[i])
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
-			scans[i].KeyLocking = keyLocking
-			ba.Requests[i].MustSetInner(&scans[i])
+			scans[i].req.SetSpan(f.spans[i])
+			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].req.KeyLocking = keyLocking
+			scans[i].union.ReverseScan = &scans[i].req
+			ba.Requests[i].Value = &scans[i].union
 		}
 	} else {
-		scans := make([]roachpb.ScanRequest, len(f.spans))
+		scans := make([]struct {
+			req   roachpb.ScanRequest
+			union roachpb.RequestUnion_Scan
+		}, len(f.spans))
 		for i := range f.spans {
-			scans[i].SetSpan(f.spans[i])
-			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
-			scans[i].KeyLocking = keyLocking
-			ba.Requests[i].MustSetInner(&scans[i])
+			scans[i].req.SetSpan(f.spans[i])
+			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[i].req.KeyLocking = keyLocking
+			scans[i].union.Scan = &scans[i].req
+			ba.Requests[i].Value = &scans[i].union
 		}
 	}
 	if cap(f.requestSpans) < len(f.spans) {

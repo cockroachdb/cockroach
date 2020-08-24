@@ -203,6 +203,9 @@ type hashJoiner struct {
 		// that were unmatched are emitted during the emitUnmatched phase.
 		buildRowMatched []bool
 
+		// buckets is used to store the computed hash value of each key in a single
+		// probe batch.
+		buckets []uint64
 		// prevBatch, if not nil, indicates that the previous probe input batch has
 		// not been fully processed.
 		prevBatch coldata.Batch
@@ -306,8 +309,20 @@ func (hj *hashJoiner) Next(ctx context.Context) coldata.Batch {
 func (hj *hashJoiner) build(ctx context.Context) {
 	hj.ht.build(ctx, hj.inputTwo)
 
-	if !hj.spec.rightDistinct {
-		hj.ht.maybeAllocateSameAndVisited()
+	// We might have duplicates in the hash table, so we need to set up
+	// same and visited slices for the prober.
+	if !hj.spec.rightDistinct && hj.spec.joinType != descpb.LeftAntiJoin && hj.spec.joinType != descpb.ExceptAllJoin {
+		// We don't need same with LEFT ANTI and EXCEPT ALL joins because
+		// they have separate collectAnti* methods.
+		hj.ht.same = maybeAllocateUint64Array(hj.ht.same, hj.ht.vals.Length()+1)
+	}
+	if !hj.spec.rightDistinct || hj.spec.joinType.IsSetOpJoin() {
+		// visited slice is also used for set-operation joins, regardless of
+		// the fact whether the right side is distinct.
+		hj.ht.visited = maybeAllocateBoolArray(hj.ht.visited, hj.ht.vals.Length()+1)
+		// Since keyID = 0 is reserved for end of list, it can be marked as visited
+		// at the beginning.
+		hj.ht.visited[0] = true
 	}
 
 	if hj.spec.right.outer {
@@ -368,18 +383,6 @@ func (hj *hashJoiner) emitUnmatched() {
 	})
 }
 
-// hjInitialToCheck is a slice that contains all consequent integers in
-// [0, coldata.MaxBatchSize) range that can be used to initialize toCheck buffer
-// for most of the join types.
-var hjInitialToCheck []uint64
-
-func init() {
-	hjInitialToCheck = make([]uint64, coldata.MaxBatchSize)
-	for i := range hjInitialToCheck {
-		hjInitialToCheck[i] = uint64(i)
-	}
-}
-
 // exec is a general prober that works with non-distinct build table equality
 // columns. It returns a Batch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
@@ -406,45 +409,47 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 			}
 
 			for i, colIdx := range hj.spec.left.eqCols {
-				hj.ht.probeScratch.keys[i] = batch.ColVec(int(colIdx))
+				hj.ht.keys[i] = batch.ColVec(int(colIdx))
 			}
 
 			sel := batch.Selection()
 
 			// First, we compute the hash values for all tuples in the batch.
+			if cap(hj.probeState.buckets) < batchSize {
+				hj.probeState.buckets = make([]uint64, batchSize)
+			} else {
+				// Note that we don't need to clear old values from buckets
+				// because the correct values will be populated in
+				// computeBuckets.
+				hj.probeState.buckets = hj.probeState.buckets[:batchSize]
+			}
 			hj.ht.computeBuckets(
-				ctx, hj.ht.probeScratch.buckets, hj.ht.probeScratch.keys, batchSize, sel,
+				ctx, hj.probeState.buckets, hj.ht.keys, batchSize, sel,
 			)
 			// Then, we initialize groupID with the initial hash buckets and
 			// toCheck with all applicable indices.
+			hj.ht.probeScratch.setupLimitedSlices(batchSize, hj.ht.buildMode)
 			var nToCheck uint64
 			switch hj.spec.joinType {
 			case descpb.LeftAntiJoin, descpb.ExceptAllJoin:
 				// The setup of probing for LEFT ANTI and EXCEPT ALL joins
 				// needs a special treatment in order to reuse the same "check"
 				// functions below.
-				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+				for i, bucket := range hj.probeState.buckets[:batchSize] {
+					hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
 					if hj.ht.buildScratch.first[bucket] != 0 {
 						// Non-zero "first" key indicates that there is a match of hashes
 						// and we need to include the current tuple to check whether it is
 						// an actual match.
-						hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
 						hj.ht.probeScratch.toCheck[nToCheck] = uint64(i)
 						nToCheck++
 					}
 				}
-				// We need to reset headID for all tuples in the batch to remove any
-				// leftover garbage from the previous iteration. For tuples that need
-				// to be checked, headID will be updated accordingly; for tuples that
-				// definitely don't have a match, the zero value will remain until the
-				// "collecting" and "congregation" step in which such tuple will be
-				// included into the output.
-				copy(hj.ht.probeScratch.headID[:batchSize], zeroUint64Column)
 			default:
-				for i, bucket := range hj.ht.probeScratch.buckets[:batchSize] {
+				for i, bucket := range hj.probeState.buckets[:batchSize] {
 					hj.ht.probeScratch.groupID[i] = hj.ht.buildScratch.first[bucket]
 				}
-				copy(hj.ht.probeScratch.toCheck, hjInitialToCheck[:batchSize])
+				copy(hj.ht.probeScratch.toCheck, hashTableInitialToCheck[:batchSize])
 				nToCheck = uint64(batchSize)
 			}
 
@@ -463,7 +468,7 @@ func (hj *hashJoiner) exec(ctx context.Context) coldata.Batch {
 				for nToCheck > 0 {
 					// Continue searching for the build table matching keys while the toCheck
 					// array is non-empty.
-					nToCheck = hj.ht.check(hj.ht.probeScratch.keys, hj.ht.keyCols, nToCheck, sel)
+					nToCheck = hj.ht.check(hj.ht.keys, nToCheck, sel)
 					hj.ht.findNext(hj.ht.buildScratch.next, nToCheck)
 				}
 
@@ -667,9 +672,19 @@ func MakeHashJoinerSpec(
 		// with the row on the right to emit it. However, we don't support ON
 		// conditions just yet. When we do, we'll have a separate case for that.
 		rightDistinct = true
-	case descpb.LeftAntiJoin:
-	case descpb.IntersectAllJoin:
-	case descpb.ExceptAllJoin:
+	case descpb.LeftAntiJoin,
+		descpb.IntersectAllJoin,
+		descpb.ExceptAllJoin:
+		// LEFT ANTI, INTERSECT ALL, and EXCEPT ALL joins currently rely on
+		// the fact that ht.probeScratch.headID is populated in order to
+		// perform the matching. However, headID is only populated when the
+		// right side is considered to be non-distinct, so we override that
+		// information here. Note that it forces these joins to be slower
+		// than they could have been if they utilized the actual
+		// distinctness information.
+		// TODO(yuzefovich): refactor these joins to take advantage of the
+		// actual distinctness information.
+		rightDistinct = false
 	default:
 		return spec, errors.AssertionFailedf("hash join of type %s not supported", joinType)
 	}
