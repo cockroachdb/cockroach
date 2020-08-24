@@ -369,12 +369,14 @@ func (expr *NumVal) ResolveAsType(
 }
 
 func intersectTypeSlices(xs, ys []*types.T) (out []*types.T) {
+	seen := make(map[*types.T]bool)
 	for _, x := range xs {
 		for _, y := range ys {
-			if x == y {
+			if x == y && !seen[x] {
 				out = append(out, x)
 			}
 		}
+		seen[x] = true
 	}
 	return out
 }
@@ -458,7 +460,6 @@ var (
 		types.String,
 		types.Bytes,
 		types.Bool,
-		types.Box2D,
 		types.Int,
 		types.Float,
 		types.Decimal,
