@@ -2090,6 +2090,7 @@ signed_iconst64 ::=
 
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
+	| partition 'VALUES' 'IN' '(' expr_list ')' 'CONFIGURE' 'ZONE' 'USING' '(' var_set_list ')' opt_partition_by
 
 range_partition ::=
 	partition 'VALUES' 'FROM' '(' expr_list ')' 'TO' '(' expr_list ')' opt_partition_by

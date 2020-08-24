@@ -596,6 +596,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.expr != nil {
 			v.metadataExpr(name, "yaml", -1, n.yamlConfig)
 		}
+		// enhance create partition feature with locate zone
+		if n.sourcePlan != nil {
+			n.sourcePlan = v.visit(n.sourcePlan)
+		}
 
 	case *projectSetNode:
 		if v.observer.expr != nil {

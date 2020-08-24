@@ -492,3 +492,21 @@ ALTER INDEX t44231@i CONFIGURE ZONE USING num_replicas=COPY FROM PARENT
 
 statement ok
 DROP INDEX t@secondary
+
+# add create partition with zone test feature
+statement ok
+CREATE TABLE a (id INT PRIMARY KEY) PARTITION BY LIST (id) (
+PARTITION b VALUES IN (1) CONFIGURE ZONE USING (constraints='[+region=test]')
+)
+
+query TT
+SELECT zone_name, config_sql FROM [SHOW ZONE CONFIGURATION FOR PARTITION b OF TABLE a];
+----
+test.a.b  ALTER PARTITION b OF INDEX a@primary CONFIGURE ZONE USING
+          range_min_bytes = 16777216,
+		  range_max_bytes = 67108864,
+		  gc.ttlseconds = 90000,
+		  num_replicas = 3,
+		  constraints = '[+region=test]',
+		  lease_preferences = '[]'
+

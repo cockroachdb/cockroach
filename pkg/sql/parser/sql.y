@@ -4142,14 +4142,24 @@ list_partitions:
   }
 
 list_partition:
-  partition VALUES IN '(' expr_list ')' opt_partition_by
-  {
-    $$.val = tree.ListPartition{
-      Name: tree.UnrestrictedName($1),
-      Exprs: $5.exprs(),
-      Subpartition: $7.partitionBy(),
+    partition VALUES IN '(' expr_list ')' opt_partition_by
+    {
+      $$.val = tree.ListPartition{
+        Name: tree.UnrestrictedName($1),
+        Exprs: $5.exprs(),
+        Subpartition: $7.partitionBy(),
+       }
     }
-  }
+  // enhance create partition feature with locate zone
+  | partition VALUES IN '(' expr_list ')' CONFIGURE ZONE USING '('var_set_list')' opt_partition_by
+    {
+      $$.val = tree.ListPartition{
+        Name: tree.UnrestrictedName($1),
+        Exprs: $5.exprs(),
+        Location: $11.kvOptions(),
+        Subpartition: $13.partitionBy(),
+      }
+    }
 
 range_partitions:
   range_partition

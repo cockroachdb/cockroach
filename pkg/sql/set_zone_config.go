@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -45,8 +45,9 @@ type setZoneConfigNode struct {
 	yamlConfig    tree.TypedExpr
 	options       map[tree.Name]optionValue
 	setDefault    bool
-
-	run setZoneConfigRun
+	// enhance create partition feature with locate zone
+	sourcePlan planNode
+	run        setZoneConfigRun
 }
 
 // supportedZoneConfigOptions indicates how to translate SQL variable
