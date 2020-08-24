@@ -169,7 +169,7 @@ func NewServer(ctx *Context, opts ...ServerOption) *grpc.Server {
 		grpc.StatsHandler(&ctx.stats),
 	}
 	if !ctx.Config.Insecure {
-		tlsConfig, err := ctx.GetServerTLSConfig()
+		tlsConfig, err := ctx.GetNodeToNodeServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
@@ -699,7 +699,7 @@ func (ctx *Context) grpcDialOptions(
 		var tlsConfig *tls.Config
 		var err error
 		if ctx.tenID == roachpb.SystemTenantID {
-			tlsConfig, err = ctx.GetClientTLSConfig()
+			tlsConfig, err = ctx.GetNodeToNodeClientTLSConfig()
 		} else {
 			tlsConfig, err = ctx.GetTenantClientTLSConfig()
 		}

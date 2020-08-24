@@ -573,15 +573,15 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	maybeSetMetric(cm.certMetrics.UIExpiration, cm.uiCert)
 }
 
-// GetServerTLSConfig returns a server TLS config with a callback to fetch the
+// GetNodeToNodeServerTLSConfig returns a server TLS config with a callback to fetch the
 // latest TLS config. We still attempt to get the config to make sure
 // the initial call has a valid config loaded.
-func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
-	if _, err := cm.getEmbeddedServerTLSConfig(nil); err != nil {
+func (cm *CertificateManager) GetNodeToNodeServerTLSConfig() (*tls.Config, error) {
+	if _, err := cm.getEmbeddedNodeToNodeServerTLSConfig(nil); err != nil {
 		return nil, err
 	}
 	return &tls.Config{
-		GetConfigForClient: cm.getEmbeddedServerTLSConfig,
+		GetConfigForClient: cm.getEmbeddedNodeToNodeServerTLSConfig,
 		// NB: this is needed to use (*http.Server).ServeTLS, which tries to load
 		// a certificate eagerly from the supplied strings (which are empty in
 		// our case) unless:
@@ -596,10 +596,10 @@ func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
-// getEmbeddedServerTLSConfig returns the most up-to-date server tls.Config.
+// getNodeToNodeEmbeddedServerTLSConfig returns the most up-to-date server tls.Config.
 // This is the callback set in tls.Config.GetConfigForClient. We currently
 // ignore the ClientHelloInfo object.
-func (cm *CertificateManager) getEmbeddedServerTLSConfig(
+func (cm *CertificateManager) getEmbeddedNodeToNodeServerTLSConfig(
 	_ *tls.ClientHelloInfo,
 ) (*tls.Config, error) {
 	cm.mu.Lock()
@@ -828,6 +828,42 @@ func (cm *CertificateManager) GetTenantClientTLSConfig() (*tls.Config, error) {
 	}
 
 	cm.tenantClientConfig = cfg
+	return cfg, nil
+}
+
+// GetNodeToNodeClientTLSConfig returns the most up-to-date client
+// tls.Config for node-to-node connections.
+func (cm *CertificateManager) GetNodeToNodeClientTLSConfig() (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// We always need the CA cert.
+	ca, err := cm.getCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	// We're the node user:
+	// Return the cached config if we have one.
+	if cm.clientConfig != nil {
+		return cm.clientConfig, nil
+	}
+
+	clientCert, err := cm.getNodeClientCertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newClientTLSConfig(
+		clientCert.FileContents,
+		clientCert.KeyFileContents,
+		ca.FileContents)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the config.
+	cm.clientConfig = cfg
 	return cfg, nil
 }
 

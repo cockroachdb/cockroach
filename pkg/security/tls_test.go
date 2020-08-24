@@ -24,7 +24,7 @@ func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir)
 	require.NoError(t, err)
-	config, err := cm.GetServerTLSConfig()
+	config, err := cm.GetNodeToNodeServerTLSConfig()
 	require.NoError(t, err)
 	require.NotNil(t, config.GetConfigForClient)
 	config, err = config.GetConfigForClient(&tls.ClientHelloInfo{})

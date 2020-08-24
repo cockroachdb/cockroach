@@ -103,10 +103,20 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 	return ctx.lazy.certificateManager.cm, ctx.lazy.certificateManager.err
 }
 
-// GetServerTLSConfig returns the server TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a server TLS config.
-func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
+// GetNodeToNodeServerTLSConfig returns the server TLS config for
+// node-to-node connections, initializing it if needed.
+//
+// The node-to-node TLS config is flexible and accepts both
+// certs signed by the node CA (`ca.crt`) and those signed
+// by the client CA if present (`ca-client.crt`). This retains
+// the ability of RPC clients to use a SQL client cert
+// signed by the client CA to perform admin operations.
+//
+// TODO(knz): We may want to restrict this. See discussion
+// in https://github.com/cockroachdb/cockroach/issues/53316
+//
+// If Insecure is true, returns a nil config.
+func (ctx *SecurityContext) GetNodeToNodeServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -117,18 +127,21 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetServerTLSConfig()
+	tlsCfg, err := cm.GetNodeToNodeServerTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
 
-// GetClientTLSConfig returns the client TLS config, initializing it if needed.
-// If Insecure is true, return a nil config, otherwise ask the certificate
-// manager for a TLS config using certs for the config.User.
-// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
-func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
+// GetNodeToNodeClientTLSConfig returns the node-to-node client TLS
+// config, initializing it if needed.  If Insecure is true, return a
+// nil config, otherwise ask the certificate manager for a TLS config
+// using certs.
+//
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI,
+// use GetUIClientTLSConfig instead.
+func (ctx *SecurityContext) GetNodeToNodeClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -139,7 +152,7 @@ func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetClientTLSConfig(ctx.config.User)
+	tlsCfg, err := cm.GetNodeToNodeClientTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}

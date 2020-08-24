@@ -719,7 +719,14 @@ func (s *Server) maybeUpgradeToSecureConn(
 	// connection to use TLS/SSL.
 
 	// Do we have a TLS configuration?
-	tlsConfig, serverErr := s.execCfg.RPCContext.GetServerTLSConfig()
+	//
+	// TODO(knz): The node-to-node TLS config accepts certs signed by
+	// the node-to-node CA, in addition to the client CA. Since it
+	// supports both, using it keeps things flexible. However we may
+	// want to restrict this and prevent certs signed by the
+	// node-to-node CA from using SQL.
+	// See: https://github.com/cockroachdb/cockroach/issues/53316
+	tlsConfig, serverErr := s.execCfg.RPCContext.GetNodeToNodeServerTLSConfig()
 	if serverErr != nil {
 		return
 	}
