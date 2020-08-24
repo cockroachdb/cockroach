@@ -848,8 +848,9 @@ func EncodeGeoInvertedIndexTableKeys(
 }
 
 func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err error) {
+	// Avoid per-key heap allocations.
+	b := make([]byte, 0, len(geoKeys)*(len(inKey)+encoding.MaxVarintLen))
 	keys = make([][]byte, len(geoKeys))
-	var b []byte // avoid per-key heap allocations
 	for i, k := range geoKeys {
 		prev := len(b)
 		b = append(b, inKey...)

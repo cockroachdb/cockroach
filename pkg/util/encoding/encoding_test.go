@@ -2014,7 +2014,7 @@ func TestValueEncodeDecodeDuration(t *testing.T) {
 }
 
 func BenchmarkEncodeNonsortingVarint(b *testing.B) {
-	bytes := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	bytes := make([]byte, 0, b.N*MaxNonsortingVarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -2023,7 +2023,7 @@ func BenchmarkEncodeNonsortingVarint(b *testing.B) {
 }
 
 func BenchmarkDecodeNonsortingVarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingVarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingVarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingStdlibVarint(buf, rng.Int63())
@@ -2127,7 +2127,7 @@ func TestPeekLengthNonsortingUVarint(t *testing.T) {
 }
 
 func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -2136,7 +2136,7 @@ func BenchmarkEncodeNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
@@ -2152,7 +2152,7 @@ func BenchmarkDecodeNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()%(1<<7)))
@@ -2168,7 +2168,7 @@ func BenchmarkDecodeOneByteNonsortingUvarint(b *testing.B) {
 }
 
 func BenchmarkPeekLengthNonsortingUvarint(b *testing.B) {
-	buf := make([]byte, 0, b.N*NonsortingUvarintMaxLen)
+	buf := make([]byte, 0, b.N*MaxNonsortingUvarintLen)
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < b.N; i++ {
 		buf = EncodeNonsortingUvarint(buf, uint64(rng.Int63()))
