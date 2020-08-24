@@ -960,6 +960,7 @@ func (tc *Collection) ResolveSchemaByID(
 
 	// If this collection is attached to a session and the session has created
 	// a temporary schema, then check if the schema ID matches.
+	// This check doesn't work after switching databases. Issue #53163.
 	if tc.sessionData != nil && tc.sessionData.TemporarySchemaID == uint32(schemaID) {
 		return catalog.ResolvedSchema{
 			Kind: catalog.SchemaTemporary,

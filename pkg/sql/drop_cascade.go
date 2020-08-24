@@ -100,7 +100,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 						" dropped or made public before dropping database %s",
 					objName.FQString(), tree.AsString((*tree.Name)(&dbName)))
 			}
-			if err := p.prepareDropWithTableDesc(ctx, tbDesc); err != nil {
+			if err := p.canDropTable(ctx, tbDesc); err != nil {
 				return err
 			}
 			// Recursively check permissions on all dependent views, since some may
