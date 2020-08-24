@@ -256,6 +256,10 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 	if args.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
+				if errors.Is(err, stop.ErrUnavailable) {
+					// Return if we're seeing stopper related errors.
+					return
+				}
 				t.Fatal(err)
 			}
 		}
@@ -390,7 +394,7 @@ func (tc *TestCluster) StartServer(
 	t testing.TB, server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
 ) error {
 	if err := server.Start(); err != nil {
-		t.Fatalf("%+v", err)
+		return err
 	}
 
 	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
