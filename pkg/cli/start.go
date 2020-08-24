@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -604,12 +605,12 @@ If problems persist, please see %s.`
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
-			var buf bytes.Buffer
+			var buf redact.StringBuilder
 			info := build.GetInfo()
-			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
-			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
-			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
+			buf.Printf("CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
+			buf.Printf("build:\t%s %s @ %s (%s)\n",
+				redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
+			buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
@@ -620,63 +621,64 @@ If problems persist, please see %s.`
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
 			}
-			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+			buf.Printf("sql:\t%s\n", pgURL)
 
-			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
+			buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
-				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
+				buf.Printf("socket:\t%s\n", serverCfg.SocketFile)
 			}
-			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
+			buf.Printf("logs:\t%s\n", flag.Lookup("log-dir").Value)
 			if serverCfg.AuditLogDirName.IsSet() {
-				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
+				buf.Printf("SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
 			}
 			if serverCfg.Attrs != "" {
-				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
+				buf.Printf("attrs:\t%s\n", serverCfg.Attrs)
 			}
 			if len(serverCfg.Locality.Tiers) > 0 {
-				fmt.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
+				buf.Printf("locality:\t%s\n", serverCfg.Locality)
 			}
 			if s.TempDir() != "" {
-				fmt.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
+				buf.Printf("temp dir:\t%s\n", s.TempDir())
 			}
 			if ext := s.ClusterSettings().ExternalIODir; ext != "" {
-				fmt.Fprintf(tw, "external I/O path: \t%s\n", ext)
+				buf.Printf("external I/O path: \t%s\n", ext)
 			} else {
-				fmt.Fprintf(tw, "external I/O path: \t<disabled>\n")
+				buf.Printf("external I/O path: \t<disabled>\n")
 			}
 			for i, spec := range serverCfg.Stores.Specs {
-				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
+				buf.Printf("store[%d]:\t%s\n", i, spec)
 			}
-			fmt.Fprintf(tw, "storage engine: \t%s\n", serverCfg.StorageEngine.String())
+			buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 			nodeID := s.NodeID()
 			if initialStart {
 				if nodeID == server.FirstNodeID {
-					fmt.Fprintf(tw, "status:\tinitialized new cluster\n")
+					buf.Printf("status:\tinitialized new cluster\n")
 				} else {
-					fmt.Fprintf(tw, "status:\tinitialized new node, joined pre-existing cluster\n")
+					buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")
 				}
 			} else {
-				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
+				buf.Printf("status:\trestarted pre-existing node\n")
 			}
 
 			if baseCfg.ClusterName != "" {
-				fmt.Fprintf(tw, "cluster name:\t%s\n", baseCfg.ClusterName)
+				buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
 			}
 
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetClusterID(clusterID)
-			fmt.Fprintf(tw, "clusterID:\t%s\n", clusterID)
-			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+			buf.Printf("clusterID:\t%s\n", clusterID)
+			buf.Printf("nodeID:\t%d\n", nodeID)
 
 			// Collect the formatted string and show it to the user.
-			if err := tw.Flush(); err != nil {
+			msg, err := expandTabsInRedactableBytes(buf.RedactableBytes())
+			if err != nil {
 				return err
 			}
-			msg := buf.String()
-			log.Infof(ctx, "node startup completed:\n%s", msg)
+			msgS := msg.ToString()
+			log.Infof(ctx, "node startup completed:\n%s", msgS)
 			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
-				fmt.Print(msg)
+				fmt.Print(msgS.StripMarkers())
 			}
 
 			return nil
@@ -875,6 +877,22 @@ If problems persist, please see %s.`
 	}
 
 	return returnErr
+}
+
+// expandTabsInRedactableBytes expands tabs in the redactable byte
+// slice, so that columns are aligned. The correctness of this
+// function depends on the assumption that the `tabwriter` does not
+// replace characters.
+func expandTabsInRedactableBytes(s redact.RedactableBytes) (redact.RedactableBytes, error) {
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+	if _, err := tw.Write([]byte(s)); err != nil {
+		return nil, err
+	}
+	if err := tw.Flush(); err != nil {
+		return nil, err
+	}
+	return redact.RedactableBytes(buf.Bytes()), nil
 }
 
 func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {

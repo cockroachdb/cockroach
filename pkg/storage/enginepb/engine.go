@@ -10,24 +10,32 @@
 
 package enginepb
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/redact"
+)
 
 // Type implements the pflag.Value interface.
 func (e *EngineType) Type() string { return "string" }
 
 // String implements the pflag.Value interface.
-func (e *EngineType) String() string {
+func (e *EngineType) String() string { return redact.StringWithoutMarkers(e) }
+
+// SafeFormat implements the refact.SafeFormatter interface.
+func (e *EngineType) SafeFormat(p redact.SafePrinter, _ rune) {
 	switch *e {
 	case EngineTypeRocksDB:
-		return "rocksdb"
+		p.SafeString("rocksdb")
 	case EngineTypeDefault:
-		return "default"
+		p.SafeString("default")
 	case EngineTypePebble:
-		return "pebble"
+		p.SafeString("pebble")
 	case EngineTypeTeePebbleRocksDB:
-		return "pebble+rocksdb"
+		p.SafeString("pebble+rocksdb")
+	default:
+		p.Printf("<unknown engine %d>", int32(*e))
 	}
-	return ""
 }
 
 // Set implements the pflag.Value interface.
