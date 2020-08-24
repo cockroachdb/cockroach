@@ -40,7 +40,7 @@ var _ resolver.SchemaResolver = &planner{}
 // ResolveUncachedDatabaseByName looks up a database name from the store.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *dbdesc.ImmutableDatabaseDescriptor, err error) {
+) (res *dbdesc.Immutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		var desc catalog.DatabaseDescriptor
 		desc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(
@@ -48,7 +48,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 			tree.DatabaseLookupFlags{CommonLookupFlags: p.CommonLookupFlags(required)},
 		)
 		if desc != nil {
-			res = desc.(*dbdesc.ImmutableDatabaseDescriptor)
+			res = desc.(*dbdesc.Immutable)
 		}
 	})
 	return res, err
@@ -56,7 +56,7 @@ func (p *planner) ResolveUncachedDatabaseByName(
 
 func (p *planner) ResolveMutableDatabaseDescriptor(
 	ctx context.Context, name string, required bool,
-) (*dbdesc.MutableDatabaseDescriptor, error) {
+) (*dbdesc.Mutable, error) {
 	desc, err := p.LogicalSchemaAccessor().GetDatabaseDesc(
 		ctx, p.txn, p.ExecCfg().Codec, name, tree.DatabaseLookupFlags{
 			CommonLookupFlags: p.CommonLookupFlags(required),
@@ -65,7 +65,7 @@ func (p *planner) ResolveMutableDatabaseDescriptor(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.MutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Mutable), nil
 }
 
 // runWithOptions sets the provided resolution flags for the
@@ -553,7 +553,7 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
-	dbDescs     map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor
+	dbDescs     map[descpb.ID]*dbdesc.Immutable
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
 	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
 	tbIDs       []descpb.ID
@@ -569,14 +569,14 @@ type tableLookupFn = *internalLookupCtx
 // appropriate implementation of Descriptor before constructing a
 // new internalLookupCtx. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	rawDescs []descpb.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
+	rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
 ) *internalLookupCtx {
 	descs := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
 		desc := &rawDescs[i]
 		switch t := desc.Union.(type) {
 		case *descpb.Descriptor_Database:
-			descs[i] = dbdesc.NewImmutableDatabaseDescriptor(*t.Database)
+			descs[i] = dbdesc.NewImmutable(*t.Database)
 		case *descpb.Descriptor_Table:
 			descs[i] = tabledesc.NewImmutable(*t.Table)
 		case *descpb.Descriptor_Type:
@@ -588,11 +588,9 @@ func newInternalLookupCtxFromDescriptors(
 	return newInternalLookupCtx(descs, prefix)
 }
 
-func newInternalLookupCtx(
-	descs []catalog.Descriptor, prefix *dbdesc.ImmutableDatabaseDescriptor,
-) *internalLookupCtx {
+func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
-	dbDescs := make(map[descpb.ID]*dbdesc.ImmutableDatabaseDescriptor)
+	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
 	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
@@ -600,7 +598,7 @@ func newInternalLookupCtx(
 	// Record database descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
-		case *dbdesc.ImmutableDatabaseDescriptor:
+		case *dbdesc.Immutable:
 			dbNames[desc.GetID()] = desc.GetName()
 			dbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.GetID() {
@@ -634,9 +632,7 @@ func newInternalLookupCtx(
 	}
 }
 
-func (l *internalLookupCtx) getDatabaseByID(
-	id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -826,7 +822,7 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id descpb.ID) (*dbdesc.ImmutableDatabaseDescriptor, error)
+	getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error)
 	getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

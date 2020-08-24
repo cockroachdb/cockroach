@@ -31,7 +31,7 @@ import (
 
 type dropSchemaNode struct {
 	n  *tree.DropSchema
-	db *dbdesc.MutableDatabaseDescriptor
+	db *dbdesc.Mutable
 	d  *dropCascadeState
 }
 

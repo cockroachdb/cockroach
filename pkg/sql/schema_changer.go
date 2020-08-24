@@ -430,7 +430,7 @@ func drainNamesForDescriptor(
 			// If the descriptor to drain is a schema, then we need to delete the
 			// draining names from the parent database's schema mapping.
 			if isSchema {
-				db := descs[desc.GetParentID()].(*dbdesc.MutableDatabaseDescriptor)
+				db := descs[desc.GetParentID()].(*dbdesc.Mutable)
 				for _, name := range namesToReclaim {
 					delete(db.Schemas, name.Name)
 				}

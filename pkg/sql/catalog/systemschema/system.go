@@ -367,8 +367,8 @@ const SystemDatabaseName = "system"
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
-func MakeSystemDatabaseDesc() *dbdesc.ImmutableDatabaseDescriptor {
-	return dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+func MakeSystemDatabaseDesc() *dbdesc.Immutable {
+	return dbdesc.NewImmutable(descpb.DatabaseDescriptor{
 		Name:    SystemDatabaseName,
 		ID:      keys.SystemDatabaseID,
 		Version: 1,

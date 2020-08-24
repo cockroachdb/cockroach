@@ -65,7 +65,7 @@ type Descriptor interface {
 }
 
 // DatabaseDescriptor will eventually be called dbdesc.Descriptor.
-// It is implemented by ImmutableDatabaseDescriptor.
+// It is implemented by Immutable.
 type DatabaseDescriptor interface {
 	Descriptor
 
