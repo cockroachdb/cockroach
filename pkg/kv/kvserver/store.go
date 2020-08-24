@@ -1001,7 +1001,12 @@ func NewStore(
 
 // String formats a store for debug output.
 func (s *Store) String() string {
-	return fmt.Sprintf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s *Store) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[n%d,s%d]", s.Ident.NodeID, s.Ident.StoreID)
 }
 
 // ClusterSettings returns the node's ClusterSettings.
