@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -97,13 +97,19 @@ type Config struct {
 	Stopper              *stop.Stopper
 	AmbientCtx           log.AmbientContext
 	TestingKnobs         kvserverbase.IntentResolverTestingKnobs
-	RangeDescriptorCache kvbase.RangeDescriptorCache
+	RangeDescriptorCache RangeCache
 
 	TaskLimit                    int
 	MaxGCBatchWait               time.Duration
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
+}
+
+// RangeCache is a simplified interface to the rngcache.RangeCache.
+type RangeCache interface {
+	// Lookup looks up range information for the range containing key.
+	Lookup(ctx context.Context, key roachpb.RKey) (rangecache.CacheEntry, error)
 }
 
 // IntentResolver manages the process of pushing transactions and
@@ -118,7 +124,7 @@ type IntentResolver struct {
 	ambientCtx   log.AmbientContext
 	sem          *quotapool.IntPool // semaphore to limit async goroutines
 
-	rdc kvbase.RangeDescriptorCache
+	rdc RangeCache
 
 	gcBatcher      *requestbatcher.RequestBatcher
 	irBatcher      *requestbatcher.RequestBatcher
@@ -163,34 +169,10 @@ func setConfigDefaults(c *Config) {
 
 type nopRangeDescriptorCache struct{}
 
-type zeroCacheEntry struct{}
-
-func (z zeroCacheEntry) Desc() *roachpb.RangeDescriptor {
-	return &roachpb.RangeDescriptor{}
-}
-
-func (z zeroCacheEntry) DescSpeculative() bool {
-	return false
-}
-
-func (z zeroCacheEntry) Leaseholder() *roachpb.ReplicaDescriptor {
-	return nil
-}
-
-func (z zeroCacheEntry) Lease() *roachpb.Lease {
-	return nil
-}
-
-func (z zeroCacheEntry) LeaseSpeculative() bool {
-	return false
-}
-
-var _ kvbase.RangeCacheEntry = zeroCacheEntry{}
-
 func (nrdc nopRangeDescriptorCache) Lookup(
 	ctx context.Context, key roachpb.RKey,
-) (kvbase.RangeCacheEntry, error) {
-	return zeroCacheEntry{}, nil
+) (rangecache.CacheEntry, error) {
+	return rangecache.CacheEntry{}, nil
 }
 
 // New creates an new IntentResolver.

@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,10 +60,7 @@ func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHin
 // returns the list of ranges whose leaseholder is not on the indicated node.
 // Ranges with unknown leases are not included in the result.
 func MisplannedRanges(
-	ctx context.Context,
-	spans []roachpb.Span,
-	nodeID roachpb.NodeID,
-	rdc *kvcoord.RangeDescriptorCache,
+	ctx context.Context, spans []roachpb.Span, nodeID roachpb.NodeID, rdc *rangecache.RangeCache,
 ) (misplannedRanges []roachpb.RangeInfo) {
 	log.VEvent(ctx, 2, "checking range cache to see if range info updates should be communicated to the gateway")
 	misplanned := make(map[roachpb.RangeID]struct{})
