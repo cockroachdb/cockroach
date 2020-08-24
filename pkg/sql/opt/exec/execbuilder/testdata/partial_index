@@ -1,9 +1,5 @@
 # LogicTest: local
 
-# TODO(mgartner): remove this once partial indexes are fully supported.
-statement ok
-SET experimental_partial_indexes=on
-
 statement ok
 CREATE TABLE t (
     a INT PRIMARY KEY,

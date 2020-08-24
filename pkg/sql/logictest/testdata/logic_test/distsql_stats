@@ -786,7 +786,6 @@ upper_bound  range_rows  distinct_range_rows  equal_rows
 # Test that columns referenced in partial index predicates always have
 # histograms collected for them, with up to 200 buckets.
 statement ok
-SET experimental_partial_indexes=on;
 CREATE TABLE partial (a INT, b INT, c INT, INDEX (a) WHERE b > 0 OR c > 0);
 INSERT INTO partial VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 CREATE STATISTICS s FROM partial
