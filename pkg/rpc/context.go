@@ -26,6 +26,7 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -418,7 +419,7 @@ func NewContext(opts ContextOptions) *Context {
 
 	ctx := &Context{
 		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config, opts.TenantID),
+		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},

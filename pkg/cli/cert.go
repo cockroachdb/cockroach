@@ -213,7 +213,7 @@ List certificates and keys found in the certificate directory.
 
 // runListCerts loads and lists all certs.
 func runListCerts(cmd *cobra.Command, args []string) error {
-	cm, err := security.NewCertificateManager(baseCfg.SSLCertsDir)
+	cm, err := security.NewCertificateManager(baseCfg.SSLCertsDir, security.CommandTLSSettings{})
 	if err != nil {
 		return errors.Wrap(err, "cannot load certificates")
 	}
