@@ -53,7 +53,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
 	case catalog.SchemaUserDefined:
 		// TODO (rohany): Check permissions here.
-		desc := schema.Desc.(*MutableSchemaDescriptor)
+		desc := schema.Desc.(*schemadesc.Mutable)
 		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown schema kind")

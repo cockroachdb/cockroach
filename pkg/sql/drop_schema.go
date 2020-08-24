@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -101,7 +102,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	for i := range n.d.schemasToDelete {
 		sc := n.d.schemasToDelete[i]
 		schemaIDs[i] = sc.ID
-		mutDesc := sc.Desc.(*MutableSchemaDescriptor)
+		mutDesc := sc.Desc.(*schemadesc.Mutable)
 		mutDesc.DrainingNames = append(mutDesc.DrainingNames, descpb.NameInfo{
 			ParentID:       n.db.ID,
 			ParentSchemaID: keys.RootNamespaceID,
