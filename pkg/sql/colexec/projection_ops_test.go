@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -213,8 +214,8 @@ func TestRandomComparisons(t *testing.T) {
 				},
 			)
 		}
-		ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
-		ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
+		colconv.ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
+		colconv.ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
 		supportedCmpOps := []tree.ComparisonOperator{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
 		if typ.Family() == types.JsonFamily {
 			supportedCmpOps = []tree.ComparisonOperator{tree.EQ, tree.NE}

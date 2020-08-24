@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -43,7 +44,7 @@ type Materializer struct {
 	// converter contains the converted vectors of the current batch. Note that
 	// if the batch had a selection vector on top of it, the converted vectors
 	// will be "dense" and contain only tuples that were selected.
-	converter *vecToDatumConverter
+	converter *colconv.VecToDatumConverter
 
 	// row is the memory used for the output row.
 	row rowenc.EncDatumRow
@@ -153,7 +154,7 @@ func NewMaterializer(
 		input:       input,
 		typs:        typs,
 		drainHelper: newDrainHelper(metadataSourcesQueue),
-		converter:   newVecToDatumConverter(len(typs), vecIdxsToConvert),
+		converter:   colconv.NewVecToDatumConverter(len(typs), vecIdxsToConvert),
 		row:         make(rowenc.EncDatumRow, len(typs)),
 		closers:     toClose,
 	}
@@ -226,14 +227,14 @@ func (m *Materializer) next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
-			m.converter.convertBatchAndDeselect(m.batch)
+			m.converter.ConvertBatchAndDeselect(m.batch)
 		}
 
 		for colIdx := range m.typs {
 			// Note that we don't need to apply the selection vector of the
 			// batch to index m.curIdx because vecToDatumConverter returns a
 			// "dense" datum column.
-			m.row[colIdx].Datum = m.converter.getDatumColumn(colIdx)[m.curIdx]
+			m.row[colIdx].Datum = m.converter.GetDatumColumn(colIdx)[m.curIdx]
 		}
 		m.curIdx++
 		// Note that there is no post-processing to be done in the

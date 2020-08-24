@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -252,7 +253,7 @@ type distinctAggregatorHelperBase struct {
 	*aggregatorHelperBase
 
 	inputTypes       []*types.T
-	aggColsConverter *vecToDatumConverter
+	aggColsConverter *colconv.VecToDatumConverter
 	arena            stringarena.Arena
 	datumAlloc       *rowenc.DatumAlloc
 	scratch          struct {
@@ -293,7 +294,7 @@ func newDistinctAggregatorHelperBase(
 			}
 		}
 	}
-	b.aggColsConverter = newVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
+	b.aggColsConverter = colconv.NewVecToDatumConverter(len(inputTypes), vecIdxsToConvert)
 	b.scratch.converted = []tree.Datum{nil}
 	b.scratch.sel = make([]int, coldata.BatchSize())
 	return b
@@ -348,7 +349,7 @@ func (b *distinctAggregatorHelperBase) selectDistinctTuples(
 			}
 		}
 		for _, colIdx := range inputIdxs {
-			b.scratch.ed.Datum = b.aggColsConverter.getDatumColumn(int(colIdx))[tupleIdx]
+			b.scratch.ed.Datum = b.aggColsConverter.GetDatumColumn(int(colIdx))[tupleIdx]
 			b.scratch.encoded, err = b.scratch.ed.Fingerprint(
 				b.inputTypes[colIdx], b.datumAlloc, b.scratch.encoded,
 			)
@@ -419,7 +420,7 @@ func (h *filteringDistinctHashAggregatorHelper) performAggregation(
 	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
-	h.aggColsConverter.convertVecs(vecs, inputLen, sel)
+	h.aggColsConverter.ConvertVecs(vecs, inputLen, sel)
 	for aggFnIdx, aggFn := range h.spec.Aggregations {
 		var maybeModified bool
 		vecs, inputLen, sel, maybeModified = h.filters[aggFnIdx].applyFilter(ctx, vecs, inputLen, sel)
@@ -472,7 +473,7 @@ func (h *distinctOrderedAggregatorHelper) performAggregation(
 	groups []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
-	h.aggColsConverter.convertVecs(vecs, inputLen, sel)
+	h.aggColsConverter.ConvertVecs(vecs, inputLen, sel)
 	for aggFnIdx, aggFn := range h.spec.Aggregations {
 		var maybeModified bool
 		if aggFn.Distinct {
