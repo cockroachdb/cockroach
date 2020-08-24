@@ -19,7 +19,7 @@ statement ok
 ALTER TABLE t SET SCHEMA public
 
 # Cannot set schema to one that does not exist.
-statement error pq: schema does_not_exist does not exist
+statement error pq: unknown schema "does_not_exist"
 ALTER TABLE t SET SCHEMA does_not_exist
 
 # Ensure we cannot set schema if there is already a table with the same name
@@ -286,7 +286,7 @@ statement ok
 ALTER TYPE typ SET SCHEMA public
 
 # Cannot set schema to one that does not exist.
-statement error pq: schema does_not_exist does not exist
+statement error pq: unknown schema "does_not_exist"
 ALTER TYPE typ SET SCHEMA does_not_exist
 
 # Ensure we cannot set schema if there is already a type with the same name

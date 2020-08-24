@@ -41,7 +41,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	found, schema, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, db.GetID(), n.Schema)
+	found, schema, err := p.ResolveMutableSchemaDescriptor(ctx, db.ID, n.Schema, true /* required */)
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +53,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
 	case catalog.SchemaUserDefined:
 		// TODO (rohany): Check permissions here.
-		desc, err := p.Descriptors().GetMutableSchemaDescriptorByID(ctx, schema.ID, p.txn)
-		if err != nil {
-			return nil, err
-		}
+		desc := schema.Desc.(*MutableSchemaDescriptor)
 		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown schema kind")

@@ -30,7 +30,7 @@ type Accessor interface {
 
 	// GetSchema returns true and a ResolvedSchema object if the target schema
 	// exists under the target database.
-	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string) (bool, ResolvedSchema, error)
+	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags) (bool, ResolvedSchema, error)
 
 	// GetObjectNames returns the list of all objects in the given
 	// database and schema.

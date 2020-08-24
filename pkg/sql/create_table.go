@@ -211,14 +211,9 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getSchemaIDForCreate(
 	ctx context.Context, codec keys.SQLCodec, dbID descpb.ID, scName string,
 ) (descpb.ID, error) {
-	exists, res, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, codec, dbID, scName)
+	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, dbID, scName, true /* required */)
 	if err != nil {
 		return 0, err
-	}
-	if !exists {
-		return 0, pgerror.Newf(
-			pgcode.InvalidSchemaName, "target schema does not exist",
-		)
 	}
 	switch res.Kind {
 	case catalog.SchemaPublic, catalog.SchemaUserDefined:
