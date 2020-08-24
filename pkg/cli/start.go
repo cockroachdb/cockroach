@@ -991,11 +991,13 @@ func setupAndInitializeLoggingAndProfiling(
 		panic(errors.Newf("logging already active; first used at:\n%s", firstUse))
 	}
 
+	fl := flagSetForCmd(cmd)
+
 	// Default the log directory to the "logs" subdirectory of the first
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
 	ambiguousLogDirs := false
-	lf := cmd.Flags().Lookup(logflags.LogDirName)
+	lf := fl.Lookup(cliflags.LogDir.Name)
 	if !startCtx.logDir.IsSet() && !lf.Changed {
 		// We only override the log directory if the user has not explicitly
 		// disabled file logging using --log-dir="".
@@ -1015,8 +1017,8 @@ func setupAndInitializeLoggingAndProfiling(
 		}
 	}
 
-	if logDir := startCtx.logDir.String(); logDir != "" {
-		ls := cockroachCmd.PersistentFlags().Lookup(logflags.LogToStderrName)
+	if logDir := logOutputDirectory(); logDir != "" {
+		ls := fl.Lookup(logflags.LogToStderrName)
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
@@ -1036,6 +1038,8 @@ func setupAndInitializeLoggingAndProfiling(
 		// creating a file in an incorrect log directory or if something is
 		// accidentally logging after flag parsing but before the --background
 		// dispatch has occurred.
+		// Note: this uses flag.Lookup() and not fl.Lookup() because we want
+		// to get the original flag set up by the logging package.
 		if err := flag.Lookup(logflags.LogDirName).Value.Set(logDir); err != nil {
 			return nil, err
 		}
