@@ -21,7 +21,6 @@ import (
 	"strings"
 	"text/template"
 
-	gendoc "github.com/pseudomuto/protoc-gen-doc"
 	"github.com/spf13/cobra"
 )
 
@@ -111,44 +110,59 @@ func runHTTP(protocPath, genDocPath, protobufPath, outPath string) error {
 	for i := range file.Messages {
 		messages[file.Messages[i].FullName] = &file.Messages[i]
 	}
-	methods := make(map[string]interface{})
+	methods := make(map[string]*protoMethod)
 	for i := range service.Methods {
 		methods[service.Methods[i].Name] = &service.Methods[i]
 	}
+
+	// Given a message type, returns all message types in its type field that are
+	// also present in the messages map. Useful to recurse into types that have
+	// other types.
+	extraMessages := func(name string) []string {
+		seen := make(map[string]bool)
+		var extraFn func(name string) []string
+		extraFn = func(name string) []string {
+			if seen[name] {
+				return nil
+			}
+			seen[name] = true
+			msg, ok := messages[name]
+			if !ok {
+				return nil
+			}
+			var other []string
+			for _, field := range msg.Fields {
+				if innerMsg, ok := messages[field.FullType]; ok {
+					other = append(other, field.FullType)
+					other = append(other, extraFn(innerMsg.FullName)...)
+				}
+			}
+			return other
+		}
+		return extraFn(name)
+	}
+
 	tmplFuncs := template.FuncMap{
-		"nobr": gendoc.NoBrFilter,
-		"getMessage": func(name string) interface{} {
+		// tableCell formats strings for use in a table cell. For example, it converts \n\n into <br>.
+		"tableCell": func(s string) string {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return ""
+			}
+			s = strings.ReplaceAll(s, "\r", "")
+			// Double newlines are paragraph breaks.
+			s = strings.ReplaceAll(s, "\n\n", "<br><br>")
+			// Other newlines are just width wrapping and should be converted to spaces.
+			s = strings.ReplaceAll(s, "\n", " ")
+			return s
+		},
+		"getMessage": func(name string) *protoMessage {
 			return messages[name]
 		},
-		// Given a message type, returns all message types in its type
-		// field that are also present in the messages map. Useful to
-		// recurse into types that have other types.
-		"extraMessages": func(name string) []string {
-			seen := make(map[string]bool)
-			var extraFn func(name string) []string
-			extraFn = func(name string) []string {
-				if seen[name] {
-					return nil
-				}
-				seen[name] = true
-				msg, ok := messages[name]
-				if !ok {
-					return nil
-				}
-				var other []string
-				for _, field := range msg.Fields {
-					if innerMsg, ok := messages[field.FullType]; ok {
-						other = append(other, field.FullType)
-						other = append(other, extraFn(innerMsg.FullName)...)
-					}
-				}
-				return other
-			}
-			return extraFn(name)
-		},
+		"extraMessages": extraMessages,
 	}
 	tmplFull := template.Must(template.New("full").Funcs(tmplFuncs).Parse(fullTemplate))
-	tmplSingle := template.Must(template.New("single").Funcs(tmplFuncs).Parse(singleTemplate))
+	tmplMessages := template.Must(template.New("single").Funcs(tmplFuncs).Parse(messagesTemplate))
 
 	// JSON data is now in memory. Generate full doc page.
 	if err := execHTTPTmpl(tmplFull, &file, filepath.Join(outPath, "full.md")); err != nil {
@@ -160,9 +174,15 @@ func runHTTP(protocPath, genDocPath, protobufPath, outPath string) error {
 		if !ok {
 			return fmt.Errorf("single method not found: %s", methodName)
 		}
-		path := filepath.Join(outPath, fmt.Sprintf("%s.md", strings.ToLower(methodName)))
-		if err := execHTTPTmpl(tmplSingle, method, path); err != nil {
-			return err
+		for name, messages := range map[string][]string{
+			"request":  {method.RequestFullType},
+			"response": {method.ResponseFullType},
+			"other":    append(extraMessages(method.RequestFullType), extraMessages(method.ResponseFullType)...),
+		} {
+			path := filepath.Join(outPath, fmt.Sprintf("%s-%s.md", strings.ToLower(methodName), name))
+			if err := execHTTPTmpl(tmplMessages, messages, path); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -199,30 +219,11 @@ type protoData struct {
 		Extensions []interface{}  `json:"extensions"`
 		Messages   []protoMessage `json:"messages"`
 		Services   []struct {
-			Name        string `json:"name"`
-			LongName    string `json:"longName"`
-			FullName    string `json:"fullName"`
-			Description string `json:"description"`
-			Methods     []struct {
-				Name              string `json:"name"`
-				Description       string `json:"description"`
-				RequestType       string `json:"requestType"`
-				RequestLongType   string `json:"requestLongType"`
-				RequestFullType   string `json:"requestFullType"`
-				RequestStreaming  bool   `json:"requestStreaming"`
-				ResponseType      string `json:"responseType"`
-				ResponseLongType  string `json:"responseLongType"`
-				ResponseFullType  string `json:"responseFullType"`
-				ResponseStreaming bool   `json:"responseStreaming"`
-				Options           struct {
-					GoogleAPIHTTP struct {
-						Rules []struct {
-							Method  string `json:"method"`
-							Pattern string `json:"pattern"`
-						} `json:"rules"`
-					} `json:"google.api.http"`
-				} `json:"options"`
-			} `json:"methods"`
+			Name        string        `json:"name"`
+			LongName    string        `json:"longName"`
+			FullName    string        `json:"fullName"`
+			Description string        `json:"description"`
+			Methods     []protoMethod `json:"methods"`
 		} `json:"services"`
 	} `json:"files"`
 	ScalarValueTypes []struct {
@@ -236,6 +237,27 @@ type protoData struct {
 		PythonType string `json:"pythonType"`
 		RubyType   string `json:"rubyType"`
 	} `json:"scalarValueTypes"`
+}
+
+type protoMethod struct {
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	RequestType       string `json:"requestType"`
+	RequestLongType   string `json:"requestLongType"`
+	RequestFullType   string `json:"requestFullType"`
+	RequestStreaming  bool   `json:"requestStreaming"`
+	ResponseType      string `json:"responseType"`
+	ResponseLongType  string `json:"responseLongType"`
+	ResponseFullType  string `json:"responseFullType"`
+	ResponseStreaming bool   `json:"responseStreaming"`
+	Options           struct {
+		GoogleAPIHTTP struct {
+			Rules []struct {
+				Method  string `json:"method"`
+				Pattern string `json:"pattern"`
+			} `json:"rules"`
+		} `json:"google.api.http"`
+	} `json:"options"`
 }
 
 type protoMessage struct {
@@ -268,7 +290,7 @@ const fullTemplate = `
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* with .Fields */}}
 
@@ -282,7 +304,7 @@ const fullTemplate = `
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .Fields}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* if .Fields */}}
 {{end}} {{- /* with getMessage */}}
@@ -302,11 +324,11 @@ const fullTemplate = `
 
 {{with .Description}}{{.}}{{end}}
 
-### Request Parameters
+#### Request Parameters
 
 {{template "FIELDS" .RequestFullType}}
 
-### Response Parameters
+#### Response Parameters
 
 {{template "FIELDS" .ResponseFullType}}
 
@@ -315,42 +337,18 @@ const fullTemplate = `
 {{- end -}} {{- /* services */ -}}
 `
 
-var singleTemplate = `
-{{- define "FIELDS" -}}
-{{with getMessage .}}
-{{$message := .}}
-{{with .Fields}}
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
+var messagesTemplate = `
 {{- range .}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
-{{- end}} {{- /* range */}}
-{{end}} {{- /* with .Fields */}}
-
-{{/* document extra messages */}}
-{{range extraMessages .FullName}}
 {{with getMessage .}}
-{{if .Fields}}
-<a name="{{$message.FullName}}-{{.FullName}}"></a>
+<a name="{{.FullName}}"></a>
 #### {{.LongName}}
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-{{- range .Fields}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+{{with .Fields}}
+| Field | Type | Label |
+| ----- | ---- | ----- |
+{{- range .}}
+| {{.Name}} | [{{.LongType}}](#{{.FullType}}) | {{.Label}} |
 {{- end}} {{- /* range */}}
-{{end}} {{- /* if .Fields */}}
-{{end}} {{- /* with getMessage */}}
-{{end}} {{- /* range */}}
-
-{{end}} {{- /* with getMessage */}}
-{{- end}} {{- /* template */}}
-
-### Request Parameters
-
-{{template "FIELDS" .RequestFullType}}
-
-### Response Parameters
-
-{{template "FIELDS" .ResponseFullType}}
+{{end}}{{- /* with .Fields */}}
+{{end}}{{- /* with getMessage */}}
+{{end}}{{- /* range */ -}}
 `
