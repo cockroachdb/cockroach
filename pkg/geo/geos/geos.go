@@ -710,3 +710,18 @@ func MakeValid(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// SharedPaths Returns a EWKB containing paths shared by the two given EWKBs.
+func SharedPaths(a geopb.EWKB, b geopb.EWKB) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_SharedPaths(g, goToCSlice(a), goToCSlice(b), &cEWKB),
+	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}

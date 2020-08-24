@@ -3826,6 +3826,35 @@ Bottom Left.`,
 	),
 
 	//
+	// Operation on two geometries
+	//
+	"st_sharedpaths": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(ctx *tree.EvalContext, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.SharedPaths(a.Geometry, b.Geometry)
+				if err != nil {
+					return nil, err
+				}
+
+				if ret == nil {
+					return tree.DNull, nil
+				}
+				geom := tree.NewDGeometry(ret)
+				return geom, nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: `Returns a collection containing paths shared by the two input geometries.
+
+Those going in the same direction are in the first element of the collection, 
+those going in the opposite direction are in the second element. 
+The paths themselves are given in the direction of the first geometry.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
+	//
 	// Schema changes
 	//
 	"addgeometrycolumn": makeBuiltin(
