@@ -2217,7 +2217,7 @@ message JoinNodeResponse {
   bytes cluster_id = 1 [(gogoproto.customname) = "ClusterID"];
   int32 node_id = 2 [(gogoproto.customname) = "NodeID"];
   int32 store_id = 3 [(gogoproto.customname) = "StoreID"];
-  roachpb.Version active_version = 4 [(gogoproto.customname) = "ActiveVersion"];
+  roachpb.Version active_version = 4;
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.

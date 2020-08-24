@@ -79,7 +79,6 @@ const (
 	VersionBox2DType
 	VersionLeasedDatabaseDescriptors
 	VersionUpdateScheduledJobsSchema
-	VersionJoinRPC
 
 	// Add new versions here (step one of two).
 )
@@ -589,11 +588,6 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionUpdateScheduledJobsSchema drops schedule_changes and adds schedule_status.
 		Key:     VersionUpdateScheduledJobsSchema,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 19},
-	},
-	{
-		// VersionJoinRPC enables the use of the Join RPC.
-		Key:     VersionJoinRPC,
-		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 20},
 	},
 
 	// Add new versions here (step two of two).

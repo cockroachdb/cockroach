@@ -16,8 +16,10 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 )
 
 func registerJoinInitMixed(r *testRegistry) {
@@ -35,6 +37,10 @@ func registerJoinInitMixed(r *testRegistry) {
 
 // runJoinInitMixed tests the mechanism used to allocate node IDs and
 // disseminate cluster IDs in mixed version clusters.
+//
+// TODO(irfansharif): This test is only really useful for the 20.1/20.2
+// timeframe where we introduced the Join RPC; we should remove this test at a
+// future point.
 func runJoinInitMixed(ctx context.Context, t *test, c *cluster, buildVersion version.Version) {
 	predecessorVersion, err := PredecessorVersion(buildVersion)
 	if err != nil {
@@ -88,7 +94,7 @@ func runJoinInitMixed(ctx context.Context, t *test, c *cluster, buildVersion ver
 		// to change crdb code to make that happen.
 		sleepStep(time.Minute),
 
-		// Roll node2 into the new version and check to see that it retains it's
+		// Roll node2 into the new version and check to see that it retains its
 		// node/cluster ID.
 		binaryUpgradeStep(c.Node(node2), mainVersion),
 		checkClusterIDsMatch(node1, node2),
@@ -160,8 +166,8 @@ func unsuccessfullyAddNodeStep(nodes nodeListOption, joinNode int, newVersion st
 				// Today it includes both versions, which seems silly.
 				startArgs(fmt.Sprintf("-a=--join=%s", joinAddr)),
 			)
-			if err == nil {
-				t.Fatal("expected failure, got success")
+			if !errors.Is(err, server.ErrIncompatibleBinaryVersion) {
+				t.Fatalf("expected err: %s, got %v", server.ErrIncompatibleBinaryVersion, err)
 			}
 		}
 	}

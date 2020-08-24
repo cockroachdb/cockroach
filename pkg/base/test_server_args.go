@@ -141,8 +141,27 @@ type TestClusterArgs struct {
 	// If true, nodes will be started in parallel. This is useful in
 	// testing certain recovery scenarios, although it makes store/node
 	// IDs unpredictable. Even in ParallelStart mode, StartTestCluster
-	// waits for all nodes to start before returning.
+	// waits for all nodes to start before returning. It is also useful when
+	// testing uninitialized clusters where we want to simulate starting all
+	// servers in parallel, each of them waiting for init.
 	ParallelStart bool
+
+	// ConnectedServers is used in tests that set up partially connected
+	// clusters, where not ever server is expected to join the overall cluster
+	// (due to missing join flags for e.g.). This informs the test runner how
+	// many server statuses we should expect to wait on. If unset, it defaults
+	// to waiting on all the servers in the cluster.
+	ConnectedServers int
+	// BootstrapNode is used in tests that set up uninitialized clusters.
+	// It provides a handle on a node that's guaranteed to be part of the
+	// cluster. The default value of 0 is otherwise used for the same purpose.
+	BootstrapNode int
+
+	// TODO(irfansharif): It's a bit unfortunate that we needed to add these
+	// custom arguments above to test partially connected clusters. Ideally we
+	// should be able to simply rely on a stopper and tear down bits as needed.
+	// In doing so we ran into #25617, where by skipping waiting for node
+	// statuses, we ran into unexpected behavior around server teardown.
 
 	// ServerArgsPerNode override the default ServerArgs with the value in this
 	// map. The map's key is an index within TestCluster.Servers. If there is

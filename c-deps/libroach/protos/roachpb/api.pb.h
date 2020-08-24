@@ -17799,6 +17799,7 @@ class JoinNodeResponse : public ::google::protobuf::MessageLite /* @@protoc_inse
   ::std::string* release_cluster_id();
   void set_allocated_cluster_id(::std::string* cluster_id);
 
+  // .cockroach.roachpb.Version active_version = 4;
   bool has_active_version() const;
   void clear_active_version();
   static const int kActiveVersionFieldNumber = 4;
@@ -36515,6 +36516,7 @@ inline void JoinNodeResponse::set_store_id(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.JoinNodeResponse.store_id)
 }
 
+// .cockroach.roachpb.Version active_version = 4;
 inline bool JoinNodeResponse::has_active_version() const {
   return this != internal_default_instance() && active_version_ != NULL;
 }

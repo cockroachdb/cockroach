@@ -40123,6 +40123,7 @@ bool JoinNodeResponse::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.Version active_version = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
@@ -40173,6 +40174,7 @@ void JoinNodeResponse::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->store_id(), output);
   }
 
+  // .cockroach.roachpb.Version active_version = 4;
   if (this->has_active_version()) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       4, this->_internal_active_version(), output);
@@ -40195,6 +40197,7 @@ size_t JoinNodeResponse::ByteSizeLong() const {
         this->cluster_id());
   }
 
+  // .cockroach.roachpb.Version active_version = 4;
   if (this->has_active_version()) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(

@@ -1302,8 +1302,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	// TODO(irfansharif): How far down can this be deferred to?
-	_ = startGossipFn()
 	if s.cfg.DelayedBootstrapFn != nil {
 		defer time.AfterFunc(30*time.Second, s.cfg.DelayedBootstrapFn).Stop()
 	}
@@ -1465,6 +1463,8 @@ func (s *Server) Start(ctx context.Context) error {
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
 
 	onSuccessfulReturnFn()
+
+	startGossipFn()
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or

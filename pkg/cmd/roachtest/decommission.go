@@ -309,9 +309,10 @@ func runDecommissionRandomized(ctx context.Context, t *test, c *cluster) {
 		Multiplier:     2,
 	}
 
-	// This is a pretty gross hack to let the bootstrap info disseminate through
-	// the cluster. Since it's no longer happening through gossip, it takes a
-	// bit longer to happen. We should do two things to improve our story here:
+	// This is a pretty gross hack to let the bootstrap info (cluster ID,
+	// liveness records) disseminate through the cluster. Since it's no longer
+	// happening through gossip, it takes a bit longer to happen. We should do
+	// two things to improve our story here:
 	//
 	// - We should opportunistically write to the liveness table when adding a
 	//   node through the Join RPC. This would also simplify the handling of

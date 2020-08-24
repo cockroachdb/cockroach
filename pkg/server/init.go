@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,9 +46,10 @@ var ErrClusterInitialized = fmt.Errorf("cluster has already been initialized")
 // TODO(irfansharif): Remove this in 21.1.
 var ErrJoinRPCUnsupported = fmt.Errorf("node does not support the Join RPC")
 
-// ErrImproperBinaryVersion is returned when a CRDB node with a binary version X
-// attempts to join a cluster with an active version X+1. This is not allowed.
-var ErrImproperBinaryVersion = fmt.Errorf("improper binary version")
+// ErrIncompatibleBinaryVersion is returned when a CRDB node with a binary version X
+// attempts to join a cluster with an active version that's higher. This is not
+// allowed.
+var ErrIncompatibleBinaryVersion = fmt.Errorf("binary is incompatible with the cluster attempted to join")
 
 // initServer handles the bootstrapping process. It is instantiated early in the
 // server startup sequence to determine whether a NodeID and ClusterID are
@@ -322,7 +322,7 @@ func (s *initServer) ServeAndWait(
 				continue
 			}
 
-			if errors.Is(err, ErrImproperBinaryVersion) {
+			if errors.Is(err, ErrIncompatibleBinaryVersion) {
 				return nil, false, err
 			}
 
@@ -378,7 +378,7 @@ func (s *initServer) Bootstrap(
 // list in order to determine what the cluster ID is, and to be allocated a
 // node+store ID. It can return ErrJoinRPCUnsupported, in which case the caller
 // is expected to fall back to the gossip-based cluster ID discovery mechanism.
-// It can also fail with ErrImproperBinaryVersion, in which case we know we're
+// It can also fail with ErrIncompatibleBinaryVersion, in which case we know we're
 // running a binary that's too old to join the rest of the cluster.
 func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) error {
 	if len(s.config.resolvers) == 0 {
@@ -402,7 +402,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) e
 		select {
 		case <-tickChan:
 			err := s.attemptJoin(ctx, addr)
-			if errors.Is(err, ErrJoinRPCUnsupported) || errors.Is(err, ErrImproperBinaryVersion) {
+			if errors.Is(err, ErrJoinRPCUnsupported) || errors.Is(err, ErrIncompatibleBinaryVersion) {
 				// Propagate upwards; these are error conditions the caller
 				// knows to expect.
 				return err
@@ -438,9 +438,7 @@ func (s *initServer) attemptJoin(ctx context.Context, addr string) error {
 	}
 
 	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Warningf(ctx, "%v", err)
-		}
+		_ = conn.Close()
 	}()
 
 	binaryVersion := s.config.binaryVersion
@@ -467,16 +465,9 @@ func (s *initServer) attemptJoin(ctx context.Context, addr string) error {
 			return ErrJoinRPCUnsupported
 		}
 
-		if status.Code() == codes.FailedPrecondition {
-			if strings.Contains(err.Error(), ErrJoinRPCUnsupported.Error()) {
-				log.Infof(ctx, "%s running in mixed-version cluster mode; falling back to gossip-based cluster join", addr)
-				return ErrJoinRPCUnsupported
-			}
-
-			if strings.Contains(err.Error(), ErrImproperBinaryVersion.Error()) {
-				log.Infof(ctx, "%s is running %v, which is higher than our binary version %s", addr, resp, req.BinaryVersion.String())
-				return ErrImproperBinaryVersion
-			}
+		if status.Code() == codes.PermissionDenied {
+			log.Infof(ctx, "%s is running a version higher than our binary version %s", addr, req.BinaryVersion.String())
+			return ErrIncompatibleBinaryVersion
 		}
 
 		return err
@@ -528,7 +519,7 @@ func (s *initServer) DiskClusterVersion() clusterversion.ClusterVersion {
 type initServerCfg struct {
 	advertiseAddr             string
 	binaryMinSupportedVersion roachpb.Version
-	binaryVersion             roachpb.Version
+	binaryVersion             roachpb.Version // This is what's used for bootstrap.
 	defaultSystemZoneConfig   zonepb.ZoneConfig
 	defaultZoneConfig         zonepb.ZoneConfig
 
@@ -551,7 +542,7 @@ type initServerCfg struct {
 func newInitServerConfig(cfg Config, dialOpts []grpc.DialOption) initServerCfg {
 	binaryVersion := cfg.Settings.Version.BinaryVersion()
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
-		if ov := knobs.(*TestingKnobs).BootstrapVersionOverride; ov != (roachpb.Version{}) {
+		if ov := knobs.(*TestingKnobs).BinaryVersionOverride; ov != (roachpb.Version{}) {
 			binaryVersion = ov
 		}
 	}

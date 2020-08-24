@@ -50,13 +50,13 @@ type TestCluster struct {
 	Servers         []*server.TestServer
 	Conns           []*gosql.DB
 	stopper         *stop.Stopper
-	replicationMode base.TestClusterReplicationMode
 	scratchRangeKey roachpb.Key
 	mu              struct {
 		syncutil.Mutex
 		serverStoppers []*stop.Stopper
 	}
-	serverArgs []base.TestServerArgs
+	serverArgs  []base.TestServerArgs
+	clusterArgs base.TestClusterArgs
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
@@ -127,54 +127,62 @@ func (tc *TestCluster) StopServer(idx int) {
 // The cluster should be stopped using TestCluster.Stopper().Stop().
 func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
 	cluster := NewTestCluster(t, nodes, args)
-	cluster.Start(t, args)
+	err := cluster.Start(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return cluster
 }
 
 // NewTestCluster initializes a TestCluster made up of `nodes` in-memory testing
 // servers. It needs to be started separately using the return type.
-func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestCluster {
+func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *TestCluster {
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
 
 	if err := checkServerArgsForCluster(
-		args.ServerArgs, args.ReplicationMode, disallowJoinAddr,
+		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
 	); err != nil {
 		t.Fatal(err)
 	}
-	for _, sargs := range args.ServerArgsPerNode {
+	for _, sargs := range clusterArgs.ServerArgsPerNode {
 		if err := checkServerArgsForCluster(
-			sargs, args.ReplicationMode, allowJoinAddr,
+			sargs, clusterArgs.ReplicationMode, allowJoinAddr,
 		); err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	if clusterArgs.ConnectedServers == 0 {
+		// Unless told explicitly otherwise, we assume all nodes are going to be
+		// connected.
+		clusterArgs.ConnectedServers = nodes
+	}
 	tc := &TestCluster{
-		stopper:         stop.NewStopper(),
-		replicationMode: args.ReplicationMode,
+		stopper:     stop.NewStopper(),
+		clusterArgs: clusterArgs,
 	}
 
 	// Check if any of the args have a locality set.
 	noLocalities := true
-	for _, arg := range args.ServerArgsPerNode {
+	for _, arg := range tc.clusterArgs.ServerArgsPerNode {
 		if len(arg.Locality.Tiers) > 0 {
 			noLocalities = false
 			break
 		}
 	}
-	if len(args.ServerArgs.Locality.Tiers) > 0 {
+	if len(tc.clusterArgs.ServerArgs.Locality.Tiers) > 0 {
 		noLocalities = false
 	}
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
-		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
+		if perNodeServerArgs, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok {
 			serverArgs = perNodeServerArgs
 		} else {
-			serverArgs = args.ServerArgs
+			serverArgs = tc.clusterArgs.ServerArgs
 		}
 
 		// If no localities are specified in the args, we'll generate some
@@ -223,10 +231,10 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 // If looking to test initialization/bootstrap behavior, Start should be invoked
 // in a separate thread and with ParallelStart enabled (otherwise it'll block
 // on waiting for init for the first server).
-func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
+func (tc *TestCluster) Start(t testing.TB) error {
 	nodes := len(tc.Servers)
 	var errCh chan error
-	if args.ParallelStart {
+	if tc.clusterArgs.ParallelStart {
 		errCh = make(chan error, nodes)
 	}
 
@@ -237,50 +245,20 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 			disableLBS = true
 		}
 
-		if args.ParallelStart {
+		if tc.clusterArgs.ParallelStart {
 			go func(i int) {
 				errCh <- tc.StartServer(t, tc.Server(i), tc.serverArgs[i])
 			}(i)
 		} else {
 			if err := tc.StartServer(t, tc.Server(i), tc.serverArgs[i]); err != nil {
-				t.Fatal(err)
+				return err
 			}
 			// We want to wait for stores for each server in order to have predictable
 			// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
 			// unexpected order (#22342).
-			tc.WaitForStores(t, tc.Servers[0].Gossip())
-		}
-	}
-
-	if args.ParallelStart {
-		for i := 0; i < nodes; i++ {
-			if err := <-errCh; err != nil {
-				if errors.Is(err, stop.ErrUnavailable) {
-					// Return if we're seeing stopper related errors.
-					return
-				}
-				t.Fatal(err)
+			if err := tc.WaitForNStores(tc.Servers[tc.clusterArgs.BootstrapNode].Gossip(), i+1); err != nil {
+				return err
 			}
-		}
-
-		tc.WaitForStores(t, tc.Servers[0].Gossip())
-	}
-
-	if tc.replicationMode == base.ReplicationManual {
-		// We've already disabled the merge queue via testing knobs above, but ALTER
-		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
-		// the cluster setting.
-		//
-		// TODO(benesch): this won't be necessary once we have sticky bits for
-		// splits.
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if disableLBS {
-		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
-			t.Fatal(err)
 		}
 	}
 
@@ -288,14 +266,45 @@ func (tc *TestCluster) Start(t testing.TB, args base.TestClusterArgs) {
 	// cluster stopper is stopped.
 	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
 
-	if tc.replicationMode == base.ReplicationAuto {
+	if tc.clusterArgs.ParallelStart {
+		for i := 0; i < tc.clusterArgs.ConnectedServers; i++ {
+			if err := <-errCh; err != nil {
+				return err
+			}
+		}
+
+		if err := tc.WaitForNStores(tc.Servers[tc.clusterArgs.BootstrapNode].Gossip(), tc.clusterArgs.ConnectedServers); err != nil {
+			return err
+		}
+	}
+
+	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
+		// We've already disabled the merge queue via testing knobs above, but ALTER
+		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
+		// the cluster setting.
+		//
+		// TODO(benesch): this won't be necessary once we have sticky bits for
+		// splits.
+		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+			return err
+		}
+	}
+
+	if disableLBS {
+		if _, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.range_split.by_load_enabled = false`); err != nil {
+			return err
+		}
+	}
+
+	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
 
 	// Wait until a NodeStatus is persisted for every node (see #25488, #25649, #31574).
 	tc.WaitForNodeStatuses(t)
+	return nil
 }
 
 type checkType bool
@@ -361,7 +370,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 	// started, in which case the check has not been performed.
 	if err := checkServerArgsForCluster(
 		serverArgs,
-		tc.replicationMode,
+		tc.clusterArgs.ReplicationMode,
 		// Allow JoinAddr here; servers being added after the TestCluster has been
 		// started should have a JoinAddr filled in at this point.
 		allowJoinAddr,
@@ -369,7 +378,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		return nil, err
 	}
 	serverArgs.Stopper = stop.NewStopper()
-	if tc.replicationMode == base.ReplicationManual {
+	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		var stkCopy kvserver.StoreTestingKnobs
 		if stk := serverArgs.Knobs.Store; stk != nil {
 			stkCopy = *stk.(*kvserver.StoreTestingKnobs)
@@ -409,25 +418,31 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 func (tc *TestCluster) StartServer(
 	t testing.TB, server serverutils.TestServerInterface, serverArgs base.TestServerArgs,
 ) error {
+	tc.mu.Lock()
+	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
+	tc.mu.Unlock()
+
 	if err := server.Start(); err != nil {
 		return err
 	}
 
-	dbConn := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
+	dbConn, err := serverutils.OpenDBConn(t, server, serverArgs, server.Stopper())
+	if err != nil {
+		return err
+	}
 
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	tc.Conns = append(tc.Conns, dbConn)
-	tc.mu.serverStoppers = append(tc.mu.serverStoppers, serverArgs.Stopper)
 	return nil
 }
 
-// WaitForStores waits for all of the store descriptors to be gossiped. Servers
+// WaitForNStores waits for N of the store descriptors to be gossiped. Servers
 // other than the first "bootstrap" their stores asynchronously, but we'd like
 // to wait for all of the stores to be initialized before returning the
-// TestCluster.
-func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
+// TestCluster. This helper lets us do that.
+func (tc *TestCluster) WaitForNStores(g *gossip.Gossip, n int) error {
 	// Register a gossip callback for the store descriptors.
 	var storesMu syncutil.Mutex
 	stores := map[roachpb.StoreID]struct{}{}
@@ -448,7 +463,7 @@ func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
 			}
 
 			stores[desc.StoreID] = struct{}{}
-			if len(stores) == len(tc.Servers) {
+			if len(stores) == n {
 				close(storesDoneOnce)
 				storesDoneOnce = nil
 			}
@@ -458,9 +473,10 @@ func (tc *TestCluster) WaitForStores(t testing.TB, g *gossip.Gossip) {
 	// Wait for the store descriptors to be gossiped.
 	for err := range storesDone {
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // LookupRange is part of TestClusterInterface.
@@ -878,10 +894,11 @@ func (tc *TestCluster) WaitForFullReplication() error {
 // WaitForNodeStatuses waits until a NodeStatus is persisted for every node and
 // store in the cluster.
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
+	connectedNode := tc.clusterArgs.BootstrapNode
 	testutils.SucceedsSoon(t, func() error {
-		url := tc.Server(0).ServingRPCAddr()
-		nodeID := tc.Server(0).NodeID()
-		conn, err := tc.Server(0).RPCContext().GRPCDialNode(url, nodeID,
+		url := tc.Server(connectedNode).ServingRPCAddr()
+		nodeID := tc.Server(connectedNode).NodeID()
+		conn, err := tc.Server(connectedNode).RPCContext().GRPCDialNode(url, nodeID,
 			rpc.DefaultClass).Connect(context.Background())
 		if err != nil {
 			return err
@@ -892,8 +909,8 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 			return err
 		}
 
-		if len(response.Nodes) < tc.NumServers() {
-			return fmt.Errorf("expected %d nodes registered, got %+v", tc.NumServers(), response)
+		if len(response.Nodes) < tc.clusterArgs.ConnectedServers {
+			return fmt.Errorf("expected %d nodes registered, got %+v", tc.clusterArgs.ConnectedServers, response)
 		}
 
 		// Check that all the nodes in the testcluster have a status. We tolerate
@@ -906,8 +923,8 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 			}
 			nodeIDs[node.Desc.NodeID] = true
 		}
-		for _, s := range tc.Servers {
-			if id := s.GetNode().Descriptor.NodeID; !nodeIDs[id] {
+		for id := 1; id <= tc.clusterArgs.ConnectedServers; id++ {
+			if !nodeIDs[roachpb.NodeID(id)] {
 				return fmt.Errorf("missing n%d in NodeStatus: %+v", id, response)
 			}
 		}
@@ -937,7 +954,7 @@ func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
 
 // ReplicationMode implements TestClusterInterface.
 func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
-	return tc.replicationMode
+	return tc.clusterArgs.ReplicationMode
 }
 
 // ToggleReplicateQueues activates or deactivates the replication queues on all

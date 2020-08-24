@@ -52,22 +52,27 @@ type TestingKnobs struct {
 	// server fails to start.
 	RPCListener net.Listener
 
-	// BootstrapVersionOverride, if not empty, will be used for bootstrapping
-	// clusters instead of clusterversion.BinaryVersion (if this server is the
-	// one bootstrapping the cluster).
+	// BinaryVersionOverride overrides the binary version the CRDB server thinks
+	// it's running.
 	//
-	// This can be used by tests to essentially pretend that a new cluster is
-	// not starting from scratch, but instead is "created" by a node starting up
-	// with engines that had already been bootstrapped, at this
-	// BootstrapVersionOverride. For example, it allows convenient creation of a
-	// cluster from a 2.1 binary, but that's running at version 2.0.
+	// This is consulted when bootstrapping clusters, opting to do it at the
+	// override instead of clusterversion.BinaryVersion (if this server is the
+	// one bootstrapping the cluster). This can als be used by tests to
+	// essentially that a new cluster is not starting from scratch, but instead
+	// is "created" by a node starting up with engines that had already been
+	// bootstrapped, at this BinaryVersionOverride. For example, it allows
+	// convenient creation of a cluster from a 2.1 binary, but that's running at
+	// version 2.0.
+	//
+	// It's also used when advertising this server's binary version when sending
+	// out join requests.
 	//
 	// NB: When setting this, you probably also want to set
 	// DisableAutomaticVersionUpgrade.
 	//
 	// TODO(irfansharif): Update users of this testing knob to use the
 	// appropriate clusterversion.Handle instead.
-	BootstrapVersionOverride roachpb.Version
+	BinaryVersionOverride roachpb.Version
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

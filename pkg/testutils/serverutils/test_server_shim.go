@@ -240,7 +240,10 @@ func StartServer(
 	if err := server.Start(); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	goDB := OpenDBConn(t, server, params, server.Stopper())
+	goDB, err := OpenDBConn(t, server, params, server.Stopper())
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
 	return server, goDB, server.DB()
 }
 
@@ -257,7 +260,7 @@ func NewServer(params base.TestServerArgs) TestServerInterface {
 // OpenDBConn sets up a gosql DB connection to the given server.
 func OpenDBConn(
 	t testing.TB, server TestServerInterface, params base.TestServerArgs, stopper *stop.Stopper,
-) *gosql.DB {
+) (*gosql.DB, error) {
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
 		t, server.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
@@ -266,7 +269,7 @@ func OpenDBConn(
 	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	stopper.AddCloser(
@@ -274,7 +277,7 @@ func OpenDBConn(
 			_ = goDB.Close()
 			cleanupGoDB()
 		}))
-	return goDB
+	return goDB, nil
 }
 
 // StartServerRaw creates and starts a TestServer.

@@ -1129,32 +1129,25 @@ func (n *Node) GossipSubscription(
 func (n *Node) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
-	ctxWithSpan, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id")
+	ctx, span := n.AnnotateCtxWithSpan(ctx, "alloc-{node,store}-id")
 	defer span.Finish()
 
-	if !n.storeCfg.Settings.Version.IsActive(ctx, clusterversion.VersionJoinRPC) {
-		return nil, grpcstatus.Error(codes.FailedPrecondition, ErrJoinRPCUnsupported.Error())
-	}
-
 	activeVersion := n.storeCfg.Settings.Version.ActiveVersion(ctx)
-	binaryVersion := n.storeCfg.Settings.Version.BinaryVersion()
-	if req.BinaryVersion.Less(binaryVersion) && req.BinaryVersion.Less(activeVersion.Version) {
-		resp := &roachpb.JoinNodeResponse{
-			ActiveVersion: &activeVersion.Version,
-		}
-		return resp, grpcstatus.Error(codes.FailedPrecondition, ErrImproperBinaryVersion.Error())
+	if req.BinaryVersion.Less(activeVersion.Version) {
+		return nil, grpcstatus.Error(codes.PermissionDenied, ErrIncompatibleBinaryVersion.Error())
 	}
 
-	nodeID, err := allocateNodeID(ctxWithSpan, n.storeCfg.DB)
+	nodeID, err := allocateNodeID(ctx, n.storeCfg.DB)
 	if err != nil {
 		return nil, err
 	}
 
-	storeID, err := allocateStoreIDs(ctxWithSpan, nodeID, 1, n.storeCfg.DB)
+	storeID, err := allocateStoreIDs(ctx, nodeID, 1, n.storeCfg.DB)
 	if err != nil {
 		return nil, err
 	}
-	log.Infof(ctxWithSpan, "allocated IDs: n%d, s%d", nodeID, storeID)
+
+	log.Infof(ctx, "allocated IDs: n%d, s%d", nodeID, storeID)
 
 	return &roachpb.JoinNodeResponse{
 		ClusterID:     n.clusterID.Get().GetBytes(),
