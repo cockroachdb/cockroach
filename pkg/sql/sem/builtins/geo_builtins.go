@@ -835,7 +835,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT())
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
 				if err != nil {
 					return nil, err
 				}
@@ -858,7 +858,7 @@ var geoBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT())
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(geopb.DefaultGeometrySRID))
 				if err != nil {
 					return nil, err
 				}
@@ -3820,6 +3820,53 @@ Bottom Left.`,
 			},
 			Info: infoBuilder{
 				info: "Extends the box2d by delta_x units in the x dimension and delta_y units in the y dimension.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"delta", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				delta := float64(tree.MustBeDFloat(args[1]))
+				if g.Empty() {
+					return g, nil
+				}
+				bbox := g.CartesianBoundingBox().Buffer(delta, delta)
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Extends the bounding box represented by the geometry by delta units across all dimensions, returning a Polygon representing the new bounding box.",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"delta_x", types.Float},
+				{"delta_y", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				deltaX := float64(tree.MustBeDFloat(args[1]))
+				deltaY := float64(tree.MustBeDFloat(args[2]))
+				if g.Empty() {
+					return g, nil
+				}
+				bbox := g.CartesianBoundingBox().Buffer(deltaX, deltaY)
+				ret, err := geo.NewGeometryFromGeomT(bbox.ToGeomT(g.SRID()))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: "Extends the bounding box represented by the geometry by delta_x units in the x dimension and delta_y units in the y dimension, returning a Polygon representing the new bounding box.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},

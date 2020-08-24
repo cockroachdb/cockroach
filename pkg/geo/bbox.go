@@ -187,12 +187,12 @@ func (b *CartesianBoundingBox) Covers(o *CartesianBoundingBox) bool {
 }
 
 // ToGeomT converts a BoundingBox to a GeomT.
-func (b *CartesianBoundingBox) ToGeomT() geom.T {
+func (b *CartesianBoundingBox) ToGeomT(srid geopb.SRID) geom.T {
 	if b.LoX == b.HiX && b.LoY == b.HiY {
-		return geom.NewPointFlat(geom.XY, []float64{b.LoX, b.LoY})
+		return geom.NewPointFlat(geom.XY, []float64{b.LoX, b.LoY}).SetSRID(int(srid))
 	}
 	if b.LoX == b.HiX || b.LoY == b.HiY {
-		return geom.NewLineStringFlat(geom.XY, []float64{b.LoX, b.LoY, b.HiX, b.HiY})
+		return geom.NewLineStringFlat(geom.XY, []float64{b.LoX, b.LoY, b.HiX, b.HiY}).SetSRID(int(srid))
 	}
 	return geom.NewPolygonFlat(
 		geom.XY,
@@ -204,7 +204,7 @@ func (b *CartesianBoundingBox) ToGeomT() geom.T {
 			b.LoX, b.LoY,
 		},
 		[]int{10},
-	)
+	).SetSRID(int(srid))
 }
 
 // boundingBoxFromGeomT returns a bounding box from a given geom.T.
