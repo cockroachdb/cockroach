@@ -268,6 +268,12 @@ func (g *Geometry) SpatialObject() geopb.SpatialObject {
 	return g.spatialObject
 }
 
+// SpatialObjectRef return a pointer to the SpatialObject representation of the
+// Geometry.
+func (g *Geometry) SpatialObjectRef() *geopb.SpatialObject {
+	return &g.spatialObject
+}
+
 // EWKBHex returns the EWKBHex representation of the Geometry.
 func (g *Geometry) EWKBHex() string {
 	return g.spatialObject.EWKBHex()
@@ -502,6 +508,12 @@ func (g *Geography) EWKB() geopb.EWKB {
 // SpatialObject returns the SpatialObject representation of the Geography.
 func (g *Geography) SpatialObject() geopb.SpatialObject {
 	return g.spatialObject
+}
+
+// SpatialObjectRef returns a pointer to the SpatialObject representation of the
+// Geography.
+func (g *Geography) SpatialObjectRef() *geopb.SpatialObject {
+	return &g.spatialObject
 }
 
 // EWKBHex returns the EWKBHex representation of the Geography.
