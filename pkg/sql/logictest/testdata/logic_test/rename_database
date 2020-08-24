@@ -107,7 +107,7 @@ GRANT ALL ON DATABASE t TO testuser
 
 user testuser
 
-statement error only users with the admin role are allowed to ALTER DATABASE ... RENAME
+statement error must be owner of database t
 ALTER DATABASE t RENAME TO v
 
 query T
@@ -115,7 +115,35 @@ SHOW DATABASES
 ----
 t
 
+# Test that owners can rename databases as long as they have the CREATEDB
+# privilege.
 user root
+
+statement ok
+ALTER USER testuser CREATEDB
+
+user testuser
+
+statement ok
+CREATE DATABASE testuserdb
+
+statement ok
+ALTER DATABASE testuserdb RENAME TO testuserdb2
+
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to rename database
+ALTER DATABASE testuserdb2 RENAME TO testuserdb3
+
+user root
+
+statement ok
+DROP DATABASE testuserdb2
 
 # Test that renames aren't allowed while views refer to any of a DB's tables,
 # both for views in that database and for views in a different database.

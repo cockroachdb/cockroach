@@ -170,27 +170,47 @@ query I
 SELECT * FROM b.a
 ----
 
+# Non-admin users need the CREATEDB role option to create databases.
 user testuser
 
-statement error only users with the admin role are allowed to CREATE DATABASE
+statement error permission denied to create database
 CREATE DATABASE privs
 
 user root
 
 statement ok
-CREATE DATABASE privs
+ALTER USER testuser CREATEDB
 
 user testuser
 
-statement error user testuser does not have DROP privilege on database privs
+statement ok
+CREATE DATABASE privs
+
+# As the owner, testuser has DROP privileges.
+statement ok
 DROP DATABASE privs CASCADE
+
+# But needs explicit DROP privileges on databases where they're not the owner.
+statement error user testuser does not have DROP privilege on database a
+DROP DATABASE a CASCADE
 
 user root
 
 statement ok
-GRANT DROP ON DATABASE privs TO testuser
+GRANT DROP ON DATABASE a TO testuser
 
 user testuser
 
 statement ok
-DROP DATABASE privs CASCADE
+DROP DATABASE a CASCADE
+
+# Test revoking CREATEDB.
+user root
+
+statement ok
+ALTER USER testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE privs
