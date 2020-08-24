@@ -1541,6 +1541,10 @@ func NewTableDesc(
 						"session variable experimental_partial_indexes is set to false, cannot create a partial index")
 				}
 
+				if d.Inverted {
+					return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
+				}
+
 				expr, err := idxValidator.Validate(d.Predicate)
 				if err != nil {
 					return nil, err
