@@ -15,10 +15,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -321,4 +325,51 @@ func TestShowBackups(t *testing.T) {
 	require.Equal(t, 4, len(b1))
 	b2 := sqlDBRestore.QueryStr(t, `SHOW BACKUP $1 IN $2`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
+}
+
+func TestShowBackupTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, tc, systemDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitNone)
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	// NB: tenant certs for 10, 11, 20 are embedded. See:
+	_ = security.EmbeddedTenantIDs()
+
+	// Setup a few tenants, each with a different table.
+	conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10), TenantInfo: []byte("ten")})
+	defer conn10.Close()
+	tenant10 := sqlutils.MakeSQLRunner(conn10)
+	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
+	beforeTS := systemDB.QueryStr(t, `SELECT now()::timestamp::string`)[0][0]
+
+	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME '%s'`, beforeTS))
+
+	res := systemDB.QueryStr(t, `SELECT table_name, start_time::string, end_time::string, rows FROM [SHOW BACKUP 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"10", "NULL", beforeTS, "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT table_name, privileges FROM [SHOW BACKUP 'nodelocal://1/t10' WITH privileges]`)
+	require.Equal(t, [][]string{
+		{"10", "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT table_name, create_statement FROM [SHOW BACKUP SCHEMAS 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"10", "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP RANGES 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"/Tenant/10", "/Tenant/11"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT start_pretty, end_pretty FROM [SHOW BACKUP FILES 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"/Tenant/10", "/Tenant/11"},
+	}, res)
 }
