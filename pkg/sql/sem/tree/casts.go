@@ -806,7 +806,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return &DGeometry{g}, nil
 		case *DBox2D:
-			g, err := geo.NewGeometryFromGeomT(d.ToGeomT())
+			g, err := geo.NewGeometryFromGeomT(d.ToGeomT(geopb.DefaultGeometrySRID))
 			if err != nil {
 				return nil, err
 			}
