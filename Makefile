@@ -872,6 +872,7 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions docs/generated/redact_s
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
+  pkg/sql/colconv/vec_to_datum.eg.go \
   pkg/sql/colexec/and_or_projection.eg.go \
   pkg/sql/colexec/cast.eg.go \
   pkg/sql/colexec/const.eg.go \
@@ -930,7 +931,6 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/utils.eg.go \
   pkg/sql/colexec/values_differ.eg.go \
   pkg/sql/colexec/vec_comparators.eg.go \
-  pkg/sql/colexec/vec_to_datum.eg.go \
   pkg/sql/colexec/window_peer_grouper.eg.go
 
 OPTGEN_TARGETS = \

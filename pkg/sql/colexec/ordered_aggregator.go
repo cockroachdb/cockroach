@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -52,7 +53,7 @@ type orderedAggregator struct {
 	done      bool
 
 	outputTypes        []*types.T
-	inputArgsConverter *vecToDatumConverter
+	inputArgsConverter *colconv.VecToDatumConverter
 
 	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
@@ -240,7 +241,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			}
 		} else {
 			if batchLength > 0 {
-				a.inputArgsConverter.convertBatchAndDeselect(batch)
+				a.inputArgsConverter.ConvertBatchAndDeselect(batch)
 				a.aggHelper.performAggregation(
 					ctx, batch.ColVecs(), batchLength, batch.Selection(), &a.bucket, a.groupCol,
 				)

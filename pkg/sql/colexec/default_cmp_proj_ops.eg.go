@@ -13,6 +13,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,7 +23,7 @@ type defaultCmpProjOp struct {
 	projOpBase
 
 	adapter             comparisonExprAdapter
-	toDatumConverter    *vecToDatumConverter
+	toDatumConverter    *colconv.VecToDatumConverter
 	datumToVecConverter func(tree.Datum) interface{}
 }
 
@@ -41,9 +42,9 @@ func (d *defaultCmpProjOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
-		d.toDatumConverter.convertBatchAndDeselect(batch)
-		leftColumn := d.toDatumConverter.getDatumColumn(d.col1Idx)
-		rightColumn := d.toDatumConverter.getDatumColumn(d.col2Idx)
+		d.toDatumConverter.ConvertBatchAndDeselect(batch)
+		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
+		rightColumn := d.toDatumConverter.GetDatumColumn(d.col2Idx)
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
@@ -77,7 +78,7 @@ type defaultCmpRConstProjOp struct {
 	constArg tree.Datum
 
 	adapter             comparisonExprAdapter
-	toDatumConverter    *vecToDatumConverter
+	toDatumConverter    *colconv.VecToDatumConverter
 	datumToVecConverter func(tree.Datum) interface{}
 }
 
@@ -96,8 +97,8 @@ func (d *defaultCmpRConstProjOp) Next(ctx context.Context) coldata.Batch {
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
 	d.allocator.PerformOperation([]coldata.Vec{output}, func() {
-		d.toDatumConverter.convertBatchAndDeselect(batch)
-		nonConstColumn := d.toDatumConverter.getDatumColumn(d.colIdx)
+		d.toDatumConverter.ConvertBatchAndDeselect(batch)
+		nonConstColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
 		for i := 0; i < n; i++ {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
