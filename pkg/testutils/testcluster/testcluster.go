@@ -144,7 +144,7 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 	}
 	for _, sargs := range args.ServerArgsPerNode {
 		if err := checkServerArgsForCluster(
-			sargs, args.ReplicationMode, disallowJoinAddr,
+			sargs, args.ReplicationMode, allowJoinAddr,
 		); err != nil {
 			t.Fatal(err)
 		}
