@@ -92,7 +92,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	privs.SetOwner(params.SessionData().User)
 
 	// Create the SchemaDescriptor.
-	desc := schemadesc.NewMutableCreatedSchemaDescriptor(descpb.SchemaDescriptor{
+	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
 		ParentID:   db.ID,
 		Name:       n.Schema,
 		ID:         id,
