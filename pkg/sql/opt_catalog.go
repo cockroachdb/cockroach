@@ -91,7 +91,7 @@ func (oc *optCatalog) reset() {
 type optSchema struct {
 	planner *planner
 
-	database *dbdesc.ImmutableDatabaseDescriptor
+	database *dbdesc.Immutable
 	schema   catalog.ResolvedSchema
 
 	name cat.SchemaName
@@ -184,7 +184,7 @@ func (oc *optCatalog) ResolveSchema(
 	prefix := prefixI.(*catalog.ResolvedObjectPrefix)
 	return &optSchema{
 		planner:  oc.planner,
-		database: prefix.Database.(*dbdesc.ImmutableDatabaseDescriptor),
+		database: prefix.Database.(*dbdesc.Immutable),
 		schema:   prefix.Schema,
 		name:     oc.tn.ObjectNamePrefix,
 	}, oc.tn.ObjectNamePrefix, nil

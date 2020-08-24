@@ -35,7 +35,7 @@ import (
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, newName string, stmt string,
+	ctx context.Context, desc *dbdesc.Mutable, newName string, stmt string,
 ) error {
 	oldName := desc.GetName()
 	desc.SetName(newName)
@@ -90,7 +90,7 @@ func (p *planner) renameDatabase(
 // only be called when database descriptor leasing is enabled. See
 // writeDatabaseChangeToBatch. Also queues a job to complete the schema change.
 func (p *planner) writeNonDropDatabaseChange(
-	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, jobDesc string,
+	ctx context.Context, desc *dbdesc.Mutable, jobDesc string,
 ) error {
 	if err := p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc); err != nil {
 		return err
@@ -106,7 +106,7 @@ func (p *planner) writeNonDropDatabaseChange(
 // can only be called when database descriptor leasing is enabled. Does not
 // queue a job to complete the schema change.
 func (p *planner) writeDatabaseChangeToBatch(
-	ctx context.Context, desc *dbdesc.MutableDatabaseDescriptor, b *kv.Batch,
+	ctx context.Context, desc *dbdesc.Mutable, b *kv.Batch,
 ) error {
 	if p.Descriptors().DatabaseLeasingUnsupported() {
 		log.Fatal(ctx, "invalid attempted write of database descriptor")

@@ -158,7 +158,7 @@ func maybeFilterMissingViews(
 func allocateDescriptorRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	databasesByID map[descpb.ID]*dbdesc.MutableDatabaseDescriptor,
+	databasesByID map[descpb.ID]*dbdesc.Mutable,
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.Mutable,
@@ -1306,13 +1306,13 @@ func doRestorePlan(
 		}
 	}
 
-	databasesByID := make(map[descpb.ID]*dbdesc.MutableDatabaseDescriptor)
+	databasesByID := make(map[descpb.ID]*dbdesc.Mutable)
 	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
 	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	typesByID := make(map[descpb.ID]*typedesc.Mutable)
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
-		case *dbdesc.MutableDatabaseDescriptor:
+		case *dbdesc.Mutable:
 			databasesByID[desc.GetID()] = desc
 		case *schemadesc.Mutable:
 			schemasByID[desc.ID] = desc

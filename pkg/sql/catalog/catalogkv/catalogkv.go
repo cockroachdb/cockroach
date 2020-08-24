@@ -301,7 +301,7 @@ func unwrapDescriptor(
 		}
 		return tabledesc.NewImmutable(*table), nil
 	case database != nil:
-		dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*database)
+		dbDesc := dbdesc.NewImmutable(*database)
 		if err := dbDesc.Validate(); err != nil {
 			return nil, err
 		}
@@ -336,7 +336,7 @@ func unwrapDescriptorMutable(
 		}
 		return mutTable, nil
 	case database != nil:
-		dbDesc := dbdesc.NewMutableExistingDatabaseDescriptor(*database)
+		dbDesc := dbdesc.NewExistingMutable(*database)
 		if err := dbDesc.Validate(); err != nil {
 			return nil, err
 		}
@@ -496,13 +496,13 @@ func GetDatabaseID(
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		DatabaseDescriptorKind, false /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Immutable), nil
 }
 
 // MustGetTableDescByID looks up the table descriptor given its ID,
@@ -522,13 +522,13 @@ func MustGetTableDescByID(
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.ImmutableDatabaseDescriptor, error) {
+) (*dbdesc.Immutable, error) {
 	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
 		DatabaseDescriptorKind, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.ImmutableDatabaseDescriptor), nil
+	return desc.(*dbdesc.Immutable), nil
 }
 
 // MustGetSchemaDescByID looks up the schema descriptor given its ID,
@@ -553,7 +553,7 @@ func MustGetSchemaDescByID(
 // rather than making a round trip for each ID.
 func GetDatabaseDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
-) ([]*dbdesc.ImmutableDatabaseDescriptor, error) {
+) ([]*dbdesc.Immutable, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
 		key := catalogkeys.MakeDescMetadataKey(codec, id)
@@ -562,7 +562,7 @@ func GetDatabaseDescriptorsFromIDs(
 	if err := txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	results := make([]*dbdesc.ImmutableDatabaseDescriptor, 0, len(ids))
+	results := make([]*dbdesc.Immutable, 0, len(ids))
 	for i := range b.Results {
 		result := &b.Results[i]
 		if result.Err != nil {
@@ -590,7 +590,7 @@ func GetDatabaseDescriptorsFromIDs(
 			)
 		}
 		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
-		results = append(results, dbdesc.NewImmutableDatabaseDescriptor(*db))
+		results = append(results, dbdesc.NewImmutable(*db))
 	}
 	return results, nil
 }
@@ -640,7 +640,7 @@ func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.M
 	case table != nil:
 		return tabledesc.NewExistingMutable(*table)
 	case database != nil:
-		return dbdesc.NewMutableExistingDatabaseDescriptor(*database)
+		return dbdesc.NewExistingMutable(*database)
 	case typ != nil:
 		return typedesc.NewExistingMutable(*typ)
 	case schema != nil:

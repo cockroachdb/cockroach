@@ -762,7 +762,7 @@ func compileTestCase(tc baseReportTestCase) (compiledTestCase, error) {
 			}
 		}
 		sysCfgBuilder.addDBDesc(dbID,
-			&dbdesc.NewInitialDatabaseDescriptor(descpb.ID(dbID), db.name, security.AdminRole).ImmutableDatabaseDescriptor)
+			&dbdesc.NewInitial(descpb.ID(dbID), db.name, security.AdminRole).Immutable)
 
 		for _, table := range db.tables {
 			tableID := objectCounter
@@ -1095,7 +1095,7 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 }
 
 // addTableDesc adds a database descriptor to the SystemConfig.
-func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *dbdesc.ImmutableDatabaseDescriptor) {
+func (b *systemConfigBuilder) addDBDesc(id int, dbDesc *dbdesc.Immutable) {
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
 	var v roachpb.Value

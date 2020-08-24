@@ -117,7 +117,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
-		func(db *dbdesc.ImmutableDatabaseDescriptor) error {
+		func(db *dbdesc.Immutable) error {
 			if _, ok := userNames[db.GetPrivileges().Owner]; ok {
 				userNames[db.GetPrivileges().Owner] = append(
 					userNames[db.GetPrivileges().Owner],

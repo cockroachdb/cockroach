@@ -53,8 +53,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			desc.ModificationTime = ts1
 			return desc
 		}
-		mkDB := func(id descpb.ID, name string) *dbdesc.ImmutableDatabaseDescriptor {
-			return &dbdesc.NewInitialDatabaseDescriptor(id, name, security.AdminRole).ImmutableDatabaseDescriptor
+		mkDB := func(id descpb.ID, name string) *dbdesc.Immutable {
+			return &dbdesc.NewInitial(id, name, security.AdminRole).Immutable
 		}
 		mkTyp := func(desc typDesc) *typedesc.Immutable {
 			// Set a default parent schema for the type descriptors.

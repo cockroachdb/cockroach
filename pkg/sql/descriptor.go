@@ -59,7 +59,7 @@ var (
 // createDatabase implements the DatabaseDescEditor interface.
 func (p *planner) createDatabase(
 	ctx context.Context, database *tree.CreateDatabase, jobDesc string,
-) (*dbdesc.MutableDatabaseDescriptor, bool, error) {
+) (*dbdesc.Mutable, bool, error) {
 
 	dbName := string(database.Name)
 	shouldCreatePublicSchema := true
@@ -86,7 +86,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	desc := dbdesc.NewInitialDatabaseDescriptor(id, string(database.Name), p.SessionData().User)
+	desc := dbdesc.NewInitial(id, string(database.Name), p.SessionData().User)
 	if err := p.createDescriptorWithID(ctx, dKey.Key(p.ExecCfg().Codec), id, desc, nil, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -168,7 +168,7 @@ func (p *planner) createDescriptorWithID(
 		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
 			return err
 		}
-	case *dbdesc.MutableDatabaseDescriptor:
+	case *dbdesc.Mutable:
 		if err := desc.Validate(); err != nil {
 			return err
 		}

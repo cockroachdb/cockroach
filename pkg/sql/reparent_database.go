@@ -33,8 +33,8 @@ import (
 
 type reparentDatabaseNode struct {
 	n         *tree.ReparentDatabase
-	db        *dbdesc.MutableDatabaseDescriptor
-	newParent *dbdesc.MutableDatabaseDescriptor
+	db        *dbdesc.Mutable
+	newParent *dbdesc.Mutable
 }
 
 func (p *planner) ReparentDatabase(

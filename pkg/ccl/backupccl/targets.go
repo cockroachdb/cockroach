@@ -684,9 +684,9 @@ func fullClusterTargetsBackup(
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
 	allDescs []catalog.Descriptor,
-) ([]catalog.Descriptor, []*dbdesc.ImmutableDatabaseDescriptor, error) {
+) ([]catalog.Descriptor, []*dbdesc.Immutable, error) {
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
-	fullClusterDBs := make([]*dbdesc.ImmutableDatabaseDescriptor, 0)
+	fullClusterDBs := make([]*dbdesc.Immutable, 0)
 
 	systemTablesToBackup := make(map[string]struct{}, len(fullClusterSystemTables))
 	for _, tableName := range fullClusterSystemTables {
@@ -696,7 +696,7 @@ func fullClusterTargets(
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor:
-			dbDesc := dbdesc.NewImmutableDatabaseDescriptor(*desc.DatabaseDesc())
+			dbDesc := dbdesc.NewImmutable(*desc.DatabaseDesc())
 			fullClusterDescs = append(fullClusterDescs, desc)
 			if dbDesc.GetID() != systemschema.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.

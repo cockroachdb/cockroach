@@ -27,7 +27,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 		t.Fatal(err)
 	}
 	const id = 17
-	desc := NewInitialDatabaseDescriptor(id, string(stmt.AST.(*tree.CreateDatabase).Name), security.AdminRole)
+	desc := NewInitial(id, string(stmt.AST.(*tree.CreateDatabase).Name), security.AdminRole)
 	if desc.GetName() != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.GetName())
 	}

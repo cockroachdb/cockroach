@@ -299,7 +299,7 @@ func WriteDescriptors(
 			// the users on the restoring cluster match the ones that were on the
 			// cluster that was backed up. So we wipe the privileges on the database.
 			if descCoverage != tree.AllDescriptors {
-				if mut, ok := desc.(*dbdesc.MutableDatabaseDescriptor); ok {
+				if mut, ok := desc.(*dbdesc.Mutable); ok {
 					mut.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRole)
 				} else {
 					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
@@ -822,7 +822,7 @@ func createImportingDescriptors(
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				rewriteDesc := dbdesc.NewInitialDatabaseDescriptorWithPrivileges(
+				rewriteDesc := dbdesc.NewInitialWithPrivileges(
 					rewrite.ID, desc.GetName(), desc.GetPrivileges())
 				databases = append(databases, rewriteDesc)
 			}
@@ -839,7 +839,7 @@ func createImportingDescriptors(
 		}
 	}
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		databases = append(databases, dbdesc.NewInitialDatabaseDescriptor(
+		databases = append(databases, dbdesc.NewInitial(
 			descpb.ID(tempSystemDBID), restoreTempSystemDB, security.AdminRole))
 	}
 

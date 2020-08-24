@@ -171,7 +171,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		}
 
 		switch d := descriptor.(type) {
-		case *dbdesc.MutableDatabaseDescriptor:
+		case *dbdesc.Mutable:
 			if p.Descriptors().DatabaseLeasingUnsupported() {
 				if err := d.Validate(); err != nil {
 					return err

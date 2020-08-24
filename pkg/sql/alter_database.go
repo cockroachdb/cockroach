@@ -19,7 +19,7 @@ import (
 
 type alterDatabaseOwnerNode struct {
 	n    *tree.AlterDatabaseOwner
-	desc *dbdesc.MutableDatabaseDescriptor
+	desc *dbdesc.Mutable
 }
 
 // AlterDatabaseOwner transforms a tree.AlterDatabaseOwner into a plan node.
