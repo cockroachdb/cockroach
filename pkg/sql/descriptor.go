@@ -46,6 +46,7 @@ import (
 var (
 	errEmptyDatabaseName = pgerror.New(pgcode.Syntax, "empty database name")
 	errNoDatabase        = pgerror.New(pgcode.InvalidName, "no database specified")
+	errNoSchema          = pgerror.Newf(pgcode.InvalidName, "no schema specified")
 	errNoTable           = pgerror.New(pgcode.InvalidName, "no table specified")
 	errNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
 	errNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")

@@ -269,8 +269,8 @@ func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLo
 	}
 }
 
-// getDescriptorsFromTargetList fetches the descriptors for the targets.
-func getDescriptorsFromTargetList(
+// getDescriptorsFromTargetListForPrivilegeChange fetches the descriptors for the targets.
+func getDescriptorsFromTargetListForPrivilegeChange(
 	ctx context.Context, p *planner, targets tree.TargetList,
 ) ([]catalog.Descriptor, error) {
 	if targets.Databases != nil {
@@ -307,6 +307,32 @@ func getDescriptorsFromTargetList(
 
 		if len(descs) == 0 {
 			return nil, errNoMatch
+		}
+		return descs, nil
+	}
+
+	if targets.Schemas != nil {
+		if len(targets.Schemas) == 0 {
+			return nil, errNoSchema
+		}
+		descs := make([]catalog.Descriptor, 0, len(targets.Schemas))
+		// Resolve the current database.
+		curDB, err := p.ResolveMutableDatabaseDescriptor(ctx, p.CurrentDatabase(), true /* required */)
+		if err != nil {
+			return nil, err
+		}
+		for _, sc := range targets.Schemas {
+			_, resSchema, err := p.ResolveMutableSchemaDescriptor(ctx, curDB.ID, sc, true /* required */)
+			if err != nil {
+				return nil, err
+			}
+			switch resSchema.Kind {
+			case catalog.SchemaUserDefined:
+				descs = append(descs, resSchema.Desc)
+			default:
+				return nil, pgerror.Newf(pgcode.InvalidSchemaName,
+					"cannot change privileges on schema %q", resSchema.Name)
+			}
 		}
 		return descs, nil
 	}

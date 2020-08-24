@@ -1615,19 +1615,14 @@ SELECT * FROM information_schema.schema_privileges
 grantee   table_catalog  table_schema        privilege_type  is_grantable
 admin     other_db       crdb_internal       ALL             NULL
 root      other_db       crdb_internal       ALL             NULL
-testuser  other_db       crdb_internal       SELECT          NULL
 admin     other_db       information_schema  ALL             NULL
 root      other_db       information_schema  ALL             NULL
-testuser  other_db       information_schema  SELECT          NULL
 admin     other_db       pg_catalog          ALL             NULL
 root      other_db       pg_catalog          ALL             NULL
-testuser  other_db       pg_catalog          SELECT          NULL
 admin     other_db       pg_extension        ALL             NULL
 root      other_db       pg_extension        ALL             NULL
-testuser  other_db       pg_extension        SELECT          NULL
 admin     other_db       public              ALL             NULL
 root      other_db       public              ALL             NULL
-testuser  other_db       public              SELECT          NULL
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
