@@ -355,6 +355,10 @@ func MakeIndexDescriptor(
 				"session variable experimental_partial_indexes is set to false, cannot create a partial index")
 		}
 
+		if n.Inverted {
+			return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
+		}
+
 		idxValidator := schemaexpr.MakeIndexPredicateValidator(params.ctx, n.Table, tableDesc, &params.p.semaCtx)
 		expr, err := idxValidator.Validate(n.Predicate)
 		if err != nil {
