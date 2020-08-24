@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -29,7 +31,7 @@ func (p *planner) prepareSetSchema(
 ) (descpb.ID, error) {
 
 	switch t := desc.(type) {
-	case *MutableTableDescriptor, *MutableTypeDescriptor:
+	case *tabledesc.Mutable, *typedesc.Mutable:
 	default:
 		return 0, pgerror.Newf(
 			pgcode.InvalidParameterValue,

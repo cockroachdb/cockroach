@@ -166,7 +166,7 @@ type varFormatter struct {
 // Format implements the NodeFormatter interface.
 func (c *varFormatter) Format(ctx *tree.FmtCtx) {
 	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.ObjectName != "" {
-		// This logic is different from (*TableName).Format() with
+		// This logic is different from (*tree.TableName).Format() with
 		// FmtAlwaysQualify, because FmtShowTableAliases only wants to
 		// prefixes the table names for vars in expressions, not table
 		// names in sub-queries.

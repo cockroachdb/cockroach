@@ -416,7 +416,7 @@ func removeSequenceOwnerIfExists(
 
 func resolveColumnItemToDescriptors(
 	ctx context.Context, p *planner, columnItem *tree.ColumnItem,
-) (*MutableTableDescriptor, *descpb.ColumnDescriptor, error) {
+) (*tabledesc.Mutable, *descpb.ColumnDescriptor, error) {
 	var tableName tree.TableName
 	if columnItem.TableName != nil {
 		tableName = columnItem.TableName.ToTableName()
@@ -467,12 +467,12 @@ func maybeAddSequenceDependencies(
 	col *descpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 	backrefs map[descpb.ID]*tabledesc.Mutable,
-) ([]*MutableTableDescriptor, error) {
+) ([]*tabledesc.Mutable, error) {
 	seqNames, err := sequence.GetUsedSequenceNames(expr)
 	if err != nil {
 		return nil, err
 	}
-	var seqDescs []*MutableTableDescriptor
+	var seqDescs []*tabledesc.Mutable
 	for _, seqName := range seqNames {
 		parsedSeqName, err := parser.ParseTableName(seqName)
 		if err != nil {
@@ -480,7 +480,7 @@ func maybeAddSequenceDependencies(
 		}
 		tn := parsedSeqName.ToTableName()
 
-		var seqDesc *MutableTableDescriptor
+		var seqDesc *tabledesc.Mutable
 		p, ok := sc.(*planner)
 		if ok {
 			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)

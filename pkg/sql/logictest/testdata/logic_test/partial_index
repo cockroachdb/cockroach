@@ -1,8 +1,6 @@
 #### Partial Indexes
 
-# TODO(mgartner): remove this once partial indexes are fully supported.
 statement ok
-SET experimental_partial_indexes=on;
 SET experimental_enable_enums = true;
 
 statement ok
@@ -903,6 +901,17 @@ enum_table_show  CREATE TABLE public.enum_table_show (
                  INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
                  FAMILY fam_0_a_b_rowid (a, b, rowid)
 )
+
+# Inverted partial indexes.
+
+statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
+CREATE TABLE inv (j JSON, i INT, INVERTED INDEX (j) WHERE i > 0)
+
+statement ok
+CREATE TABLE inv (j JSON, i INT)
+
+statement error pgcode 0A000 unimplemented: partial inverted indexes not supported
+CREATE INVERTED INDEX ON inv (j) WHERE i > 0
 
 # Regression tests for #52318. Mutations on partial indexes in the
 # DELETE_AND_WRITE_ONLY state should update the indexes correctly.

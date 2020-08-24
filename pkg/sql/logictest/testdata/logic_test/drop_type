@@ -2,7 +2,6 @@ statement ok
 SET experimental_enable_enums = true;
 SET sql_safe_updates = false;
 SET enable_experimental_alter_column_type_general = true;
-SET experimental_partial_indexes = on
 
 # Basic test -- create and drop a type.
 statement ok

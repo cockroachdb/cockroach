@@ -1535,10 +1535,8 @@ func NewTableDesc(
 				idx.Partitioning = partitioning
 			}
 			if d.Predicate != nil {
-				// TODO(mgartner): remove this once partial indexes are fully supported.
-				if !sessionData.PartialIndexes {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"session variable experimental_partial_indexes is set to false, cannot create a partial index")
+				if d.Inverted {
+					return nil, unimplemented.NewWithIssue(50952, "partial inverted indexes not supported")
 				}
 
 				expr, err := idxValidator.Validate(d.Predicate)
@@ -1589,12 +1587,6 @@ func NewTableDesc(
 				idx.Partitioning = partitioning
 			}
 			if d.Predicate != nil {
-				// TODO(mgartner): remove this once partial indexes are fully supported.
-				if !sessionData.PartialIndexes {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"session variable experimental_partial_indexes is set to false, cannot create a partial index")
-				}
-
 				expr, err := idxValidator.Validate(d.Predicate)
 				if err != nil {
 					return nil, err
@@ -2181,7 +2173,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 }
 
 func makeShardCheckConstraintDef(
-	desc *MutableTableDescriptor, buckets int, shardCol *descpb.ColumnDescriptor,
+	desc *tabledesc.Mutable, buckets int, shardCol *descpb.ColumnDescriptor,
 ) (*tree.CheckConstraintTableDef, error) {
 	values := &tree.Tuple{}
 	for i := 0; i < buckets; i++ {

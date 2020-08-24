@@ -1594,7 +1594,7 @@ func (s *Server) Start(ctx context.Context) error {
 				md := forwardAuthenticationMetadata(req.Context(), req)
 				authCtx := metadata.NewIncomingContext(req.Context(), md)
 				_, err := s.admin.requireAdminUser(authCtx)
-				if errors.Is(err, errInsufficientPrivilege) {
+				if errors.Is(err, errRequiresAdmin) {
 					http.Error(w, "admin privilege required", http.StatusUnauthorized)
 					return
 				} else if err != nil {

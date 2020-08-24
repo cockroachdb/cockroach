@@ -17,7 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -531,13 +535,13 @@ func (p *planner) checkCanAlterToNewOwner(
 
 	var objType string
 	switch desc.(type) {
-	case *MutableTypeDescriptor:
+	case *typedesc.Mutable:
 		objType = "type"
-	case *MutableTableDescriptor:
+	case *tabledesc.Mutable:
 		objType = "table"
-	case *MutableSchemaDescriptor:
+	case *schemadesc.Mutable:
 		objType = "schema"
-	case *MutableDatabaseDescriptor:
+	case *dbdesc.Mutable:
 		objType = "database"
 	default:
 		return errors.AssertionFailedf("unknown object descriptor type %v", desc)

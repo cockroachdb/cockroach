@@ -16,6 +16,7 @@ import (
 	gosqldriver "database/sql/driver"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -180,6 +181,235 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	}
 	if !isClientsideQueryCanceledErr(err) {
 		t.Fatalf("expected error with specific error code, got: %s", err)
+	}
+}
+
+func TestCancelSessionPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// getSessionIDs retrieves the IDs of any currently running queries for the
+	// specified user.
+	getSessionIDs := func(t *testing.T, ctx context.Context, conn *gosql.Conn, user string) []string {
+		rows, err := conn.QueryContext(
+			ctx, "SELECT session_id FROM [SHOW SESSIONS] WHERE user_name = $1", user,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sessionIDs []string
+		for rows.Next() {
+			var sessionID string
+			if err := rows.Scan(&sessionID); err != nil {
+				t.Fatal(err)
+			}
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return sessionIDs
+	}
+
+	ctx := context.Background()
+	numNodes := 2
+	testCluster := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Insecure: true,
+			},
+		})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Create users with various permissions.
+	conn, err := testCluster.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, `
+CREATE USER has_admin;
+CREATE USER has_admin2;
+CREATE USER has_cancelquery CANCELQUERY;
+CREATE USER no_perms;
+GRANT admin TO has_admin;
+GRANT admin TO has_admin2;
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type testCase struct {
+		name          string
+		user          string
+		targetUser    string
+		shouldSucceed bool
+		expectedErrRE string
+	}
+	testCases := []testCase{
+		{"admins can cancel other admins", "has_admin", "has_admin2", true, ""},
+		{"non-admins with CANCELQUERY can cancel non-admins", "has_cancelquery", "no_perms", true,
+			""},
+		{"non-admins cannot cancel admins", "has_cancelquery", "has_admin", false,
+			"permission denied to cancel admin session"},
+		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
+			"this operation requires CANCELQUERY privilege"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Open a session for the target user.
+			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			defer targetDB.Close()
+			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
+
+			// Retrieve the session ID.
+			var sessionID string
+			testutils.SucceedsSoon(t, func() error {
+				sessionIDs := getSessionIDs(t, ctx, conn, tc.targetUser)
+				if len(sessionIDs) == 0 {
+					return errors.New("could not find session")
+				}
+				if len(sessionIDs) > 1 {
+					return errors.New("found multiple sessions")
+				}
+				sessionID = sessionIDs[0]
+				return nil
+			})
+
+			// Attempt to cancel the session. We connect to the other node to make sure
+			// non-local sessions can be canceled.
+			db := getUserConn(t, tc.user, testCluster.Server(1))
+			defer db.Close()
+			runner := sqlutils.MakeSQLRunner(db)
+			if tc.shouldSucceed {
+				runner.Exec(t, `CANCEL SESSION $1`, sessionID)
+				testutils.SucceedsSoon(t, func() error {
+					sessionIDs := getSessionIDs(t, ctx, conn, tc.targetUser)
+					if len(sessionIDs) > 0 {
+						return errors.Errorf("expected no sessions for %q, found %d", tc.targetUser, len(sessionIDs))
+					}
+					return nil
+				})
+			} else {
+				runner.ExpectErr(t, tc.expectedErrRE, `CANCEL SESSION $1`, sessionID)
+			}
+		})
+	}
+}
+
+func TestCancelQueryPermissions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// getQueryIDs retrieves the IDs of any currently running queries for the
+	// specified user.
+	getQueryIDs := func(t *testing.T, ctx context.Context, conn *gosql.Conn, user string) []string {
+		rows, err := conn.QueryContext(
+			ctx, "SELECT query_id FROM [SHOW QUERIES] WHERE user_name = $1", user,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var queryIDs []string
+		for rows.Next() {
+			var queryID string
+			if err := rows.Scan(&queryID); err != nil {
+				t.Fatal(err)
+			}
+			queryIDs = append(queryIDs, queryID)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return queryIDs
+	}
+
+	ctx := context.Background()
+	numNodes := 2
+	testCluster := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Insecure: true,
+			},
+		})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Create users with various permissions.
+	conn, err := testCluster.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.ExecContext(ctx, `
+CREATE USER has_admin;
+CREATE USER has_admin2;
+CREATE USER has_cancelquery CANCELQUERY;
+CREATE USER no_perms;
+GRANT admin TO has_admin;
+GRANT admin TO has_admin2;
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type testCase struct {
+		name          string
+		user          string
+		targetUser    string
+		shouldSucceed bool
+		expectedErrRE string
+	}
+	testCases := []testCase{
+		{"admins can cancel other admins", "has_admin", "has_admin2", true, ""},
+		{"non-admins with CANCELQUERY can cancel non-admins", "has_cancelquery", "no_perms", true,
+			""},
+		{"non-admins cannot cancel admins", "has_cancelquery", "has_admin", false,
+			"permission denied to cancel admin query"},
+		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
+			"this operation requires CANCELQUERY privilege"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Start a query with the target user.
+			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			defer targetDB.Close()
+			go func() {
+				var errRE string
+				if tc.shouldSucceed {
+					errRE = "query execution canceled"
+				} else {
+					// The query should survive until the connection gets torn down at the
+					// end of the test.
+					errRE = "sql: database is closed"
+				}
+				sqlutils.MakeSQLRunner(targetDB).ExpectErr(t, errRE, "SELECT pg_sleep(1000000)")
+			}()
+
+			// Retrieve the query ID.
+			var queryID string
+			testutils.SucceedsSoon(t, func() error {
+				queryIDs := getQueryIDs(t, ctx, conn, tc.targetUser)
+				if len(queryIDs) == 0 {
+					return errors.New("could not find query")
+				}
+				if len(queryIDs) > 1 {
+					return errors.New("found multiple queries")
+				}
+				queryID = queryIDs[0]
+				return nil
+			})
+
+			// Attempt to cancel the query. We connect to the other node to make sure
+			// non-local queries can be canceled.
+			db := getUserConn(t, tc.user, testCluster.Server(1))
+			defer db.Close()
+			runner := sqlutils.MakeSQLRunner(db)
+			if tc.shouldSucceed {
+				runner.Exec(t, `CANCEL QUERY $1`, queryID)
+			} else {
+				runner.ExpectErr(t, tc.expectedErrRE, `CANCEL QUERY $1`, queryID)
+			}
+		})
 	}
 }
 
@@ -616,4 +846,18 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 		t.Fatal("expected the connection to be killed " +
 			"but the connection is still alive")
 	}
+}
+
+func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+	pgURL := url.URL{
+		Scheme:   "postgres",
+		User:     url.User(username),
+		Host:     server.ServingSQLAddr(),
+		RawQuery: "sslmode=disable",
+	}
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
 }

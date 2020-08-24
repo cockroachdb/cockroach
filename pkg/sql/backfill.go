@@ -321,7 +321,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 // on the new version of the table descriptor. It returns the new table descs.
 func (sc *SchemaChanger) dropConstraints(
 	ctx context.Context, constraints []descpb.ConstraintToUpdate,
-) (map[descpb.ID]*ImmutableTableDescriptor, error) {
+) (map[descpb.ID]*tabledesc.Immutable, error) {
 	log.Infof(ctx, "dropping %d constraints", len(constraints))
 
 	fksByBackrefTable := make(map[descpb.ID][]*descpb.ConstraintToUpdate)
@@ -344,7 +344,7 @@ func (sc *SchemaChanger) dropConstraints(
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
-		scTable := scDesc.(*MutableTableDescriptor)
+		scTable := scDesc.(*tabledesc.Mutable)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -374,7 +374,7 @@ func (sc *SchemaChanger) dropConstraints(
 						if !ok {
 							return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 						}
-						backrefTable := backrefDesc.(*MutableTableDescriptor)
+						backrefTable := backrefDesc.(*tabledesc.Mutable)
 						if err := removeFKBackReferenceFromTable(backrefTable, def.Name, scTable); err != nil {
 							return err
 						}
@@ -411,9 +411,9 @@ func (sc *SchemaChanger) dropConstraints(
 
 	log.Info(ctx, "finished dropping constraints")
 
-	tableDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
+	tableDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	for i := range descs {
-		tableDescs[i] = descs[i].(*ImmutableTableDescriptor)
+		tableDescs[i] = descs[i].(*tabledesc.Immutable)
 	}
 	return tableDescs, nil
 }
@@ -446,7 +446,7 @@ func (sc *SchemaChanger) addConstraints(
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
-		scTable := scDesc.(*MutableTableDescriptor)
+		scTable := scDesc.(*tabledesc.Mutable)
 		for i := range constraints {
 			constraint := &constraints[i]
 			switch constraint.ConstraintType {
@@ -496,7 +496,7 @@ func (sc *SchemaChanger) addConstraints(
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 					}
-					backrefTable := backrefDesc.(*MutableTableDescriptor)
+					backrefTable := backrefDesc.(*tabledesc.Mutable)
 					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 				}
 			}
@@ -1723,7 +1723,7 @@ func validateCheckInTxn(
 	leaseMgr *lease.Manager,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	tableDesc *MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	checkName string,
 ) error {
@@ -1764,7 +1764,7 @@ func validateFkInTxn(
 	ctx context.Context,
 	leaseMgr *lease.Manager,
 	evalCtx *tree.EvalContext,
-	tableDesc *MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	fkName string,
 ) error {

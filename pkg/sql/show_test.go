@@ -21,7 +21,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -775,71 +774,72 @@ func TestShowSessionPrivileges(t *testing.T) {
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
 	defer s.Stopper().Stop(context.Background())
 
-	// Prepare a non-root session.
-	_ = sqlDBroot.Exec(t, `CREATE USER nonroot`)
-	pgURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User("nonroot"),
-		Host:     s.ServingSQLAddr(),
-		RawQuery: "sslmode=disable",
-	}
-	rawSQLDBnonroot, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rawSQLDBnonroot.Close()
-	sqlDBnonroot := sqlutils.MakeSQLRunner(rawSQLDBnonroot)
+	// Create three users: one with no special permissions, one with the
+	// VIEWACTIVITY role option, and one admin. We'll check that the VIEWACTIVITY
+	// users and the admin can see all sessions and the unpermissioned user can
+	// only see their own session.
+	_ = sqlDBroot.Exec(t, `CREATE USER noperms`)
+	_ = sqlDBroot.Exec(t, `CREATE USER viewactivity VIEWACTIVITY`)
+	_ = sqlDBroot.Exec(t, `CREATE USER adminuser`)
+	_ = sqlDBroot.Exec(t, `GRANT admin TO adminuser`)
 
-	// Ensure the non-root session is open.
-	sqlDBnonroot.Exec(t, `SELECT version()`)
+	type user struct {
+		username             string
+		canViewOtherSessions bool
+		sqlRunner            *sqlutils.SQLRunner
+	}
 
-	t.Run("root", func(t *testing.T) {
-		// Verify that the root session can use SHOW SESSIONS properly and
-		// can observe other sessions than its own.
-		rows := sqlDBroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
-		defer rows.Close()
-		counts := map[string]int{}
-		for rows.Next() {
-			var userName string
-			if err := rows.Scan(&userName); err != nil {
-				t.Fatal(err)
-			}
-			counts[userName]++
+	users := []user{
+		{"noperms", false, nil},
+		{"viewactivity", true, nil},
+		{"adminuser", true, nil},
+	}
+	for i, tc := range users {
+		pgURL := url.URL{
+			Scheme:   "postgres",
+			User:     url.User(tc.username),
+			Host:     s.ServingSQLAddr(),
+			RawQuery: "sslmode=disable",
 		}
-		if err := rows.Err(); err != nil {
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
 			t.Fatal(err)
 		}
-		if counts[security.RootUser] == 0 {
-			t.Fatalf("root session is unable to see its own session: %+v", counts)
-		}
-		if counts["nonroot"] == 0 {
-			t.Fatal("root session is unable to see non-root session")
-		}
-	})
+		defer db.Close()
+		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
-	t.Run("non-root", func(t *testing.T) {
-		// Verify that the non-root session can use SHOW SESSIONS properly
-		// and cannot observe other sessions than its own.
-		rows := sqlDBnonroot.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
-		defer rows.Close()
-		counts := map[string]int{}
-		for rows.Next() {
-			var userName string
-			if err := rows.Scan(&userName); err != nil {
+		// Ensure the session is open.
+		users[i].sqlRunner.Exec(t, `SELECT version()`)
+	}
+
+	for _, u := range users {
+		t.Run(u.username, func(t *testing.T) {
+			rows := u.sqlRunner.Query(t, `SELECT user_name FROM [SHOW CLUSTER SESSIONS]`)
+			defer rows.Close()
+			counts := map[string]int{}
+			for rows.Next() {
+				var userName string
+				if err := rows.Scan(&userName); err != nil {
+					t.Fatal(err)
+				}
+				counts[userName]++
+			}
+			if err := rows.Err(); err != nil {
 				t.Fatal(err)
 			}
-			counts[userName]++
-		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		if counts["nonroot"] == 0 {
-			t.Fatal("non-root session is unable to see its own session")
-		}
-		if len(counts) > 1 {
-			t.Fatalf("non-root session is able to see other sessions: %+v", counts)
-		}
-	})
+			for _, u2 := range users {
+				if u.canViewOtherSessions || u.username == u2.username {
+					if counts[u2.username] == 0 {
+						t.Fatalf(
+							"%s session is unable to see %s session: %+v", u.username, u2.username, counts)
+					}
+				} else if counts[u2.username] > 0 {
+					t.Fatalf(
+						"%s session should not be able to see %s session: %+v", u.username, u2.username, counts)
+				}
+			}
+		})
+	}
 }
 
 func TestLintClusterSettingNames(t *testing.T) {

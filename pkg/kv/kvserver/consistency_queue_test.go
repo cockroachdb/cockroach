@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -225,6 +226,13 @@ func TestCheckConsistencyReplay(t *testing.T) {
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if testing.Short() {
+		// Takes 30s as of 2020/07. The test uses on-disk stores because nodes get
+		// killed, and for some reason using the on-disk stores seems to cause
+		// WaitForFullReplication() to take forever.
+		skip.UnderShort(t)
+	}
 
 	const numStores = 3
 	testKnobs := kvserver.StoreTestingKnobs{
