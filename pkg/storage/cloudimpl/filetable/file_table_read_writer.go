@@ -187,23 +187,13 @@ func (f *FileToTableSystem) GetFQPayloadTableName() string {
 }
 
 // GetSimpleFileTableName returns the non-qualified File table name.
-func (f *FileToTableSystem) GetSimpleFileTableName() (string, error) {
-	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
-	if err != nil {
-		return "", err
-	}
-
-	return tableName.ObjectName.String() + fileTableNameSuffix, nil
+func (f *FileToTableSystem) GetSimpleFileTableName(prefix string) (string, error) {
+	return prefix + fileTableNameSuffix, nil
 }
 
 // GetSimplePayloadTableName returns the non-qualified Payload table name.
-func (f *FileToTableSystem) GetSimplePayloadTableName() (string, error) {
-	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
-	if err != nil {
-		return "", err
-	}
-
-	return tableName.ObjectName.String() + payloadTableNameSuffix, nil
+func (f *FileToTableSystem) GetSimplePayloadTableName(prefix string) (string, error) {
+	return prefix + payloadTableNameSuffix, nil
 }
 
 // GetDatabaseAndSchema returns the database.schema of the current
@@ -215,6 +205,16 @@ func (f *FileToTableSystem) GetDatabaseAndSchema() (string, error) {
 	}
 
 	return tableName.ObjectNamePrefix.String(), nil
+}
+
+// GetTableName returns the table name from the passed FQN.
+func (f *FileToTableSystem) GetTableName() (string, error) {
+	tableName, err := parser.ParseQualifiedTableName(f.qualifiedTableName)
+	if err != nil {
+		return "", err
+	}
+
+	return tableName.ObjectName.String(), nil
 }
 
 func resolveInternalFileToTableExecutor(
@@ -239,6 +239,14 @@ func NewFileToTableSystem(
 	executor FileToTableSystemExecutor,
 	username string,
 ) (*FileToTableSystem, error) {
+	// Check the qualifiedTableName is parseable, so that we can return a useful
+	// error pre-emptively.
+	_, err := parser.ParseQualifiedTableName(qualifiedTableName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse qualified table name %s supplied to userfile",
+			qualifiedTableName)
+	}
+
 	f := FileToTableSystem{
 		qualifiedTableName: qualifiedTableName, executor: executor, username: username,
 	}
@@ -629,17 +637,28 @@ func (f *FileToTableSystem) ReadFile(ctx context.Context, filename string) (io.R
 func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	ctx context.Context, ie *sql.InternalExecutor,
 ) (bool, error) {
-	fileTableName, err := f.GetSimpleFileTableName()
+	tablePrefix, err := f.GetTableName()
 	if err != nil {
 		return false, err
 	}
-	payloadTableName, err := f.GetSimplePayloadTableName()
+	if tablePrefix == "" {
+		return false, errors.Newf("could not resolve the table name from the FQN %s", f.qualifiedTableName)
+	}
+	fileTableName, err := f.GetSimpleFileTableName(tablePrefix)
+	if err != nil {
+		return false, err
+	}
+	payloadTableName, err := f.GetSimplePayloadTableName(tablePrefix)
 	if err != nil {
 		return false, err
 	}
 	databaseSchema, err := f.GetDatabaseAndSchema()
 	if err != nil {
 		return false, err
+	}
+
+	if databaseSchema == "" {
+		return false, errors.Newf("could not resolve the db and schema name from %s", f.qualifiedTableName)
 	}
 
 	tableExistenceQuery := fmt.Sprintf(

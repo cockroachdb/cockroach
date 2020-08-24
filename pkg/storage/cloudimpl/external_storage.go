@@ -197,12 +197,14 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		}
 	case "userfile":
 		qualifiedTableName := uri.Host
-		if qualifiedTableName == "" {
-			return conf, errors.Errorf("host component of userfile URI must be a qualified table name")
-		}
-
 		if user == "" {
 			return conf, errors.Errorf("user creating the FileTable ExternalStorage must be specified")
+		}
+
+		// If the import statement does not specify a qualified table name then use
+		// the default to attempt to locate the file(s).
+		if qualifiedTableName == "" {
+			qualifiedTableName = DefaultQualifiedNamePrefix + user
 		}
 
 		conf.Provider = roachpb.ExternalStorageProvider_FileTable

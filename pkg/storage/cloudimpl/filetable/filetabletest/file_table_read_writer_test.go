@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl/filetable"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -269,6 +270,14 @@ func TestReadWriteFile(t *testing.T) {
 			expectedNumChunks, sqlDB)
 
 		require.NoError(t, fileTableReadWriter.DeleteFile(ctx, testFileName))
+	})
+
+	// Tests that a FQN without a db and/or schema prefix is rejected during
+	// FileTable creation.
+	t.Run("no-db-or-schema-qualified-table-name", func(t *testing.T) {
+		_, err := filetable.NewFileToTableSystem(ctx, "foo",
+			executor, security.RootUser)
+		testutils.IsError(err, "could not resolve db or schema name")
 	})
 }
 
