@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -263,7 +264,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	rangeCache := kvcoord.NewRangeDescriptorCache(st, nil /* db */, size, stopper)
+	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
 	r := MakeDistSQLReceiver(
 		ctx, nil /* resultWriter */, tree.Rows,
 		rangeCache, nil /* txn */, nil /* clockUpdater */, &SessionTracing{})
