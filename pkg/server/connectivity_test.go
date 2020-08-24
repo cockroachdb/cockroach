@@ -270,3 +270,61 @@ func TestClusterConnectivity(t *testing.T) {
 		})
 	}
 }
+
+// TestJoinVersionGate checks to see that improperly versioned cockroach nodes
+// are not able to join a cluster.
+func TestJoinVersionGate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	commonArg := base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			{InMemory: true},
+		},
+	}
+
+	numNodes := 3
+	tcArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // Saves time in this test.
+		ServerArgs:      commonArg,
+		ParallelStart:   true,
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
+	defer tc.Stopper().Stop(context.Background())
+
+	testutils.SucceedsSoon(t, func() error {
+		for i := 0; i < numNodes; i++ {
+			clusterID := tc.Server(0).ClusterID()
+			got := tc.Server(i).ClusterID()
+
+			if got != clusterID {
+				return errors.Newf("mismatched cluster IDs; %s (for node %d) != %s (for node %d)", clusterID.String(), 0, got.String(), i)
+			}
+		}
+		return nil
+	})
+
+	var newVersion = clusterversion.TestingBinaryVersion
+	var oldVersion = prev(newVersion)
+
+	knobs := base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			BootstrapVersionOverride: oldVersion,
+		},
+	}
+
+	oldVersionServerArgs := commonArg
+	oldVersionServerArgs.Knobs = knobs
+	oldVersionServerArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
+
+	serv, err := tc.AddServer(oldVersionServerArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serv.Stop()
+
+	if err := serv.Start(); errors.Cause(err) != server.ErrImproperBinaryVersion {
+		t.Fatalf("expected error %s, got %v", server.ErrImproperBinaryVersion.Error(), err)
+	}
+}
