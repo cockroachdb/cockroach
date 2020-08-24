@@ -128,7 +128,19 @@ type resolveFlags struct {
 func (p *planner) ResolveMutableTableDescriptor(
 	ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
 ) (table *tabledesc.Mutable, err error) {
-	return resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
+	desc, err := resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure that the current user can access the target schema.
+	if desc != nil {
+		if err := p.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+			return nil, err
+		}
+	}
+
+	return desc, nil
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
@@ -142,7 +154,18 @@ func (p *planner) ResolveUncachedTableDescriptor(
 		}
 		table, err = resolver.ResolveExistingTableObject(ctx, p, tn, lookupFlags)
 	})
-	return table, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure that the current user can access the target schema.
+	if table != nil {
+		if err := p.canResolveDescUnderSchema(ctx, table.GetParentSchemaID(), table); err != nil {
+			return nil, err
+		}
+	}
+
+	return table, nil
 }
 
 func (p *planner) ResolveTargetObject(
@@ -247,6 +270,11 @@ func (p *planner) ResolveType(
 	if p.contextDatabaseID != descpb.InvalidID && tdesc.ParentID != descpb.InvalidID && tdesc.ParentID != p.contextDatabaseID {
 		return nil, pgerror.Newf(
 			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
+	}
+
+	// Ensure that the user can access the target schema.
+	if err := p.canResolveDescUnderSchema(ctx, tdesc.GetParentSchemaID(), tdesc); err != nil {
+		return nil, err
 	}
 
 	return tdesc.MakeTypesT(ctx, &tn, p)
@@ -790,6 +818,14 @@ func (p *planner) ResolveMutableTypeDescriptor(
 		return nil, err
 	}
 	name.SetAnnotation(&p.semaCtx.Annotations, tn)
+
+	if desc != nil {
+		// Ensure that the user can access the target schema.
+		if err := p.canResolveDescUnderSchema(ctx, desc.GetParentSchemaID(), desc); err != nil {
+			return nil, err
+		}
+	}
+
 	return desc, nil
 }
 
@@ -809,6 +845,14 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 		return nil, err
 	}
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
+
+	if table != nil {
+		// Ensure that the user can access the target schema.
+		if err := p.canResolveDescUnderSchema(ctx, table.GetParentSchemaID(), table); err != nil {
+			return nil, err
+		}
+	}
+
 	return table, nil
 }
 
@@ -834,7 +878,14 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	}
 	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
-	return desc.(*tabledesc.Mutable), nil
+	table := desc.(*tabledesc.Mutable)
+
+	// Ensure that the user can access the target schema.
+	if err := p.canResolveDescUnderSchema(ctx, table.GetParentSchemaID(), table); err != nil {
+		return nil, err
+	}
+
+	return table, nil
 }
 
 // See ResolveUncachedTableDescriptor.
@@ -847,7 +898,18 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = p.ResolveExistingObjectEx(ctx, name, required, requiredType)
 	})
-	return table, err
+	if err != nil {
+		return nil, err
+	}
+
+	if table != nil {
+		// Ensure that the user can access the target schema.
+		if err := p.canResolveDescUnderSchema(ctx, table.GetParentSchemaID(), table); err != nil {
+			return nil, err
+		}
+	}
+
+	return table, nil
 }
 
 // See ResolveExistingTableObject.
@@ -868,7 +930,14 @@ func (p *planner) ResolveExistingObjectEx(
 	}
 	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
-	return desc.(*tabledesc.Immutable), nil
+	table := desc.(*tabledesc.Immutable)
+
+	// Ensure that the user can access the target schema.
+	if err := p.canResolveDescUnderSchema(ctx, table.GetParentSchemaID(), table); err != nil {
+		return nil, err
+	}
+
+	return table, nil
 }
 
 // ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.
