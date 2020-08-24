@@ -173,20 +173,31 @@ func (p *planner) prepareDrop(
 	if tableDesc == nil {
 		return nil, err
 	}
-	if err := p.prepareDropWithTableDesc(ctx, tableDesc); err != nil {
+	if err := p.canDropTable(ctx, tableDesc); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
 }
 
-// prepareDropWithTableDesc behaves as prepareDrop, except it assumes the
-// table descriptor is already fetched. This is useful for DropDatabase,
-// as prepareDrop requires resolving a TableName when DropDatabase already
-// has it resolved.
-func (p *planner) prepareDropWithTableDesc(
-	ctx context.Context, tableDesc *tabledesc.Mutable,
-) error {
-	return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+// canDropTable returns an error if the user cannot drop the table.
+func (p *planner) canDropTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+	// Don't check for ownership if the table is a temp table.
+	// ResolveSchema currently doesn't work for temp schemas.
+	// Hack until #53163 is fixed.
+	hasOwnership := false
+	var err error
+	if !tableDesc.Temporary {
+		// If the user owns the schema the table is part of, they can drop the table.
+		hasOwnership, err = p.HasOwnershipOnSchema(ctx, tableDesc.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+	}
+	if !hasOwnership {
+		return p.CheckPrivilege(ctx, tableDesc, privilege.DROP)
+	}
+
+	return nil
 }
 
 // canRemoveFKBackReference returns an error if the input backreference isn't
