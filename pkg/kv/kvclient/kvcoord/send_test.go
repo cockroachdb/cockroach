@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rngcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -316,7 +317,7 @@ func sendBatch(
 		Desc:  *desc,
 		Lease: roachpb.Lease{},
 	})
-	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, EvictionToken{}, false /* useReverseScan */)
+	routing, err := ds.getRoutingInfo(ctx, desc.StartKey, rngcache.EvictionToken{}, false /* useReverseScan */)
 	require.NoError(t, err)
 
 	return ds.sendToReplicas(ctx, roachpb.BatchRequest{}, routing, false /* withCommit */)

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rngcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -466,13 +467,11 @@ func (mdb MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) 
 // parent descriptor during the RangeLookup scan. This is important for tests
 // that expect the RangeLookup for a user space descriptor to trigger a lookup
 // for a meta descriptor.
-func (mdb MockRangeDescriptorDB) withMetaRecursion(
-	rdc *RangeDescriptorCache,
-) MockRangeDescriptorDB {
+func (mdb MockRangeDescriptorDB) withMetaRecursion(rdc *rngcache.RangeCache) MockRangeDescriptorDB {
 	return func(key roachpb.RKey, useReverseScan bool) (rs, preRs []roachpb.RangeDescriptor, err error) {
 		metaKey := keys.RangeMetaKey(key)
 		if !metaKey.Equal(roachpb.RKeyMin) {
-			_, err := rdc.LookupWithEvictionToken(context.Background(), metaKey, EvictionToken{}, useReverseScan)
+			_, err := rdc.LookupWithEvictionToken(context.Background(), metaKey, rngcache.EvictionToken{}, useReverseScan)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -484,7 +483,7 @@ func (mdb MockRangeDescriptorDB) withMetaRecursion(
 // withMetaRecursion calls MockRangeDescriptorDB.withMetaRecursion on the
 // DistSender's RangeDescriptorDB.
 func (ds *DistSender) withMetaRecursion() *DistSender {
-	ds.rangeCache.db = ds.rangeCache.db.(MockRangeDescriptorDB).withMetaRecursion(ds.rangeCache)
+	ds.rangeCache.SetDB(ds.rangeCache.DB().(MockRangeDescriptorDB).withMetaRecursion(ds.rangeCache))
 	return ds
 }
 
@@ -1114,7 +1113,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 
 	call := func() {
 		if _, err := ds.rangeCache.LookupWithEvictionToken(
-			context.Background(), rAnyKey, EvictionToken{}, false,
+			context.Background(), rAnyKey, rngcache.EvictionToken{}, false,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -3893,7 +3892,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 			if err := testutils.SucceedsSoonError(func() error {
 				// Since the previously fetched RangeDescriptor was ["a", "d"), the request keys
 				// would be coalesced to "a".
-				numCalls := ds.rangeCache.lookupRequests.NumCalls(fmt.Sprintf("a:false:%d", initGen))
+				numCalls := ds.rangeCache.NumInFlight(fmt.Sprintf("a:false:%d", initGen))
 				if numCalls != 2 {
 					return errors.Errorf("expected %d in-flight requests, got %d", 2, numCalls)
 				}
@@ -4075,7 +4074,7 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 
 	ds := NewDistSender(cfg)
 	switchToSplitDesc = func() {
-		ds.rangeCache.db = splitRDB
+		ds.rangeCache.SetDB(splitRDB)
 	}
 
 	// We're going to send a batch with two gets, on different sides of the split.
@@ -4182,7 +4181,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			getRangeDescCacheSize := func() int64 {
 				return 1 << 20
 			}
-			rc := NewRangeDescriptorCache(st, nil /* db */, getRangeDescCacheSize, stopper)
+			rc := rngcache.NewRangeDescriptorCache(st, nil /* db */, getRangeDescCacheSize, stopper)
 			rc.Insert(ctx, roachpb.RangeInfo{
 				Desc: desc,
 				Lease: roachpb.Lease{
@@ -4193,10 +4192,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 			})
 			ent, err := rc.Lookup(ctx, roachpb.RKeyMin)
 			require.NoError(t, err)
-			tok := EvictionToken{
-				rdc:   rc,
-				entry: ent.(*rangeCacheEntry),
-			}
+			tok := rc.MakeEvictionToken(ent)
 
 			var called bool
 			transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {

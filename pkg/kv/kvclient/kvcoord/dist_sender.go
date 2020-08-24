@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rngcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -245,7 +246,7 @@ type DistSender struct {
 	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
-	rangeCache *RangeDescriptorCache
+	rangeCache *rngcache.RangeCache
 	// firstRangeProvider provides the range descriptor for range one.
 	// This is not required if a RangeDescriptorDB is supplied.
 	firstRangeProvider FirstRangeProvider
@@ -305,7 +306,7 @@ type DistSenderConfig struct {
 	// will be delegated to the RangeDescriptorDB but FirstRangeProvider will
 	// still be used to listen for updates to the first range's descriptor.
 	FirstRangeProvider FirstRangeProvider
-	RangeDescriptorDB  RangeDescriptorDB
+	RangeDescriptorDB  rngcache.RangeDescriptorDB
 
 	TestingKnobs ClientTestingKnobs
 }
@@ -333,7 +334,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if cfg.nodeDescriptor != nil {
 		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
 	}
-	var rdb RangeDescriptorDB
+	var rdb rngcache.RangeDescriptorDB
 	if cfg.FirstRangeProvider != nil {
 		ds.firstRangeProvider = cfg.FirstRangeProvider
 		rdb = ds
@@ -347,7 +348,7 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	getRangeDescCacheSize := func() int64 {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
-	ds.rangeCache = NewRangeDescriptorCache(ds.st, rdb, getRangeDescCacheSize, cfg.RPCContext.Stopper)
+	ds.rangeCache = rngcache.NewRangeDescriptorCache(ds.st, rdb, getRangeDescCacheSize, cfg.RPCContext.Stopper)
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
 		ds.transportFactory = tf
 	} else {
@@ -412,7 +413,7 @@ func (ds *DistSender) Metrics() DistSenderMetrics {
 }
 
 // RangeDescriptorCache gives access to the DistSender's range cache.
-func (ds *DistSender) RangeDescriptorCache() *RangeDescriptorCache {
+func (ds *DistSender) RangeDescriptorCache() *rngcache.RangeCache {
 	return ds.rangeCache
 }
 
@@ -531,13 +532,13 @@ func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64,
 // only with consuming cached information (the descriptor and lease info come
 // from the cache), but also with updating the cache.
 func (ds *DistSender) getRoutingInfo(
-	ctx context.Context, descKey roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
-) (EvictionToken, error) {
+	ctx context.Context, descKey roachpb.RKey, evictToken rngcache.EvictionToken, useReverseScan bool,
+) (rngcache.EvictionToken, error) {
 	returnToken, err := ds.rangeCache.LookupWithEvictionToken(
 		ctx, descKey, evictToken, useReverseScan,
 	)
 	if err != nil {
-		return EvictionToken{}, err
+		return rngcache.EvictionToken{}, err
 	}
 
 	// Sanity check: the descriptor we're about to return must include the key
@@ -1348,7 +1349,7 @@ func (ds *DistSender) sendPartialBatchAsync(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
-	routing EvictionToken,
+	routing rngcache.EvictionToken,
 	withCommit bool,
 	batchIdx int,
 	responseCh chan response,
@@ -1394,7 +1395,7 @@ func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
 	ba roachpb.BatchRequest,
 	rs roachpb.RSpan,
-	routing EvictionToken,
+	routing rngcache.EvictionToken,
 	withCommit bool,
 	batchIdx int,
 	needsTruncate bool,
@@ -1434,7 +1435,7 @@ func (ds *DistSender) sendPartialBatch(
 	// this descriptor are done at a lower level.
 	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
 	// prevTok maintains the EvictionToken used on the previous iteration.
-	var prevTok EvictionToken
+	var prevTok rngcache.EvictionToken
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
 		attempts++
 		pErr = nil
@@ -1452,7 +1453,7 @@ func (ds *DistSender) sendPartialBatch(
 				// We set pErr if we encountered an error getting the descriptor in
 				// order to return the most recent error when we are out of retries.
 				pErr = roachpb.NewError(err)
-				if !isRangeLookupErrorRetryable(err) {
+				if !rngcache.IsRangeLookupErrorRetryable(err) {
 					return response{pErr: roachpb.NewError(err)}
 				}
 				continue
@@ -1486,11 +1487,11 @@ func (ds *DistSender) sendPartialBatch(
 				// and try again with the new metadata. Re-sending the request is ok even
 				// though it might have succeeded the first time around because of
 				// idempotency.
-				log.VEventf(ctx, 1, "evicting range desc %s after %s", routing.entry, err)
+				log.VEventf(ctx, 1, "evicting range desc %s after %s", routing.Entry(), err)
 				routing.Evict(ctx)
 				// Clear the routing info to reload on the next attempt.
 				prevTok = routing
-				routing = EvictionToken{}
+				routing = rngcache.EvictionToken{}
 				continue
 			}
 			break
@@ -1732,7 +1733,7 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 // that do not definitively rule out the possibility that the batch could have
 // succeeded are transformed into AmbiguousResultErrors.
 func (ds *DistSender) sendToReplicas(
-	ctx context.Context, ba roachpb.BatchRequest, routing EvictionToken, withCommit bool,
+	ctx context.Context, ba roachpb.BatchRequest, routing rngcache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
@@ -2039,7 +2040,7 @@ func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err e
 //
 // Returns an error if the transport is exhausted.
 func skipStaleReplicas(
-	transport Transport, routing EvictionToken, ambiguousError error, lastErr error,
+	transport Transport, routing rngcache.EvictionToken, ambiguousError error, lastErr error,
 ) error {
 	// Check whether the range cache told us that the routing info we had is
 	// very out-of-date. If so, there's not much point in trying the other

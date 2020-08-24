@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rngcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -487,7 +487,7 @@ type DistSQLReceiver struct {
 	alloc  rowenc.DatumAlloc
 	closed bool
 
-	rangeCache *kvcoord.RangeDescriptorCache
+	rangeCache *rngcache.RangeCache
 	tracing    *SessionTracing
 	cleanup    func()
 
@@ -590,7 +590,7 @@ func MakeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
 	stmtType tree.StatementType,
-	rangeCache *kvcoord.RangeDescriptorCache,
+	rangeCache *rngcache.RangeCache,
 	txn *kv.Txn,
 	updateClock func(observedTs hlc.Timestamp),
 	tracing *SessionTracing,
