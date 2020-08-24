@@ -656,7 +656,7 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = descs.MakeCollection(ctx, s.cfg.LeaseManager,
-		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache, sd)
+		s.cfg.Settings, s.dbCache.getDatabaseCache(), s.dbCache, sd, s.cfg.HydratedTables)
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobsCache = make(map[descpb.ID]*jobs.Job)
 	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
