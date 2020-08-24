@@ -439,7 +439,9 @@ func (ds *ServerImpl) NewFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		collection := descs.NewCollection(ctx, ds.ServerConfig.Settings, ds.ServerConfig.LeaseManager.(*lease.Manager))
+		collection := descs.NewCollection(ctx, ds.ServerConfig.Settings,
+			ds.ServerConfig.LeaseManager.(*lease.Manager),
+			ds.ServerConfig.HydratedTables)
 		flowCtx.TypeResolverFactory = &descs.DistSQLTypeResolverFactory{
 			Descriptors: collection,
 			CleanupFunc: func(ctx context.Context) {
