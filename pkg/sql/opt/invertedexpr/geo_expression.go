@@ -62,8 +62,9 @@ func GeoUnionKeySpansToSpanExpr(ukSpans geoindex.UnionKeySpans) *SpanExpression 
 	if len(ukSpans) == 0 {
 		return nil
 	}
+	// Avoid per-span heap allocations.
+	b := make([]byte, 0, len(ukSpans)*(2*encoding.MaxVarintLen))
 	spans := make([]InvertedSpan, len(ukSpans))
-	var b []byte // avoid per-span heap allocations
 	for i, ukSpan := range ukSpans {
 		spans[i], b = geoToSpan(ukSpan, b)
 	}
