@@ -19,7 +19,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
@@ -150,10 +149,13 @@ func constructUserfileDestinationURI(source, destination, user string) string {
 	// If the destination is a well-formed userfile URI of the form
 	// userfile://db.schema.tablename_prefix/path/to/file, then we
 	// use that as the final URI.
+	//
+	// A URI without a host will default to searching in
+	// `defaultdb.public.userfiles_username`.
 	var userfileURI *url.URL
 	var err error
 	if userfileURI, err = url.ParseRequestURI(destination); err == nil {
-		if userfileURI.Scheme == defaultUserfileScheme && userfileURI.Host != "" {
+		if userfileURI.Scheme == defaultUserfileScheme {
 			return userfileURI.String()
 		}
 	}
@@ -184,7 +186,7 @@ func constructUserfileListURI(glob, user string) string {
 	// userfile://db.schema.tablename_prefix/glob/pattern, then we
 	// use that as the final URI.
 	if userfileURL, err := url.ParseRequestURI(glob); err == nil {
-		if userfileURL.Scheme == defaultUserfileScheme && userfileURL.Host != "" {
+		if userfileURL.Scheme == defaultUserfileScheme {
 			return userfileURL.String()
 		}
 	}
@@ -216,16 +218,13 @@ func listUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 		return err
 	}
 
-	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
+	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
+		connURL.User.Username())
 	if err != nil {
 		return err
 	}
-	userFileTableConf := roachpb.ExternalStorage_FileTable{
-		User:               connURL.User.Username(),
-		QualifiedTableName: userfileParsedURL.Host,
-		Path:               userfileParsedURL.Path,
-	}
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf,
+
+	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return err
@@ -259,20 +258,26 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 		return err
 	}
 
-	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
+	userFileTableConf, err := cloudimpl.ExternalStorageConfFromURI(unescapedUserfileListURI,
+		connURL.User.Username())
 	if err != nil {
 		return err
 	}
-	userFileTableConf := roachpb.ExternalStorage_FileTable{
-		User:               connURL.User.Username(),
-		QualifiedTableName: userfileParsedURL.Host,
-	}
-	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf,
+
+	// We zero out the path so that we can provide explicit glob patterns to the
+	// ListFiles call below. Explicit glob patterns allows us to use the same
+	// ExternalStorage for both the ListFiles() and Delete() methods.
+	userFileTableConf.FileTableConfig.Path = ""
+	f, err := cloudimpl.MakeSQLConnFileTableStorage(ctx, userFileTableConf.FileTableConfig,
 		conn.conn.(cloud.SQLConnI))
 	if err != nil {
 		return err
 	}
 
+	userfileParsedURL, err := url.ParseRequestURI(unescapedUserfileListURI)
+	if err != nil {
+		return err
+	}
 	files, err := f.ListFiles(ctx, userfileParsedURL.Path)
 	if err != nil {
 		return err
@@ -298,7 +303,11 @@ func deleteUserFile(ctx context.Context, conn *sqlConn, glob string) error {
 			return errors.WithDetail(err, fmt.Sprintf("deletion failed at %s", file))
 		}
 
-		fmt.Printf("deleted userfile://%s%s\n", userfileParsedURL.Host, deleteFileBasename)
+		resolvedHost := defaultQualifiedNamePrefix + connURL.User.Username()
+		if userfileParsedURL.Host != "" {
+			resolvedHost = userfileParsedURL.Host
+		}
+		fmt.Printf("deleted userfile://%s%s\n", resolvedHost, deleteFileBasename)
 	}
 	return nil
 }

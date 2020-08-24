@@ -49,6 +49,8 @@ func Example_userfile_upload() {
 	c.Run(fmt.Sprintf("userfile upload %s /test/À.csv", file))
 	// Test fully qualified URI specifying db.schema.tablename_prefix.
 	c.Run(fmt.Sprintf("userfile upload %s userfile://defaultdb.public.foo/test/file1.csv", file))
+	// Test URI with no db.schema.tablename_prefix.
+	c.Run(fmt.Sprintf("userfile upload %s userfile:///test/file3.csv", file))
 
 	// Output:
 	// userfile upload test.csv /test/file1.csv
@@ -73,6 +75,8 @@ func Example_userfile_upload() {
 	// successfully uploaded to userfile://defaultdb.public.userfiles_root/test/À.csv
 	// userfile upload test.csv userfile://defaultdb.public.foo/test/file1.csv
 	// successfully uploaded to userfile://defaultdb.public.foo/test/file1.csv
+	// userfile upload test.csv userfile:///test/file3.csv
+	// successfully uploaded to userfile:///test/file3.csv
 }
 
 func checkUserFileContent(
@@ -144,6 +148,18 @@ func TestUserFileUpload(t *testing.T) {
 
 		t.Run(tc.name+"_fullURI", func(t *testing.T) {
 			destination := fmt.Sprintf("userfile://defaultdb.public.foo/test/file%d.csv", i)
+			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
+				destination))
+			require.NoError(t, err)
+
+			checkUserFileContent(ctx, t, c.ExecutorConfig(), security.RootUser,
+				destination, tc.fileContent)
+		})
+
+		// Not specifying a qualified table name should default to writing to
+		// `defaultdb.public.userfiles_username`.
+		t.Run(tc.name+"_no-host-uri", func(t *testing.T) {
+			destination := fmt.Sprintf("userfile:///test/file%d.csv", i)
 			_, err = c.RunWithCapture(fmt.Sprintf("userfile upload %s %s", filePath,
 				destination))
 			require.NoError(t, err)
@@ -244,6 +260,11 @@ func TestUserFileList(t *testing.T) {
 			{
 				"no-glob-path-list-all-in-default",
 				defaultUserfileURLSchemeAndHost.String(),
+				abs(fileNames),
+			},
+			{
+				"no-host-list-all-in-default",
+				"userfile:///*/*/*.csv",
 				abs(fileNames),
 			},
 			{
@@ -353,6 +374,13 @@ func TestUserFileDelete(t *testing.T) {
 			{
 				"no-glob-path-delete-all-in-default",
 				defaultUserfileURLSchemeAndHost.String(),
+				fileNames,
+				abs(fileNames),
+				nil,
+			},
+			{
+				"no-host-delete-all-in-default",
+				"userfile:///*/*/*.*",
 				fileNames,
 				abs(fileNames),
 				nil,

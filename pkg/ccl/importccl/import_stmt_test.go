@@ -1889,6 +1889,22 @@ b STRING) CSV DATA (%s)`, testFiles.files[0])); err != nil {
 		require.NoError(t, userfileStorage.Delete(ctx, ""))
 	})
 
+	t.Run("userfile-relative-file-path", func(t *testing.T) {
+		userfileURI := "userfile:///import-test/employees.csv"
+		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
+			ExternalStorageFromURI(ctx, userfileURI, security.RootUser)
+		require.NoError(t, err)
+
+		data := []byte("1,2")
+		require.NoError(t, userfileStorage.WriteFile(ctx, "", bytes.NewReader(data)))
+
+		sqlDB.Exec(t, fmt.Sprintf("IMPORT TABLE baz (id INT PRIMARY KEY, "+
+			"id2 INT) CSV DATA ('%s')", userfileURI))
+		sqlDB.CheckQueryResults(t, "SELECT * FROM baz", sqlDB.QueryStr(t, "SELECT 1, 2"))
+
+		require.NoError(t, userfileStorage.Delete(ctx, ""))
+	})
+
 	t.Run("import-with-db-privs", func(t *testing.T) {
 		sqlDB.Exec(t, `USE defaultdb`)
 		sqlDB.Exec(t, `CREATE USER foo`)
