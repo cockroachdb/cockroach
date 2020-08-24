@@ -80,7 +80,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		found, res, err := p.LogicalSchemaAccessor().GetSchema(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID, schema)
+		found, res, err := p.ResolveMutableSchemaDescriptor(ctx, dbDesc.ID, schema, true /* required */)
 		if err != nil {
 			return nil, err
 		}

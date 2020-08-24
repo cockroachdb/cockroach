@@ -40,20 +40,9 @@ func (p *planner) prepareSetSchema(
 	schemaID := desc.GetParentSchemaID()
 
 	// Lookup the the schema we want to set to.
-	exists, res, err := p.LogicalSchemaAccessor().GetSchema(
-		ctx, p.txn,
-		p.ExecCfg().Codec,
-		databaseID,
-
-		schema,
-	)
+	_, res, err := p.ResolveUncachedSchemaDescriptor(ctx, databaseID, schema, true /* required */)
 	if err != nil {
 		return 0, err
-	}
-
-	if !exists {
-		return 0, pgerror.Newf(pgcode.InvalidSchemaName,
-			"schema %s does not exist", schema)
 	}
 
 	switch res.Kind {

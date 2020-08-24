@@ -325,13 +325,15 @@ INSERT INTO t.t VALUES (1);
 	}
 
 	// Look up the schema first so only the read txn is recorded in
-	// kv trace logs.
-	if _, err := sqlDB.Exec(`SELECT * FROM t.t`); err != nil {
+	// kv trace logs. We explicitly specify the schema to avoid an extra failed
+	// lease acquisition, which occurs in a separate transaction, to work around
+	// a current limitation in schema resolution. See #53301.
+	if _, err := sqlDB.Exec(`SELECT * FROM t.public.t`); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := sqlDB.Exec(
-		`SET tracing=on,kv; SELECT * FROM t.t; SET TRACING=off`); err != nil {
+		`SET tracing=on,kv; SELECT * FROM t.public.t; SET TRACING=off`); err != nil {
 		t.Fatal(err)
 	}
 

@@ -81,7 +81,12 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 
 // GetSchema implements the Accessor interface.
 func (a UncachedPhysicalAccessor) GetSchema(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	scName string,
+	flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if scName == tree.PublicSchema {
@@ -92,8 +97,13 @@ func (a UncachedPhysicalAccessor) GetSchema(
 
 	// Lookup the schema ID.
 	exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, scName)
-	if err != nil || !exists {
-		return exists, catalog.ResolvedSchema{}, err
+	if err != nil {
+		return false, catalog.ResolvedSchema{}, err
+	} else if !exists {
+		if flags.Required {
+			return false, catalog.ResolvedSchema{}, sqlerrors.NewUndefinedSchemaError(scName)
+		}
+		return false, catalog.ResolvedSchema{}, nil
 	}
 
 	// The temporary schema doesn't have a descriptor, only a namespace entry.
@@ -106,9 +116,13 @@ func (a UncachedPhysicalAccessor) GetSchema(
 	}
 
 	// Get the descriptor from disk.
-	sc, err := MustGetSchemaDescByID(ctx, txn, codec, schemaID)
+	untypedDesc, err := GetAnyDescriptorByID(ctx, txn, codec, schemaID, Mutability(flags.RequireMutable))
 	if err != nil {
 		return false, catalog.ResolvedSchema{}, err
+	}
+	sc, ok := untypedDesc.(catalog.SchemaDescriptor)
+	if !ok {
+		return false, catalog.ResolvedSchema{}, nil
 	}
 	return true, catalog.ResolvedSchema{
 		ID:   sc.GetID(),
@@ -127,7 +141,8 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	scName string,
 	flags tree.DatabaseListFlags,
 ) (tree.TableNames, error) {
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName)
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbDesc.GetID(), scName,
+		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +242,8 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 		return nil, err
 	}
 
-	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName)
+	ok, schema, err := a.GetSchema(ctx, txn, codec, dbID, scName,
+		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
 	if err != nil {
 		return nil, err
 	}
