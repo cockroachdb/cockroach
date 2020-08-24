@@ -576,7 +576,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATEROLE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
+%token <str> CONVERSION CONVERT COPY COVERING CREATE CREATEDB CREATELOGIN CREATEROLE
 %token <str> CROSS CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CYCLE
@@ -618,7 +619,8 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE MINUTE MONTH
 %token <str> MULTILINESTRING MULTIPOINT MULTIPOLYGON
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLCHANGEFEED NOCONTROLJOB NOCREATEDB NOCREATEROLE NOLOGIN NO_INDEX_JOIN
+%token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCONTROLCHANGEFEED NOCONTROLJOB
+%token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -2279,6 +2281,10 @@ backup_options:
 //     * skip: skip this execution, reschedule it based on RECURRING (or change_capture_period)
 //       expression.
 //     * wait: wait for the previous execution to complete.  This is the default.
+//   * ignore_existing_backups
+//     If backups were already created in the destination in which a new schedule references,
+//     this flag must be passed in to acknowledge that the new schedule may be backing up different
+//     objects.
 //
 // %SeeAlso: BACKUP
 create_schedule_for_backup_stmt:
@@ -6340,7 +6346,7 @@ role_option:
   }
 | CONTROLJOB
   {
-   $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCONTROLJOB
   {
@@ -6359,6 +6365,14 @@ role_option:
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
 | NOCREATEDB
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| CREATELOGIN
+  {
+    $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
+  }
+| NOCREATELOGIN
   {
     $$.val = tree.KVOption{Key: tree.Name($1), Value: nil}
   }
@@ -11217,6 +11231,7 @@ unreserved_keyword:
 | COPY
 | COVERING
 | CREATEDB
+| CREATELOGIN
 | CREATEROLE
 | CUBE
 | CURRENT
@@ -11323,6 +11338,7 @@ unreserved_keyword:
 | NORMAL
 | NO_INDEX_JOIN
 | NOCREATEDB
+| NOCREATELOGIN
 | NOCREATEROLE
 | NOCONTROLCHANGEFEED
 | NOCONTROLJOB
