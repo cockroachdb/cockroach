@@ -633,7 +633,14 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.status("installing kafka")
 	folder := k.basePath()
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
-	k.c.Run(ctx, k.nodes, `curl https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz | tar -xz -C `+folder)
+	k.c.Run(
+		ctx,
+		k.nodes,
+		fmt.Sprintf(
+			`curl --retry 10 --retry-delay 5 -o /tmp/confluent.tar.gz https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz && tar xvf /tmp/confluent.tar.gz -C %s`,
+			folder,
+		),
+	)
 	if !k.c.isLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
 		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
