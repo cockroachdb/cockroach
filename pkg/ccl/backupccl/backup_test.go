@@ -1986,6 +1986,59 @@ INSERT INTO sc.tb2 VALUES (1);
 		}
 	})
 
+	// Test restoring tables with user defined schemas when restore schemas are
+	// not being remapped. Like no-remap but with more databases and schemas.
+	t.Run("multi-schemas", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `
+SET experimental_enable_user_defined_schemas = true;
+SET experimental_enable_enums = true;
+
+CREATE DATABASE d1;
+USE d1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tb (x INT);
+INSERT INTO sc1.tb VALUES (1);
+CREATE SCHEMA sc2;
+CREATE TABLE sc2.tb (x INT);
+INSERT INTO sc2.tb VALUES (2);
+
+CREATE DATABASE d2;
+USE d2;
+CREATE SCHEMA sc3;
+CREATE TABLE sc3.tb (x INT);
+INSERT INTO sc3.tb VALUES (3);
+CREATE SCHEMA sc4;
+CREATE TABLE sc4.tb (x INT);
+INSERT INTO sc4.tb VALUES (4);
+`)
+		{
+			// Backup all databases.
+			sqlDB.Exec(t, `BACKUP DATABASE d1, d2 TO 'nodelocal://0/test/'`)
+			// Create a new database to restore into. This restore should restore the
+			// schemas into the new database.
+			sqlDB.Exec(t, `CREATE DATABASE newdb`)
+			// Create a schema and table in the database to restore into, unrelated to
+			// the restore.
+			sqlDB.Exec(t, `USE newdb`)
+			sqlDB.Exec(t, `CREATE SCHEMA existingschema`)
+			sqlDB.Exec(t, `CREATE TABLE existingschema.tb (x INT)`)
+			sqlDB.Exec(t, `INSERT INTO existingschema.tb VALUES (0)`)
+
+			sqlDB.Exec(t, `RESTORE TABLE d1.sc1.*, d1.sc2.*, d2.sc3.*, d2.sc4.* FROM 'nodelocal://0/test/' WITH into_db = 'newdb'`)
+
+			// Check that we can resolve all names through the user defined schemas.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM newdb.sc1.tb`, [][]string{{"1"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM newdb.sc2.tb`, [][]string{{"2"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM newdb.sc3.tb`, [][]string{{"3"}})
+			sqlDB.CheckQueryResults(t, `SELECT * FROM newdb.sc4.tb`, [][]string{{"4"}})
+
+			// Check that name resolution still works for the preexisting schema.
+			sqlDB.CheckQueryResults(t, `SELECT * FROM newdb.existingschema.tb`, [][]string{{"0"}})
+		}
+	})
 	// Test when we remap schemas to existing schemas in the cluster.
 	t.Run("remap", func(t *testing.T) {
 		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitNone)

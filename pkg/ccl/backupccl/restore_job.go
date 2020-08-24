@@ -812,6 +812,7 @@ func createImportingDescriptors(
 	// mutable descriptors for rewriting but ultimately want to return the
 	// tables as the slice of interfaces.
 	var mutableTables []*tabledesc.Mutable
+	var mutableDatabases []*dbdesc.Mutable
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
@@ -821,10 +822,10 @@ func createImportingDescriptors(
 			mutableTables = append(mutableTables, mut)
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
-			if rewrite, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				rewriteDesc := dbdesc.NewInitialWithPrivileges(
-					rewrite.ID, desc.GetName(), desc.GetPrivileges())
-				databases = append(databases, rewriteDesc)
+			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
+				mut := dbdesc.NewCreatedMutable(*desc.DatabaseDesc())
+				databases = append(databases, mut)
+				mutableDatabases = append(mutableDatabases, mut)
 			}
 		case catalog.SchemaDescriptor:
 			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
@@ -847,7 +848,12 @@ func createImportingDescriptors(
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
 	spans = spansForAllTableIndexes(p.ExecCfg().Codec, tables, nil)
 
-	log.Eventf(ctx, "starting restore for %d mutableTables", len(mutableTables))
+	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
+
+	// Assign new IDs to the database descriptors.
+	if err := rewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
@@ -908,6 +914,13 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	// Collect new database IDs for lookups when rewriting existing database
+	// descriptors with new schemas.
+	newDatabaseIDs := make(map[descpb.ID]struct{})
+	for _, db := range databases {
+		newDatabaseIDs[db.GetID()] = struct{}{}
+	}
+
 	if !details.PrepareCompleted {
 		err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			if len(details.Tenants) > 0 {
@@ -923,10 +936,57 @@ func createImportingDescriptors(
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(r.tables), len(databases))
 			}
 
+			b := txn.NewBatch()
+
+			// For new schemas with existing parent databases, the schema map on the
+			// database descriptor needs to be updated.
+			existingDBsWithNewSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
+			for _, sc := range writtenSchemas {
+				parentID := sc.GetParentID()
+				if _, ok := newDatabaseIDs[parentID]; !ok {
+					existingDBsWithNewSchemas[parentID] = append(existingDBsWithNewSchemas[parentID], sc)
+				}
+			}
+			// Write the updated databases.
+			for dbID, schemas := range existingDBsWithNewSchemas {
+				log.Infof(ctx, "writing schema entries to database %d", dbID)
+				desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
+					dbID, catalogkv.Mutable, catalogkv.DatabaseDescriptorKind, true /* required */)
+				if err != nil {
+					return err
+				}
+				db := desc.(*dbdesc.Mutable)
+				if db.Schemas == nil {
+					// TODO (lucy): Push map initialization to when we create these
+					// descriptors.
+					db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+				}
+				for _, sc := range schemas {
+					db.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{ID: sc.GetID()}
+				}
+				// TODO (lucy): It's risky to be incrementing the version outside of the
+				// usual mutable database descriptor resolution path and reading
+				// "mutable" descriptors right out of the store. We should be fine since
+				// we're updating each of these databases exactly once, but there's
+				// nothing preventing us from mistakenly incrementing the version the
+				// wrong number of times in the transaction.
+				db.MaybeIncrementVersion()
+				if err := catalogkv.WriteDescToBatch(
+					ctx,
+					false, /* kvTrace */
+					p.ExecCfg().Settings,
+					b,
+					keys.SystemSQLCodec,
+					db.ID,
+					db,
+				); err != nil {
+					return err
+				}
+			}
+
 			// We could be restoring tables that point to existing types. We need to
 			// ensure that those existing types are updated with back references pointing
 			// to the new tables being restored.
-			b := txn.NewBatch()
 			for _, table := range mutableTables {
 				// Collect all types used by this table.
 				typeIDs, err := table.GetAllReferencedTypeIDs(func(id descpb.ID) (catalog.TypeDescriptor, error) {
@@ -950,6 +1010,11 @@ func createImportingDescriptors(
 					}
 					typDesc := desc.(*typedesc.Mutable)
 					typDesc.AddReferencingDescriptorID(table.GetID())
+					// TODO (lucy): I think we should be incrementing the version for the
+					// types, but first we have to ensure that it only happens once per
+					// transaction since we're going outside the normal mutable descriptor
+					// resolution path. Also see the comment above in the case of
+					// updated databases.
 					if err := catalogkv.WriteDescToBatch(
 						ctx,
 						false, /* kvTrace */
@@ -1341,7 +1406,9 @@ func (r *restoreResumer) dropDescriptors(
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, typDesc.ID))
 	}
 
-	// Drop any schema descriptors that this restore created.
+	// Drop any schema descriptors that this restore created. Also collect the
+	// descriptors so we can update their parent databases later.
+	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
 	for i := range details.SchemaDescs {
 		sc := details.SchemaDescs[i]
 		if err := catalogkv.RemoveObjectNamespaceEntry(
@@ -1356,6 +1423,7 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 		b.Del(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, sc.ID))
+		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
 	// Queue a GC job.
@@ -1390,6 +1458,7 @@ func (r *restoreResumer) dropDescriptors(
 	for _, table := range details.TableDescs {
 		ignoredTables[table.ID] = struct{}{}
 	}
+	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range r.databases {
 		// We need to ignore details.TableDescs since we haven't committed the txn that deletes these.
 		isDBEmpty, err = isDatabaseEmpty(ctx, r.execCfg.DB, dbDesc, ignoredTables)
@@ -1401,8 +1470,53 @@ func (r *restoreResumer) dropDescriptors(
 			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, dbDesc.GetID())
 			b.Del(descKey)
 			b.Del(catalogkeys.NewDatabaseKey(dbDesc.GetName()).Key(keys.SystemSQLCodec))
+			deletedDBs[dbDesc.GetID()] = struct{}{}
 		}
 	}
+
+	// For each database that had a child schema deleted (regardless of whether
+	// the db was created in the restore job), if it wasn't deleted just now,
+	// delete the now-deleted child schema from its schema map.
+	for dbID, schemas := range dbsWithDeletedSchemas {
+		log.Infof(ctx, "deleting schema entries from database %d", dbID)
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec,
+			dbID, catalogkv.Mutable, catalogkv.DatabaseDescriptorKind, true /* required */)
+		if err != nil {
+			return err
+		}
+		db := desc.(*dbdesc.Mutable)
+		for _, sc := range schemas {
+			if schemaInfo, ok := db.Schemas[sc.GetName()]; !ok {
+				log.Warningf(ctx, "unexpected missing schema entry for %s from db %d; skipping deletion",
+					sc.GetName(), dbID)
+			} else if schemaInfo.ID != sc.GetID() {
+				log.Warningf(ctx, "unexpected schema entry %d for %s from db %d, expecting %d; skipping deletion",
+					schemaInfo.ID, sc.GetName(), dbID, sc.GetID())
+			} else {
+				delete(db.Schemas, sc.GetName())
+			}
+		}
+
+		// TODO (lucy): It's risky to be incrementing the version outside of the
+		// usual mutable database descriptor resolution path and reading
+		// "mutable" descriptors right out of the store. We should be fine since
+		// we're updating each of these databases exactly once, but there's
+		// nothing preventing us from mistakenly incrementing the version the
+		// wrong number of times in the transaction.
+		db.MaybeIncrementVersion()
+		if err := catalogkv.WriteDescToBatch(
+			ctx,
+			false, /* kvTrace */
+			r.settings,
+			b,
+			keys.SystemSQLCodec,
+			db.ID,
+			db,
+		); err != nil {
+			return err
+		}
+	}
+
 	if err := txn.Run(ctx, b); err != nil {
 		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
 	}
