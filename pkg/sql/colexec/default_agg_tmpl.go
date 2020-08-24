@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -41,8 +42,8 @@ type default_AGGKINDAgg struct {
 	fn        tree.AggregateFunc
 	ctx       context.Context
 	// inputArgsConverter is managed by the aggregator, and this function can
-	// simply call getDatumColumn.
-	inputArgsConverter *vecToDatumConverter
+	// simply call GetDatumColumn.
+	inputArgsConverter *colconv.VecToDatumConverter
 	resultConverter    func(tree.Datum) interface{}
 	vec                coldata.Vec
 	scratch            struct {
@@ -139,9 +140,9 @@ func _ADD_TUPLE(
 	// Note that the only function that takes no arguments is COUNT_ROWS, and
 	// it has an optimized implementation, so we don't need to check whether
 	// len(inputIdxs) is at least 1.
-	firstArg := a.inputArgsConverter.getDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
+	firstArg := a.inputArgsConverter.GetDatumColumn(int(inputIdxs[0]))[convertedTupleIdx]
 	for j, colIdx := range inputIdxs[1:] {
-		a.scratch.otherArgs[j] = a.inputArgsConverter.getDatumColumn(int(colIdx))[convertedTupleIdx]
+		a.scratch.otherArgs[j] = a.inputArgsConverter.GetDatumColumn(int(colIdx))[convertedTupleIdx]
 	}
 	if err := a.fn.Add(a.ctx, firstArg, a.scratch.otherArgs...); err != nil {
 		colexecerror.ExpectedError(err)
@@ -175,7 +176,7 @@ func newDefault_AGGKINDAggAlloc(
 	allocator *colmem.Allocator,
 	constructor execinfrapb.AggregateConstructor,
 	evalCtx *tree.EvalContext,
-	inputArgsConverter *vecToDatumConverter,
+	inputArgsConverter *colconv.VecToDatumConverter,
 	numArguments int,
 	constArguments tree.Datums,
 	outputType *types.T,
@@ -208,8 +209,8 @@ type default_AGGKINDAggAlloc struct {
 	// inputArgsConverter is a converter from coldata.Vecs to tree.Datums that
 	// is shared among all aggregate functions and is managed by the aggregator
 	// (meaning that the aggregator operator is responsible for calling
-	// convertBatch method).
-	inputArgsConverter *vecToDatumConverter
+	// ConvertBatch method).
+	inputArgsConverter *colconv.VecToDatumConverter
 	resultConverter    func(tree.Datum) interface{}
 	// otherArgsScratch is the scratch space for arguments other than first one
 	// that is shared among all aggregate functions created by this alloc. Such

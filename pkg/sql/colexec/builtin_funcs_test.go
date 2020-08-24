@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -195,7 +196,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		outputIdx:           outputIdx,
 		columnTypes:         typs,
 		outputType:          types.String,
-		toDatumConverter:    newVecToDatumConverter(len(typs), inputCols),
+		toDatumConverter:    colconv.NewVecToDatumConverter(len(typs), inputCols),
 		datumToVecConverter: GetDatumToPhysicalFn(types.String),
 		row:                 make(tree.Datums, outputIdx),
 		argumentCols:        inputCols,

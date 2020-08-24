@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -58948,7 +58949,7 @@ func GetSelectionConstOperator(
 		selConstOpBase:   selConstOpBase,
 		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
 		constArg:         constArg,
-		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{colIdx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{colIdx}),
 	}, nil
 }
 
@@ -60209,6 +60210,6 @@ func GetSelectionOperator(
 	return &defaultCmpSelOp{
 		selOpBase:        selOpBase,
 		adapter:          newComparisonExprAdapter(cmpExpr, evalCtx),
-		toDatumConverter: newVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
+		toDatumConverter: colconv.NewVecToDatumConverter(len(inputTypes), []int{col1Idx, col2Idx}),
 	}, nil
 }
