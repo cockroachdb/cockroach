@@ -21,7 +21,6 @@ import (
 	"strings"
 	"text/template"
 
-	gendoc "github.com/pseudomuto/protoc-gen-doc"
 	"github.com/spf13/cobra"
 )
 
@@ -116,7 +115,19 @@ func runHTTP(protocPath, genDocPath, protobufPath, outPath string) error {
 		methods[service.Methods[i].Name] = &service.Methods[i]
 	}
 	tmplFuncs := template.FuncMap{
-		"nobr": gendoc.NoBrFilter,
+		// tableCell formats strings for use in a table cell. For example, it converts \n\n into <br>.
+		"tableCell": func(s string) string {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return ""
+			}
+			s = strings.ReplaceAll(s, "\r", "")
+			// Double newlines are paragraph breaks.
+			s = strings.ReplaceAll(s, "\n\n", "<br><br>")
+			// Other newlines are just width wrapping and should be converted to spaces.
+			s = strings.ReplaceAll(s, "\n", " ")
+			return s
+		},
 		"getMessage": func(name string) interface{} {
 			return messages[name]
 		},
@@ -268,7 +279,7 @@ const fullTemplate = `
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* with .Fields */}}
 
@@ -282,7 +293,7 @@ const fullTemplate = `
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .Fields}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* if .Fields */}}
 {{end}} {{- /* with getMessage */}}
@@ -302,11 +313,11 @@ const fullTemplate = `
 
 {{with .Description}}{{.}}{{end}}
 
-### Request Parameters
+##### Request Parameters
 
 {{template "FIELDS" .RequestFullType}}
 
-### Response Parameters
+##### Response Parameters
 
 {{template "FIELDS" .ResponseFullType}}
 
@@ -323,7 +334,7 @@ var singleTemplate = `
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* with .Fields */}}
 
@@ -332,12 +343,12 @@ var singleTemplate = `
 {{with getMessage .}}
 {{if .Fields}}
 <a name="{{$message.FullName}}-{{.FullName}}"></a>
-#### {{.LongName}}
+### {{.LongName}}
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 {{- range .Fields}}
-| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{nobr .Description}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
+| {{.Name}} | [{{.LongType}}](#{{$message.FullName}}-{{.FullType}}) | {{.Label}} | {{.Description | tableCell}}{{if .DefaultValue}} Default: {{.DefaultValue}}{{end}} |
 {{- end}} {{- /* range */}}
 {{end}} {{- /* if .Fields */}}
 {{end}} {{- /* with getMessage */}}
@@ -346,11 +357,11 @@ var singleTemplate = `
 {{end}} {{- /* with getMessage */}}
 {{- end}} {{- /* template */}}
 
-### Request Parameters
+## Request Parameters
 
 {{template "FIELDS" .RequestFullType}}
 
-### Response Parameters
+## Response Parameters
 
 {{template "FIELDS" .ResponseFullType}}
 `
