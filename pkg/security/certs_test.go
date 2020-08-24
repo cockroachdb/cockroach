@@ -287,13 +287,6 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
-		testKeySize, time.Hour*48, true, security.NodeUser, false,
-	); err != nil {
-		return errors.Errorf("could not generate Client pair: %v", err)
-	}
-
-	if err := security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedClientCAKey),
 		testKeySize, time.Hour*48, true, security.RootUser, false,
 	); err != nil {
 		return errors.Errorf("could not generate Client pair: %v", err)
@@ -399,6 +392,12 @@ func TestUseCerts(t *testing.T) {
 }
 
 func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) string {
+	if caName == "" {
+		return fmt.Sprintf("postgresql://%s@%s/?sslmode=require&sslcert=%s&sslkey=%s",
+			user, addr,
+			filepath.Join(certsDir, certName),
+			filepath.Join(certsDir, keyName))
+	}
 	return fmt.Sprintf("postgresql://%s@%s/?sslmode=verify-full&sslrootcert=%s&sslcert=%s&sslkey=%s",
 		user, addr,
 		filepath.Join(certsDir, caName),
@@ -494,10 +493,12 @@ func TestUseSplitCACerts(t *testing.T) {
 	}{
 		// Success, but "node" is not a sql user.
 		{"node", security.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
+		// Bad client cert: we're using the root cert signed by the client CA, not the server CA.
+		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
 		// Success!
-		{"root", security.EmbeddedCACert, "client.root", ""},
-		// Bad server CA: can't verify server certificate.
-		{"root", security.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
+		{"root", security.EmbeddedClientCACert, "client.root", ""},
+		// Bad server CA: can't verify node certificate with client CA.
+		{"node", security.EmbeddedClientCACert, "node", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
 		{"node", security.EmbeddedCACert, "node", "tls: bad certificate"},
 		// We can't verify the node certificate using the UI cert.
@@ -543,7 +544,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	}
 
 	// Delete ca-client.crt and ca-ui.crt before starting the node.
-	// This will make the server fall back on using ca.crt.
+	// This retains the ability of the server to use ca.crt for node certs.
 	if err := os.Remove(filepath.Join(certsDir, "ca-client.crt")); err != nil {
 		t.Fatal(err)
 	}
@@ -612,10 +613,10 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		user, caName, certPrefix string
 		expectedError            string
 	}{
-		// Certificate signed by wrong client CA.
-		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
 		{"node", security.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
+		// Failure: certificate signed by client CA, but client CA not available any more.
+		{"root", "", "client.root", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
