@@ -67,20 +67,24 @@ func (p *planner) CreateRoleNode(
 		return p.TypeAsStringOrNull(ctx, e, op)
 	}
 	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
-
-	// Using CREATE ROLE syntax enables NOLOGIN by default.
-	if isRole && !roleOptions.Contains(roleoption.LOGIN) &&
-		!roleOptions.Contains(roleoption.NOLOGIN) {
-		roleOptions = append(roleOptions,
-			roleoption.RoleOption{Option: roleoption.NOLOGIN, HasValue: false})
-	}
-
 	if err != nil {
 		return nil, err
 	}
 
 	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
 		return nil, err
+	}
+
+	// Check that the requested combination of password options is
+	// compatible with the user's own CREATELOGIN privilege.
+	if err := p.checkPasswordOptionConstraints(ctx, roleOptions, true /* newUser */); err != nil {
+		return nil, err
+	}
+
+	// Using CREATE ROLE syntax enables NOLOGIN by default.
+	if isRole && !roleOptions.Contains(roleoption.LOGIN) && !roleOptions.Contains(roleoption.NOLOGIN) {
+		roleOptions = append(roleOptions,
+			roleoption.RoleOption{Option: roleoption.NOLOGIN, HasValue: false})
 	}
 
 	ua, err := p.getUserAuthInfo(ctx, nameE, opName)

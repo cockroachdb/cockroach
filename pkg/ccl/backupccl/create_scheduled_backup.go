@@ -33,15 +33,17 @@ import (
 )
 
 const (
-	optFirstRun          = "first_run"
-	optOnExecFailure     = "on_execution_failure"
-	optOnPreviousRunning = "on_previous_running"
+	optFirstRun              = "first_run"
+	optOnExecFailure         = "on_execution_failure"
+	optOnPreviousRunning     = "on_previous_running"
+	optIgnoreExistingBackups = "ignore_existing_backups"
 )
 
 var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
-	optFirstRun:          sql.KVStringOptRequireValue,
-	optOnExecFailure:     sql.KVStringOptRequireValue,
-	optOnPreviousRunning: sql.KVStringOptRequireValue,
+	optFirstRun:              sql.KVStringOptRequireValue,
+	optOnExecFailure:         sql.KVStringOptRequireValue,
+	optOnPreviousRunning:     sql.KVStringOptRequireValue,
+	optIgnoreExistingBackups: sql.KVStringOptRequireNoValue,
 }
 
 // scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
@@ -275,6 +277,13 @@ func doCreateBackupSchedules(
 		return err
 	}
 
+	// Check if backups were already taken to this collection.
+	if _, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]; !ignoreExisting {
+		if err := checkForExistingBackupsInCollection(ctx, p, destinations); err != nil {
+			return err
+		}
+	}
+
 	evalCtx := &p.ExtendedEvalContext().EvalContext
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
@@ -340,6 +349,48 @@ func doCreateBackupSchedules(
 		}
 		return emitSchedule(full, fullBackupStmt, resultsCh)
 	})
+}
+
+// checkForExistingBackupsInCollection checks that there are no existing backups
+// already in the destination collection. This is used as a safeguard for users
+// to avoid creating a backup schedule that will conflict an existing running
+// schedule. This may cause an issue because the 2 schedules may be backing up
+// different targets and therefore incremental backups into the latest full
+// backup may fail if the targets differ.
+//
+// It is still possible that a user creates 2 schedules pointing to the same
+// collection, if both schedules were created before either of them took a full
+// backup.
+//
+// The user should be able to skip this check with a schedule options flag.
+func checkForExistingBackupsInCollection(
+	ctx context.Context, p sql.PlanHookState, destinations []string,
+) error {
+	makeCloudFactory := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	collectionURI, _, err := getURIsByLocalityKV(destinations, "")
+	if err != nil {
+		return err
+	}
+	defaultStore, err := makeCloudFactory(ctx, collectionURI, p.User())
+	if err != nil {
+		return err
+	}
+	defaultStore.Close()
+
+	r, err := defaultStore.ReadFile(ctx, latestFileName)
+	if err == nil {
+		// A full backup has already been taken to this location.
+		r.Close()
+		return errors.Newf("backups already created in %s; to ignore existing backups, "+
+			"the schedule can be created with the 'ignore_existing_backups' option",
+			collectionURI)
+	}
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		return errors.Newf("unexpected error occurred when checking for existing backups in %s",
+			collectionURI)
+	}
+
+	return nil
 }
 
 func makeBackupSchedule(

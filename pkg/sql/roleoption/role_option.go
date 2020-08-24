@@ -47,6 +47,8 @@ const (
 	NOCONTROLCHANGEFEED
 	CREATEDB
 	NOCREATEDB
+	CREATELOGIN
+	NOCREATELOGIN
 )
 
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
@@ -63,6 +65,8 @@ var toSQLStmts = map[Option]string{
 	NOCONTROLCHANGEFEED: `DELETE FROM system.role_options WHERE username = $1 AND option = 'CONTROLCHANGEFEED'`,
 	CREATEDB:            `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATEDB')`,
 	NOCREATEDB:          `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATEDB'`,
+	CREATELOGIN:         `UPSERT INTO system.role_options (username, option) VALUES ($1, 'CREATELOGIN')`,
+	NOCREATELOGIN:       `DELETE FROM system.role_options WHERE username = $1 AND option = 'CREATELOGIN'`,
 }
 
 // Mask returns the bitmask for a given role option.
@@ -84,6 +88,8 @@ var ByName = map[string]Option{
 	"NOCONTROLCHANGEFEED": NOCONTROLCHANGEFEED,
 	"CREATEDB":            CREATEDB,
 	"NOCREATEDB":          NOCREATEDB,
+	"CREATELOGIN":         CREATELOGIN,
+	"NOCREATELOGIN":       NOCREATELOGIN,
 }
 
 // ToOption takes a string and returns the corresponding Option.
@@ -178,7 +184,9 @@ func (rol List) CheckRoleOptionConflicts() error {
 		(roleOptionBits&CONTROLCHANGEFEED.Mask() != 0 &&
 			roleOptionBits&NOCONTROLCHANGEFEED.Mask() != 0) ||
 		(roleOptionBits&CREATEDB.Mask() != 0 &&
-			roleOptionBits&NOCREATEDB.Mask() != 0) {
+			roleOptionBits&NOCREATEDB.Mask() != 0) ||
+		(roleOptionBits&CREATELOGIN.Mask() != 0 &&
+			roleOptionBits&NOCREATELOGIN.Mask() != 0) {
 		return pgerror.Newf(pgcode.Syntax, "conflicting role options")
 	}
 	return nil

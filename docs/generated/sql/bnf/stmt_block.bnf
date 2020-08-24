@@ -753,6 +753,7 @@ unreserved_keyword ::=
 	| 'COPY'
 	| 'COVERING'
 	| 'CREATEDB'
+	| 'CREATELOGIN'
 	| 'CREATEROLE'
 	| 'CUBE'
 	| 'CURRENT'
@@ -859,6 +860,7 @@ unreserved_keyword ::=
 	| 'NORMAL'
 	| 'NO_INDEX_JOIN'
 	| 'NOCREATEDB'
+	| 'NOCREATELOGIN'
 	| 'NOCREATEROLE'
 	| 'NOCONTROLCHANGEFEED'
 	| 'NOCONTROLJOB'
@@ -1976,6 +1978,8 @@ role_option ::=
 	| 'NOCONTROLCHANGEFEED'
 	| 'CREATEDB'
 	| 'NOCREATEDB'
+	| 'CREATELOGIN'
+	| 'NOCREATELOGIN'
 	| password_clause
 	| valid_until_clause
 

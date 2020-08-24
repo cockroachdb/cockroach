@@ -53,7 +53,7 @@ import (
 //   - generally useful and actually a requirement for auditing.
 // - a counter for the logging entry, monotonically increasing
 //   from the point the process started.
-//   - this is a requiredement for auditing too.
+//   - this is a requirement for auditing too.
 //
 //  .-----------------------------------------------------------------------------------------------------------------------------.../
 //  |
@@ -72,7 +72,7 @@ import (
 //      without revealing PII". We don't know how to separate those two things
 //      yet so the audit log contains the full SQL of the query even though
 //      this may yield PII. This may need to be addressed later.
-//  - the placeholder values. Useful for queries using placehodlers.
+//  - the placeholder values. Useful for queries using placeholders.
 //    - "{}" when there are no placeholders.
 //  - the query execution time in milliseconds. For troubleshooting.
 //  - the number of rows that were produced. For troubleshooting.
@@ -101,6 +101,14 @@ var slowInternalQueryLogEnabled = settings.RegisterPublicBoolSetting(
 	"when set to true, internal queries which exceed the slow query log threshold "+
 		"are logged to a separate log. Must have the slow query log enabled for this "+
 		"setting to have any effect.",
+	false,
+)
+
+var slowQueryLogFullTableScans = settings.RegisterPublicBoolSetting(
+	"sql.log.slow_query.experimental_full_table_scans.enabled",
+	"when set to true, statements that perform a full table/index scan will be logged to the "+
+		"slow query log even if they do not meet the latency threshold. Must have the slow query "+
+		"log enabled for this setting to have any effect.",
 	false,
 )
 
@@ -143,6 +151,7 @@ func (p *planner) maybeLogStatementInternal(
 	logV := log.V(2)
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
 	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
+	slowLogFullTableScans := slowQueryLogFullTableScans.Get(&p.execCfg.Settings.SV)
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
@@ -198,7 +207,9 @@ func (p *planner) maybeLogStatementInternal(
 		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s %d",
 			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr, numRetries)
 	}
-	if slowQueryLogEnabled && queryDuration > slowLogThreshold {
+	if slowQueryLogEnabled && (queryDuration > slowLogThreshold || slowLogFullTableScans) {
+		logReason, shouldLog := p.slowQueryLogReason(queryDuration, slowLogThreshold)
+
 		var logger *log.SecondaryLogger
 		// Non-internal queries are always logged to the slow query log.
 		if execType == executorTypeExec {
@@ -210,9 +221,9 @@ func (p *planner) maybeLogStatementInternal(
 			logger = p.execCfg.SlowInternalQueryLogger
 		}
 
-		if logger != nil {
-			logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d",
-				age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries)
+		if logger != nil && shouldLog {
+			logger.Logf(ctx, "%.3fms %s %q %s %q %s %d %q %d %s",
+				age, lbl, appName, logTrigger, stmtStr, plStr, rows, execErrStr, numRetries, logReason)
 		}
 	}
 	if logExecuteEnabled {
@@ -250,6 +261,27 @@ func (p *planner) maybeAudit(desc catalog.Descriptor, priv privilege.Kind) {
 	default:
 		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: false})
 	}
+}
+
+func (p *planner) slowQueryLogReason(
+	queryDuration time.Duration, slowLogThreshold time.Duration,
+) (reason string, shouldLog bool) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	sep := " "
+	if slowLogThreshold != 0 && queryDuration > slowLogThreshold {
+		fmt.Fprintf(&buf, "%sLATENCY_THRESHOLD", sep)
+	}
+	if p.curPlan.flags.IsSet(planFlagContainsFullTableScan) {
+		fmt.Fprintf(&buf, "%sFULL_TABLE_SCAN", sep)
+	}
+	if p.curPlan.flags.IsSet(planFlagContainsFullIndexScan) {
+		fmt.Fprintf(&buf, "%sFULL_SECONDARY_INDEX_SCAN", sep)
+	}
+	buf.WriteByte(' ')
+	buf.WriteByte('}')
+	reason = buf.String()
+	return reason, reason != "{ }"
 }
 
 // auditEvent represents an audit event for a single table.

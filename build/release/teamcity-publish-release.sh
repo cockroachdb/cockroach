@@ -31,7 +31,11 @@ release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 if [[ -z "${DRY_RUN}" ]] ; then
   bucket="${BUCKET:-binaries.cockroachdb.com}"
   google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_CREDENTIALS"
-  dockerhub_repository="docker.io/cockroachdb/cockroach"
+  if [[ -z "${PRE_RELEASE}" ]] ; then
+    dockerhub_repository="docker.io/cockroachdb/cockroach"
+  else
+    dockerhub_repository="docker.io/cockroachdb/cockroach-unstable"
+  fi
   gcr_repository="us.gcr.io/cockroach-cloud-images/cockroach"
   s3_download_hostname="${bucket}"
   git_repo_for_tag="cockroachdb/cockroach"
@@ -65,22 +69,19 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 
-tc_start_block "Compile publish-artifacts"
-build/builder.sh go install ./pkg/cmd/publish-artifacts
-tc_end_block "Compile publish-artifacts"
-
-
 tc_start_block "Compile publish-provisional-artifacts"
 build/builder.sh go install ./pkg/cmd/publish-provisional-artifacts
 tc_end_block "Compile publish-provisional-artifacts"
 
 
 tc_start_block "Make and publish release S3 artifacts"
+# Using publish-provisional-artifacts here is funky. We're directly publishing
+# the official binaries, not provisional ones. Legacy naming. To clean up...
 build/builder.sh env \
   AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   TC_BUILD_BRANCH="$build_name" \
-  publish-artifacts -release -bucket "$bucket"
+  publish-provisional-artifacts -provisional -release -bucket "$bucket"
 tc_end_block "Make and publish release S3 artifacts"
 
 
@@ -89,7 +90,7 @@ configure_docker_creds
 docker_login_with_google
 docker_login
 
-# TODO: update publish-artifacts with option to leave one or more cockroach binaries in the local filesystem
+# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
 curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 

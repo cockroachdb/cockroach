@@ -79,6 +79,7 @@ const (
 	VersionBox2DType
 	VersionLeasedDatabaseDescriptors
 	VersionUpdateScheduledJobsSchema
+	VersionCreateLoginPrivilege
 
 	// Add new versions here (step one of two).
 )
@@ -589,6 +590,16 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionUpdateScheduledJobsSchema,
 		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 19},
 	},
+	{
+		// VersionCreateLoginPrivilege is when CREATELOGIN/NOCREATELOGIN
+		// are introduced.
+		//
+		// It represents adding authn principal management via CREATELOGIN
+		// role option.
+		Key:     VersionCreateLoginPrivilege,
+		Version: roachpb.Version{Major: 20, Minor: 1, Unstable: 20},
+	},
+
 	// Add new versions here (step two of two).
 })
 
