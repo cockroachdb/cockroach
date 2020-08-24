@@ -17,6 +17,7 @@
 #endif  // #if _WIN32
 #include <memory>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string>
 #include <vector>
 
@@ -55,6 +56,7 @@ typedef void (*CR_GEOS_SetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry, int);
 typedef int (*CR_GEOS_GetSRID_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef void (*CR_GEOS_GeomDestroy_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
+typedef int (*CR_GEOS_HasZ_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_IsEmpty_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef char (*CR_GEOS_IsSimple_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 typedef int (*CR_GEOS_GeomTypeId_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
@@ -123,6 +125,7 @@ typedef CR_GEOS_WKBWriter (*CR_GEOS_WKBWriter_create_r)(CR_GEOS_Handle);
 typedef char* (*CR_GEOS_WKBWriter_write_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, CR_GEOS_Geometry,
                                            size_t*);
 typedef void (*CR_GEOS_WKBWriter_setByteOrder_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, int);
+typedef void (*CR_GEOS_WKBWriter_setOutputDimension_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, int);
 typedef void (*CR_GEOS_WKBWriter_destroy_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter);
 typedef void (*CR_GEOS_WKBWriter_setIncludeSRID_r)(CR_GEOS_Handle, CR_GEOS_WKBWriter, const char);
 typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double, double,
@@ -143,6 +146,7 @@ struct CR_GEOS {
   CR_GEOS_Context_setErrorMessageHandler_r GEOSContext_setErrorMessageHandler_r;
   CR_GEOS_Free_r GEOSFree_r;
 
+  CR_GEOS_HasZ_r GEOSHasZ_r;
   CR_GEOS_IsEmpty_r GEOSisEmpty_r;
   CR_GEOS_IsSimple_r GEOSisSimple_r;
   CR_GEOS_GeomTypeId_r GEOSGeomTypeId_r;
@@ -203,6 +207,7 @@ struct CR_GEOS {
   CR_GEOS_WKBWriter_create_r GEOSWKBWriter_create_r;
   CR_GEOS_WKBWriter_destroy_r GEOSWKBWriter_destroy_r;
   CR_GEOS_WKBWriter_setByteOrder_r GEOSWKBWriter_setByteOrder_r;
+  CR_GEOS_WKBWriter_setOutputDimension_r GEOSWKBWriter_setOutputDimension_r;
   CR_GEOS_WKBWriter_setIncludeSRID_r GEOSWKBWriter_setIncludeSRID_r;
   CR_GEOS_WKBWriter_write_r GEOSWKBWriter_write_r;
 
@@ -242,6 +247,7 @@ struct CR_GEOS {
     INIT(GEOSBufferParams_setQuadrantSegments_r);
     INIT(GEOSBufferParams_setSingleSided_r);
     INIT(GEOSBufferWithParams_r);
+    INIT(GEOSHasZ_r);
     INIT(GEOSisEmpty_r);
     INIT(GEOSGeomTypeId_r);
     INIT(GEOSSetSRID_r);
@@ -281,6 +287,7 @@ struct CR_GEOS {
     INIT(GEOSWKBWriter_create_r);
     INIT(GEOSWKBWriter_destroy_r);
     INIT(GEOSWKBWriter_setByteOrder_r);
+    INIT(GEOSWKBWriter_setOutputDimension_r);
     INIT(GEOSWKBWriter_setIncludeSRID_r);
     INIT(GEOSWKBWriter_write_r);
     INIT(GEOSClipByRect_r);
@@ -367,10 +374,14 @@ void CR_GEOS_PushLittleEndianUint32(std::vector<unsigned char>& buf, uint32_t va
 
 void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geometry geom,
                              CR_GEOS_String* ewkb, int srid) {
+  auto hasZ = lib->GEOSHasZ_r(handle, geom);
+  auto isEmpty = lib->GEOSisEmpty_r(handle, geom);
   // Empty points error in GEOS EWKB encoding. As such, we have to encode ourselves.
   // This is still broken for GEOMETRYCOLLECTIONs/MULTIPOINT containing empty points,
   // but there's not much we can do there for now.
-  if (lib->GEOSisEmpty_r(handle, geom) && lib->GEOSGeomTypeId_r(handle, geom) == 0) {
+  // TODO(#geo); for 3D / 4D support, patch this to support those dimensions (we cannot extract that info with the GEOS API).
+  // Alternatively, upgrade GEOS to include https://github.com/libgeos/geos/commit/466cff135c8e504632ae38b79a1348dbadb390f1.
+  if (isEmpty && lib->GEOSGeomTypeId_r(handle, geom) == 0) {
     std::vector<unsigned char> buf;
     buf.push_back('\x01');  // little endian
 
@@ -400,6 +411,9 @@ void CR_GEOS_writeGeomToEWKB(CR_GEOS* lib, CR_GEOS_Handle handle, CR_GEOS_Geomet
   }
   auto wkbWriter = lib->GEOSWKBWriter_create_r(handle);
   lib->GEOSWKBWriter_setByteOrder_r(handle, wkbWriter, 1);
+  if (hasZ) {
+    lib->GEOSWKBWriter_setOutputDimension_r(handle, wkbWriter, 3);
+  }
   if (srid != 0) {
     lib->GEOSSetSRID_r(handle, geom, srid);
   }
