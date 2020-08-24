@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -170,14 +171,14 @@ func (r *Replica) RangeFeed(
 		if err := lim.Begin(ctx); err != nil {
 			return roachpb.NewError(err)
 		}
-		// Finish the iterator limit, but only if we exit before
-		// creating the iterator itself.
-		iterSemRelease = lim.Finish
-		defer func() {
-			if iterSemRelease != nil {
-				iterSemRelease()
-			}
-		}()
+		// Finish the iterator limit if we exit before the iterator finishes.
+		// The release function will be hooked into the Close method on the
+		// iterator below. The sync.Once prevents any races.
+		var iterSemReleaseOnce sync.Once
+		iterSemRelease = func() {
+			iterSemReleaseOnce.Do(lim.Finish)
+		}
+		defer iterSemRelease()
 	}
 
 	// Lock the raftMu, then register the stream as a new rangefeed registration.
@@ -210,8 +211,6 @@ func (r *Replica) RangeFeed(
 				SimpleIterator: innerIter,
 				close:          iterSemRelease,
 			}
-			// Responsibility for releasing the semaphore now passes to the iterator.
-			iterSemRelease = nil
 			return catchUpIter
 		}
 	}
