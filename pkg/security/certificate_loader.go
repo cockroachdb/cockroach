@@ -123,6 +123,8 @@ func (p PemUsage) String() string {
 		return "UI"
 	case ClientPem:
 		return "Client"
+	case TenantClientPem:
+		return "Tenant Client"
 	default:
 		return "unknown"
 	}
