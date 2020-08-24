@@ -269,7 +269,10 @@ func newInternalPlanner(
 	// The table collection used by the internal planner does not rely on the
 	// deprecatedDatabaseCache and there are no subscribers to the
 	// deprecatedDatabaseCache, so we can leave it uninitialized.
-	tables := descs.NewCollection(ctx, execCfg.Settings, execCfg.LeaseManager)
+	// Furthermore, we're not concerned about the efficiency of querying tables
+	// with user-defined types, hence the nil hydratedTables.
+	tables := descs.NewCollection(ctx, execCfg.Settings, execCfg.LeaseManager,
+		nil /* hydratedTables */)
 	dataMutator := &sessionDataMutator{
 		data: sd,
 		defaults: SessionDefaults(map[string]string{
