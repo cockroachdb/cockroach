@@ -8820,76 +8820,129 @@ func (ht *hashTable) checkColDeleting(
 // key is removed from toCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
 // new length of toCheck is returned by this function.
-func (ht *hashTable) check(
-	probeVecs []coldata.Vec, buildKeyCols []uint32, nToCheck uint64, probeSel []int,
-) uint64 {
-	ht.checkCols(probeVecs, ht.vals.ColVecs(), buildKeyCols, nToCheck, probeSel)
+func (ht *hashTable) check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []int) uint64 {
+	ht.checkCols(probeVecs, nToCheck, probeSel)
 	nDiffers := uint64(0)
 	switch ht.probeMode {
 	case hashTableDefaultProbeMode:
-		for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
-			if !ht.probeScratch.differs[toCheck] {
-				// If the current key matches with the probe key, we want to update headID
-				// with the current key if it has not been set yet.
-				keyID := ht.probeScratch.groupID[toCheck]
-				if ht.probeScratch.headID[toCheck] == 0 {
-					ht.probeScratch.headID[toCheck] = keyID
-				}
-				firstID := ht.probeScratch.headID[toCheck]
-				if !ht.visited[keyID] {
-					// We can then add this keyID into the same array at the end of the
-					// corresponding linked list and mark this ID as visited. Since there
-					// can be multiple keys that match this probe key, we want to mark
-					// differs at this position to be true. This way, the prober will
-					// continue probing for this key until it reaches the end of the next
-					// chain.
-					ht.probeScratch.differs[toCheck] = true
-					ht.visited[keyID] = true
-					if firstID != keyID {
-						ht.same[keyID] = ht.same[firstID]
-						ht.same[firstID] = keyID
+		if ht.same != nil {
+			for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+				if !ht.probeScratch.differs[toCheck] {
+					// If the current key matches with the probe key, we want to update headID
+					// with the current key if it has not been set yet.
+					keyID := ht.probeScratch.groupID[toCheck]
+					if ht.probeScratch.headID[toCheck] == 0 {
+						ht.probeScratch.headID[toCheck] = keyID
+					}
+					firstID := ht.probeScratch.headID[toCheck]
+					if !ht.visited[keyID] {
+						// We can then add this keyID into the same array at the end of the
+						// corresponding linked list and mark this ID as visited. Since there
+						// can be multiple keys that match this probe key, we want to mark
+						// differs at this position to be true. This way, the prober will
+						// continue probing for this key until it reaches the end of the next
+						// chain.
+						ht.probeScratch.differs[toCheck] = true
+						ht.visited[keyID] = true
+						if firstID != keyID {
+							ht.same[keyID] = ht.same[firstID]
+							ht.same[firstID] = keyID
+						}
 					}
 				}
+				if ht.probeScratch.differs[toCheck] {
+					// Continue probing in this next chain for the probe key.
+					ht.probeScratch.differs[toCheck] = false
+					ht.probeScratch.toCheck[nDiffers] = toCheck
+					nDiffers++
+				}
 			}
-			if ht.probeScratch.differs[toCheck] {
-				// Continue probing in this next chain for the probe key.
-				ht.probeScratch.differs[toCheck] = false
-				ht.probeScratch.toCheck[nDiffers] = toCheck
-				nDiffers++
+		} else {
+			for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+				if !ht.probeScratch.differs[toCheck] {
+					// If the current key matches with the probe key, we want to update headID
+					// with the current key if it has not been set yet.
+					keyID := ht.probeScratch.groupID[toCheck]
+					if ht.probeScratch.headID[toCheck] == 0 {
+						ht.probeScratch.headID[toCheck] = keyID
+					}
+				}
+				if ht.probeScratch.differs[toCheck] {
+					// Continue probing in this next chain for the probe key.
+					ht.probeScratch.differs[toCheck] = false
+					ht.probeScratch.toCheck[nDiffers] = toCheck
+					nDiffers++
+				}
 			}
 		}
 	case hashTableDeletingProbeMode:
-		for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
-			if !ht.probeScratch.differs[toCheck] {
-				// If the current key matches with the probe key, we want to update headID
-				// with the current key if it has not been set yet.
-				keyID := ht.probeScratch.groupID[toCheck]
-				// We need to check whether this key hasn't been "deleted" (we
-				// reuse 'visited' array for tracking which tuples are deleted).
-				// TODO(yuzefovich): rather than reusing 'visited' array to have
-				// "deleted" marks we could be actually removing tuples' keyIDs
-				// from the hash chains. This will require changing our use of
-				// singly linked list 'next' to doubly linked list.
-				if !ht.visited[keyID] {
-					// It hasn't been deleted, so we match it with 'toCheck'
-					// probing tuple and "delete" the key.
-					ht.probeScratch.headID[toCheck] = keyID
-					ht.visited[keyID] = true
-				} else {
-					// It has been deleted, so we need to continue probing on the
-					// next chain if it's not the end of the chain already.
-					if keyID != 0 {
-						ht.probeScratch.toCheck[nDiffers] = toCheck
-						nDiffers++
+		if ht.same != nil {
+			for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+				if !ht.probeScratch.differs[toCheck] {
+					// If the current key matches with the probe key, we want to update headID
+					// with the current key if it has not been set yet.
+					keyID := ht.probeScratch.groupID[toCheck]
+					// We need to check whether this key hasn't been "deleted" (we
+					// reuse 'visited' array for tracking which tuples are deleted).
+					// TODO(yuzefovich): rather than reusing 'visited' array to have
+					// "deleted" marks we could be actually removing tuples' keyIDs
+					// from the hash chains. This will require changing our use of
+					// singly linked list 'next' to doubly linked list.
+					if !ht.visited[keyID] {
+						// It hasn't been deleted, so we match it with 'toCheck'
+						// probing tuple and "delete" the key.
+						ht.probeScratch.headID[toCheck] = keyID
+						ht.visited[keyID] = true
+					} else {
+						// It has been deleted, so we need to continue probing on the
+						// next chain if it's not the end of the chain already.
+						if keyID != 0 {
+							ht.probeScratch.toCheck[nDiffers] = toCheck
+							nDiffers++
+						}
 					}
+					continue
 				}
-				continue
+				if ht.probeScratch.differs[toCheck] {
+					// Continue probing in this next chain for the probe key.
+					ht.probeScratch.differs[toCheck] = false
+					ht.probeScratch.toCheck[nDiffers] = toCheck
+					nDiffers++
+				}
 			}
-			if ht.probeScratch.differs[toCheck] {
-				// Continue probing in this next chain for the probe key.
-				ht.probeScratch.differs[toCheck] = false
-				ht.probeScratch.toCheck[nDiffers] = toCheck
-				nDiffers++
+		} else {
+			for _, toCheck := range ht.probeScratch.toCheck[:nToCheck] {
+				if !ht.probeScratch.differs[toCheck] {
+					// If the current key matches with the probe key, we want to update headID
+					// with the current key if it has not been set yet.
+					keyID := ht.probeScratch.groupID[toCheck]
+					// We need to check whether this key hasn't been "deleted" (we
+					// reuse 'visited' array for tracking which tuples are deleted).
+					// TODO(yuzefovich): rather than reusing 'visited' array to have
+					// "deleted" marks we could be actually removing tuples' keyIDs
+					// from the hash chains. This will require changing our use of
+					// singly linked list 'next' to doubly linked list.
+					if !ht.visited[keyID] {
+						// It hasn't been deleted, so we match it with 'toCheck'
+						// probing tuple and "delete" the key.
+						ht.probeScratch.headID[toCheck] = keyID
+						ht.visited[keyID] = true
+					} else {
+						// It has been deleted, so we need to continue probing on the
+						// next chain if it's not the end of the chain already.
+						if keyID != 0 {
+							ht.probeScratch.toCheck[nDiffers] = toCheck
+							nDiffers++
+						}
+					}
+					continue
+				}
+				if ht.probeScratch.differs[toCheck] {
+					// Continue probing in this next chain for the probe key.
+					ht.probeScratch.differs[toCheck] = false
+					ht.probeScratch.toCheck[nDiffers] = toCheck
+					nDiffers++
+				}
 			}
 		}
 	default:
