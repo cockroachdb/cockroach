@@ -1059,11 +1059,11 @@ func DecodeBox2DDescending(b []byte) ([]byte, geo.CartesianBoundingBox, error) {
 // EncodeGeoAscending encodes a geopb.SpatialObject value in ascending order and
 // returns the new buffer.
 // It is sorted by the given curve index, followed by the bytes of the spatial object.
-func EncodeGeoAscending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([]byte, error) {
+func EncodeGeoAscending(b []byte, curveIndex uint64, so *geopb.SpatialObject) ([]byte, error) {
 	b = append(b, geoMarker)
 	b = EncodeUint64Ascending(b, curveIndex)
 
-	data, err := protoutil.Marshal(g)
+	data, err := protoutil.Marshal(so)
 	if err != nil {
 		return nil, err
 	}
@@ -1074,11 +1074,11 @@ func EncodeGeoAscending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([]
 // EncodeGeoDescending encodes a geopb.SpatialObject value in descending order and
 // returns the new buffer.
 // It is sorted by the given curve index, followed by the bytes of the spatial object.
-func EncodeGeoDescending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([]byte, error) {
+func EncodeGeoDescending(b []byte, curveIndex uint64, so *geopb.SpatialObject) ([]byte, error) {
 	b = append(b, geoDescMarker)
 	b = EncodeUint64Descending(b, curveIndex)
 
-	data, err := protoutil.Marshal(g)
+	data, err := protoutil.Marshal(so)
 	if err != nil {
 		return nil, err
 	}
@@ -1093,49 +1093,47 @@ func EncodeGeoDescending(b []byte, curveIndex uint64, g *geopb.SpatialObject) ([
 
 // DecodeGeoAscending decodes a geopb.SpatialObject value that was encoded
 // in ascending order back into a geopb.SpatialObject.
-func DecodeGeoAscending(b []byte) ([]byte, geopb.SpatialObject, error) {
+func DecodeGeoAscending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	if PeekType(b) != Geo {
-		return nil, geopb.SpatialObject{}, errors.Errorf("did not find Geo marker")
+		return nil, errors.Errorf("did not find Geo marker")
 	}
 	b = b[1:]
 	var err error
 	b, _, err = DecodeUint64Ascending(b)
 	if err != nil {
-		return nil, geopb.SpatialObject{}, err
+		return nil, err
 	}
 
 	var pbBytes []byte
-	var ret geopb.SpatialObject
 	b, pbBytes, err = decodeBytesInternal(b, pbBytes, ascendingGeoEscapes, false /* expectMarker */)
 	if err != nil {
-		return b, ret, err
+		return b, err
 	}
-	err = protoutil.Unmarshal(pbBytes, &ret)
-	return b, ret, err
+	err = protoutil.Unmarshal(pbBytes, so)
+	return b, err
 }
 
 // DecodeGeoDescending decodes a geopb.SpatialObject value that was encoded
 // in descending order back into a geopb.SpatialObject.
-func DecodeGeoDescending(b []byte) ([]byte, geopb.SpatialObject, error) {
+func DecodeGeoDescending(b []byte, so *geopb.SpatialObject) ([]byte, error) {
 	if PeekType(b) != GeoDesc {
-		return nil, geopb.SpatialObject{}, errors.Errorf("did not find Geo marker")
+		return nil, errors.Errorf("did not find Geo marker")
 	}
 	b = b[1:]
 	var err error
 	b, _, err = DecodeUint64Descending(b)
 	if err != nil {
-		return nil, geopb.SpatialObject{}, err
+		return nil, err
 	}
 
 	var pbBytes []byte
-	var ret geopb.SpatialObject
 	b, pbBytes, err = decodeBytesInternal(b, pbBytes, descendingGeoEscapes, false /* expectMarker */)
 	if err != nil {
-		return b, ret, err
+		return b, err
 	}
 	onesComplement(pbBytes)
-	err = protoutil.Unmarshal(pbBytes, &ret)
-	return b, ret, err
+	err = protoutil.Unmarshal(pbBytes, so)
+	return b, err
 }
 
 // EncodeTimeTZAscending encodes a timetz.TimeTZ value and appends it to
@@ -2269,15 +2267,15 @@ func EncodeUntaggedBox2DValue(appendTo []byte, b geo.CartesianBoundingBox) ([]by
 
 // EncodeGeoValue encodes a geopb.SpatialObject value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
-func EncodeGeoValue(appendTo []byte, colID uint32, so geopb.SpatialObject) ([]byte, error) {
+func EncodeGeoValue(appendTo []byte, colID uint32, so *geopb.SpatialObject) ([]byte, error) {
 	appendTo = EncodeValueTag(appendTo, colID, Geo)
 	return EncodeUntaggedGeoValue(appendTo, so)
 }
 
 // EncodeUntaggedGeoValue encodes a geopb.SpatialObject value, appends it to the supplied buffer,
 // and returns the final buffer.
-func EncodeUntaggedGeoValue(appendTo []byte, so geopb.SpatialObject) ([]byte, error) {
-	bytes, err := protoutil.Marshal(&so)
+func EncodeUntaggedGeoValue(appendTo []byte, so *geopb.SpatialObject) ([]byte, error) {
+	bytes, err := protoutil.Marshal(so)
 	if err != nil {
 		return nil, err
 	}
@@ -2577,17 +2575,16 @@ func DecodeUntaggedBox2DValue(
 	return remaining, box, err
 }
 
-// DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue.
-func DecodeUntaggedGeoValue(
-	b []byte,
-) (remaining []byte, spatialObject geopb.SpatialObject, err error) {
+// DecodeUntaggedGeoValue decodes a value encoded by EncodeUntaggedGeoValue into
+// the provided geopb.SpatialObject reference.
+func DecodeUntaggedGeoValue(b []byte, so *geopb.SpatialObject) (remaining []byte, err error) {
 	var data []byte
 	remaining, data, err = DecodeUntaggedBytesValue(b)
 	if err != nil {
-		return b, geopb.SpatialObject{}, err
+		return b, err
 	}
-	err = protoutil.Unmarshal(data, &spatialObject)
-	return remaining, spatialObject, err
+	err = protoutil.Unmarshal(data, so)
+	return remaining, err
 }
 
 // DecodeUntaggedDecimalValue decodes a value encoded by EncodeUntaggedDecimalValue.

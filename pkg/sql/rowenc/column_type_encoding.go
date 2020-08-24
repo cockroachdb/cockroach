@@ -101,17 +101,17 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		}
 		return encoding.EncodeBox2DDescending(b, t.CartesianBoundingBox)
 	case *tree.DGeography:
-		so := t.Geography.SpatialObject()
+		so := t.Geography.SpatialObjectRef()
 		if dir == encoding.Ascending {
-			return encoding.EncodeGeoAscending(b, t.Geography.SpaceCurveIndex(), &so)
+			return encoding.EncodeGeoAscending(b, t.Geography.SpaceCurveIndex(), so)
 		}
-		return encoding.EncodeGeoDescending(b, t.Geography.SpaceCurveIndex(), &so)
+		return encoding.EncodeGeoDescending(b, t.Geography.SpaceCurveIndex(), so)
 	case *tree.DGeometry:
-		so := t.Geometry.SpatialObject()
+		so := t.Geometry.SpatialObjectRef()
 		if dir == encoding.Ascending {
-			return encoding.EncodeGeoAscending(b, t.Geometry.SpaceCurveIndex(), &so)
+			return encoding.EncodeGeoAscending(b, t.Geometry.SpaceCurveIndex(), so)
 		}
-		return encoding.EncodeGeoDescending(b, t.Geometry.SpaceCurveIndex(), &so)
+		return encoding.EncodeGeoDescending(b, t.Geometry.SpaceCurveIndex(), so)
 	case *tree.DDate:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, t.UnixEpochDaysWithOrig()), nil
@@ -300,21 +300,21 @@ func DecodeTableKey(
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: r}), rkey, err
 	case types.GeographyFamily:
-		var r geopb.SpatialObject
+		g := a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(geopb.SpatialObject{})})
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeGeoAscending(key)
+			rkey, err = encoding.DecodeGeoAscending(key, g.Geography.SpatialObjectRef())
 		} else {
-			rkey, r, err = encoding.DecodeGeoDescending(key)
+			rkey, err = encoding.DecodeGeoDescending(key, g.Geography.SpatialObjectRef())
 		}
-		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(r)}), rkey, err
+		return g, rkey, err
 	case types.GeometryFamily:
-		var r geopb.SpatialObject
+		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(geopb.SpatialObject{})})
 		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeGeoAscending(key)
+			rkey, err = encoding.DecodeGeoAscending(key, g.Geometry.SpatialObjectRef())
 		} else {
-			rkey, r, err = encoding.DecodeGeoDescending(key)
+			rkey, err = encoding.DecodeGeoDescending(key, g.Geometry.SpatialObjectRef())
 		}
-		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(r)}), rkey, err
+		return g, rkey, err
 	case types.DateFamily:
 		var t int64
 		if dir == encoding.Ascending {
@@ -453,9 +453,9 @@ func EncodeTableValue(
 	case *tree.DBox2D:
 		return encoding.EncodeBox2DValue(appendTo, uint32(colID), t.CartesianBoundingBox)
 	case *tree.DGeography:
-		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObject())
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DGeometry:
-		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObject())
+		return encoding.EncodeGeoValue(appendTo, uint32(colID), t.SpatialObjectRef())
 	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimeTZ:
@@ -583,17 +583,19 @@ func DecodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 		}
 		return a.NewDBox2D(tree.DBox2D{CartesianBoundingBox: data}), b, nil
 	case types.GeographyFamily:
-		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		g := a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(geopb.SpatialObject{})})
+		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geography.SpatialObjectRef())
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDGeography(tree.DGeography{Geography: geo.NewGeographyUnsafe(data)}), b, nil
+		return g, b, nil
 	case types.GeometryFamily:
-		b, data, err := encoding.DecodeUntaggedGeoValue(buf)
+		g := a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(geopb.SpatialObject{})})
+		b, err := encoding.DecodeUntaggedGeoValue(buf, g.Geometry.SpatialObjectRef())
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDGeometry(tree.DGeometry{Geometry: geo.NewGeometryUnsafe(data)}), b, nil
+		return g, b, nil
 	case types.TimeFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
@@ -1363,9 +1365,9 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DBox2D:
 		return encoding.EncodeUntaggedBox2DValue(b, t.CartesianBoundingBox)
 	case *tree.DGeography:
-		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObject())
+		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObjectRef())
 	case *tree.DGeometry:
-		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObject())
+		return encoding.EncodeUntaggedGeoValue(b, t.SpatialObjectRef())
 	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimeTZ:
