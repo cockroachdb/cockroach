@@ -501,10 +501,11 @@ func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, use
 	}
 
 	switch resolvedSchema.Kind {
-	case catalog.SchemaPublic:
-		// Anyone can CREATE on a public schema.
+	case catalog.SchemaPublic, catalog.SchemaTemporary:
+		// Anyone can CREATE on a public schema, and callers check whether the
+		// temporary schema is valid to create in.
 		return nil
-	case catalog.SchemaTemporary, catalog.SchemaVirtual:
+	case catalog.SchemaVirtual:
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot CREATE on schema %s", resolvedSchema.Name)
 	case catalog.SchemaUserDefined:

@@ -3615,11 +3615,13 @@ deallocate_stmt:
 //   GRANT <roles...> TO <grantees...> [WITH ADMIN OPTION]
 //
 // Privileges:
-//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE
 //
 // Targets:
 //   DATABASE <databasename> [, ...]
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
+//   TYPE <typename> [, <typename>]...
+//   SCHEMA <schemaname> [, <schemaname]...
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
@@ -3639,6 +3641,16 @@ grant_stmt:
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
   }
+| GRANT privileges ON SCHEMA schema_name_list TO name_list
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $5.strs(),
+      },
+      Grantees: $7.nameList(),
+    }
+  }
 | GRANT error // SHOW HELP: GRANT
 
 // %Help: REVOKE - remove access privileges and role memberships
@@ -3650,11 +3662,13 @@ grant_stmt:
 //   REVOKE [ADMIN OPTION FOR] <roles...> FROM <grantees...>
 //
 // Privileges:
-//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE
 //
 // Targets:
 //   DATABASE <databasename> [, <databasename>]...
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
+//   TYPE <typename> [, <typename>]...
+//   SCHEMA <schemaname> [, <schemaname]...
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
@@ -3673,6 +3687,16 @@ revoke_stmt:
 | REVOKE privileges ON TYPE target_types FROM name_list
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Targets: $5.targetList(), Grantees: $7.nameList()}
+  }
+| REVOKE privileges ON SCHEMA schema_name_list FROM name_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.TargetList{
+        Schemas: $5.strs(),
+      },
+      Grantees: $7.nameList(),
+    }
   }
 | REVOKE error // SHOW HELP: REVOKE
 
