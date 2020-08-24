@@ -44,7 +44,8 @@ import (
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
-// analoguous to TestServer, but with control over range replication.
+// analogous to TestServer, but with control over range replication and join
+// flags.
 type TestCluster struct {
 	Servers         []*server.TestServer
 	Conns           []*gosql.DB
@@ -167,14 +168,7 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 		noLocalities = false
 	}
 
-	// Pre-bind a listener for node zero so the kernel can go ahead and
-	// assign its address for use in the other nodes' join flags.
-	// The Server becomes responsible for closing this.
-	firstListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
 		if perNodeServerArgs, ok := args.ServerArgsPerNode[i]; ok {
@@ -194,19 +188,24 @@ func NewTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestClu
 		}
 
 		if i == 0 {
-			if serverArgs.Knobs.Server == nil {
-				serverArgs.Knobs.Server = &server.TestingKnobs{}
+			if serverArgs.Listener != nil {
+				firstListener = serverArgs.Listener
 			} else {
-				// Copy the knobs so the struct with the listener is not
-				// reused for other nodes.
-				knobs := *serverArgs.Knobs.Server.(*server.TestingKnobs)
-				serverArgs.Knobs.Server = &knobs
+				// Pre-bind a listener for node zero so the kernel can go ahead and
+				// assign its address for use in the other nodes' join flags.
+				// The Server becomes responsible for closing this.
+				listener, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					t.Fatal(err)
+				}
+				firstListener = listener
+				serverArgs.Listener = listener
 			}
-			serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = firstListener
-			serverArgs.Addr = firstListener.Addr().String()
 		} else {
-			serverArgs.JoinAddr = firstListener.Addr().String()
-			serverArgs.NoAutoInitializeCluster = true
+			if serverArgs.JoinAddr == "" {
+				// Point to the first listener unless told explicitly otherwise.
+				serverArgs.JoinAddr = firstListener.Addr().String()
+			}
 		}
 
 		if _, err := tc.AddServer(serverArgs); err != nil {
@@ -379,6 +378,23 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
 		serverArgs.Knobs.Store = &stkCopy
+	}
+
+	// Install listener, if non-empty.
+	if serverArgs.Listener != nil {
+		// Instantiate the server testing knobs if non-empty.
+		if serverArgs.Knobs.Server == nil {
+			serverArgs.Knobs.Server = &server.TestingKnobs{}
+		} else {
+			// Copy the knobs so the struct with the listener is not
+			// reused for other nodes.
+			knobs := *serverArgs.Knobs.Server.(*server.TestingKnobs)
+			serverArgs.Knobs.Server = &knobs
+		}
+
+		// Install the provided listener.
+		serverArgs.Knobs.Server.(*server.TestingKnobs).RPCListener = serverArgs.Listener
+		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
 	s := serverutils.NewServer(serverArgs).(*server.TestServer)
