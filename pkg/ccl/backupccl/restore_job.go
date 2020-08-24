@@ -828,7 +828,7 @@ func createImportingDescriptors(
 				mutableDatabases = append(mutableDatabases, mut)
 			}
 		case catalog.SchemaDescriptor:
-			schemas = append(schemas, schemadesc.NewMutableCreatedSchemaDescriptor(*desc.SchemaDesc()))
+			schemas = append(schemas, schemadesc.NewCreatedMutable(*desc.SchemaDesc()))
 		case catalog.TypeDescriptor:
 			types = append(types, typedesc.NewCreatedMutable(*desc.TypeDesc()))
 		}

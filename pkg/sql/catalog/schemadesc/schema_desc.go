@@ -72,10 +72,10 @@ var (
 	_ = NewImmutable
 )
 
-// NewMutableCreatedSchemaDescriptor returns a Mutable from the
+// NewCreatedMutable returns a Mutable from the
 // given SchemaDescriptor with the cluster version being the zero schema. This
 // is for a schema that is created within the current transaction.
-func NewMutableCreatedSchemaDescriptor(desc descpb.SchemaDescriptor) *Mutable {
+func NewCreatedMutable(desc descpb.SchemaDescriptor) *Mutable {
 	return &Mutable{
 		Immutable: makeImmutable(desc),
 	}
