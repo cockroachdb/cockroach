@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -607,9 +608,10 @@ If problems persist, please see %s.`
 			var buf bytes.Buffer
 			info := build.GetInfo()
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
-			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
-			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
-			fmt.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
+			redact.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
+			redact.Fprintf(tw, "build:\t%s %s @ %s (%s)\n",
+				redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
+			redact.Fprintf(tw, "webui:\t%s\n", serverCfg.AdminURL())
 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
@@ -620,63 +622,63 @@ If problems persist, please see %s.`
 				log.Errorf(ctx, "failed computing the URL: %v", err)
 				return err
 			}
-			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
+			redact.Fprintf(tw, "sql:\t%s\n", pgURL)
 
-			fmt.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
+			redact.Fprintf(tw, "RPC client flags:\t%s\n", clientFlagsRPC())
 			if len(serverCfg.SocketFile) != 0 {
-				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
+				redact.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
-			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
+			redact.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
 			if serverCfg.AuditLogDirName.IsSet() {
-				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
+				redact.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.AuditLogDirName)
 			}
 			if serverCfg.Attrs != "" {
-				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
+				redact.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
 			}
 			if len(serverCfg.Locality.Tiers) > 0 {
-				fmt.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
+				redact.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
 			}
 			if s.TempDir() != "" {
-				fmt.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
+				redact.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
 			}
 			if ext := s.ClusterSettings().ExternalIODir; ext != "" {
-				fmt.Fprintf(tw, "external I/O path: \t%s\n", ext)
+				redact.Fprintf(tw, "external I/O path: \t%s\n", ext)
 			} else {
-				fmt.Fprintf(tw, "external I/O path: \t<disabled>\n")
+				redact.Fprintf(tw, "external I/O path: \t<disabled>\n")
 			}
 			for i, spec := range serverCfg.Stores.Specs {
-				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
+				redact.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 			}
-			fmt.Fprintf(tw, "storage engine: \t%s\n", serverCfg.StorageEngine.String())
+			redact.Fprintf(tw, "storage engine: \t%s\n", &serverCfg.StorageEngine)
 			nodeID := s.NodeID()
 			if initialBoot {
 				if nodeID == server.FirstNodeID {
-					fmt.Fprintf(tw, "status:\tinitialized new cluster\n")
+					redact.Fprintf(tw, "status:\tinitialized new cluster\n")
 				} else {
-					fmt.Fprintf(tw, "status:\tinitialized new node, joined pre-existing cluster\n")
+					redact.Fprintf(tw, "status:\tinitialized new node, joined pre-existing cluster\n")
 				}
 			} else {
-				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
+				redact.Fprintf(tw, "status:\trestarted pre-existing node\n")
 			}
 
 			if baseCfg.ClusterName != "" {
-				fmt.Fprintf(tw, "cluster name:\t%s\n", baseCfg.ClusterName)
+				redact.Fprintf(tw, "cluster name:\t%s\n", baseCfg.ClusterName)
 			}
 
 			// Remember the cluster ID for log file rotation.
 			clusterID := s.ClusterID().String()
 			log.SetClusterID(clusterID)
-			fmt.Fprintf(tw, "clusterID:\t%s\n", clusterID)
-			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
+			redact.Fprintf(tw, "clusterID:\t%s\n", clusterID)
+			redact.Fprintf(tw, "nodeID:\t%d\n", nodeID)
 
 			// Collect the formatted string and show it to the user.
 			if err := tw.Flush(); err != nil {
 				return err
 			}
-			msg := buf.String()
+			msg := redact.RedactableString(buf.String())
 			log.Infof(ctx, "node startup completed:\n%s", msg)
 			if !startCtx.inBackground && !log.LoggingToStderr(log.Severity_INFO) {
-				fmt.Print(msg)
+				fmt.Print(msg.StripMarkers())
 			}
 
 			return nil
