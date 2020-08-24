@@ -576,6 +576,12 @@ type CommonLookupFlags struct {
 	AvoidCached bool
 }
 
+// SchemaLookupFlags is the flag struct suitable for GetSchema().
+type SchemaLookupFlags struct {
+	CommonLookupFlags
+	RequireMutable bool
+}
+
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
 type DatabaseLookupFlags struct {
 	CommonLookupFlags

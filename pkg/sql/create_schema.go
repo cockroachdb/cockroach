@@ -97,6 +97,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		Name:       n.Schema,
 		ID:         id,
 		Privileges: privs,
+		Version:    1,
 	})
 
 	// Update the parent database with this schema information.
