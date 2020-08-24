@@ -319,5 +319,3 @@ ALTER SCHEMA privs RENAME TO denied
 
 statement error pq: permission denied to drop schema "privs"
 DROP SCHEMA privs
-
-# TODO (rohany): Test the usage privilege here.
