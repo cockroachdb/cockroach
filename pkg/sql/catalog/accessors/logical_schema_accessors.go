@@ -53,14 +53,19 @@ var _ catalog.Accessor = &LogicalSchemaAccessor{}
 
 // GetSchema implements the Accessor interface.
 func (l *LogicalSchemaAccessor) GetSchema(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	dbID descpb.ID,
+	scName string,
+	flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
 	if _, ok := l.vs.GetVirtualSchema(scName); ok {
 		return true, catalog.ResolvedSchema{Kind: catalog.SchemaVirtual, Name: scName}, nil
 	}
 
 	// Fallthrough.
-	return l.Accessor.GetSchema(ctx, txn, codec, dbID, scName)
+	return l.Accessor.GetSchema(ctx, txn, codec, dbID, scName, flags)
 }
 
 // GetObjectNames implements the DatabaseLister interface.

@@ -16,7 +16,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -191,13 +191,6 @@ type Collection struct {
 	// Only used prior to the 20.2 version upgrade.
 	databaseCache *database.Cache
 
-	// schemaCache maps {databaseID, schemaName} -> (schemaID, if exists, otherwise nil).
-	// TODO(sqlexec): replace with leasing system with custom schemas.
-	// This is currently never cleared, because there should only be unique schemas
-	// being added for each Collection as only temporary schemas can be
-	// made, and you cannot read from other schema caches.
-	schemaCache sync.Map
-
 	// DatabaseCacheSubscriber is used to block until the node's database cache has been
 	// updated when ReleaseAll is called.
 	// Only used prior to the 20.2 version upgrade.
@@ -243,6 +236,52 @@ type Collection struct {
 	// true in mixed-version 20.1/20.2 clusters, but it remains constant for the
 	// duration of each use of the Collection.
 	databaseLeasingUnsupported bool
+}
+
+// getLeasedDescriptorByName return a leased descriptor valid for the
+// transaction, acquiring one if necessary. Due to a bug in lease acquisition
+// for dropped descriptors, the descriptor may have to be read from the store,
+// in which case shouldReadFromStore will be true.
+func (tc *Collection) getLeasedDescriptorByName(
+	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
+) (desc catalog.Descriptor, shouldReadFromStore bool, err error) {
+	// First, look to see if we already have the descriptor.
+	// This ensures that, once a SQL transaction resolved name N to id X, it will
+	// continue to use N to refer to X even if N is renamed during the
+	// transaction.
+	if desc = tc.leasedDescriptors.getByName(parentID, parentSchemaID, name); desc != nil {
+		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
+		return desc, false, nil
+	}
+
+	readTimestamp := txn.ReadTimestamp()
+	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
+	if err != nil {
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if catalog.HasInactiveDescriptorError(err) ||
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, true, nil
+		}
+		// Lease acquisition failed with some other error. This we don't
+		// know how to deal with, so propagate the error.
+		return nil, false, err
+	}
+
+	if expiration.LessEq(readTimestamp) {
+		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	}
+
+	tc.leasedDescriptors.add(desc)
+	log.VEventf(ctx, 2, "added descriptor '%s' to collection: %+v", name, desc)
+
+	// If the descriptor we just acquired expires before the txn's deadline,
+	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
+	// timestamp, so we need to set a deadline on the transaction to prevent it
+	// from committing beyond the version's expiration time.
+	txn.UpdateDeadlineMaybe(ctx, expiration)
+	return desc, false, nil
 }
 
 // GetMutableDatabaseDescriptor returns a mutable database descriptor.
@@ -343,7 +382,8 @@ func (tc *Collection) getMutableObjectDescriptor(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -381,10 +421,98 @@ func (tc *Collection) getMutableObjectDescriptor(
 	return mutDesc, nil
 }
 
-// ResolveSchema attempts to lookup the schema from the schemaCache if it exists,
-// otherwise falling back to a database lookup.
+func (tc *Collection) getMutableUserDefinedSchemaDescriptor(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
+) (*schemadesc.Mutable, error) {
+	log.VEventf(ctx, 2, "reading mutable descriptor on '%s'", schemaName)
+	// First try the uncommitted descriptors.
+	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
+		dbID, keys.RootNamespaceID, schemaName, flags.Required,
+	); refuseFurtherLookup || err != nil {
+		return nil, err
+	} else if mut := desc.mutable; mut != nil {
+		schema, ok := mut.(*schemadesc.Mutable)
+		if !ok {
+			return nil, nil
+		}
+		log.VEventf(ctx, 2, "found uncommitted descriptor %d", schema.GetID())
+		return schema, nil
+	}
+
+	phyAccessor := catalogkv.UncachedPhysicalAccessor{}
+	found, schema, err := phyAccessor.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+	if err != nil || !found {
+		return nil, err
+	}
+	return schema.Desc.(*schemadesc.Mutable), nil
+}
+
+func (tc *Collection) getUserDefinedSchemaVersion(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
+) (*schemadesc.Immutable, error) {
+	readFromStore := func() (*schemadesc.Immutable, error) {
+		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
+		exists, schema, err := phyAccessor.GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		if err != nil || !exists || schema.Kind != catalog.SchemaUserDefined {
+			return nil, err
+		}
+		return schema.Desc.(*schemadesc.Immutable), nil
+	}
+
+	if refuseFurtherLookup, desc, err := tc.getUncommittedDescriptor(
+		dbID,
+		keys.RootNamespaceID,
+		schemaName,
+		flags.Required,
+	); refuseFurtherLookup || err != nil {
+		return nil, err
+	} else if immut := desc.immutable; immut != nil {
+		log.VEventf(ctx, 2, "found uncommitted descriptor %d", immut.GetID())
+		desc, ok := immut.(*schemadesc.Immutable)
+		if !ok {
+			if flags.Required {
+				return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
+			}
+			return nil, nil
+		}
+		return desc, nil
+	}
+
+	avoidCache := flags.AvoidCached || lease.TestingTableLeasesAreDisabled()
+	if avoidCache {
+		return readFromStore()
+	}
+
+	// TODO (lucy): Replace this with a lookup to the parent database's Schema
+	// map to short-circuit returning negative results.
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+		ctx, txn, dbID, keys.RootNamespaceID, schemaName)
+	if err != nil {
+		return nil, err
+	}
+	if shouldReadFromStore {
+		return readFromStore()
+	}
+	schema, ok := desc.(*schemadesc.Immutable)
+	if !ok {
+		if flags.Required {
+			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
+		}
+		return nil, nil
+	}
+	return schema, nil
+}
+
+// ResolveSchema resolves the schema and, if applicable, returns a descriptor
+// usable by the transaction.
+// This method departs from the pattern for the other descriptor types: there
+// are no separate methods for mutable and immutable descriptors. The only
+// reasons for this are that both paths require special handling for the public
+// schema and temp schemas, and currently the only user of the descriptor
+// collection for schemas is the CachedPhysicalAccessor, which needs access to
+// both variants anyway.
 func (tc *Collection) ResolveSchema(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string,
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaName string, flags tree.SchemaLookupFlags,
 ) (bool, catalog.ResolvedSchema, error) {
 	// Fast path public schema, as it is always found.
 	if schemaName == tree.PublicSchema {
@@ -393,30 +521,53 @@ func (tc *Collection) ResolveSchema(
 		}, nil
 	}
 
-	type schemaCacheKey struct {
-		dbID       descpb.ID
-		schemaName string
+	// If a temp schema is requested, check if it's for the current session, or
+	// else fall back to reading from the store.
+	// TODO (lucy): We need to store the temp schemas for every database that has
+	// one for this session, not just the one for the current database. Until then
+	// we're susceptible to doing store lookups when referencing the temp schema
+	// in other databases. See #53163.
+	if strings.HasPrefix(schemaName, sessiondata.PgTempSchemaName) {
+		if tc.sessionData != nil {
+			if schemaName == sessiondata.PgTempSchemaName ||
+				schemaName == tc.sessionData.SearchPath.GetTemporarySchemaName() {
+				schema := catalog.ResolvedSchema{
+					Kind: catalog.SchemaTemporary,
+					Name: tc.sessionData.SearchPath.GetTemporarySchemaName(),
+					ID:   descpb.ID(tc.sessionData.TemporarySchemaID),
+				}
+				return true, schema, nil
+			}
+		}
+
+		exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName, flags)
+		if err != nil || !exists {
+			return exists, catalog.ResolvedSchema{}, err
+		}
+		return exists, resolved, err
 	}
 
-	key := schemaCacheKey{dbID: dbID, schemaName: schemaName}
-	// First lookup the cache.
-	// TODO (SQLSchema): This should look into the lease manager.
-	if val, ok := tc.schemaCache.Load(key); ok {
-		return true, val.(catalog.ResolvedSchema), nil
+	// Otherwise, the schema is user-defined. Get the descriptor.
+	var desc catalog.SchemaDescriptor
+	if flags.RequireMutable {
+		mutDesc, err := tc.getMutableUserDefinedSchemaDescriptor(ctx, txn, dbID, schemaName, flags)
+		if err != nil || mutDesc == nil {
+			return false, catalog.ResolvedSchema{}, err
+		}
+		desc = mutDesc
+	} else {
+		immutDesc, err := tc.getUserDefinedSchemaVersion(ctx, txn, dbID, schemaName, flags)
+		if err != nil || immutDesc == nil {
+			return false, catalog.ResolvedSchema{}, err
+		}
+		desc = immutDesc
 	}
-
-	// Next, try lookup the result from KV, storing and returning the value.
-	exists, resolved, err := (catalogkv.UncachedPhysicalAccessor{}).GetSchema(ctx, txn, tc.codec(), dbID, schemaName)
-	if err != nil || !exists {
-		return exists, catalog.ResolvedSchema{}, err
-	}
-
-	if resolved.Kind == catalog.SchemaUserDefined && resolved.Desc.Dropped() {
-		return false, catalog.ResolvedSchema{}, nil
-	}
-
-	tc.schemaCache.Store(key, resolved)
-	return exists, resolved, err
+	return true, catalog.ResolvedSchema{
+		Kind: catalog.SchemaUserDefined,
+		Name: schemaName,
+		ID:   desc.GetID(),
+		Desc: desc,
+	}, nil
 }
 
 // GetDatabaseVersion returns a database descriptor with a version suitable for
@@ -429,9 +580,6 @@ func (tc *Collection) ResolveSchema(
 // It might also add a transaction deadline to the transaction that is
 // enforced at the KV layer to ensure that the transaction doesn't violate
 // the validity window of the table descriptor version returned.
-//
-// TODO (lucy): This logic is quite similar to GetObjectVersion. Think about
-// unifying once we also have support for schemas.
 func (tc *Collection) GetDatabaseVersion(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
 ) (*dbdesc.Immutable, error) {
@@ -473,35 +621,13 @@ func (tc *Collection) GetDatabaseVersion(
 		return readFromStore()
 	}
 
-	// First, look to see if we already have the descriptor.
-	// This ensures that, once a SQL transaction resolved name N to id X, it will
-	// continue to use N to refer to X even if N is renamed during the
-	// transaction.
-	if desc := tc.leasedDescriptors.getByName(keys.RootNamespaceID, keys.RootNamespaceID, name); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-		db, ok := desc.(*dbdesc.Immutable)
-		if !ok {
-			if flags.Required {
-				return nil, sqlerrors.NewUndefinedDatabaseError(name)
-			}
-			return nil, nil
-		}
-		return db, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, keys.RootNamespaceID, keys.RootNamespaceID, name)
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
+		ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 	if err != nil {
-		// Read the descriptor from the store in the face of some specific errors
-		// because of a known limitation of AcquireByName. See the known
-		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return readFromStore()
-		}
-		// Lease acquisition failed with some other error. This we don't
-		// know how to deal with, so propagate the error.
 		return nil, err
+	}
+	if shouldReadFromStore {
+		return readFromStore()
 	}
 	db, ok := desc.(*dbdesc.Immutable)
 	if !ok {
@@ -510,19 +636,6 @@ func (tc *Collection) GetDatabaseVersion(
 		}
 		return nil, nil
 	}
-
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
-	}
-
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added database descriptor '%s' to collection: %+v", name, desc)
-
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return db, nil
 }
 
@@ -610,10 +723,6 @@ func (tc *Collection) GetTableVersion(
 func (tc *Collection) getObjectVersion(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (catalog.Descriptor, error) {
-	if log.V(2) {
-		log.Infof(ctx, "planner acquiring lease on descriptor '%s'", name)
-	}
-
 	readObjectFromStore := func() (catalog.Descriptor, error) {
 		phyAccessor := catalogkv.UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(
@@ -637,7 +746,8 @@ func (tc *Collection) getObjectVersion(
 	dbID := db.GetID()
 
 	// Resolve the schema to the ID of the schema.
-	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema())
+	foundSchema, resolvedSchema, err := tc.ResolveSchema(ctx, txn, dbID, name.Schema(),
+		tree.SchemaLookupFlags{CommonLookupFlags: flags.CommonLookupFlags})
 	if err != nil || !foundSchema {
 		return nil, err
 	}
@@ -677,42 +787,13 @@ func (tc *Collection) getObjectVersion(
 		return readObjectFromStore()
 	}
 
-	// First, look to see if we already have the descriptor.
-	// This ensures that, once a SQL transaction resolved name N to id X, it will
-	// continue to use N to refer to X even if N is renamed during the
-	// transaction.
-	if desc := tc.leasedDescriptors.getByName(dbID, schemaID, name.Object()); desc != nil {
-		log.VEventf(ctx, 2, "found descriptor in collection for '%s'", name)
-		return desc, nil
-	}
-
-	readTimestamp := txn.ReadTimestamp()
-	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, dbID, schemaID, name.Object())
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(ctx, txn, dbID, schemaID, name.Object())
 	if err != nil {
-		// Read the descriptor from the store in the face of some specific errors
-		// because of a known limitation of AcquireByName. See the known
-		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
-			errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return readObjectFromStore()
-		}
-		// Lease acquisition failed with some other error. This we don't
-		// know how to deal with, so propagate the error.
 		return nil, err
 	}
-
-	if expiration.LessEq(readTimestamp) {
-		log.Fatalf(ctx, "bad descriptor for T=%s, expiration=%s", readTimestamp, expiration)
+	if shouldReadFromStore {
+		return readObjectFromStore()
 	}
-
-	tc.leasedDescriptors.add(desc)
-	log.VEventf(ctx, 2, "added descriptor '%s' to collection", name)
-
-	// If the descriptor we just acquired expires before the txn's deadline,
-	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
-	// timestamp, so we need to set a deadline on the transaction to prevent it
-	// from committing beyond the version's expiration time.
-	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return desc, nil
 }
 
@@ -853,17 +934,6 @@ func (tc *Collection) getMutableDescriptorByID(
 		return nil, err
 	}
 	return desc.(catalog.MutableDescriptor), nil
-}
-
-// GetMutableSchemaDescriptorByID gets a Mutable by ID.
-func (tc *Collection) GetMutableSchemaDescriptorByID(
-	ctx context.Context, scID descpb.ID, txn *kv.Txn,
-) (*schemadesc.Mutable, error) {
-	desc, err := tc.getMutableDescriptorByID(ctx, scID, txn)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*schemadesc.Mutable), nil
 }
 
 // ResolveSchemaByID looks up a schema by ID.
@@ -1492,13 +1562,6 @@ func (tc *Collection) deprecatedDatabaseCache() *database.Cache {
 // ResetDatabaseCache resets the table collection's database.Cache.
 func (tc *Collection) ResetDatabaseCache(dbCache *database.Cache) {
 	tc.databaseCache = dbCache
-}
-
-// ResetSchemaCache resets the table collection's schema cache.
-// TODO (rohany): This can removed once we use the collection's descriptors
-//  to manage schemas.
-func (tc *Collection) ResetSchemaCache() {
-	tc.schemaCache = sync.Map{}
 }
 
 // DatabaseCacheSubscriber allows the connExecutor to wait for a callback.
