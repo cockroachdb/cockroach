@@ -455,6 +455,9 @@ func (r opResult) createAndWrapRowSource(
 			if err != nil {
 				return nil, err
 			}
+			if ioReader, ok := proc.(execinfra.IOReader); ok {
+				r.IOReader = ioReader
+			}
 			var (
 				rs execinfra.RowSource
 				ok bool
@@ -628,6 +631,7 @@ func NewColOperator(
 				return r, err
 			}
 			result.Op, result.IsStreaming = scanOp, true
+			result.IOReader = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.

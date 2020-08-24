@@ -34,7 +34,7 @@ func TestNumBatches(t *testing.T) {
 	nBatches := 10
 	noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, coldata.BatchSize()))
 	vsc := NewVectorizedStatsCollector(
-		noop, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* ioTime */
+		noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 		nil, /* inputStatsCollectors */
 	)
@@ -56,7 +56,7 @@ func TestNumTuples(t *testing.T) {
 	for _, batchSize := range []int{1, 16, 1024} {
 		noop := NewNoop(makeFiniteChunksSourceWithBatchSize(nBatches, batchSize))
 		vsc := NewVectorizedStatsCollector(
-			noop, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* ioTime */
+			noop, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -88,7 +88,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 		leftInput := NewVectorizedStatsCollector(
-			leftSource, 0 /* id */, execinfrapb.ProcessorIDTagKey, true, /* ioTime */
+			leftSource, nil /* ioReader */, 0 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -97,7 +97,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeSource:   timeSource,
 		}
 		rightInput := NewVectorizedStatsCollector(
-			rightSource, 1 /* id */, execinfrapb.ProcessorIDTagKey, true, /* ioTime */
+			rightSource, nil /* ioReader */, 1 /* id */, execinfrapb.ProcessorIDTagKey,
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
@@ -118,7 +118,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		}
 
 		mjStatsCollector := NewVectorizedStatsCollector(
-			timeAdvancingMergeJoiner, 2 /* id */, execinfrapb.ProcessorIDTagKey, false, /* ioTime */
+			timeAdvancingMergeJoiner, nil /* ioReader */, 2 /* id */, execinfrapb.ProcessorIDTagKey,
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
 			[]*VectorizedStatsCollector{leftInput, rightInput},
 		)
