@@ -145,28 +145,38 @@ project                            ·                      ·                   
 ·                                  table                  ltable@primary                                                                                                                                                                                                              ·                                                ·
 ·                                  spans                  FULL SCAN                                                                                                                                                                                                                   ·                                                ·
 
-# The following queries perform semi- and anti-joins, and don't currently use
-# an inverted join.
+# This query performs a semi-join, which is converted to an inner join by the
+# optimizer.
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
-·                       distribution         local                       ·            ·
-·                       vectorized           true                        ·            ·
-project                 ·                    ·                           (lk)         ·
- │                      estimated row count  10 (missing stats)          ·            ·
- └── cross join (semi)  ·                    ·                           (lk, geom2)  ·
-      │                 estimated row count  10 (missing stats)          ·            ·
-      │                 pred                 st_intersects(geom2, geom)  ·            ·
-      ├── scan          ·                    ·                           (lk, geom2)  ·
-      │                 estimated row count  1000 (missing stats)        ·            ·
-      │                 table                ltable@primary              ·            ·
-      │                 spans                FULL SCAN                   ·            ·
-      └── scan          ·                    ·                           (geom)       ·
-·                       estimated row count  1000 (missing stats)        ·            ·
-·                       table                rtable@primary              ·            ·
-·                       spans                FULL SCAN                   ·            ·
+·                                            distribution           local                                    ·                                         ·
+·                                            vectorized             true                                     ·                                         ·
+project                                      ·                      ·                                        (lk)                                      ·
+ │                                           estimated row count    10 (missing stats)                       ·                                         ·
+ └── distinct                                ·                      ·                                        (lk, geom2)                               ·
+      │                                      estimated row count    1000 (missing stats)                     ·                                         ·
+      │                                      distinct on            lk                                       ·                                         ·
+      └── project                            ·                      ·                                        (lk, geom2)                               ·
+           └── project                       ·                      ·                                        (lk, geom2, geom)                         ·
+                │                            estimated row count    10000 (missing stats)                    ·                                         ·
+                └── lookup join (inner)      ·                      ·                                        (lk, geom2, rk1, rk2, geom)               ·
+                     │                       table                  rtable@primary                           ·                                         ·
+                     │                       equality               (rk1, rk2) = (rk1,rk2)                   ·                                         ·
+                     │                       equality cols are key  ·                                        ·                                         ·
+                     │                       pred                   st_intersects(geom2, geom)               ·                                         ·
+                     └── project             ·                      ·                                        (lk, geom2, rk1, rk2)                     ·
+                          │                  estimated row count    10000 (missing stats)                    ·                                         ·
+                          └── inverted join  ·                      ·                                        (lk, geom2, rk1, rk2, geom_inverted_key)  ·
+                               │             table                  rtable@geom_index                        ·                                         ·
+                               │             inverted expr          st_intersects(geom2, geom_inverted_key)  ·                                         ·
+                               └── scan      ·                      ·                                        (lk, geom2)                               ·
+·                                            estimated row count    1000 (missing stats)                     ·                                         ·
+·                                            table                  ltable@primary                           ·                                         ·
+·                                            spans                  FULL SCAN                                ·                                         ·
 
+# This query performs an anti-join, and does not currently use an inverted join.
 query TTTTT
 EXPLAIN (VERBOSE)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))

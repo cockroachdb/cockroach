@@ -1945,8 +1945,9 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// covering" here means that not all columns in the ON condition are
 			// available.
 			//
-			// TODO(rytaft): We could create a semi/anti join on top of an inner/left
-			//  join if we wrap it with a DISTINCT ON the key of the left side.
+			// For semi joins, we may still be able to generate an inverted join
+			// by converting it to an inner join using the ConvertSemiToInnerJoin
+			// rule. But in that case, we would already have an inner join here.
 			continue
 		}
 
@@ -2623,11 +2624,11 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	}
 
 	return &memo.LookupJoinPrivate{
-		JoinType:              opt.InnerJoinOp,
-		Table:                 indexPrivate.Table,
-		Index:                 cat.PrimaryIndex,
-		KeyCols:               lookupCols,
-		Cols:                  outCols,
+		JoinType: opt.InnerJoinOp,
+		Table:    indexPrivate.Table,
+		Index:    cat.PrimaryIndex,
+		KeyCols:  lookupCols,
+		Cols:     outCols,
 		LookupColsAreTableKey: true,
 		ConstFilters:          nil,
 		JoinPrivate:           memo.JoinPrivate{},
