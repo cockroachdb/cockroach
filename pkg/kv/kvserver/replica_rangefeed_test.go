@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -86,11 +88,20 @@ func TestReplicaRangefeed(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		},
-	)
+	const numNodes = 3
+	args := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: make(map[int]base.TestServerArgs, numNodes),
+	}
+	for i := 0; i < numNodes; i++ {
+		// Disable closed timestamps as this test was designed assuming no closed
+		// timestamps would get propagated.
+		settings := cluster.MakeTestingClusterSettings()
+		closedts.TargetDuration.Override(&settings.SV, 24*time.Hour)
+		kvserver.RangefeedEnabled.Override(&settings.SV, true)
+		args.ServerArgsPerNode[i] = base.TestServerArgs{Settings: settings}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(ctx)
 
 	ts := tc.Servers[0]
@@ -140,7 +151,6 @@ func TestReplicaRangefeed(t *testing.T) {
 				Span:     rangefeedSpan,
 				WithDiff: true,
 			}
-			kvserver.RangefeedEnabled.Override(&store.ClusterSettings().SV, true)
 			pErr := store.RangeFeed(&req, stream)
 			streamErrC <- pErr
 		}(i)
