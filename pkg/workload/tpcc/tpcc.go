@@ -53,7 +53,10 @@ type tpcc struct {
 	waitFraction float64
 	workers      int
 	fks          bool
-	dbOverride   string
+	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
+	// due to origin index restrictions being lifted.
+	deprecatedFkIndexes bool
+	dbOverride          string
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -164,6 +167,7 @@ var tpccMeta = workload.Meta{
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 
 		g.flags.StringVar(&g.mix, `mix`,
@@ -466,8 +470,12 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccCustomerStats(),
 	}
 	history := workload.Table{
-		Name:   `history`,
-		Schema: tpccHistorySchemaBase,
+		Name: `history`,
+		Schema: maybeAddFkSuffix(
+			w.deprecatedFkIndexes,
+			tpccHistorySchemaBase,
+			deprecatedTpccHistorySchemaFkSuffix,
+		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numHistoryPerWarehouse * w.warehouses,
 			FillBatch:  w.tpccHistoryInitialRowBatch,
@@ -536,7 +544,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccOrderLineSchemaBase,
+			maybeAddFkSuffix(
+				w.deprecatedFkIndexes,
+				tpccOrderLineSchemaBase,
+				deprecatedTpccOrderLineSchemaFkSuffix,
+			),
 			tpccOrderLineSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
