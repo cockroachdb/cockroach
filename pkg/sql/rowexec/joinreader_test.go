@@ -16,11 +16,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"math"
-	"sort"
-	"strings"
-	"testing"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -45,6 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"math"
+	"sort"
+	"strings"
+	"testing"
 )
 
 func TestJoinReader(t *testing.T) {
@@ -887,6 +886,60 @@ func TestIndexJoiner(t *testing.T) {
 			)
 		})
 	}
+}
+
+// BenchmarkLeftSemiJoin benchmarks a left semi join between a table with 2000 rows
+// and one with 10000 rows, injecting statistics to force the left semi join
+func BenchmarkLeftSemiJoin (b *testing.B) {
+	const rightRows = 10000
+	const leftRows = 2000
+
+	setup := func(b *testing.B, r *sqlutils.SQLRunner) {
+		r.Exec(b, "CREATE TABLE ltable (k int primary key, v int, INDEX foo(v))")
+		r.Exec(b, "CREATE TABLE rtable (k int primary key, v int, INDEX foo(v))")
+
+		r.Exec(b, fmt.Sprintf(
+			"INSERT INTO ltable SELECT i, i FROM generate_series(0,%d) AS g(i)", leftRows-1,
+		))
+		r.Exec(b, fmt.Sprintf(
+			"INSERT INTO rtable SELECT i, i FROM generate_series(0,%d) AS g(i)", rightRows-1,
+		))
+		r.Exec(b, `ALTER TABLE rtable INJECT STATISTICS '[
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 4000
+  }
+]'
+;`)
+		r.Exec(b, `ALTER TABLE ltable INJECT STATISTICS '[
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 1000
+  }
+]'
+;`)
+
+	}
+
+	b.Run("LeftSemiJoin", func(b *testing.B) {
+			s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+			defer s.Stopper().Stop(context.Background())
+			r := sqlutils.MakeSQLRunner(db)
+			// Don't let auto stats interfere with the test. Stock stats are
+			// sufficient to get the right plans (i.e. lookup join).
+			r.Exec(b, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+			setup(b, r)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for j := 0; j < 100; j++ {
+					r.Exec(b, fmt.Sprintf(`SELECT * FROM ltable WHERE EXISTS (SELECT 1 FROM rtable WHERE rtable.v = ltable.v + %d)`, j))
+				}
+			}
+		})
 }
 
 // BenchmarkJoinReader benchmarks different lookup join match ratios against a
