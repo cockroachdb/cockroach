@@ -65,7 +65,6 @@ func randTables(r *rand.Rand) string {
 		SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 		SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;
 		SET experimental_enable_enums = true;
-		SET experimental_partial_indexes = true;
 	`)
 
 	// Create the random tables.

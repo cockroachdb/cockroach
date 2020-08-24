@@ -6185,7 +6185,6 @@ func TestPartialIndexBackfill(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
-SET experimental_partial_indexes=on;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, a INT, b INT);
 INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3), (4, 4, 4);
