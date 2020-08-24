@@ -69,6 +69,9 @@ func (c *vecToDatumConverter) convertBatchAndDeselect(batch coldata.Batch) {
 		return
 	}
 	batchLength := batch.Length()
+	if batchLength == 0 {
+		return
+	}
 	// Ensure that convertedVecs are of sufficient length.
 	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < batchLength {
 		for _, vecIdx := range c.vecIdxsToConvert {
@@ -108,17 +111,18 @@ func (c *vecToDatumConverter) convertBatch(batch coldata.Batch) {
 // being the fact that it takes in a "disassembled" batch and not coldata.Batch.
 // Consider whether you should be using convertBatch instead.
 func (c *vecToDatumConverter) convertVecs(vecs []coldata.Vec, inputLen int, sel []int) {
-	if len(c.vecIdxsToConvert) == 0 {
-		// No vectors were selected for conversion, so there is nothing to do.
+	if len(c.vecIdxsToConvert) == 0 || inputLen == 0 {
+		// No vectors were selected for conversion or there are no tuples to
+		// convert, so there is nothing to do.
 		return
 	}
 	// Ensure that convertedVecs are of sufficient length.
 	requiredLength := inputLen
 	if sel != nil {
 		// When sel is non-nil, it might be something like sel = [1023], so we
-		// need to allocate up to the full coldata.BatchSize(), regardless of
-		// the length of the batch.
-		requiredLength = coldata.BatchSize()
+		// need to allocate up to the largest index mentioned in sel. Here, we
+		// rely on the fact that selection vectors are increasing sequences.
+		requiredLength = sel[inputLen-1] + 1
 	}
 	if cap(c.convertedVecs[c.vecIdxsToConvert[0]]) < requiredLength {
 		for _, vecIdx := range c.vecIdxsToConvert {

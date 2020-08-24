@@ -12,9 +12,11 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -48,6 +50,16 @@ func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
 		v := b.ColVec(colIdx)
 		if v.CanonicalTypeFamily() == types.BytesFamily {
 			v.Bytes().AssertOffsetsAreNonDecreasing(n)
+		}
+	}
+	if sel := b.Selection(); sel != nil {
+		for i := 1; i < n; i++ {
+			if sel[i] <= sel[i-1] {
+				colexecerror.InternalError(fmt.Sprintf(
+					"unexpectedly selection vector is not an increasing sequence "+
+						"at position %d: %v", i, sel[:n],
+				))
+			}
 		}
 	}
 	return b

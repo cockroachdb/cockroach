@@ -86,7 +86,9 @@ func BatchSize() int {
 }
 
 // MaxBatchSize is the maximum acceptable size of batches.
-const MaxBatchSize = 4096
+// Note: if the factor of 4 is ever changed to be less than 4, then
+// colexec.hashAggregatorMaxBuffered needs to be adjusted accordingly.
+const MaxBatchSize = 4 * defaultBatchSize
 
 // SetBatchSizeForTests modifies batchSize variable. It should only be used in
 // tests. batch sizes greater than MaxBatchSize will return an error.
