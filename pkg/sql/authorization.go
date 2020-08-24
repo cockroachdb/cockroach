@@ -510,6 +510,23 @@ func (p *planner) canCreateOnSchema(ctx context.Context, schemaID descpb.ID, use
 	}
 }
 
+func (p *planner) canResolveUnderSchema(ctx context.Context, schemaID descpb.ID) error {
+	resolvedSchema, err := p.Descriptors().ResolveSchemaByID(ctx, p.Txn(), schemaID)
+	if err != nil {
+		return err
+	}
+
+	switch resolvedSchema.Kind {
+	case catalog.SchemaPublic, catalog.SchemaTemporary, catalog.SchemaVirtual:
+		// Anyone can resolve under temporary, public or virtual schemas.
+		return nil
+	case catalog.SchemaUserDefined:
+		return p.CheckPrivilegeForUser(ctx, resolvedSchema.Desc, privilege.USAGE, p.User())
+	default:
+		panic(errors.AssertionFailedf("unknown schema kind %d", resolvedSchema.Kind))
+	}
+}
+
 // checkCanAlterToNewOwner checks if the new owner exists, the current user
 // has privileges to alter the owner of the object and the current user is a
 //  member of the new owner role.

@@ -207,6 +207,12 @@ func (oc *optCatalog) ResolveDataSource(
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
+
+	// Ensure that the current user can access the target schema.
+	if err := oc.planner.canResolveUnderSchema(ctx, desc.GetParentSchemaID()); err != nil {
+		return nil, cat.DataSourceName{}, err
+	}
+
 	ds, err := oc.dataSourceForDesc(ctx, flags, desc, &oc.tn)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
