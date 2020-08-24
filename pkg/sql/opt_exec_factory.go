@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,10 +49,21 @@ type execFactory struct {
 
 var _ exec.Factory = &execFactory{}
 
+var execFactoryPool = sync.Pool{
+	New: func() interface{} {
+		return &execFactory{}
+	},
+}
+
 func newExecFactory(p *planner) *execFactory {
-	return &execFactory{
-		planner: p,
-	}
+	ef := execFactoryPool.Get().(*execFactory)
+	ef.planner = p
+	return ef
+}
+
+func (ef *execFactory) Release() {
+	*ef = execFactory{}
+	execFactoryPool.Put(ef)
 }
 
 // ConstructValues is part of the exec.Factory interface.

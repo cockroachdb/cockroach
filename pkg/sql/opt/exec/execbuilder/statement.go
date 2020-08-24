@@ -123,6 +123,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 			func(ef exec.ExplainFactory) (exec.Plan, error) {
 				// Create a separate builder for the explain query.
 				explainBld := New(ef, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
+				defer explainBld.Release()
 				explainBld.disableTelemetry = true
 				return explainBld.Build()
 			},
@@ -135,6 +136,7 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 
 	// Create a separate builder for the explain query.
 	explainBld := New(b.factory, b.mem, b.catalog, explain.Input, b.evalCtx, b.initialAllowAutoCommit)
+	defer explainBld.Release()
 	explainBld.disableTelemetry = true
 	plan, err := explainBld.Build()
 	if err != nil {

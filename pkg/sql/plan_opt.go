@@ -198,9 +198,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	}
 
 	// Build the plan tree.
-	// TODO(yuzefovich): we're creating a new exec.Factory for every query, but
-	// we probably could pool those allocations using sync.Pool. Investigate
-	// this.
 	if mode := p.SessionData().ExperimentalDistSQLPlanningMode; mode != sessiondata.ExperimentalDistSQLPlanningOff {
 		planningMode := distSQLDefaultPlanning
 		// If this transaction has modified or created any types, it is not safe to
@@ -265,10 +262,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		)
 	}
 	// If we got here, we did not create a plan above.
+	ef := newExecFactory(p)
+	defer ef.Release()
 	return opc.runExecBuilder(
 		&p.curPlan,
 		p.stmt,
-		newExecFactory(p),
+		ef,
 		execMemo,
 		p.EvalContext(),
 		p.ExecCfg().Codec,
@@ -551,9 +550,6 @@ func (opc *optPlanningCtx) runExecBuilder(
 ) error {
 	var result *planComponents
 	var explainPlan *explain.Plan
-	var isDDL bool
-	var containsFullTableScan bool
-	var containsFullIndexScan bool
 	if planTop.appStats != nil {
 		// We do not set this flag upfront when initializing planTop because the
 		// planning process could in principle modify the AST, resulting in a
@@ -563,31 +559,27 @@ func (opc *optPlanningCtx) runExecBuilder(
 			allowAutoCommit,
 		)
 	}
+	var bld *execbuilder.Builder
 	if !planTop.savePlanString && !planTop.savePlanForStats {
 		// No instrumentation.
-		bld := execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld = execbuilder.New(f, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
 		}
 		result = plan.(*planComponents)
-		isDDL = bld.IsDDL
-		containsFullTableScan = bld.ContainsFullTableScan
-		containsFullIndexScan = bld.ContainsFullIndexScan
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
-		bld := execbuilder.New(explainFactory, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld = execbuilder.New(explainFactory, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
 		}
 		explainPlan = plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
-		isDDL = bld.IsDDL
-		containsFullTableScan = bld.ContainsFullTableScan
-		containsFullIndexScan = bld.ContainsFullIndexScan
 	}
+	defer bld.Release()
 
 	if stmt.ExpectedTypes != nil {
 		cols := result.main.planColumns()
@@ -603,13 +595,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.codec = codec
 	planTop.stmt = stmt
 	planTop.flags = opc.flags
-	if isDDL {
+	if bld.IsDDL {
 		planTop.flags.Set(planFlagIsDDL)
 	}
-	if containsFullTableScan {
+	if bld.ContainsFullTableScan {
 		planTop.flags.Set(planFlagContainsFullTableScan)
 	}
-	if containsFullIndexScan {
+	if bld.ContainsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
 	}
 	return nil

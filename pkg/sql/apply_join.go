@@ -200,7 +200,9 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		// the right side of the join using the optimizer, with all outer columns
 		// in the right side replaced by the bindings that were defined by the most
 		// recently read left row.
-		p, err := a.planRightSideFn(newExecFactory(params.p), leftRow)
+		ef := newExecFactory(params.p)
+		defer ef.Release()
+		p, err := a.planRightSideFn(ef, leftRow)
 		if err != nil {
 			return false, err
 		}

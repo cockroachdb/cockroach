@@ -258,6 +258,7 @@ func (cb *cascadeBuilder) planCascade(
 
 	// 4. Execbuild the optimized expression.
 	eb := New(execFactory, factory.Memo(), cb.b.catalog, optimizedExpr, evalCtx, allowAutoCommit)
+	defer eb.Release()
 	// Set up the With binding.
 	eb.addBuiltWithExpr(cascadeInputWithID, bufferColMap, bufferRef)
 	plan, err := eb.Build()

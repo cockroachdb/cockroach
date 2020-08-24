@@ -11,6 +11,8 @@
 package execbuilder
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -112,7 +114,8 @@ func New(
 	evalCtx *tree.EvalContext,
 	allowAutoCommit bool,
 ) *Builder {
-	b := &Builder{
+	b := builderPool.Get().(*Builder)
+	*b = Builder{
 		factory:                factory,
 		mem:                    mem,
 		catalog:                catalog,
@@ -218,4 +221,15 @@ func (b *Builder) findBuiltWithExpr(id opt.WithID) *builtWithExpr {
 		}
 	}
 	return nil
+}
+
+func (b *Builder) Release() {
+	*b = Builder{}
+	builderPool.Put(b)
+}
+
+var builderPool = sync.Pool{
+	New: func() interface{} {
+		return &Builder{}
+	},
 }

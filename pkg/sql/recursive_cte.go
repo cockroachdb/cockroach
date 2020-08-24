@@ -114,7 +114,9 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		bufferedRows: lastWorkingRows,
 		label:        n.label,
 	}
-	newPlan, err := n.genIterationFn(newExecFactory(params.p), buf)
+	ef := newExecFactory(params.p)
+	defer ef.Release()
+	newPlan, err := n.genIterationFn(ef, buf)
 	if err != nil {
 		return false, err
 	}

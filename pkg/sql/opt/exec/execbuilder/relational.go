@@ -758,6 +758,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 		}
 
 		eb := New(ef, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		defer eb.Release()
 		eb.disableTelemetry = true
 		plan, err := eb.Build()
 		if err != nil {

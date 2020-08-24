@@ -64,6 +64,7 @@ const (
 	distSQLLocalOnlyPlanning
 )
 
+// TODO(yuzefovich): pool allocations of distSQLSpecExecFactories.
 func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exec.Factory {
 	return &distSQLSpecExecFactory{
 		planner:       p,

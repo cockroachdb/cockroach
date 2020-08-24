@@ -1043,6 +1043,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 		evalCtx := evalCtxFactory()
 		execFactory := newExecFactory(planner)
+		defer execFactory.Release()
 		// The cascading query is allowed to autocommit only if it is the last
 		// cascade and there are no check queries to run.
 		allowAutoCommit := planner.autoCommit
