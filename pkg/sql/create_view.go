@@ -43,7 +43,7 @@ type createViewNode struct {
 	replace      bool
 	persistence  tree.Persistence
 	materialized bool
-	dbDesc       *dbdesc.ImmutableDatabaseDescriptor
+	dbDesc       *dbdesc.Immutable
 	columns      colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created

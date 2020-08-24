@@ -32,7 +32,7 @@ import (
 
 type renameDatabaseNode struct {
 	n       *tree.RenameDatabase
-	dbDesc  *dbdesc.MutableDatabaseDescriptor
+	dbDesc  *dbdesc.Mutable
 	newName string
 }
 

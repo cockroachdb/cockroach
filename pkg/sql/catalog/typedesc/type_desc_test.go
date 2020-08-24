@@ -213,7 +213,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	ctx := context.Background()
 
 	descs := catalog.MapDescGetter{}
-	descs[100] = dbdesc.NewImmutableDatabaseDescriptor(descpb.DatabaseDescriptor{
+	descs[100] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
 	})
