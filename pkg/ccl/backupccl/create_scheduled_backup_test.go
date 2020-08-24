@@ -561,7 +561,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 			latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", tc.name, latestFileName))
 			require.NoError(t, err)
 			backedUp := th.sqlDB.QueryStr(t,
-				`SELECT database_name, table_name FROM [SHOW BACKUP $1] ORDER BY database_name, table_name`,
+				`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,
 				fmt.Sprintf("%s/%s", destination, string(latest)))
 			require.Equal(t, tc.verifyTables, backedUp)
 		})
