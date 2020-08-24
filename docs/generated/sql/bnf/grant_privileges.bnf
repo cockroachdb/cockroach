@@ -3,3 +3,4 @@ grant_stmt ::=
 	
 	 
 	| 'GRANT' ( 'ALL' | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' 'TYPE' target_types 'TO' ( ( user_name ) ( ( ',' user_name ) )* )
+	| 'GRANT' ( 'ALL' | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' 'SCHEMA' schema_name_list 'TO' ( ( user_name ) ( ( ',' user_name ) )* )

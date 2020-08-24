@@ -282,6 +282,11 @@ func getTableCreateParams(
 		)
 	}
 
+	// Check permissions on the schema.
+	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+		return nil, 0, err
+	}
+
 	exists, id, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
 	if err == nil && exists {

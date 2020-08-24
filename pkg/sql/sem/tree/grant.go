@@ -37,6 +37,7 @@ type Grant struct {
 // Only one field may be non-nil.
 type TargetList struct {
 	Databases NameList
+	Schemas   []string
 	Tables    TablePatterns
 	Tenant    roachpb.TenantID
 	Types     []*UnresolvedObjectName
@@ -53,6 +54,14 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
+	} else if tl.Schemas != nil {
+		ctx.WriteString("SCHEMA ")
+		for i := range tl.Schemas {
+			if i != 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNameP(&tl.Schemas[i])
+		}
 	} else if tl.Tenant != (roachpb.TenantID{}) {
 		ctx.WriteString(fmt.Sprintf("TENANT %d", tl.Tenant.ToUint64()))
 	} else if tl.Types != nil {

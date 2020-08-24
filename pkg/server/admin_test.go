@@ -380,7 +380,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if a, e := len(details.Grants), 4; a != e {
+			if a, e := len(details.Grants), 2; a != e {
 				t.Fatalf("# of grants %d != expected %d", a, e)
 			}
 

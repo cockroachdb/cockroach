@@ -15,7 +15,7 @@ ALTER SCHEMA s OWNER TO testuser
 user testuser
 
 # Ensure the user has to be an owner to alter the owner.
-statement error pq: must be owner of schema s
+statement error pq: must be owner of schema "s"
 ALTER SCHEMA s OWNER TO testuser
 
 user root
