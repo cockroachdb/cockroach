@@ -60,7 +60,7 @@ type ColBatchScan struct {
 	ResultTypes []*types.T
 }
 
-var _ colexecbase.Operator = &ColBatchScan{}
+var _ colexecbase.IOReadingOperator = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
@@ -112,10 +112,15 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	}
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.BytesRead = s.rf.fetcher.GetBytesRead()
+	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = int64(s.rowsRead)
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
+}
+
+// GetBytesRead returns the number of bytes read from disk by ColBatchScan.
+func (s *ColBatchScan) GetBytesRead() int64 {
+	return s.rf.fetcher.GetBytesRead()
 }
 
 // NewColBatchScan creates a new ColBatchScan operator.

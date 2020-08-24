@@ -628,6 +628,7 @@ func NewColOperator(
 				return r, err
 			}
 			result.Op, result.IsStreaming = scanOp, true
+			result.IOReadingOp = scanOp
 			result.MetadataSources = append(result.MetadataSources, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need to
 			// log its creation separately.

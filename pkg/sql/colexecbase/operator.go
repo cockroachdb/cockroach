@@ -54,6 +54,13 @@ type DrainableOperator interface {
 	execinfrapb.MetadataSource
 }
 
+// IOReadingOperator is an operator that performs IO reads.
+type IOReadingOperator interface {
+	Operator
+	// GetBytesRead returns the number of bytes read from disk by this operator.
+	GetBytesRead() int64
+}
+
 // ZeroInputNode is an execinfra.OpNode with no inputs.
 type ZeroInputNode struct{}
 

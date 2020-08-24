@@ -75,6 +75,7 @@ type NewColOperatorArgs struct {
 // values of NewColOperator call.
 type NewColOperatorResult struct {
 	Op               colexecbase.Operator
+	IOReadingOp      colexecbase.IOReadingOperator
 	ColumnTypes      []*types.T
 	InternalMemUsage int
 	MetadataSources  []execinfrapb.MetadataSource

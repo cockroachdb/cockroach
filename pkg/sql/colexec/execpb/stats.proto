@@ -30,4 +30,7 @@ message VectorizedStats {
   bool io = 5 [(gogoproto.customname) = "IO"];
   int64 max_allocated_mem = 6;
   int64 max_allocated_disk = 7;
+  // bytes_read is the number of bytes read from the disk. It is set only when
+  // io is true.
+  int64 bytes_read = 8;
 }

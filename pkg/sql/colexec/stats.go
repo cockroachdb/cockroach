@@ -35,6 +35,8 @@ type VectorizedStatsCollector struct {
 	execpb.VectorizedStats
 	idTagKey string
 
+	ioReadingOp colexecbase.IOReadingOperator
+
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
 	// inputs spent doing work - this will be corrected when stats are reported
@@ -57,9 +59,9 @@ var _ colexecbase.Operator = &VectorizedStatsCollector{}
 // indicates whether IO time is being measured.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
+	ioReadingOp colexecbase.IOReadingOperator,
 	id int32,
 	idTagKey string,
-	ioTime bool,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -70,8 +72,9 @@ func NewVectorizedStatsCollector(
 	}
 	return &VectorizedStatsCollector{
 		Operator:             op,
-		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
+		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioReadingOp != nil},
 		idTagKey:             idTagKey,
+		ioReadingOp:          ioReadingOp,
 		stopwatch:            inputWatch,
 		memMonitors:          memMonitors,
 		diskMonitors:         diskMonitors,
@@ -108,6 +111,9 @@ func (vsc *VectorizedStatsCollector) finalizeStats() {
 	for _, diskMon := range vsc.diskMonitors {
 		vsc.MaxAllocatedDisk += diskMon.MaximumBytes()
 	}
+	if vsc.IO {
+		vsc.BytesRead = vsc.ioReadingOp.GetBytesRead()
+	}
 }
 
 // OutputStats outputs the vectorized stats collected by vsc into ctx.
@@ -132,6 +138,7 @@ func (vsc *VectorizedStatsCollector) OutputStats(
 		vsc.MaxAllocatedMem = 0
 		vsc.MaxAllocatedDisk = 0
 		vsc.NumBatches = 0
+		vsc.BytesRead = 0
 	}
 	tracing.SetSpanStats(span, &vsc.VectorizedStats)
 	span.Finish()
