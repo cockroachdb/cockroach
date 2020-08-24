@@ -434,8 +434,8 @@ func (g *lockTableGuardImpl) isSameTxnAsReservation(ws waitingState) bool {
 // told that it is done waiting.
 // Acquires g.mu.
 func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
-	spans := g.spans.GetSpans(g.sa, g.ss)
-	var span *spanset.Span
+	spans := g.spans.Get(spanset.TransactionIsolation, g.sa, g.ss)
+	var span *roachpb.Span
 	resumingInSameSpan := false
 	if g.index == -1 || len(spans[g.index].EndKey) == 0 {
 		span = stepToNextSpan(g)
@@ -1780,7 +1780,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 		g = newLockTableGuardImpl()
 		g.seqNum = atomic.AddUint64(&t.seqNum, 1)
 		g.txn = req.txnMeta()
-		g.spans = req.LockSpans
+		g.spans = req.LatchSpans
 		g.readTS = req.readConflictTimestamp()
 		g.writeTS = req.writeConflictTimestamp()
 		g.sa = spanset.NumSpanAccess - 1
@@ -1798,7 +1798,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) lockTa
 	}
 	for ss := spanset.SpanScope(0); ss < spanset.NumSpanScope; ss++ {
 		for sa := spanset.SpanAccess(0); sa < spanset.NumSpanAccess; sa++ {
-			if len(g.spans.GetSpans(sa, ss)) > 0 {
+			if len(g.spans.Get(spanset.TransactionIsolation, sa, ss)) > 0 {
 				// Since the spans are constant for a request, every call to
 				// ScanAndEnqueue for that request will execute the following code
 				// for the same SpanScope(s). Any SpanScope for which this code does
@@ -2001,7 +2001,7 @@ func findAccessInSpans(
 		ss = spanset.SpanLocal
 	}
 	for sa := spanset.NumSpanAccess - 1; sa >= 0; sa-- {
-		s := spans.GetSpans(sa, ss)
+		s := spans.Get(spanset.TransactionIsolation, sa, ss)
 		// First span that starts after key
 		i := sort.Search(len(s), func(i int) bool {
 			return key.Compare(s[i].Key) < 0
@@ -2085,11 +2085,11 @@ func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
 // Iteration helper for findNextLockAfter. Returns the next span to search
 // over, or nil if the iteration is done.
 // REQUIRES: g.mu is locked.
-func stepToNextSpan(g *lockTableGuardImpl) *spanset.Span {
+func stepToNextSpan(g *lockTableGuardImpl) *roachpb.Span {
 	g.index++
 	for ; g.ss < spanset.NumSpanScope; g.ss++ {
 		for ; g.sa >= 0; g.sa-- {
-			spans := g.spans.GetSpans(g.sa, g.ss)
+			spans := g.spans.Get(spanset.TransactionIsolation, g.sa, g.ss)
 			if g.index < len(spans) {
 				span := &spans[g.index]
 				g.key = span.Key

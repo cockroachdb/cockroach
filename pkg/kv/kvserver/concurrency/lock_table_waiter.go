@@ -402,7 +402,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 func (w *lockTableWaiterImpl) WaitOnLock(
 	ctx context.Context, req Request, intent *roachpb.Intent,
 ) *Error {
-	sa, _, err := findAccessInSpans(intent.Key, req.LockSpans)
+	sa, _, err := findAccessInSpans(intent.Key, req.LatchSpans)
 	if err != nil {
 		return roachpb.NewError(err)
 	}

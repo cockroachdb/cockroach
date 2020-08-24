@@ -162,7 +162,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				for i, req := range reqs {
 					reqUnions[i].MustSetInner(req)
 				}
-				latchSpans, lockSpans := c.collectSpans(t, txn, ts, reqs)
+				latchSpans := c.collectSpans(t, txn, ts, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
 					Txn:       txn,
@@ -172,7 +172,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					WaitPolicy:      waitPolicy,
 					Requests:        reqUnions,
 					LatchSpans:      latchSpans,
-					LockSpans:       lockSpans,
+					// LockSpans:       lockSpans,
 				}
 				return ""
 
@@ -800,12 +800,12 @@ func (c *cluster) resetNamespace() {
 // Its logic mirrors that in Replica.collectSpans.
 func (c *cluster) collectSpans(
 	t *testing.T, txn *roachpb.Transaction, ts hlc.Timestamp, reqs []roachpb.Request,
-) (latchSpans, lockSpans *spanset.SpanSet) {
-	latchSpans, lockSpans = &spanset.SpanSet{}, &spanset.SpanSet{}
+) (latchSpans *spanset.SpanSet) {
+	latchSpans = &spanset.SpanSet{}
 	h := roachpb.Header{Txn: txn, Timestamp: ts}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, h, req, latchSpans, lockSpans)
+			cmd.DeclareKeys(c.rangeDesc, h, req, latchSpans, nil)
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}
@@ -813,13 +813,11 @@ func (c *cluster) collectSpans(
 
 	// Commands may create a large number of duplicate spans. De-duplicate
 	// them to reduce the number of spans we pass to the spanlatch manager.
-	for _, s := range [...]*spanset.SpanSet{latchSpans, lockSpans} {
-		s.SortAndDedup()
-		if err := s.Validate(); err != nil {
-			t.Fatal(err)
-		}
+	latchSpans.SortAndDedup()
+	if err := latchSpans.Validate(); err != nil {
+		t.Fatal(err)
 	}
-	return latchSpans, lockSpans
+	return latchSpans
 }
 
 func (c *cluster) waitAndCollect(t *testing.T, m *monitor) string {
