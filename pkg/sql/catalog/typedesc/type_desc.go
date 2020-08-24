@@ -37,9 +37,9 @@ var _ catalog.TypeDescriptor = (*Immutable)(nil)
 var _ catalog.TypeDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// MakeSimpleAliasTypeDescriptor creates a type descriptor that is an alias
-// for the input type. It is intended to be used as an intermediate for name
-// resolution, and should not be serialized and stored on disk.
+// MakeSimpleAlias creates a type descriptor that is an alias for the input
+// type. It is intended to be used as an intermediate for name resolution, and
+// should not be serialized and stored on disk.
 func MakeSimpleAlias(typ *types.T) *Immutable {
 	return NewImmutable(descpb.TypeDescriptor{
 		ParentID:       descpb.InvalidID,
