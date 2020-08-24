@@ -4,7 +4,6 @@ go_library(
     name = "kvbase",
     srcs = [
         "constants.go",
-        "range_cache.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvbase",
     visibility = ["//visibility:public"],

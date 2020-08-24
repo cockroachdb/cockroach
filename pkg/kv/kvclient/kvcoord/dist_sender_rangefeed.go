@@ -16,6 +16,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -31,7 +32,7 @@ import (
 type singleRangeInfo struct {
 	rs    roachpb.RSpan
 	ts    hlc.Timestamp
-	token EvictionToken
+	token rangecache.EvictionToken
 }
 
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
@@ -135,10 +136,10 @@ func (ds *DistSender) partialRangeFeed(
 		// If we've cleared the descriptor on a send failure, re-lookup.
 		if !rangeInfo.token.Valid() {
 			var err error
-			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, EvictionToken{}, false)
+			ri, err := ds.getRoutingInfo(ctx, rangeInfo.rs.Key, rangecache.EvictionToken{}, false)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
-				if !isRangeLookupErrorRetryable(err) {
+				if !rangecache.IsRangeLookupErrorRetryable(err) {
 					return err
 				}
 				continue
@@ -166,7 +167,7 @@ func (ds *DistSender) partialRangeFeed(
 			case errors.HasType(err, (*sendError)(nil)), errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)):
 				// Evict the descriptor from the cache and reload on next attempt.
 				rangeInfo.token.Evict(ctx)
-				rangeInfo.token = EvictionToken{}
+				rangeInfo.token = rangecache.EvictionToken{}
 				continue
 			case errors.HasType(err, (*roachpb.RangeKeyMismatchError)(nil)):
 				// Evict the descriptor from the cache.
