@@ -1491,7 +1491,7 @@ func (s *adminServer) Locations(
 ) (*serverpb.LocationsResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 
-	userName, err := userFromContext(ctx)
+	_, err := userFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1500,7 +1500,7 @@ func (s *adminServer) Locations(
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
 	rows, cols, err := s.server.sqlServer.internalExecutor.QueryWithCols(
 		ctx, "admin-locations", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: userName},
+		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		q.String(),
 	)
 	if err != nil {
