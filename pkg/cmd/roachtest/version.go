@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 )
@@ -25,13 +26,13 @@ import (
 // TODO(tbg): remove this test. Use the harness in versionupgrade.go
 // to make a much better one, much more easily.
 func registerVersion(r *testRegistry) {
-	runVersion := func(ctx context.Context, t *test, c *cluster, version string) {
+	runVersion := func(ctx context.Context, t *test, c *cluster, binaryVersion string) {
 		nodes := c.spec.NodeCount - 1
 		goos := ifLocal(runtime.GOOS, "linux")
 
 		b, err := binfetcher.Download(ctx, binfetcher.Options{
 			Binary:  "cockroach",
-			Version: "v" + version,
+			Version: "v" + binaryVersion,
 			GOOS:    goos,
 			GOARCH:  "amd64",
 		})
@@ -56,8 +57,13 @@ func registerVersion(r *testRegistry) {
 
 		loadDuration := " --duration=" + (time.Duration(3*nodes+2)*stageDuration + buffer).String()
 
+		var deprecatedWorkloadsStr string
+		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+			deprecatedWorkloadsStr += " --deprecated-fk-indexes"
+		}
+
 		workloads := []string{
-			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
+			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + deprecatedWorkloadsStr + loadDuration + " {pgurl:1-%d}",
 			"./workload run kv --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
 		}
 
@@ -101,7 +107,7 @@ func registerVersion(r *testRegistry) {
 					// checks had been broken for a long time. See:
 					//
 					// https://github.com/cockroachdb/cockroach/issues/37737#issuecomment-496026918
-					if !strings.HasPrefix(version, "2.") {
+					if !strings.HasPrefix(binaryVersion, "2.") {
 						if err := c.CheckReplicaDivergenceOnDB(ctx, db); err != nil {
 							return errors.Wrapf(err, "node %d", i)
 						}

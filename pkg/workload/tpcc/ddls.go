@@ -90,8 +90,10 @@ const (
 		h_date   timestamp,
 		h_amount decimal(6,2),
 		h_data   varchar(24),
-		primary key (h_w_id, rowid)
-  )`
+		primary key (h_w_id, rowid)`
+	deprecatedTpccHistorySchemaFkSuffix = `
+		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
+		index history_district_fk_idx (h_w_id, h_d_id)`
 
 	// ORDER table.
 	tpccOrderSchemaBase = `(
@@ -169,8 +171,9 @@ const (
 		ol_quantity     integer,
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
-		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)
-  )`
+		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
+	deprecatedTpccOrderLineSchemaFkSuffix = `
+		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 	tpccOrderLineSchemaInterleaveSuffix = `
 		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
