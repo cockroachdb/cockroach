@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
@@ -1649,7 +1650,7 @@ func (s *Store) startGossip() {
 	gossipFns := []struct {
 		key         roachpb.Key
 		fn          func(context.Context, *Replica) error
-		description string
+		description redact.SafeString
 		interval    time.Duration
 	}{
 		{
