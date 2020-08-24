@@ -20,8 +20,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -37,11 +39,8 @@ type renameDatabaseNode struct {
 }
 
 // RenameDatabase renames the database.
-// Privileges: Ownership or superuser + DROP on source database.
-//   Notes: postgres requires superuser, db owner, or "CREATEDB".
-//          Postgres requires non-superuser owners to have
-//          CREATEDB privilege to rename a DB.
-//          mysql >= 5.1.23 does not allow database renames.
+// Privileges: superuser + DROP or ownership + CREATEDB privileges
+//   Notes: mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
@@ -56,20 +55,34 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	hasOwnership, err := p.HasOwnership(ctx, dbDesc)
+	hasAdmin, err := p.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the user is not the db owner, they must have admin privilege and have
-	// drop privilege on the db.
-	if !hasOwnership {
-		if err := p.RequireAdminRole(ctx, "ALTER DATABASE ... RENAME"); err != nil {
-			return nil, err
-		}
-
+	if hasAdmin {
+		// The user must have DROP privileges on the database. This prevents a
+		// superuser from renaming, e.g., the system database.
 		if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
 			return nil, err
+		}
+	} else {
+		// Non-superusers must be the owner and have the CREATEDB privilege.
+		hasOwnership, err := p.HasOwnership(ctx, dbDesc)
+		if err != nil {
+			return nil, err
+		}
+		if !hasOwnership {
+			return nil, pgerror.Newf(
+				pgcode.InsufficientPrivilege, "must be owner of database %s", n.Name)
+		}
+		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)
+		if err != nil {
+			return nil, err
+		}
+		if !hasCreateDB {
+			return nil, pgerror.New(
+				pgcode.InsufficientPrivilege, "permission denied to rename database")
 		}
 	}
 

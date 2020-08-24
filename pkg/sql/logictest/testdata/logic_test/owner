@@ -81,17 +81,12 @@ DROP SEQUENCE s
 user root
 
 statement ok
-GRANT admin TO testuser
+ALTER USER testuser CREATEDB
 
 user testuser
 
 statement ok
 CREATE DATABASE d
-
-user root
-
-statement ok
-REVOKE admin FROM testuser
 
 user testuser
 
