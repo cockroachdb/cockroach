@@ -1358,6 +1358,35 @@ func (s *Server) Start(ctx context.Context) error {
 		s.rpcContext.NodeID.Set(ctx, state.nodeID)
 	}
 
+	// TODO(irfansharif): Now that we have our node ID, we should run another
+	// check here to make sure we've not been decommissioned away (if we're here
+	// following a server restart). See the discussions in #48843 for how that
+	// could be done, and what's motivating it.
+	//
+	// In summary: We'd consult our local store keys to see if they contain a
+	// kill file informing us we've been decommissioned away (the
+	// decommissioning process, that prefers to decommission live targets, will
+	// inform the target node to persist such a file).
+	//
+	// Short of that, if we were decommissioned in absentia, we'd attempt to
+	// reach out to already connected nodes in our join list to see if they have
+	// any knowledge of our node ID being decommissioned. This is something the
+	// decommissioning node will broadcast (best-effort) to cluster if the
+	// target node is unavailable, and is only done with the operator guarantee
+	// that this node is indeed never coming back. If we learn that we're not
+	// decommissioned, we'll solicit the decommissioned list from the already
+	// connected node to be able to respond to inbound decomm check requests.
+	//
+	// As for the problem of the ever growing list of decommissioned node IDs
+	// being maintained on each node, given that we're populating+broadcasting
+	// this list in best effort fashion (like said above, we're relying on the
+	// operator to guarantee that the target node is never coming back), perhaps
+	// it's also fine for us to age out the node ID list we maintain if it gets
+	// too large. Though even maintaining a max of 64 MB of decommissioned node
+	// IDs would likely outlive us all
+	//
+	//   536,870,912 bits/64 bits = 8,388,608 decommissioned node IDs.
+
 	// TODO(tbg): split this method here. Everything above this comment is
 	// the early stage of startup -- setting up listeners and determining the
 	// initState -- and everything after it is actually starting the server,
