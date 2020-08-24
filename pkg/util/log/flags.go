@@ -14,6 +14,7 @@ import (
 	"context"
 	"flag"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/errors"
 )
@@ -152,7 +153,9 @@ func SetupRedactionAndStderrRedirects() (cleanupForTestingOnly func(), err error
 	// log entries on stderr, that's a configuration we cannot support
 	// safely. Reject it.
 	if redactableLogsRequested && mainLog.stderrThreshold.get() != Severity_NONE {
-		return nil, errors.New("cannot enable redactable logging without a logging directory")
+		return nil, errors.WithHintf(
+			errors.New("cannot enable redactable logging without a logging directory"),
+			"You can pass --%s to set up a logging directory explicitly.", cliflags.LogDir.Name)
 	}
 
 	// Configuration valid. Assign it.

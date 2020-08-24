@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -75,20 +74,12 @@ func (c *transientCluster) checkConfigAndSetupLogging(
 		}
 	}
 
-	// Set up logging. For demo/transient server we use non-standard
-	// behavior where we avoid file creation if possible.
-	fl := flagSetForCmd(cmd)
-	df := fl.Lookup(cliflags.LogDir.Name)
-	sf := fl.Lookup(logflags.LogToStderrName)
-	if !df.Changed && !sf.Changed {
-		// User did not request logging flags; shut down all logging.
-		// Otherwise, the demo command would cause a cockroach-data
-		// directory to appear in the current directory just for logs.
-		_ = df.Value.Set("")
-		df.Changed = true
-		_ = sf.Value.Set(log.Severity_NONE.String())
-		sf.Changed = true
-	}
+	// Override the default server store spec.
+	//
+	// This is needed because the logging setup code peeks into this to
+	// decide how to enable logging.
+	serverCfg.Stores.Specs = nil
+
 	c.stopper, err = setupAndInitializeLoggingAndProfiling(ctx, cmd)
 	if err != nil {
 		return err
