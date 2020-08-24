@@ -345,7 +345,7 @@ func (g *Geometry) Compare(o *Geometry) int {
 	if lhs < rhs {
 		return -1
 	}
-	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+	return compareSpatialObjectBytes(g.SpatialObjectRef(), o.SpatialObjectRef())
 }
 
 //
@@ -589,7 +589,7 @@ func (g *Geography) Compare(o *Geography) int {
 	if lhs < rhs {
 		return -1
 	}
-	return compareSpatialObjectBytes(g.SpatialObject(), o.SpatialObject())
+	return compareSpatialObjectBytes(g.SpatialObjectRef(), o.SpatialObjectRef())
 }
 
 //
@@ -895,12 +895,12 @@ func GeomTContainsEmpty(g geom.T) bool {
 // compareSpatialObjectBytes compares the SpatialObject if they were serialized.
 // This is used for comparison operations, and must be kept consistent with the indexing
 // encoding.
-func compareSpatialObjectBytes(lhs geopb.SpatialObject, rhs geopb.SpatialObject) int {
-	marshalledLHS, err := protoutil.Marshal(&lhs)
+func compareSpatialObjectBytes(lhs *geopb.SpatialObject, rhs *geopb.SpatialObject) int {
+	marshalledLHS, err := protoutil.Marshal(lhs)
 	if err != nil {
 		panic(err)
 	}
-	marshalledRHS, err := protoutil.Marshal(&rhs)
+	marshalledRHS, err := protoutil.Marshal(rhs)
 	if err != nil {
 		panic(err)
 	}
