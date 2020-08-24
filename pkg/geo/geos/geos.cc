@@ -131,6 +131,8 @@ typedef void (*CR_GEOS_WKBWriter_setIncludeSRID_r)(CR_GEOS_Handle, CR_GEOS_WKBWr
 typedef CR_GEOS_Geometry (*CR_GEOS_ClipByRect_r)(CR_GEOS_Handle, CR_GEOS_Geometry, double, double,
                                                  double, double);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_SharedPaths_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 const char* dlopenFailError = "failed to execute dlopen";
@@ -213,6 +215,8 @@ struct CR_GEOS {
 
   CR_GEOS_ClipByRect_r GEOSClipByRect_r;
 
+  CR_GEOS_SharedPaths_r GEOSSharedPaths_r;
+
   CR_GEOS(dlhandle geoscHandle, dlhandle geosHandle)
       : geoscHandle(geoscHandle), geosHandle(geosHandle) {}
 
@@ -278,6 +282,7 @@ struct CR_GEOS {
     INIT(GEOSWithin_r);
     INIT(GEOSRelate_r);
     INIT(GEOSRelatePattern_r);
+    INIT(GEOSSharedPaths_r);
     INIT(GEOSWKTReader_create_r);
     INIT(GEOSWKTReader_destroy_r);
     INIT(GEOSWKTReader_read_r);
@@ -947,6 +952,33 @@ CR_GEOS_Status CR_GEOS_RelatePattern(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slic
       }
     } else {
       *ret = r;
+    }
+  }
+  if (geomA != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomA);
+  }
+  if (geomB != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, geomB);
+  }
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_SharedPaths(CR_GEOS* lib, CR_GEOS_Slice a, CR_GEOS_Slice b, CR_GEOS_String* ret) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+
+  auto wkbReader = lib->GEOSWKBReader_create_r(handle);
+  auto geomA = lib->GEOSWKBReader_read_r(handle, wkbReader, a.data, a.len);
+  auto geomB = lib->GEOSWKBReader_read_r(handle, wkbReader, b.data, b.len);
+  lib->GEOSWKBReader_destroy_r(handle, wkbReader);
+  *ret = {.data = NULL, .len = 0};
+  if (geomA != nullptr && geomB != nullptr) {
+    auto r = lib->GEOSSharedPaths_r(handle, geomA, geomB);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib, handle, r, ret, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
     }
   }
   if (geomA != nullptr) {
