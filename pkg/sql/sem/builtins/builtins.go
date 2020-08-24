@@ -3342,6 +3342,19 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.node_id": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(ctx.NodeID.Get())), nil
+			},
+			Info:       "Returns the node ID.",
+			Volatility: tree.VolatilityStable,
+		},
+	),
+
 	"crdb_internal.cluster_name": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
