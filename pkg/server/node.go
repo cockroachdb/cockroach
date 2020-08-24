@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -466,7 +467,11 @@ func (n *Node) start(
 
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.newEngines...)
-	log.Infof(ctx, "%s: started with %v engine(s) and attributes %v", n, allEngines, attrs.Attrs)
+	for _, e := range allEngines {
+		t := e.Type()
+		log.Infof(ctx, "started with engine type %v", t)
+	}
+	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
 }
 
