@@ -1568,7 +1568,15 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 				if err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(t.Stride())), nil
+				switch t.Layout() {
+				case geom.NoLayout:
+					if gc, ok := t.(*geom.GeometryCollection); ok && gc.Empty() {
+						return tree.NewDInt(tree.DInt(geom.XY.Stride())), nil
+					}
+					return nil, errors.AssertionFailedf("no layout found on object")
+				default:
+					return tree.NewDInt(tree.DInt(t.Stride())), nil
+				}
 			},
 			types.Int,
 			infoBuilder{
