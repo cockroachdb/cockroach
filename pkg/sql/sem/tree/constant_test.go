@@ -26,7 +26,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 )
+
+// TestAvailTypesAreSets verifies that all of the constant "available type"
+// slices don't have duplicate OIDs.
+func TestAvailTypesAreSets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCases := []struct {
+		availTypes []*types.T
+	}{
+		{tree.NumValAvailInteger},
+		{tree.NumValAvailDecimalNoFraction},
+		{tree.NumValAvailDecimalWithFraction},
+		{tree.StrValAvailAllParsable},
+		{tree.StrValAvailBytes},
+	}
+
+	for i, test := range testCases {
+		seen := make(map[oid.Oid]struct{})
+		for _, newType := range test.availTypes {
+			if _, ok := seen[newType.Oid()]; ok {
+				t.Errorf("%d: found duplicate type: %v", i, newType)
+			}
+			seen[newType.Oid()] = struct{}{}
+		}
+	}
+}
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
 // all return expected available type sets, and that attempting to resolve the NumVals
