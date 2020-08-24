@@ -126,14 +126,14 @@ type resolveFlags struct {
 }
 
 func (p *planner) ResolveMutableTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
-) (table *MutableTableDescriptor, err error) {
+	ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
+) (table *tabledesc.Mutable, err error) {
 	return resolver.ResolveMutableExistingTableObject(ctx, p, tn, required, requiredType)
 }
 
 func (p *planner) ResolveUncachedTableDescriptor(
-	ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
-) (table *ImmutableTableDescriptor, err error) {
+	ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
+) (table *tabledesc.Immutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		lookupFlags := tree.ObjectLookupFlags{
 			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
@@ -384,7 +384,7 @@ func findTableContainingIndex(
 	dbName, scName string,
 	idxName tree.UnrestrictedName,
 	lookupFlags tree.CommonLookupFlags,
-) (result *tree.TableName, desc *MutableTableDescriptor, err error) {
+) (result *tree.TableName, desc *tabledesc.Mutable, err error) {
 	sa := sc.LogicalSchemaAccessor()
 	dbDesc, err := sa.GetDatabaseDesc(ctx, txn, codec, dbName,
 		tree.DatabaseLookupFlags{CommonLookupFlags: lookupFlags})
@@ -441,7 +441,7 @@ func findTableContainingIndex(
 // lookup.
 func expandMutableIndexName(
 	ctx context.Context, p *planner, index *tree.TableIndexName, requireTable bool,
-) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
+) (tn *tree.TableName, desc *tabledesc.Mutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tn, desc, err = expandIndexName(ctx, p.txn, p, p.ExecCfg().Codec, index, requireTable)
 	})
@@ -455,7 +455,7 @@ func expandIndexName(
 	codec keys.SQLCodec,
 	index *tree.TableIndexName,
 	requireTable bool,
-) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
+) (tn *tree.TableName, desc *tabledesc.Mutable, err error) {
 	tn = &index.Table
 	if tn.Table() != "" {
 		// The index and its table prefix must exist already. Resolve the table.
@@ -511,7 +511,7 @@ func expandIndexName(
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
-) (*MutableTableDescriptor, *descpb.IndexDescriptor, error) {
+) (*tabledesc.Mutable, *descpb.IndexDescriptor, error) {
 	var catalog optCatalog
 	catalog.init(p)
 	catalog.reset()
@@ -584,7 +584,7 @@ type internalLookupCtx struct {
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.Immutable
 	schemaDescs map[descpb.ID]*schemadesc.Immutable
-	tbDescs     map[descpb.ID]*ImmutableTableDescriptor
+	tbDescs     map[descpb.ID]*tabledesc.Immutable
 	tbIDs       []descpb.ID
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
@@ -621,7 +621,7 @@ func newInternalLookupCtx(descs []catalog.Descriptor, prefix *dbdesc.Immutable) 
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
-	tbDescs := make(map[descpb.ID]*ImmutableTableDescriptor)
+	tbDescs := make(map[descpb.ID]*tabledesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
 	var tbIDs, typIDs, dbIDs []descpb.ID
 	// Record database descriptors for name lookups.
@@ -776,7 +776,7 @@ func (p *planner) ResolveMutableTableDescriptorEx(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (*MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	tn := name.ToTableName()
 	table, err := resolver.ResolveMutableExistingTableObject(ctx, p, &tn, required, requiredType)
 	if err != nil {
@@ -794,7 +794,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (*MutableTableDescriptor, error) {
+) (*tabledesc.Mutable, error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:      tree.CommonLookupFlags{Required: required},
 		RequireMutable:         true,
@@ -808,7 +808,7 @@ func (p *planner) ResolveMutableTableDescriptorExAllowNoPrimaryKey(
 	}
 	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
-	return desc.(*MutableTableDescriptor), nil
+	return desc.(*tabledesc.Mutable), nil
 }
 
 // See ResolveUncachedTableDescriptor.
@@ -817,7 +817,7 @@ func (p *planner) ResolveUncachedTableDescriptorEx(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (table *ImmutableTableDescriptor, err error) {
+) (table *tabledesc.Immutable, err error) {
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		table, err = p.ResolveExistingObjectEx(ctx, name, required, requiredType)
 	})
@@ -830,7 +830,7 @@ func (p *planner) ResolveExistingObjectEx(
 	name *tree.UnresolvedObjectName,
 	required bool,
 	requiredType tree.RequiredTableKind,
-) (res *ImmutableTableDescriptor, err error) {
+) (res *tabledesc.Immutable, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
 		DesiredObjectKind:    tree.TableObject,
@@ -842,7 +842,7 @@ func (p *planner) ResolveExistingObjectEx(
 	}
 	tn := tree.MakeTableNameFromPrefix(prefix, tree.Name(name.Object()))
 	name.SetAnnotation(&p.semaCtx.Annotations, &tn)
-	return desc.(*ImmutableTableDescriptor), nil
+	return desc.(*tabledesc.Immutable), nil
 }
 
 // ResolvedName is a convenience wrapper for UnresolvedObjectName.Resolved.

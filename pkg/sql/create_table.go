@@ -2181,7 +2181,7 @@ func makeHashShardComputeExpr(colNames []string, buckets int) *string {
 }
 
 func makeShardCheckConstraintDef(
-	desc *MutableTableDescriptor, buckets int, shardCol *descpb.ColumnDescriptor,
+	desc *tabledesc.Mutable, buckets int, shardCol *descpb.ColumnDescriptor,
 ) (*tree.CheckConstraintTableDef, error) {
 	values := &tree.Tuple{}
 	for i := 0; i < buckets; i++ {

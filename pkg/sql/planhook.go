@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -92,10 +93,10 @@ type PlanHookState interface {
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	EvalAsOfTimestamp(ctx context.Context, asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(
-		ctx context.Context, dbName string, required bool) (*ImmutableDatabaseDescriptor, error)
+		ctx context.Context, dbName string, required bool) (*dbdesc.Immutable, error)
 	ResolveMutableTableDescriptor(
-		ctx context.Context, tn *TableName, required bool, requiredType tree.RequiredTableKind,
-	) (table *MutableTableDescriptor, err error)
+		ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind,
+	) (table *tabledesc.Mutable, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []descpb.Descriptor, desc *tabledesc.Immutable, displayOptions ShowCreateDisplayOptions,
 	) (string, error)

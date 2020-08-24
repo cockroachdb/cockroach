@@ -80,7 +80,7 @@ func doCreateSequence(
 	context string,
 	dbDesc catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
-	name *TableName,
+	name *tree.TableName,
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
 	jobDesc string,
@@ -103,7 +103,7 @@ func doCreateSequence(
 	// currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
 	desc, err := NewSequenceTableDesc(
-		name.Table(),
+		name.Object(),
 		opts,
 		dbDesc.GetID(),
 		schemaID,
@@ -125,7 +125,7 @@ func doCreateSequence(
 		params.ExecCfg().Settings,
 		dbDesc.GetID(),
 		schemaID,
-		name.Table(),
+		name.Object(),
 	).Key(params.ExecCfg().Codec)
 	if err = params.p.createDescriptorWithID(
 		params.ctx, key, id, desc, params.EvalContext().Settings, jobDesc,

@@ -258,13 +258,13 @@ func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
 ) (res catalog.TableDescriptor, err error) {
 	if zs.TargetsIndex() {
-		var mutRes *MutableTableDescriptor
+		var mutRes *tabledesc.Mutable
 		_, mutRes, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
 		if mutRes != nil {
 			res = mutRes
 		}
 	} else if zs.TargetsTable() {
-		var immutRes *ImmutableTableDescriptor
+		var immutRes *tabledesc.Immutable
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 			flags.IncludeOffline = true

@@ -370,7 +370,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 			ctx,
 			table.ID,
 			func(desc catalog.MutableDescriptor) error {
-				tbl := desc.(*MutableTableDescriptor)
+				tbl := desc.(*tabledesc.Mutable)
 				if !tbl.Adding() {
 					return lease.ErrDidntUpdateDescriptor
 				}
@@ -846,7 +846,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 
 	var runStatus jobs.RunningStatus
 	if _, err := sc.leaseMgr.Publish(ctx, sc.descID, func(desc catalog.MutableDescriptor) error {
-		tbl := desc.(*MutableTableDescriptor)
+		tbl := desc.(*tabledesc.Mutable)
 
 		runStatus = ""
 		// Apply mutations belonging to the same version.
@@ -1042,7 +1042,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
-		scTable := scDesc.(*MutableTableDescriptor)
+		scTable := scDesc.(*tabledesc.Mutable)
 
 		for _, mutation := range scTable.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -1084,7 +1084,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if !ok {
 					return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 				}
-				backrefTable := backrefDesc.(*MutableTableDescriptor)
+				backrefTable := backrefDesc.(*tabledesc.Mutable)
 				backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKey)
 			}
 
@@ -1168,7 +1168,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 					if len(oldIndex.Interleave.Ancestors) != 0 {
 						ancestorInfo := oldIndex.Interleave.Ancestors[len(oldIndex.Interleave.Ancestors)-1]
-						ancestor := descs[ancestorInfo.TableID].(*MutableTableDescriptor)
+						ancestor := descs[ancestorInfo.TableID].(*tabledesc.Mutable)
 						ancestorIdx, err := ancestor.FindIndexByID(ancestorInfo.IndexID)
 						if err != nil {
 							return err
@@ -1431,7 +1431,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		if !ok {
 			return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 		}
-		scTable := scDesc.(*MutableTableDescriptor)
+		scTable := scDesc.(*tabledesc.Mutable)
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
 		columns := make(map[string]struct{})
@@ -1471,7 +1471,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 					if !ok {
 						return errors.AssertionFailedf("required table with ID %d not provided to update closure", sc.descID)
 					}
-					backrefTable := backrefDesc.(*MutableTableDescriptor)
+					backrefTable := backrefDesc.(*tabledesc.Mutable)
 					if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, scTable); err != nil {
 						return err
 					}
@@ -1589,7 +1589,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
-	ctx context.Context, desc *MutableTableDescriptor, constraint *descpb.ConstraintToUpdate,
+	ctx context.Context, desc *tabledesc.Mutable, constraint *descpb.ConstraintToUpdate,
 ) error {
 	switch constraint.ConstraintType {
 	case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
@@ -2194,7 +2194,7 @@ func init() {
 // queueCleanupJobs checks if the completed schema change needs to start a
 // child job to clean up dropped schema elements.
 func (sc *SchemaChanger) queueCleanupJobs(
-	ctx context.Context, scDesc *MutableTableDescriptor, txn *kv.Txn, childJobs []*jobs.StartableJob,
+	ctx context.Context, scDesc *tabledesc.Mutable, txn *kv.Txn, childJobs []*jobs.StartableJob,
 ) ([]*jobs.StartableJob, error) {
 	// Create jobs for dropped columns / indexes to be deleted.
 	mutationID := scDesc.ClusterVersion.NextMutationID

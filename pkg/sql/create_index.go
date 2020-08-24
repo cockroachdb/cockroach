@@ -203,7 +203,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 // not* re-use a pre-existing shard column.
 func (p *planner) setupFamilyAndConstraintForShard(
 	ctx context.Context,
-	tableDesc *MutableTableDescriptor,
+	tableDesc *tabledesc.Mutable,
 	shardCol *descpb.ColumnDescriptor,
 	idxColumns []string,
 	buckets int32,

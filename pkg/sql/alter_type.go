@@ -340,7 +340,7 @@ func (n *alterTypeNode) Values() tree.Datums                 { return tree.Datum
 func (n *alterTypeNode) Close(ctx context.Context)           {}
 func (n *alterTypeNode) ReadingOwnWrites()                   {}
 
-func (p *planner) canModifyType(ctx context.Context, desc *MutableTypeDescriptor) error {
+func (p *planner) canModifyType(ctx context.Context, desc *typedesc.Mutable) error {
 	hasOwnership, err := p.HasOwnership(ctx, desc)
 	if err != nil {
 		return err

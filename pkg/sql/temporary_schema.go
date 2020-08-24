@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -154,7 +155,7 @@ func temporarySchemaSessionID(scName string) (bool, ClusterWideID, error) {
 // temporary schema of the given dbID.
 func getTemporaryObjectNames(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, tempSchemaName string,
-) (TableNames, error) {
+) (tree.TableNames, error) {
 	dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, dbID)
 	if err != nil {
 		return nil, err
@@ -257,7 +258,7 @@ func cleanupSchemaObjects(
 		}
 		// TODO(ajwerner): Deal with temporary types or ensure that they cannot
 		// exist.
-		desc := objDesc.(*ImmutableTableDescriptor)
+		desc := objDesc.(*tabledesc.Immutable)
 
 		tblDescsByID[desc.ID] = desc
 		tblNamesByID[desc.ID] = tbName
