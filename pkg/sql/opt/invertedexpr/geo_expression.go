@@ -81,20 +81,14 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) 
 	}
 	spansToRead := make([]InvertedSpan, 0, len(rpExpr))
 	var b []byte // avoid per-expr heap allocations
-	for _, elem := range rpExpr {
-		// The keys in the RPKeyExpr are unique.
-		if key, ok := elem.(geoindex.Key); ok {
-			var span InvertedSpan
-			span, b = geoToSpan(geoindex.KeySpan{Start: key, End: key}, b)
-			spansToRead = append(spansToRead, span)
-		}
-	}
 	var stack []*SpanExpression
 	for _, elem := range rpExpr {
 		switch e := elem.(type) {
 		case geoindex.Key:
 			var span InvertedSpan
 			span, b = geoToSpan(geoindex.KeySpan{Start: e, End: e}, b)
+			// The keys in the RPKeyExpr are unique, so simply append to spansToRead.
+			spansToRead = append(spansToRead, span)
 			stack = append(stack, &SpanExpression{
 				FactoredUnionSpans: []InvertedSpan{span},
 			})
@@ -117,8 +111,15 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) 
 					node0, node1 = node1, node0
 				}
 				if node1.Operator == None {
+					// node1 can be discarded after unioning its FactoredUnionSpans.
 					node = node0
-					node.FactoredUnionSpans = append(node.FactoredUnionSpans, node1.FactoredUnionSpans...)
+					// Union into the one with the larger capacity. This optimizes
+					// the case of many unions.
+					if cap(node.FactoredUnionSpans) < cap(node1.FactoredUnionSpans) {
+						node.FactoredUnionSpans = append(node1.FactoredUnionSpans, node.FactoredUnionSpans...)
+					} else {
+						node.FactoredUnionSpans = append(node.FactoredUnionSpans, node1.FactoredUnionSpans...)
+					}
 				} else {
 					node = &SpanExpression{
 						Operator: SetUnion,
