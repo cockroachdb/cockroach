@@ -165,8 +165,8 @@ AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0
 ----
 1  13
 
-# The following queries perform semi- and anti-joins, and don't currently use
-# an inverted join.
+# These queries perform semi-joins, which are converted to inner joins by the
+# optimizer.
 query I
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ORDER BY lk
@@ -183,6 +183,7 @@ ORDER BY rk
 13
 16
 
+# These queries perform anti-joins, which do not currently use an inverted join.
 query I
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ORDER BY lk
