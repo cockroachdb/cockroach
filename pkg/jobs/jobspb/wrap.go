@@ -214,3 +214,6 @@ const (
 	// Silence unused warning.
 	_ = BaseFormatVersion
 )
+
+// SafeValue implements the redact.SafeValue interface.
+func (Type) SafeValue() {}
