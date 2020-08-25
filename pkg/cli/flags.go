@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -390,6 +391,8 @@ func init() {
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Enable/disable various external storage endpoints.
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -555,6 +558,8 @@ func init() {
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		boolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
@@ -735,6 +740,8 @@ func init() {
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
 		// Mark the --global flag as hidden until we investigate it more.
 		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
@@ -799,6 +806,9 @@ func init() {
 		// (which is a PreRun for this command):
 		_ = extraServerFlagInit // guru assignment
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
+
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
