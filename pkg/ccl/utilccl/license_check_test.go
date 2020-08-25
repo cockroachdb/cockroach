@@ -63,7 +63,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		}
 		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "")
 		if !testutils.IsError(err, tc.err) {
-			l, _ := licenseccl.Decode(tc.lic)
+			l, _ := decode(tc.lic)
 			t.Fatalf("%d: lic %v, update by %T, checked by %s at %s, got %q", i, l, updater, tc.checkCluster, tc.checkTime, err)
 		}
 	}

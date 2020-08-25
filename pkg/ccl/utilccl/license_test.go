@@ -6,13 +6,14 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package licenseccl
+package utilccl
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -31,7 +32,7 @@ func TestLicense(t *testing.T) {
 	wayAfter := ts.Add(time.Hour * 24 * 365 * 200)
 
 	for i, tc := range []struct {
-		licType      License_Type
+		licType      licenseccl.License_Type
 		grantedTo    []uuid.UUID
 		expiration   time.Time
 		checkCluster uuid.UUID
@@ -40,33 +41,33 @@ func TestLicense(t *testing.T) {
 		err          string
 	}{
 		{licType: -1, err: "requires an enterprise license"},
-		{License_Evaluation, clustersA, ts, clusterA, "", ts, ""},
-		{License_Enterprise, clustersA, ts, clusterA, "", ts, ""},
-		{License_NonCommercial, clustersA, ts, clusterA, "", ts, ""},
-		{License_Evaluation, clustersA, after, clusterA, "", ts, ""},
-		{License_Evaluation, clustersA, ts, clusterA, "", before, ""},
-		{License_Evaluation, clustersA, wayAfter, clusterA, "", ts, ""},
+		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", ts, ""},
+		{licenseccl.License_Enterprise, clustersA, ts, clusterA, "", ts, ""},
+		{licenseccl.License_NonCommercial, clustersA, ts, clusterA, "", ts, ""},
+		{licenseccl.License_Evaluation, clustersA, after, clusterA, "", ts, ""},
+		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", before, ""},
+		{licenseccl.License_Evaluation, clustersA, wayAfter, clusterA, "", ts, ""},
 
 		// expirations.
-		{License_Evaluation, clustersA, ts, clusterA, "", after, "expired"},
-		{License_Evaluation, clustersA, after, clusterA, "", wayAfter, "expired"},
-		{License_NonCommercial, clustersA, after, clusterA, "", wayAfter, "expired"},
-		{License_NonCommercial, clustersA, t0, clusterA, "", wayAfter, ""},
-		{License_Evaluation, clustersA, t0, clusterA, "", wayAfter, ""},
+		{licenseccl.License_Evaluation, clustersA, ts, clusterA, "", after, "expired"},
+		{licenseccl.License_Evaluation, clustersA, after, clusterA, "", wayAfter, "expired"},
+		{licenseccl.License_NonCommercial, clustersA, after, clusterA, "", wayAfter, "expired"},
+		{licenseccl.License_NonCommercial, clustersA, t0, clusterA, "", wayAfter, ""},
+		{licenseccl.License_Evaluation, clustersA, t0, clusterA, "", wayAfter, ""},
 
 		// grace period.
-		{License_Enterprise, clustersA, after, clusterA, "", wayAfter, ""},
+		{licenseccl.License_Enterprise, clustersA, after, clusterA, "", wayAfter, ""},
 
 		// mismatch.
-		{License_Enterprise, clustersA, ts, clusterB, "", ts, "not valid for cluster"},
-		{License_Enterprise, clustersB, ts, clusterA, "", ts, "not valid for cluster"},
-		{License_Enterprise, append(clustersB, clusterA), ts, clusterA, "", ts, ""},
-		{License_Enterprise, nil, ts, clusterA, "", ts, "license valid only for"},
-		{License_Enterprise, nil, ts, clusterA, "tc-17", ts, ""},
+		{licenseccl.License_Enterprise, clustersA, ts, clusterB, "", ts, "not valid for cluster"},
+		{licenseccl.License_Enterprise, clustersB, ts, clusterA, "", ts, "not valid for cluster"},
+		{licenseccl.License_Enterprise, append(clustersB, clusterA), ts, clusterA, "", ts, ""},
+		{licenseccl.License_Enterprise, nil, ts, clusterA, "", ts, "license valid only for"},
+		{licenseccl.License_Enterprise, nil, ts, clusterA, "tc-17", ts, ""},
 	} {
-		var lic *License
+		var lic *licenseccl.License
 		if tc.licType != -1 {
-			s, err := License{
+			s, err := licenseccl.License{
 				ClusterID:         tc.grantedTo,
 				ValidUntilUnixSec: tc.expiration.Unix(),
 				Type:              tc.licType,
@@ -76,13 +77,13 @@ func TestLicense(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			lic, err = Decode(s)
+			lic, err = decode(s)
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err := lic.Check(
-			tc.checkTime, tc.checkCluster, tc.checkOrg, "",
+		if err := check(
+			lic, tc.checkTime, tc.checkCluster, tc.checkOrg, "",
 		); !testutils.IsError(err, tc.err) {
 			t.Fatalf("%d: lic for %s to %s, checked by %s at %s.\n got %q", i,
 				tc.grantedTo, tc.expiration, tc.checkCluster, tc.checkTime, err)
@@ -96,18 +97,18 @@ func TestBadLicenseStrings(t *testing.T) {
 		{"crl-0-&&&&&", "invalid license string"},
 		{"crl-0-blah", "invalid license string"},
 	} {
-		if _, err := Decode(tc.lic); !testutils.IsError(err, tc.err) {
+		if _, err := decode(tc.lic); !testutils.IsError(err, tc.err) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
 		}
 	}
 }
 
 func TestExpiredLicenseLanguage(t *testing.T) {
-	lic := License{
-		Type:              License_Evaluation,
+	lic := &licenseccl.License{
+		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: 1,
 	}
-	err := lic.Check(timeutil.Now(), uuid.MakeV4(), "", "RESTORE")
+	err := check(lic, timeutil.Now(), uuid.MakeV4(), "", "RESTORE")
 	expected := "Use of RESTORE requires an enterprise license. Your evaluation license expired on " +
 		"January 1, 1970. If you're interested in getting a new license, please contact " +
 		"subscriptions@cockroachlabs.com and we can help you out."
