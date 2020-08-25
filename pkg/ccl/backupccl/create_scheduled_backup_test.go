@@ -608,3 +608,19 @@ func TestCreateBackupScheduleCollectionOverwrite(t *testing.T) {
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' "+
 		"RECURRING '@daily' WITH EXPERIMENTAL SCHEDULE OPTIONS ignore_existing_backups;")
 }
+
+func TestCreateBackupScheduleInExplicitTxnRollback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	res := th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	require.False(t, res.Next())
+
+	th.sqlDB.Exec(t, "BEGIN;")
+	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/collection' RECURRING '@daily';")
+	th.sqlDB.Exec(t, "ROLLBACK;")
+
+	res = th.sqlDB.Query(t, "SELECT id FROM [SHOW SCHEDULES];")
+	require.False(t, res.Next())
+}
