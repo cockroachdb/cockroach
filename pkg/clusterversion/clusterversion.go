@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 // TODO(irfansharif): Should Initialize and SetBeforeChange be a part of the
@@ -205,6 +206,9 @@ func (cv ClusterVersion) IsActive(versionKey VersionKey) bool {
 	return cv.IsActiveVersion(v)
 }
 
-func (cv ClusterVersion) String() string {
-	return cv.Version.String()
+func (cv ClusterVersion) String() string { return redact.StringWithoutMarkers(cv) }
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Print(cv.Version)
 }
