@@ -1219,8 +1219,14 @@ func RemapUserDefinedTypeOIDs(t *T, newOID, newArrayOID oid.Oid) {
 
 // UserDefined returns whether or not t is a user defined type.
 func (t *T) UserDefined() bool {
+	return IsOIDUserDefinedType(t.Oid())
+}
+
+// IsOIDUserDefinedType returns whether or not o corresponds to a user
+// defined type.
+func IsOIDUserDefinedType(o oid.Oid) bool {
 	// Types with OIDs larger than the predefined max are user defined.
-	return t.Oid() > oidext.CockroachPredefinedOIDMax
+	return o > oidext.CockroachPredefinedOIDMax
 }
 
 var familyNames = map[Family]string{

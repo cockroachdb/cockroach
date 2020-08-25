@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -46,6 +47,20 @@ func (ex *connExecutor) execPrepare(
 	} else {
 		// Deallocate the unnamed statement, if it exists.
 		ex.deletePreparedStmt(ctx, "")
+	}
+
+	// If we were provided any type hints, attempt to resolve any user defined
+	// type OIDs into types.T's.
+	if parseCmd.TypeHints != nil {
+		for i := range parseCmd.TypeHints {
+			if parseCmd.TypeHints[i] == nil && types.IsOIDUserDefinedType(parseCmd.RawTypeHints[i]) {
+				var err error
+				parseCmd.TypeHints[i], err = ex.planner.ResolveTypeByOID(ctx, parseCmd.RawTypeHints[i])
+				if err != nil {
+					return retErr(err)
+				}
+			}
+		}
 	}
 
 	ps, err := ex.addPreparedStmt(
@@ -331,7 +346,7 @@ func (ex *connExecutor) execBind(
 				// nil indicates a NULL argument value.
 				qargs[k] = tree.DNull
 			} else {
-				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
+				d, err := pgwirebase.DecodeOidDatum(ctx, ptCtx, t, qArgFormatCodes[i], arg, &ex.planner)
 				if err != nil {
 					return retErr(pgerror.Wrapf(err, pgcode.ProtocolViolation,
 						"error in argument for %s", k))

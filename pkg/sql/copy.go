@@ -364,10 +364,12 @@ func (c *copyMachine) readBinaryTuple(ctx context.Context) error {
 			return errors.Newf("partial copy data row")
 		}
 		d, err := pgwirebase.DecodeOidDatum(
+			ctx,
 			c.parsingEvalCtx,
 			c.resultColumns[i].Typ.Oid(),
 			pgwirebase.FormatBinary,
 			data,
+			&c.p,
 		)
 		if err != nil {
 			return pgerror.Wrapf(err, pgcode.BadCopyFileFormat,
