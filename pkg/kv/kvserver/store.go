@@ -1028,7 +1028,7 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (s *Store) SetDraining(drain bool, reporter func(int, string)) {
+func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	s.draining.Store(drain)
 	if !drain {
 		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {

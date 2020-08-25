@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var errRenewLease = errors.New("renew lease on id")
@@ -1780,7 +1781,7 @@ func (m *Manager) isDraining() bool {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (m *Manager) SetDraining(drain bool, reporter func(int, string)) {
+func (m *Manager) SetDraining(drain bool, reporter func(int, redact.SafeString)) {
 	m.draining.Store(drain)
 	if !drain {
 		return
