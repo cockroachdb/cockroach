@@ -13,7 +13,9 @@ package clusterversion
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,4 +23,28 @@ func TestVersionsAreValid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	require.NoError(t, versionsSingleton.Validate())
+}
+
+func TestVersionFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	v := ClusterVersion{
+		Version: roachpb.Version{
+			Major: 1,
+			Minor: 2,
+			Patch: 3,
+		},
+	}
+
+	if actual, expected := string(redact.Sprint(v.Version)), `1.2`; actual != expected {
+		t.Errorf("expected %q, got %q", expected, actual)
+	}
+
+	if actual, expected := v.Version.String(), `1.2`; actual != expected {
+		t.Errorf("expected %q, got %q", expected, actual)
+	}
+
+	if actual, expected := v.String(), `1.2`; actual != expected {
+		t.Errorf("expected %q, got %q", expected, actual)
+	}
 }
