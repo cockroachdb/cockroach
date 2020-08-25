@@ -201,6 +201,7 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 	}{
 		{`\l`, `SHOW DATABASES`},
 		{`\dt`, `SHOW TABLES`},
+		{`\dT`, `SHOW TYPES`},
 		{`\du`, `SHOW USERS`},
 		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
 		{`\d`, `SHOW TABLES`},

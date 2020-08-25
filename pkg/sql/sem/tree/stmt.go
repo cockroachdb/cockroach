@@ -788,6 +788,12 @@ func (*ShowEnums) StatementType() StatementType { return Rows }
 func (*ShowEnums) StatementTag() string { return "SHOW ENUMS" }
 
 // StatementType implements the Statement interface.
+func (*ShowTypes) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTypes) StatementTag() string { return "SHOW TYPES" }
+
+// StatementType implements the Statement interface.
 func (*ShowTraceForSession) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1105,6 +1111,7 @@ func (n *ShowSessions) String() string                   { return AsString(n) }
 func (n *ShowSyntax) String() string                     { return AsString(n) }
 func (n *ShowTableStats) String() string                 { return AsString(n) }
 func (n *ShowTables) String() string                     { return AsString(n) }
+func (n *ShowTypes) String() string                      { return AsString(n) }
 func (n *ShowTraceForSession) String() string            { return AsString(n) }
 func (n *ShowTransactionStatus) String() string          { return AsString(n) }
 func (n *ShowLastQueryStatistics) String() string        { return AsString(n) }
