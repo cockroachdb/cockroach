@@ -337,6 +337,9 @@ func readPostgresStmt(
 			createTbl[name] = stmt
 		}
 	case *tree.CreateIndex:
+		if stmt.Predicate != nil {
+			return unimplemented.NewWithIssue(50225, "cannot import a table with partial indexes")
+		}
 		name, err := getTableName(&stmt.Table)
 		if err != nil {
 			return err
