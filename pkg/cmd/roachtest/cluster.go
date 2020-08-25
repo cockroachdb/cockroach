@@ -862,16 +862,9 @@ func (s *clusterSpec) args() []string {
 
 	switch cloud {
 	case aws:
-		if s.Zones != "" {
-			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
-			os.Exit(1)
-		}
-		if s.Geo {
-			fmt.Fprintf(os.Stderr, "geo-distributed clusters not yet supported on AWS\n")
-			os.Exit(1)
-		}
-
 		args = append(args, "--clouds=aws")
+	case gce:
+		args = append(args, "--clouds=gce")
 	case azure:
 		args = append(args, "--clouds=azure")
 	}
