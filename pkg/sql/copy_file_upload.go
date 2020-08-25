@@ -137,6 +137,7 @@ func newFileUploadMachine(
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.processRows = f.writeFile
+	c.forceNotNull = true
 	return
 }
 

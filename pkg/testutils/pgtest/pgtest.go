@@ -11,14 +11,16 @@
 package pgtest
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"net"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/pgproto3"
+	"github.com/jackc/pgproto3/v2"
 )
 
 // PGTest can be used to send and receive arbitrary pgwire messages on
@@ -42,10 +44,7 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 			conn.Close()
 		}
 	}()
-	fe, err := pgproto3.NewFrontend(conn, conn)
-	if err != nil {
-		return nil, errors.Wrap(err, "new frontend")
-	}
+	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
 	if err := fe.Send(&pgproto3.StartupMessage{
 		ProtocolVersion: 196608, // Version 3.0
 		Parameters: map[string]string{
@@ -56,7 +55,7 @@ func NewPGTest(ctx context.Context, addr, user string) (*PGTest, error) {
 	}
 	if msg, err := fe.Receive(); err != nil {
 		return nil, errors.Wrap(err, "receive")
-	} else if auth, ok := msg.(*pgproto3.Authentication); !ok || auth.Type != 0 {
+	} else if _, ok := msg.(*pgproto3.AuthenticationOk); !ok {
 		return nil, errors.Errorf("unexpected: %#v", msg)
 	}
 	p := &PGTest{
@@ -146,19 +145,27 @@ func (p *PGTest) Until(
 		if msg, ok := recv.(*pgproto3.ReadyForQuery); ok && typ != typReadyForQuery {
 			return nil, errors.Errorf("waiting for %T, got %#v", typs[0], msg)
 		}
-		data := recv.Encode(nil)
-		// Trim off message type and length.
-		data = data[5:]
-
-		x := reflect.New(reflect.ValueOf(recv).Elem().Type())
-		msg := x.Interface().(pgproto3.BackendMessage)
-		if err := msg.Decode(data); err != nil {
-			return nil, errors.Wrap(err, "decode")
-		}
-		msgs = append(msgs, msg)
-		if typ == reflect.TypeOf(msg) {
+		if typ == reflect.TypeOf(recv) {
 			typs = typs[1:]
 		}
+
+		// recv is a pointer to some union'd interface. The next call
+		// to p.fe.Receive with the same message type will overwrite
+		// the previous message. We thus need to copy recv into some
+		// new variable. In the past we have used the BackendMessage's
+		// Encode/Decode methods, but those are sometimes
+		// broken. Instead, go through gob.
+		var buf bytes.Buffer
+		rv := reflect.ValueOf(recv).Elem()
+		x := reflect.New(rv.Type())
+		if err := gob.NewEncoder(&buf).EncodeValue(rv); err != nil {
+			return nil, err
+		}
+		if err := gob.NewDecoder(&buf).DecodeValue(x); err != nil {
+			return nil, err
+		}
+		msg := x.Interface().(pgproto3.BackendMessage)
+		msgs = append(msgs, msg)
 	}
 	return msgs, nil
 }
