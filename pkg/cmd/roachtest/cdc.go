@@ -637,7 +637,7 @@ func (k kafkaManager) install(ctx context.Context) {
 		ctx,
 		k.nodes,
 		fmt.Sprintf(
-			`curl --retry 10 --retry-delay 5 -o /tmp/confluent.tar.gz https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz && tar xvf /tmp/confluent.tar.gz -C %s`,
+			`for i in $(seq 1 5); do curl --retry 3 --retry-delay 1 -o /tmp/confluent.tar.gz https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz && break || sleep 15; done && tar xvf /tmp/confluent.tar.gz -C %s`,
 			folder,
 		),
 	)

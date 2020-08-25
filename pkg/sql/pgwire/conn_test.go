@@ -45,8 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgproto3"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -1031,10 +1031,7 @@ func TestConnCloseCancelsAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fe, err := pgproto3.NewFrontend(conn, conn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
 	if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: version30}); err != nil {
 		t.Fatal(err)
 	}
