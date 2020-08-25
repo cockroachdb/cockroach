@@ -66,6 +66,9 @@ const (
 	// written (for example, we may not have DELETE permissions for the
 	// destination, which should be allowed).
 	BackupSentinelWriteFile = "COCKROACH-BACKUP-PLACEHOLDER"
+	// BackupEncryptionInfoFile is the file name used to store the serialized
+	// EncryptionInfo proto while the backup is in progress.
+	BackupEncryptionInfoFile = "ENCRYPTION-INFO"
 )
 
 const (
@@ -871,8 +874,8 @@ func sanitizeLocalityKV(kv string) string {
 
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, "encryption-info")
+) (*jobspb.EncryptionInfo, error) {
+	r, err := src.ReadFile(ctx, BackupEncryptionInfoFile)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
@@ -881,21 +884,34 @@ func readEncryptionOptions(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	var encInfo EncryptionInfo
+	var encInfo jobspb.EncryptionInfo
 	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
 		return nil, err
 	}
 	return &encInfo, nil
 }
 
-func writeEncryptionOptions(
-	ctx context.Context, opts *EncryptionInfo, dest cloud.ExternalStorage,
+func writeEncryptionOptionsIfNotExists(
+	ctx context.Context, opts *jobspb.EncryptionInfo, dest cloud.ExternalStorage,
 ) error {
+	r, err := dest.ReadFile(ctx, BackupEncryptionInfoFile)
+	if err == nil {
+		r.Close()
+		// If the file already exists, then we don't need to create a new one.
+		return nil
+	}
+
+	if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+		return errors.Wrapf(err,
+			"returned an unexpected error when checking for the existence of %s file",
+			BackupEncryptionInfoFile)
+	}
+
 	buf, err := protoutil.Marshal(opts)
 	if err != nil {
 		return err
 	}
-	if err := dest.WriteFile(ctx, "encryption-info", bytes.NewReader(buf)); err != nil {
+	if err := dest.WriteFile(ctx, BackupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil

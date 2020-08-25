@@ -835,8 +835,10 @@ func backupPlanHook(
 
 		// If we didn't load any prior backups from which get encryption info, we
 		// need to generate encryption specific data.
+		var encryptionInfo *jobspb.EncryptionInfo
 		if encryption == nil {
-			encryption, err = makeNewEncryptionOptions(ctx, p, encryptionParams, makeCloudStorage, defaultURI)
+			encryption, encryptionInfo, err = makeNewEncryptionOptions(ctx, p, encryptionParams,
+				makeCloudStorage, defaultURI)
 			if err != nil {
 				return err
 			}
@@ -868,6 +870,7 @@ func backupPlanHook(
 			URIsByLocalityKV: urisByLocalityKV,
 			BackupManifest:   descBytes,
 			Encryption:       encryption,
+			EncryptionInfo:   encryptionInfo,
 			CollectionURI:    collectionURI,
 		}
 		if len(spans) > 0 {
@@ -984,11 +987,12 @@ func makeNewEncryptionOptions(
 	encryptionParams backupEncryptionParams,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	defaultURI string,
-) (*jobspb.BackupEncryptionOptions, error) {
-	var encryption *jobspb.BackupEncryptionOptions
+) (*jobspb.BackupEncryptionOptions, *jobspb.EncryptionInfo, error) {
+	var encryptionOptions *jobspb.BackupEncryptionOptions
+	var encryptionInfo *jobspb.EncryptionInfo
 	exportStore, err := makeCloudStorage(ctx, defaultURI, p.User())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer exportStore.Close()
 
@@ -996,14 +1000,11 @@ func makeNewEncryptionOptions(
 	case passphrase:
 		salt, err := storageccl.GenerateSalt()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		if err := writeEncryptionOptions(ctx, &EncryptionInfo{Salt: salt},
-			exportStore); err != nil {
-			return nil, err
-		}
-		encryption = &jobspb.BackupEncryptionOptions{
+		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
+		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
 			Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, salt)}
 	case kms:
@@ -1012,13 +1013,13 @@ func makeNewEncryptionOptions(
 		plaintextDataKey := make([]byte, 32)
 		_, err := cryptorand.Read(plaintextDataKey)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to generate DataKey")
+			return nil, nil, errors.Wrap(err, "failed to generate DataKey")
 		}
 
 		encryptedDataKeyByKMSMasterKeyID, defaultKMSInfo, err :=
 			getEncryptedDataKeyByKMSMasterKeyID(ctx, encryptionParams.kmsURIs, plaintextDataKey, encryptionParams.kmsEnv)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		encryptedDataKeyMapForProto := make(map[string][]byte)
@@ -1026,17 +1027,13 @@ func makeNewEncryptionOptions(
 			func(masterKeyID hashedMasterKeyID, dataKey []byte) {
 				encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
 			})
-		if err := writeEncryptionOptions(ctx, &EncryptionInfo{
-			EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto,
-		}, exportStore); err != nil {
-			return nil, err
-		}
 
-		encryption = &jobspb.BackupEncryptionOptions{
+		encryptionInfo = &jobspb.EncryptionInfo{EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto}
+		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode:    jobspb.EncryptionMode_KMS,
 			KMSInfo: defaultKMSInfo}
 	}
-	return encryption, nil
+	return encryptionOptions, encryptionInfo, nil
 }
 
 func protectTimestampForBackup(

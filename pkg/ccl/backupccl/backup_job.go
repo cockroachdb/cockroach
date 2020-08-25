@@ -420,6 +420,13 @@ func (b *backupResumer) Resume(
 	}
 	defer defaultStore.Close()
 
+	if details.EncryptionInfo != nil {
+		if err := writeEncryptionOptionsIfNotExists(ctx, details.EncryptionInfo,
+			defaultStore); err != nil {
+			return errors.Wrapf(err, "creating encryption info file to %s", details.URI)
+		}
+	}
+
 	if err := createCheckpointIfNotExists(ctx, p.ExecCfg().Settings, defaultStore, details.Encryption); err != nil {
 		return errors.Wrapf(err, "creating checkpoint to %s", details.URI)
 	}
