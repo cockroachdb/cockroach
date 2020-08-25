@@ -203,7 +203,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			ParentSchemaID: keys.RootNamespaceID,
 			Name:           n.dbDesc.Name,
 		})
-		n.dbDesc.State = descpb.DatabaseDescriptor_DROP
+		n.dbDesc.State = descpb.DescriptorState_DROP
 
 		// Note that a job was already queued above.
 		if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {

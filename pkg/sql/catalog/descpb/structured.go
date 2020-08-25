@@ -196,17 +196,17 @@ func (desc *PartitioningDescriptor) PartitionNames() []string {
 
 // Offline returns true if the table is importing.
 func (desc *TableDescriptor) Offline() bool {
-	return desc.State == TableDescriptor_OFFLINE
+	return desc.State == DescriptorState_OFFLINE
 }
 
 // Dropped returns true if the table is being dropped.
 func (desc *TableDescriptor) Dropped() bool {
-	return desc.State == TableDescriptor_DROP
+	return desc.State == DescriptorState_DROP
 }
 
 // Adding returns true if the table is being added.
 func (desc *TableDescriptor) Adding() bool {
-	return desc.State == TableDescriptor_ADD
+	return desc.State == DescriptorState_ADD
 }
 
 // IsTable returns true if the TableDescriptor actually describes a
@@ -256,17 +256,17 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 
 // Dropped returns true if the type is dropped.
 func (desc *TypeDescriptor) Dropped() bool {
-	return desc.State == TypeDescriptor_DROP
+	return desc.State == DescriptorState_DROP
 }
 
 // Dropped implements the Descriptor interface.
 func (desc *SchemaDescriptor) Dropped() bool {
-	return desc.State == SchemaDescriptor_DROP
+	return desc.State == DescriptorState_DROP
 }
 
 // Dropped returns true if the database is dropped.
 func (desc *DatabaseDescriptor) Dropped() bool {
-	return desc.State == DatabaseDescriptor_DROP
+	return desc.State == DescriptorState_DROP
 }
 
 // IsVirtualTable returns true if the TableDescriptor describes a
