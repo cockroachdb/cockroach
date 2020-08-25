@@ -294,15 +294,30 @@ func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 
 // MergeResultStreams connects a set of resultRouters to a synchronizer. The
 // synchronizer is configured with the provided ordering.
+// forceSerialization determines whether the streams are forced to be serialized
+// (i.e. whether we don't want any parallelism).
 func (p *PhysicalPlan) MergeResultStreams(
 	resultRouters []ProcessorIdx,
 	sourceRouterSlot int,
 	ordering execinfrapb.Ordering,
 	destProcessor ProcessorIdx,
 	destInput int,
+	forceSerialization bool,
 ) {
 	proc := &p.Processors[destProcessor]
-	if len(ordering.Columns) == 0 || len(resultRouters) == 1 {
+	// We want to use unordered synchronizer if the ordering is empty and
+	// we're not being forced to serialize streams. Note that ordered
+	// synchronizers support the case of an empty ordering - they will be
+	// merging the result streams by fully consuming one stream at a time
+	// before moving on to the next one.
+	useUnorderedSync := len(ordering.Columns) == 0 && !forceSerialization
+	if len(resultRouters) == 1 {
+		// However, if we only have a single result router, then there is
+		// nothing to merge, and we unconditionally will use the unordered
+		// synchronizer since it is more efficient.
+		useUnorderedSync = true
+	}
+	if useUnorderedSync {
 		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_UNORDERED
 	} else {
 		proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_ORDERED
@@ -350,7 +365,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	pIdx := p.AddProcessor(proc)
 
 	// Connect the result routers to the processor.
-	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0)
+	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
 
 	// We now have a single result stream.
 	p.ResultRouters = p.ResultRouters[:1]
@@ -1104,9 +1119,9 @@ func (p *PhysicalPlan) AddJoinStage(
 
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
-		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0)
+		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0, false /* forceSerialization */)
 		// Connect right routers to the processor's second input if it has one.
-		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
+		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1, false /* forceSerialization */)
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
@@ -1156,7 +1171,7 @@ func (p *PhysicalPlan) AddStageOnNodes(
 	// Connect the result streams to the processors.
 	for bucket := 0; bucket < len(nodes); bucket++ {
 		pIdx := ProcessorIdx(pIdxStart + bucket)
-		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0)
+		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0, false /* forceSerialization */)
 	}
 
 	// Set the new result routers.
@@ -1241,11 +1256,13 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 
 // EnsureSingleStreamPerNode goes over the ResultRouters and merges any group of
 // routers that are on the same node, using a no-op processor.
+// forceSerialization determines whether the streams are forced to be serialized
+// (i.e. whether we don't want any parallelism).
 //
 // TODO(radu): a no-op processor is not ideal if the next processor is on the
 // same node. A fix for that is much more complicated, requiring remembering
 // extra state in the PhysicalPlan.
-func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
+func (p *PhysicalPlan) EnsureSingleStreamPerNode(forceSerialization bool) {
 	// Fast path - check if we need to do anything.
 	var nodes util.FastIntSet
 	var foundDuplicates bool
@@ -1295,7 +1312,7 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode() {
 			},
 		}
 		mergedProcIdx := p.AddProcessor(proc)
-		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx, 0 /* destInput */)
+		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx, 0 /* destInput */, forceSerialization)
 		p.ResultRouters[i] = mergedProcIdx
 	}
 }

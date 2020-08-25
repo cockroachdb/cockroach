@@ -28,7 +28,13 @@ type defaultSpanGenerator struct {
 	numKeyCols  int
 	lookupCols  []uint32
 
-	indexKeyRow          rowenc.EncDatumRow
+	indexKeyRow rowenc.EncDatumRow
+	// keyToInputRowIndices maps a lookup span key to the input row indices that
+	// desire that span. This is used for joins other than index joins, for
+	// de-duping spans, and to map the fetched rows to the input rows that need
+	// to join with them. Index joins already have unique rows in the input that
+	// generate unique spans for fetch, and simply output the fetched rows, do
+	// do not use this map.
 	keyToInputRowIndices map[string][]int
 
 	scratchSpans roachpb.Spans
@@ -81,12 +87,18 @@ func (g *defaultSpanGenerator) generateSpans(rows []rowenc.EncDatumRow) (roachpb
 		if err != nil {
 			return nil, err
 		}
-		inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
-		if inputRowIndices == nil {
+		if g.keyToInputRowIndices == nil {
+			// Index join.
 			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
 				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+		} else {
+			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
+			if inputRowIndices == nil {
+				g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
+			}
+			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
 		}
-		g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
 	}
 	return g.scratchSpans, nil
 }
@@ -308,7 +320,7 @@ func (s *joinReaderIndexJoinStrategy) processLookupRows(
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
-	ctx context.Context, row rowenc.EncDatumRow, key roachpb.Key,
+	_ context.Context, row rowenc.EncDatumRow, _ roachpb.Key,
 ) (joinReaderState, error) {
 	s.emitState.processingLookupRow = true
 	s.emitState.lookedUpRow = row

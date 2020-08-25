@@ -4285,6 +4285,15 @@ SELECT ST_AsEWKT(ST_Union(g::geometry)) FROM ( VALUES (NULL), ('POINT(1 0)'), ('
 ----
 LINESTRING (0 0, 5 0)
 
+query T
+SELECT ST_AsEWKT(
+  ST_SharedPaths(
+    ST_GeomFromText('MULTILINESTRING((26 125,26 200,126 200,126 125,26 125),
+	   (51 150,101 150,76 175,51 150))'),
+	ST_GeomFromText('LINESTRING(151 100,126 156.25,126 125,90 161, 76 175)')))
+----
+GEOMETRYCOLLECTION (MULTILINESTRING ((126 156.25, 126 125), (101 150, 90 161), (90 161, 76 175)), MULTILINESTRING EMPTY)
+
 subtest set_point_test
 
 query T
@@ -4351,3 +4360,23 @@ POINT (10.5 20.25)
 
 statement error unknown function: public.log\(\), but log\(\) exists
 SELECT public.log(10)
+
+query TT
+SELECT
+  ST_AsText(a.geom) d,
+  ST_AsText(ST_FlipCoordinates(a.geom))
+FROM geom_operators_test a
+ORDER BY d ASC
+----
+NULL                                                   NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
+GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
+LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (0.5 -0.5, 0.5 0.5)
+LINESTRING EMPTY                                       LINESTRING EMPTY
+POINT (-0.5 0.5)                                       POINT (0.5 -0.5)
+POINT (0.5 0.5)                                        POINT (0.5 0.5)
+POINT (5 5)                                            POINT (5 5)
+POINT EMPTY                                            POINT EMPTY
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0 -0.1, 0 1, 1 1, 1 -0.1, 0 -0.1))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((0 -1, 0 0, 1 0, 1 -1, 0 -1))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
