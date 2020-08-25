@@ -96,6 +96,12 @@ func getCreateTypeParams(
 	if err != nil {
 		return nil, 0, err
 	}
+
+	// Check permissions on the schema.
+	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+		return nil, 0, err
+	}
+
 	typeKey = catalogkv.MakeObjectNameKey(params.ctx, params.ExecCfg().Settings, db.GetID(), schemaID, name.Type())
 	exists, collided, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, db.GetID(), schemaID, name.Type())

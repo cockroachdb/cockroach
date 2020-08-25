@@ -282,6 +282,11 @@ func getTableCreateParams(
 		)
 	}
 
+	// Check permissions on the schema.
+	if err := params.p.canCreateOnSchema(params.ctx, schemaID, params.p.User()); err != nil {
+		return nil, 0, err
+	}
+
 	exists, id, err := catalogkv.LookupObjectID(
 		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
 	if err == nil && exists {
@@ -384,7 +389,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		// If we have an implicit txn we want to run CTAS async, and consequently
 		// ensure it gets queued as a SchemaChange.
 		if params.p.ExtendedEvalContext().TxnImplicit {
-			desc.State = descpb.TableDescriptor_ADD
+			desc.State = descpb.DescriptorState_ADD
 		}
 	} else {
 		affected = make(map[descpb.ID]*tabledesc.Mutable)
@@ -408,7 +413,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				}
 			}
 			if !foundExternalReference {
-				desc.State = descpb.TableDescriptor_PUBLIC
+				desc.State = descpb.DescriptorState_PUBLIC
 			}
 		}
 	}
@@ -759,7 +764,7 @@ func ResolveFK(
 		// other table are updated to include the backref, if it does not already
 		// exist.
 		if ts == NewTable {
-			tbl.State = descpb.TableDescriptor_ADD
+			tbl.State = descpb.DescriptorState_ADD
 		}
 
 		// If we resolve the same table more than once, we only want to edit a
@@ -1081,7 +1086,7 @@ func addInterleave(
 	}
 	index.Interleave = descpb.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
 
-	desc.State = descpb.TableDescriptor_ADD
+	desc.State = descpb.DescriptorState_ADD
 	return nil
 }
 
@@ -1123,8 +1128,8 @@ func (p *planner) finalizeInterleave(
 		return err
 	}
 
-	if desc.State == descpb.TableDescriptor_ADD {
-		desc.State = descpb.TableDescriptor_PUBLIC
+	if desc.State == descpb.DescriptorState_ADD {
+		desc.State = descpb.DescriptorState_PUBLIC
 
 		// No job description, since this is presumably part of some larger schema change.
 		if err := p.writeSchemaChange(

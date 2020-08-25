@@ -46,7 +46,7 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc *tabledesc.Immuta
 			tableDesc.Name, len(tableDesc.Families))
 	}
 
-	if tableDesc.State == descpb.TableDescriptor_DROP {
+	if tableDesc.State == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
 	if tableDesc.Name != t.StatementTimeName {

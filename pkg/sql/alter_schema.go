@@ -52,8 +52,15 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema)
 	case catalog.SchemaUserDefined:
-		// TODO (rohany): Check permissions here.
 		desc := schema.Desc.(*schemadesc.Mutable)
+		// The user must be the owner of the schema to modify it.
+		hasOwnership, err := p.HasOwnership(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+		if !hasOwnership {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "must be owner of schema %q", desc.Name)
+		}
 		return &alterSchemaNode{n: n, db: db, desc: desc}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown schema kind")

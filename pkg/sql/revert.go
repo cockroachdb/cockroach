@@ -47,7 +47,7 @@ func RevertTables(
 	// Check that all the tables are revertable -- i.e. offline and that their
 	// full interleave hierarchy is being reverted.
 	for i := range tables {
-		if tables[i].State != descpb.TableDescriptor_OFFLINE {
+		if tables[i].State != descpb.DescriptorState_OFFLINE {
 			return errors.New("only offline tables can be reverted")
 		}
 

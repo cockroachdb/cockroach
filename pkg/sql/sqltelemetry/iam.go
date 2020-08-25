@@ -28,6 +28,8 @@ const (
 	CreateRole = "create"
 	// OnDatabase is used when a GRANT/REVOKE is happening on a database.
 	OnDatabase = "on_database"
+	// OnSchema is used when a GRANT/REVOKE is happening on a schema.
+	OnSchema = "on_schema"
 	// OnTable is used when a GRANT/REVOKE is happening on a table.
 	OnTable = "on_table"
 	// OnType is used when a GRANT/REVOKE is happening on a type.

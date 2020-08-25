@@ -45,6 +45,11 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		return nil, err
 	}
 
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	d := newDropCascadeState()
 
 	// Collect all schemas to be deleted.
@@ -63,8 +68,14 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
 		case catalog.SchemaUserDefined:
+			hasOwnership, err := p.HasOwnership(ctx, sc.Desc)
+			if err != nil {
+				return nil, err
+			}
+			if !(isAdmin || hasOwnership) {
+				return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "permission denied to drop schema %q", sc.Name)
+			}
 			namesBefore := len(d.objectNamesToDelete)
-			// TODO (rohany): Do a permissions check on the schema.
 			if err := d.collectObjectsInSchema(ctx, p, db, &sc); err != nil {
 				return nil, err
 			}
@@ -167,7 +178,7 @@ func (p *planner) dropSchemaImpl(
 		Dropped: true,
 	}
 	// Mark the descriptor as dropped.
-	sc.State = descpb.SchemaDescriptor_DROP
+	sc.State = descpb.DescriptorState_DROP
 	return p.writeSchemaDesc(ctx, sc)
 }
 

@@ -173,25 +173,15 @@ query TTTT
 SHOW GRANTS ON DATABASE system
 ----
 system  crdb_internal       admin  GRANT
-system  crdb_internal       admin  SELECT
 system  crdb_internal       root   GRANT
-system  crdb_internal       root   SELECT
 system  information_schema  admin  GRANT
-system  information_schema  admin  SELECT
 system  information_schema  root   GRANT
-system  information_schema  root   SELECT
 system  pg_catalog          admin  GRANT
-system  pg_catalog          admin  SELECT
 system  pg_catalog          root   GRANT
-system  pg_catalog          root   SELECT
 system  pg_extension        admin  GRANT
-system  pg_extension        admin  SELECT
 system  pg_extension        root   GRANT
-system  pg_extension        root   SELECT
 system  public              admin  GRANT
-system  public              admin  SELECT
 system  public              root   GRANT
-system  public              root   SELECT
 
 query TTTTT
 SHOW GRANTS ON system.*

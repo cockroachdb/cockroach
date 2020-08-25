@@ -74,7 +74,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
 			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),
 			mkTable(tbDesc{ID: 4, Name: "baz", ParentID: 3}),
-			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: descpb.TableDescriptor_OFFLINE}),
+			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: descpb.DescriptorState_OFFLINE}),
 			mkDB(3, "data"),
 			mkDB(5, "empty"),
 			// Create some user defined types and tables that reference them.

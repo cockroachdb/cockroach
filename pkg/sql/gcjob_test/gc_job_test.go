@@ -132,7 +132,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 						},
 					},
 				}
-				myTableDesc.State = descpb.TableDescriptor_DROP
+				myTableDesc.State = descpb.DescriptorState_DROP
 				myTableDesc.DropTime = dropTime
 			case DATABASE:
 				details = jobspb.SchemaChangeGCDetails{
@@ -148,9 +148,9 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					},
 					ParentID: myDBID,
 				}
-				myTableDesc.State = descpb.TableDescriptor_DROP
+				myTableDesc.State = descpb.DescriptorState_DROP
 				myTableDesc.DropTime = dropTime
-				myOtherTableDesc.State = descpb.TableDescriptor_DROP
+				myOtherTableDesc.State = descpb.DescriptorState_DROP
 				myOtherTableDesc.DropTime = dropTime
 			}
 

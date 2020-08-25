@@ -691,6 +691,11 @@ func TestParse(t *testing.T) {
 		{`GRANT USAGE, GRANT ON TYPE foo TO root`},
 		{`GRANT ALL ON TYPE foo TO root`},
 
+		// GRANT ON SCHEMA.
+		{`GRANT USAGE ON SCHEMA foo TO root`},
+		{`GRANT USAGE, GRANT, CREATE ON SCHEMA foo TO root`},
+		{`GRANT ALL ON SCHEMA foo, bar, baz TO root`},
+
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
 		{`REVOKE SELECT ON TABLE foo FROM root`},
@@ -706,6 +711,11 @@ func TestParse(t *testing.T) {
 		{`REVOKE USAGE ON TYPE foo FROM root`},
 		{`REVOKE USAGE, GRANT ON TYPE foo FROM root`},
 		{`REVOKE ALL ON TYPE foo FROM root`},
+
+		// REVOKE ON SCHEMA.
+		{`REVOKE USAGE ON SCHEMA foo FROM root`},
+		{`REVOKE USAGE, GRANT, CREATE ON SCHEMA foo FROM root`},
+		{`REVOKE ALL ON SCHEMA foo, bar, baz FROM root`},
 
 		{`INSERT INTO a VALUES (1)`},
 		{`EXPLAIN INSERT INTO a VALUES (1)`},

@@ -262,3 +262,62 @@ DROP DATABASE with_schemas CASCADE
 # or elements within the schemas.
 query I
 SELECT id FROM system.namespace WHERE name LIKE 'dropschema%'
+
+# Test privilege interactions with schemas.
+subtest privileges
+
+# Have root create a schema.
+statement ok
+CREATE SCHEMA privs
+
+statement ok
+GRANT CREATE ON DATABASE test TO testuser
+
+# Test user shouldn't be able to create in privs yet.
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE privs.denied (x INT)
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+SET experimental_enable_enums = true;
+CREATE TYPE privs.denied AS ENUM ('denied');
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA privs TO testuser
+
+user testuser
+
+# Now the testuser can create objects.
+statement ok
+CREATE TABLE privs.tbl (x INT)
+
+statement ok
+SET experimental_enable_enums = true;
+CREATE TYPE privs.typ AS ENUM ('allowed');
+
+# Now revoke the permissions.
+user root
+
+statement ok
+REVOKE CREATE ON SCHEMA privs FROM testuser
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+CREATE TABLE privs.denied (x INT)
+
+statement error pq: user testuser does not have CREATE privilege on schema privs
+SET experimental_enable_enums = true;
+CREATE TYPE privs.denied AS ENUM ('denied');
+
+# The testuser shouldn't be able to alter or drop the schema.
+statement error pq: must be owner of schema "privs"
+ALTER SCHEMA privs RENAME TO denied
+
+statement error pq: permission denied to drop schema "privs"
+DROP SCHEMA privs
+
+# TODO (rohany): Test the usage privilege here.

@@ -712,6 +712,23 @@ message NameInfo {
   optional string name = 2 [(gogoproto.nullable) = false];
 }
 
+// State indicates whether a descriptor is public (i.e., normally visible,
+// resolvable, etc.) or in some other state subject to restrictions.
+// A non-public table descriptor cannot be leased.
+// A schema changer observing DROP set will truncate the table and delete the
+// descriptor.
+// It is illegal to transition DROP to any other state.
+enum DescriptorState {
+  // Not used.
+  PUBLIC = 0;
+  // Descriptor is being added.
+  ADD = 1;
+  // Descriptor is being dropped.
+  DROP = 2;
+  // Descriptor is offline (e.g. for bulk-ingestion). See offline_reason.
+  OFFLINE = 3;
+}
+
 // A TableDescriptor represents a table or view and is stored in a
 // structured metadata key. The TableDescriptor has a globally-unique ID,
 // while its member {Column,Index}Descriptors have locally-unique IDs.
@@ -824,22 +841,7 @@ message TableDescriptor {
 
   reserved 18;
 
-  // State is set if this TableDescriptor is in the process of being added or deleted.
-  // A non-public table descriptor cannot be leased.
-  // A schema changer observing DROP set will truncate the table and delete the
-  // descriptor.
-  // It is illegal to transition DROP to any other state.
-  enum State {
-    // Not used.
-    PUBLIC = 0;
-    // Descriptor is being added.
-    ADD = 1;
-    // Descriptor is being dropped.
-    DROP = 2;
-    // Descriptor is offline (e.g. for bulk-ingestion). See offline_reason.
-    OFFLINE = 3;
-  }
-  optional State state = 19 [(gogoproto.nullable) = false];
+  optional DescriptorState state = 19 [(gogoproto.nullable) = false];
   optional string offline_reason = 38 [(gogoproto.nullable) = false];
 
   message CheckConstraint {
@@ -1079,11 +1081,7 @@ message DatabaseDescriptor {
   // child schema with a target name. Temporary schemas are not stored here.
   map<string, SchemaInfo> schemas = 7 [(gogoproto.nullable) = false];
 
-  enum State {
-    PUBLIC = 0;
-    DROP = 1;
-  }
-  optional State state = 8 [(gogoproto.nullable) = false];
+  optional DescriptorState state = 8 [(gogoproto.nullable) = false];
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1127,12 +1125,7 @@ message TypeDescriptor {
   optional uint32 array_type_id = 8
     [(gogoproto.nullable) = false, (gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "ID"];
 
-  // State is set if this TypeDescriptor is in the process of being deleted.
-  enum State {
-    PUBLIC = 0;
-    DROP = 1;
-  }
-  optional State state = 13 [(gogoproto.nullable) = false];
+  optional DescriptorState state = 13 [(gogoproto.nullable) = false];
 
   // Represents the kind of type that this type descriptor represents.
   enum Kind {
@@ -1193,12 +1186,7 @@ message SchemaDescriptor {
   optional uint32 id = 3
   [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
 
-  // State is set if this SchemaDescriptor is in the process of being deleted.
-  enum State {
-    PUBLIC = 0;
-    DROP = 1;
-  }
-  optional State state = 8 [(gogoproto.nullable) = false];
+  optional DescriptorState state = 8 [(gogoproto.nullable) = false];
 
   // Last modification time of the descriptor.
   optional util.hlc.Timestamp modification_time = 5 [(gogoproto.nullable) = false];

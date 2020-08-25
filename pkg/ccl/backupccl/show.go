@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -42,12 +41,6 @@ func showBackupPlanHook(
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil, false, nil
-	}
-
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "SHOW BACKUP",
-	); err != nil {
-		return nil, nil, nil, false, err
 	}
 
 	if err := p.RequireAdminRole(ctx, "SHOW BACKUP"); err != nil {

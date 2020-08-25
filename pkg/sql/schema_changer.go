@@ -378,7 +378,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 				if !tbl.Adding() {
 					return lease.ErrDidntUpdateDescriptor
 				}
-				tbl.State = descpb.TableDescriptor_PUBLIC
+				tbl.State = descpb.DescriptorState_PUBLIC
 				return nil
 			},
 			func(txn *kv.Txn) error { return nil },
@@ -804,7 +804,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	if err != nil {
 		return err
 	}
-	if tblDesc, ok := desc.(catalog.TableDescriptor); ok && tblDesc.GetState() == descpb.TableDescriptor_ADD {
+	if tblDesc, ok := desc.(catalog.TableDescriptor); ok && tblDesc.GetState() == descpb.DescriptorState_ADD {
 		// Delete the names in use by this descriptor.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return catalogkv.RemoveObjectNamespaceEntry(
