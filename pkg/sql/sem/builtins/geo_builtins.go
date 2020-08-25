@@ -3476,6 +3476,31 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_removepoint": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"line_string", types.Geometry},
+				{"index", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				lineString := args[0].(*tree.DGeometry)
+				index := int(*args[1].(*tree.DInt))
+
+				ret, err := geomfn.RemovePoint(lineString.Geometry, index)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Removes the Point at the given 0-based index and returns the modified LineString geometry.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_reverse": makeBuiltin(
 		defProps(),
 		tree.Overload{

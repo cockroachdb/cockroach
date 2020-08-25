@@ -1570,6 +1570,8 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_relatematch"></a><code>st_relatematch(intersection_matrix: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given DE-9IM intersection matrix satisfies the given pattern.</p>
 </span></td></tr>
+<tr><td><a name="st_removepoint"></a><code>st_removepoint(line_string: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Removes the Point at the given 0-based index and returns the modified LineString geometry.</p>
+</span></td></tr>
 <tr><td><a name="st_reverse"></a><code>st_reverse(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified geometry by reversing the order of its vertices.</p>
 </span></td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor</p>
