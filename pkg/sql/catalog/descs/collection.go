@@ -483,22 +483,51 @@ func (tc *Collection) getUserDefinedSchemaVersion(
 		return readFromStore()
 	}
 
-	// TODO (lucy): Replace this with a lookup to the parent database's Schema
-	// map to short-circuit returning negative results.
-	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
-		ctx, txn, dbID, keys.RootNamespaceID, schemaName)
+	// Look up whether the schema is on the database descriptor and return early
+	// if it's not.
+	// TODO (lucy): It's unfortunate that our current API (where we look up
+	// schemas by database ID and name) forces us to look up the leased database
+	// descriptor here, since we'll already have done this lookup when we're
+	// resolving the schema by name. Arguably we should be doing this at a higher
+	// level.
+	dbDesc, err := tc.GetDatabaseVersionByID(ctx, txn, dbID,
+		tree.DatabaseLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
 	if err != nil {
 		return nil, err
 	}
-	if shouldReadFromStore {
-		return readFromStore()
-	}
-	schema, ok := desc.(*schemadesc.Immutable)
-	if !ok {
+	schemaInfo, found := dbDesc.LookupSchema(schemaName)
+	if !found {
 		if flags.Required {
 			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 		}
 		return nil, nil
+	} else if schemaInfo.Dropped {
+		if flags.Required {
+			return nil, pgerror.New(pgcode.InvalidSchemaName, "schema %s is being dropped")
+		}
+		return nil, nil
+	}
+
+	// If we have a schema ID from the database, get the schema descriptor. Since
+	// the schema and database descriptors are updated in the same transaction,
+	// their leased "versions" (not the descriptor version, but the state in the
+	// abstract sequence of states in adding, renaming, or dropping a schema) can
+	// differ by at most 1 while waiting for old leases to drain. So false
+	// negatives can occur from the database lookup, in some sense, if we have a
+	// lease on the latest version of the schema and on the previous version of
+	// the database which doesn't reflect the changes to the schema. But this
+	// isn't a problem for correctness; it can only happen on other sessions
+	// before the schema change has returned results.
+	desc, err := tc.getDescriptorVersionByID(ctx, txn, schemaInfo.ID, flags.CommonLookupFlags, true /* setTxnDeadline */)
+	if err != nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
+		}
+		return nil, err
+	}
+	schema, ok := desc.(*schemadesc.Immutable)
+	if !ok {
+		return nil, sqlerrors.NewUndefinedSchemaError(schemaName)
 	}
 	return schema, nil
 }
