@@ -848,16 +848,16 @@ func EncodeGeoInvertedIndexTableKeys(
 }
 
 func encodeGeoKeys(inKey []byte, geoKeys []geoindex.Key) (keys [][]byte, err error) {
-	keys = make([][]byte, 0, len(geoKeys))
-	for _, k := range geoKeys {
-		outKey := make([]byte, len(inKey))
-		copy(outKey, inKey)
-		d := (tree.DInt)(k)
-		newKey, err := EncodeTableKey(outKey, &d, encoding.Ascending)
-		if err != nil {
-			return nil, err
-		}
-		keys = append(keys, newKey)
+	// Avoid per-key heap allocations.
+	b := make([]byte, 0, len(geoKeys)*(len(inKey)+encoding.MaxVarintLen))
+	keys = make([][]byte, len(geoKeys))
+	for i, k := range geoKeys {
+		prev := len(b)
+		b = append(b, inKey...)
+		b = encoding.EncodeUvarintAscending(b, uint64(k))
+		// Set capacity so that the caller appending does not corrupt later keys.
+		newKey := b[prev:len(b):len(b)]
+		keys[i] = newKey
 	}
 	return keys, nil
 }

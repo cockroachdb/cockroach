@@ -519,7 +519,7 @@ func (v *Value) SetDuration(t duration.Duration) error {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetBitArray(t bitarray.BitArray) {
 	words, _ := t.EncodingParts()
-	v.ensureRawBytes(headerSize + encoding.NonsortingUvarintMaxLen + 8*len(words))
+	v.ensureRawBytes(headerSize + encoding.MaxNonsortingUvarintLen + 8*len(words))
 	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes[:headerSize], t)
 	v.setTag(ValueType_BITARRAY)
 }
