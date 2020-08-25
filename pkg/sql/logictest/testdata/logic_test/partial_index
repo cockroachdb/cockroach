@@ -829,6 +829,63 @@ DROP INDEX i2
 statement ok
 DELETE from u
 
+# Tests for ON CONFLICT (a) [WHERE ...] DO NOTHING.
+
+# An ON CONFLICT without a WHERE clause cannot use a unique partial index as an
+# arbiter.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) DO NOTHING
+
+# An ON CONFLICT with a WHERE clause cannot use a unique partial index if the
+# WHERE clause does not imply the partial index predicate.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < -1 DO NOTHING
+
+# An ON CONFLICT without a WHERE clause can use a unique pseudo-partial index as
+# an arbiter.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
+INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
+DELETE FROM u;
+DROP INDEX i2;
+
+# An ON CONFLICT with any WHERE clause can use a unique non-partial index as an
+# arbiter.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (b);
+INSERT INTO u VALUES (1, 1) ON CONFLICT (b) WHERE b > 0 DO NOTHING;
+DROP INDEX i2;
+
+# An ON CONFLICT with a WHERE clause can be use a unique partial index if the
+# WHERE clause implies the partial index predicate.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b > 1 DO NOTHING;
+INSERT INTO u VALUES (1, 2) ON CONFLICT (a) WHERE b > 1 DO NOTHING;
+
+query II rowsort
+SELECT * FROM u
+----
+1   1
+
+# There can be duplicate key errors from unique partial indexes that are not
+# arbiters.
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+INSERT INTO u VALUES (-1, -1);
+
+statement error pgcode 23505 duplicate key value \(a\)=\(-1\) violates unique constraint \"i2\"
+INSERT INTO u VALUES (-1, -1) ON CONFLICT (a) WHERE b > 0 DO NOTHING
+
+# Two arbiters can be used to detect conflicts and avoid duplicate key errors.
+statement ok
+INSERT INTO u VALUES (1, 2), (-1, -2) ON CONFLICT (a) WHERE b > 0 AND b < 0 DO NOTHING
+
+statement ok
+DROP INDEX i2
+
+statement ok
+DELETE FROM u
+
 # Test partial indexes with an ENUM in the predicate.
 subtest enum
 

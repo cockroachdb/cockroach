@@ -737,8 +737,9 @@ func TestParse(t *testing.T) {
 
 		{`INSERT INTO a VALUES (1) ON CONFLICT DO NOTHING`},
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a) DO NOTHING`},
-		{`INSERT INTO a VALUES (1) ON CONFLICT DO UPDATE SET a = 1`},
+		{`INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO NOTHING`},
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1`},
+		{`INSERT INTO a VALUES (1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 1`},
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a, b) DO UPDATE SET a = 1`},
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1, b = excluded.a`},
 		{`INSERT INTO a VALUES (1) ON CONFLICT (a) DO UPDATE SET a = 1 WHERE b > 2`},
@@ -3044,8 +3045,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`, ``},
 		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`, ``},
 		{`CREATE TABLE a(b XML)`, 0, `xml`, ``},
-
-		{`INSERT INTO a VALUES (1) ON CONFLICT (x) WHERE x > 3 DO NOTHING`, 32557, ``, ``},
 
 		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
 		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},

@@ -181,6 +181,15 @@ func (desc *Immutable) Validate() error {
 //  SchemaMeta on it?
 func (desc *Immutable) SchemaMeta() {}
 
+// LookupSchema returns a descpb.DatabaseDescriptor_SchemaInfo for the schema
+// with the provided name, if a schema with that name belongs to the database.
+func (desc *Immutable) LookupSchema(
+	name string,
+) (schemaInfo descpb.DatabaseDescriptor_SchemaInfo, found bool) {
+	schemaInfo, found = desc.Schemas[name]
+	return schemaInfo, found
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.

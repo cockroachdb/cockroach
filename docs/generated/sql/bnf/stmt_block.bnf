@@ -476,8 +476,9 @@ insert_rest ::=
 	| 'DEFAULT' 'VALUES'
 
 on_conflict ::=
-	'ON' 'CONFLICT' opt_conf_expr 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
-	| 'ON' 'CONFLICT' opt_conf_expr 'DO' 'NOTHING'
+	'ON' 'CONFLICT' 'DO' 'NOTHING'
+	| 'ON' 'CONFLICT' '(' name_list ')' opt_where_clause 'DO' 'NOTHING'
+	| 'ON' 'CONFLICT' '(' name_list ')' opt_where_clause 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
 
 pause_jobs_stmt ::=
 	'PAUSE' 'JOB' a_expr
@@ -1315,10 +1316,6 @@ table_elem ::=
 
 insert_column_item ::=
 	column_name
-
-opt_conf_expr ::=
-	'(' name_list ')'
-	| 
 
 session_var ::=
 	'identifier'

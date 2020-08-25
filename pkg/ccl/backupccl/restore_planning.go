@@ -712,6 +712,33 @@ func maybeUpgradeTableDescsInBackupManifests(
 	return nil
 }
 
+// rewriteDatabaseDescs rewrites all ID's in the input slice of
+// DatabaseDescriptors using the input ID rewrite mapping.
+func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRewriteMap) error {
+	for _, db := range databases {
+		rewrite, ok := descriptorRewrites[db.ID]
+		if !ok {
+			return errors.Errorf("missing rewrite for database %d", db.ID)
+		}
+		db.ID = rewrite.ID
+
+		// Rewrite the name-to-ID mapping for the database's child schemas.
+		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+		for schemaName, schemaInfo := range db.Schemas {
+			if schemaInfo.Dropped {
+				continue
+			}
+			rewrite, ok := descriptorRewrites[schemaInfo.ID]
+			if !ok {
+				return errors.Errorf("missing rewrite for schema %d", db.ID)
+			}
+			newSchemas[schemaName] = descpb.DatabaseDescriptor_SchemaInfo{ID: rewrite.ID}
+		}
+		db.Schemas = newSchemas
+	}
+	return nil
+}
+
 // rewriteIDsInTypesT rewrites all ID's in the input types.T using the input
 // ID rewrite mapping.
 func rewriteIDsInTypesT(typ *types.T, descriptorRewrites DescRewriteMap) {
@@ -1348,6 +1375,12 @@ func doRestorePlan(
 		return err
 	}
 
+	var databases []*dbdesc.Mutable
+	for i := range databasesByID {
+		if _, ok := descriptorRewrites[i]; ok {
+			databases = append(databases, databasesByID[i])
+		}
+	}
 	var schemas []*schemadesc.Mutable
 	for i := range schemasByID {
 		schemas = append(schemas, schemasByID[i])
@@ -1364,6 +1397,9 @@ func doRestorePlan(
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
 	if err := RewriteTableDescs(tables, descriptorRewrites, intoDB); err != nil {
+		return err
+	}
+	if err := rewriteDatabaseDescs(databases, descriptorRewrites); err != nil {
 		return err
 	}
 	if err := rewriteSchemaDescs(schemas, descriptorRewrites); err != nil {

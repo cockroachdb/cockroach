@@ -1003,7 +1003,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <empty> first_or_next
 
 %type <tree.Statement> insert_rest
-%type <tree.NameList> opt_conf_expr opt_col_def_list
+%type <tree.NameList> opt_col_def_list
 %type <*tree.OnConflict> on_conflict
 
 %type <tree.Statement> begin_transaction
@@ -7166,7 +7166,10 @@ opt_equal:
 // %Text:
 // INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
 //        <selectclause>
-//        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
+//        [ON CONFLICT {
+//          [( <colnames...> )] [WHERE <arbiter_predicate>] DO NOTHING |
+//          ( <colnames...> ) [WHERE <index_predicate>] DO UPDATE SET ... [WHERE <expr>]
+//        }
 //        [RETURNING <exprs...>]
 // %SeeAlso: UPSERT, UPDATE, DELETE, WEBDOCS/insert.html
 insert_stmt:
@@ -7268,26 +7271,31 @@ insert_column_item:
 | column_name '.' error { return unimplementedWithIssue(sqllex, 27792) }
 
 on_conflict:
-  ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list opt_where_clause
+  ON CONFLICT DO NOTHING
   {
-    $$.val = &tree.OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $8.expr())}
+    $$.val = &tree.OnConflict{
+      Columns: tree.NameList(nil),
+      DoNothing: true,
+    }
   }
-| ON CONFLICT opt_conf_expr DO NOTHING
+| ON CONFLICT '(' name_list ')' opt_where_clause DO NOTHING
   {
-    $$.val = &tree.OnConflict{Columns: $3.nameList(), DoNothing: true}
+    $$.val = &tree.OnConflict{
+      Columns: $4.nameList(),
+      ArbiterPredicate: $6.expr(),
+      DoNothing: true,
+    }
   }
-
-opt_conf_expr:
-  '(' name_list ')'
+| ON CONFLICT '(' name_list ')' opt_where_clause DO UPDATE SET set_clause_list opt_where_clause
   {
-    $$.val = $2.nameList()
+    $$.val = &tree.OnConflict{
+      Columns: $4.nameList(),
+      ArbiterPredicate: $6.expr(),
+      Exprs: $10.updateExprs(),
+      Where: tree.NewWhere(tree.AstWhere, $11.expr()),
+    }
   }
-| '(' name_list ')' where_clause { return unimplementedWithIssue(sqllex, 32557) }
-| ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
-| /* EMPTY */
-  {
-    $$.val = tree.NameList(nil)
-  }
+| ON CONFLICT ON CONSTRAINT constraint_name { return unimplementedWithIssue(sqllex, 28161) }
 
 returning_clause:
   RETURNING target_list
