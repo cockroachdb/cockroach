@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -296,7 +295,8 @@ func doCreateBackupSchedules(
 	}
 
 	ex := p.ExecCfg().InternalExecutor
-	return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	createSchedules := func() error {
+
 		unpauseOnSuccessID := jobs.InvalidScheduleID
 
 		// If needed, create incremental.
@@ -313,7 +313,7 @@ func doCreateBackupSchedules(
 			inc.Pause()
 			inc.SetScheduleStatus("Waiting for initial backup to complete")
 
-			if err := inc.Create(ctx, ex, txn); err != nil {
+			if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 				return err
 			}
 			if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
@@ -344,11 +344,13 @@ func doCreateBackupSchedules(
 		}
 
 		// Create the schedule (we need its ID to create incremental below).
-		if err := full.Create(ctx, ex, txn); err != nil {
+		if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
 			return err
 		}
 		return emitSchedule(full, fullBackupStmt, resultsCh)
-	})
+	}
+
+	return createSchedules()
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
