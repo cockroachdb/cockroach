@@ -136,7 +136,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := pgwirebase.DecodeOidDatum(nil, oid.T__int8, pgwirebase.FormatText, b[4:])
+	got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T__int8, pgwirebase.FormatText, b[4:], nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 					b := buf.wrapped.Bytes()
 					t.Logf("encoded: %v (%q)", b, b)
 
-					got, err := pgwirebase.DecodeOidDatum(nil, oid.T_bytea, pgwirebase.FormatText, b[4:])
+					got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T_bytea, pgwirebase.FormatText, b[4:], nil)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -486,7 +486,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
-		got, err := pgwirebase.DecodeOidDatum(nil, oid.T_numeric, pgwirebase.FormatBinary, bytes)
+		got, err := pgwirebase.DecodeOidDatum(context.Background(), nil, oid.T_numeric, pgwirebase.FormatBinary, bytes, nil)
 		b.StopTimer()
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())

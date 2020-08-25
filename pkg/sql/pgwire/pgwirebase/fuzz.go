@@ -13,6 +13,8 @@
 package pgwirebase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,7 +42,7 @@ func FuzzDecodeOidDatum(data []byte) int {
 	code := FormatCode(data[0]) % (FormatBinary + 1)
 	b := data[2:]
 
-	_, err := DecodeOidDatum(timeCtx, id, code, b)
+	_, err := DecodeOidDatum(context.Background(), timeCtx, id, code, b, nil)
 	if err != nil {
 		return 0
 	}
