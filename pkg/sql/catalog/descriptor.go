@@ -91,7 +91,7 @@ type TableDescriptor interface {
 
 	TableDesc() *descpb.TableDescriptor
 
-	GetState() descpb.TableDescriptor_State
+	GetState() descpb.DescriptorState
 	GetSequenceOpts() *descpb.TableDescriptor_SequenceOpts
 	GetViewQuery() string
 	GetLease() *descpb.TableDescriptor_SchemaChangeLease

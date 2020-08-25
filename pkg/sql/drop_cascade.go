@@ -93,7 +93,7 @@ func (d *dropCascadeState) resolveCollectedObjects(
 					objName.Object(),
 				)
 			}
-			if tbDesc.State == descpb.TableDescriptor_OFFLINE {
+			if tbDesc.State == descpb.DescriptorState_OFFLINE {
 				dbName := db.GetName()
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"cannot drop a database with OFFLINE tables, ensure %s is"+

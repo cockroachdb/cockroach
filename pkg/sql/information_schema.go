@@ -1889,6 +1889,6 @@ func userCanSeeTable(
 }
 
 func tableIsVisible(table catalog.TableDescriptor, allowAdding bool) bool {
-	return table.GetState() == descpb.TableDescriptor_PUBLIC ||
-		(allowAdding && table.GetState() == descpb.TableDescriptor_ADD)
+	return table.GetState() == descpb.DescriptorState_PUBLIC ||
+		(allowAdding && table.GetState() == descpb.DescriptorState_ADD)
 }

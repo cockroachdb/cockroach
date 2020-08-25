@@ -182,7 +182,7 @@ func spansForAllTableIndexes(
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
-		if rawTbl != nil && rawTbl.State != descpb.TableDescriptor_DROP {
+		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
 			tbl := tabledesc.NewImmutable(*rawTbl)
 			for _, idx := range tbl.AllNonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}

@@ -1000,7 +1000,7 @@ func prepareNewTableDescsForIngestion(
 	// as tabledesc.TableDescriptor.
 	tableDescs := make([]catalog.TableDescriptor, len(newMutableTableDescriptors))
 	for i := range tableDescs {
-		newMutableTableDescriptors[i].State = descpb.TableDescriptor_OFFLINE
+		newMutableTableDescriptors[i].State = descpb.DescriptorState_OFFLINE
 		newMutableTableDescriptors[i].OfflineReason = "importing"
 		tableDescs[i] = newMutableTableDescriptors[i]
 	}
@@ -1050,7 +1050,7 @@ func prepareExistingTableDescForIngestion(
 	// Take the table offline for import.
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
-	importing.State = descpb.TableDescriptor_OFFLINE
+	importing.State = descpb.DescriptorState_OFFLINE
 	importing.OfflineReason = "importing"
 	// TODO(dt): de-validate all the FKs.
 
@@ -1328,7 +1328,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			newTableDesc := tabledesc.NewExistingMutable(*tbl.Desc)
 			prevTableDesc := newTableDesc.ImmutableCopy().(*tabledesc.Immutable)
 			newTableDesc.Version++
-			newTableDesc.State = descpb.TableDescriptor_PUBLIC
+			newTableDesc.State = descpb.DescriptorState_PUBLIC
 			newTableDesc.OfflineReason = ""
 
 			if !tbl.IsNew {
@@ -1498,7 +1498,7 @@ func (r *importResumer) dropTables(
 		prevTableDesc := newTableDesc.ImmutableCopy().(*tabledesc.Immutable)
 		newTableDesc.Version++
 		if tbl.IsNew {
-			newTableDesc.State = descpb.TableDescriptor_DROP
+			newTableDesc.State = descpb.DescriptorState_DROP
 			// If the DropTime if set, a table uses RangeClear for fast data removal. This
 			// operation starts at DropTime + the GC TTL. If we used now() here, it would
 			// not clean up data until the TTL from the time of the error. Instead, use 1
@@ -1514,7 +1514,7 @@ func (r *importResumer) dropTables(
 			tablesToGC = append(tablesToGC, newTableDesc.ID)
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
-			newTableDesc.State = descpb.TableDescriptor_PUBLIC
+			newTableDesc.State = descpb.DescriptorState_PUBLIC
 		}
 		// Note that this CPut is safe with respect to mixed-version descriptor
 		// upgrade and downgrade, because IMPORT does not operate in mixed-version

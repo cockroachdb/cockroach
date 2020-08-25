@@ -167,7 +167,7 @@ func (p *planner) dropSchemaImpl(
 		Dropped: true,
 	}
 	// Mark the descriptor as dropped.
-	sc.State = descpb.SchemaDescriptor_DROP
+	sc.State = descpb.DescriptorState_DROP
 	return p.writeSchemaDesc(ctx, sc)
 }
 
