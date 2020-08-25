@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,6 +76,30 @@ func TestingGetTypeDescriptor(
 		return nil
 	}
 	return desc
+}
+
+// TestingGetDatabaseDescriptor retrieves a database descriptor directly from
+// the kv layer.
+//
+// This function should be moved wherever TestingGetTableDescriptor is moved.
+func TestingGetDatabaseDescriptor(
+	kvDB *kv.DB, codec keys.SQLCodec, database string,
+) (db *dbdesc.Immutable) {
+	ctx := context.TODO()
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		desc, err := UncachedPhysicalAccessor{}.GetDatabaseDesc(
+			ctx, txn, codec, database, tree.DatabaseLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{Required: true, AvoidCached: true},
+			})
+		if err != nil {
+			return err
+		}
+		db = desc.(*dbdesc.Immutable)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	return db
 }
 
 func testingGetObjectDescriptor(
