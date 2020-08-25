@@ -320,8 +320,8 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	}
 
 	// Ensure that we can perform follower reads from all replicas.
-	lRepls := replsForRange(ctx, t, tc, lr)
-	rRepls := replsForRange(ctx, t, tc, rr)
+	lRepls := replsForRange(ctx, t, tc, lr, numNodes)
+	rRepls := replsForRange(ctx, t, tc, rr, numNodes)
 	// Now immediately query both the ranges and there's 1 value per range.
 	// We need to tolerate RangeNotFound as the split range may not have been
 	// created yet.
@@ -336,7 +336,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	// the merged range.
 	merged, err := tc.Server(0).MergeRanges(lr.StartKey.AsRawKey())
 	require.Nil(t, err)
-	mergedRepls := replsForRange(ctx, t, tc, merged)
+	mergedRepls := replsForRange(ctx, t, tc, merged, numNodes)
 	// The hazard here is that a follower is not yet aware of the merge and will
 	// return an error. We'll accept that because a client wouldn't see that error
 	// from distsender.
@@ -984,7 +984,7 @@ func getFollowerReplicas(
 	rangeDesc roachpb.RangeDescriptor,
 	leaseholder roachpb.ReplicationTarget,
 ) []*kvserver.Replica {
-	repls := replsForRange(ctx, t, tc, rangeDesc)
+	repls := replsForRange(ctx, t, tc, rangeDesc, numNodes)
 	followers := make([]*kvserver.Replica, 0, len(repls)-1)
 	for _, repl := range repls {
 		if repl.StoreID() == leaseholder.StoreID && repl.NodeID() == leaseholder.NodeID {
@@ -1058,6 +1058,7 @@ func replsForRange(
 	t *testing.T,
 	tc serverutils.TestClusterInterface,
 	desc roachpb.RangeDescriptor,
+	numNodes int,
 ) (repls []*kvserver.Replica) {
 	testutils.SucceedsSoon(t, func() error {
 		repls = nil
@@ -1193,7 +1194,7 @@ RESET statement_timeout;
 			break
 		}
 	}
-	repls = replsForRange(ctx, t, tc, desc)
+	repls = replsForRange(ctx, t, tc, desc, numNodes)
 	require.Equal(t, numReplicas, len(repls))
 	// Wait until we see an epoch based lease on our chosen range. This should
 	// happen fairly quickly since we just transferred a lease (as a means to make

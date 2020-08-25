@@ -29,7 +29,7 @@ func registerAcceptance(r *testRegistry) {
 		{
 			name: "bank/zerosum-splits", fn: runBankNodeZeroSum,
 			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs into " +
-				" various errors during its rebalances, see isExpectedRelocateError)",
+				" various errors during its rebalances, see IsExpectedRelocateError)",
 		},
 		// {"bank/zerosum-restart", runBankZeroSumRestart},
 		{name: "build-info", fn: runBuildInfo},
