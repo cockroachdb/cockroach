@@ -346,10 +346,6 @@ func init() {
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
-		// --socket is deprecated as of 20.1.
-		// TODO(knz): remove in 20.2.
-		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket)
-		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
 		// Backward-compatibility flags.
@@ -924,14 +920,12 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the socket name, if requested. The flags may not be defined for
 	// `cmd` so be cognizant of that.
 	//
-	// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
-	// already set and we don't want to change it.
-	// However, if --socket-dir is set, then we'll use that.
+	// If --socket-dir is set, then we'll use that.
 	// There are two cases:
 	// 1. --socket-dir is set and is empty; in this case the user is telling us
 	//    "disable the socket".
 	// 2. is set and non-empty. Then it should be used as specified.
-	if !changed(fs, cliflags.Socket.Name) && changed(fs, cliflags.SocketDir.Name) {
+	if changed(fs, cliflags.SocketDir.Name) {
 		if serverSocketDir == "" {
 			serverCfg.SocketFile = ""
 		} else {

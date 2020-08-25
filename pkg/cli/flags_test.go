@@ -751,9 +751,6 @@ func TestServerSocketSettings(t *testing.T) {
 		// Empty socket dir disables the socket.
 		{[]string{"start", "--socket-dir="}, ""},
 		{[]string{"start", "--socket-dir=", "--listen-addr=:12345"}, ""},
-		// Deprecated behavior (remove in 20.2):
-		{[]string{"start", "--socket=/blah/xxxx"}, "/blah/xxxx"},
-		{[]string{"start", "--socket-dir=/foo", "--socket=/blah/xxxx"}, "/blah/xxxx"},
 	}
 
 	for i, td := range testData {
