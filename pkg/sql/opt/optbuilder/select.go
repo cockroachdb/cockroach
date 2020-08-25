@@ -698,29 +698,10 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta) {
 			panic(err)
 		}
 
-		texpr := tableScope.resolveAndRequireType(expr, types.Bool)
-
-		var scalar opt.ScalarExpr
-		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
-			scalar = b.buildScalar(texpr, tableScope, nil, nil, nil)
-		})
-
-		// Wrap the scalar in a FiltersItem.
-		filter := b.factory.ConstructFiltersItem(scalar)
-
-		// Expressions with non-immutable operators are not supported as partial
-		// index predicates.
-		if filter.ScalarProps().VolatilitySet.HasStable() || filter.ScalarProps().VolatilitySet.HasVolatile() {
-			panic(errors.AssertionFailedf("partial index predicate is not immutable"))
-		}
-
-		// Wrap the predicate filter expression in a FiltersExpr and normalize
-		// it.
-		filters := memo.FiltersExpr{filter}
-		filters = b.factory.NormalizePartialIndexPredicate(filters)
-
-		// Add the filters to the table metadata.
-		tabMeta.AddPartialIndexPredicate(indexOrd, &filters)
+		// Build the partial index predicate as a memo.FiltersExpr and add it
+		// to the table metadata.
+		predExpr := b.buildPartialIndexPredicate(tableScope, expr)
+		tabMeta.AddPartialIndexPredicate(indexOrd, &predExpr)
 	}
 }
 

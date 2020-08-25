@@ -137,9 +137,14 @@ type mutationBuilder struct {
 	// are joined into larger LEFT OUTER JOIN expressions.
 	subqueries []*scope
 
-	// parsedExprs is a cached set of parsed default and computed expressions
+	// parsedColExprs is a cached set of parsed default and computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
-	parsedExprs []tree.Expr
+	parsedColExprs []tree.Expr
+
+	// parsedIndexExprs is a cached set of parsed partial index predicate
+	// expressions from the table schema. These are parsed once and cached for
+	// reuse.
+	parsedIndexExprs []tree.Expr
 
 	// checks contains foreign key check queries; see buildFK* methods.
 	checks memo.FKChecksExpr
@@ -788,16 +793,11 @@ func (mb *mutationBuilder) projectPartialIndexCols(colIDs opt.ColList, predScope
 		ord := 0
 		for i, n := 0, mb.tab.DeletableIndexCount(); i < n; i++ {
 			index := mb.tab.Index(i)
-			predicate, ok := index.Predicate()
-			if !ok {
+			if _, isPartial := index.Predicate(); !isPartial {
 				continue
 			}
 
-			expr, err := parser.ParseExpr(predicate)
-			if err != nil {
-				panic(err)
-			}
-
+			expr := mb.parsePartialIndexPredicateExpr(i)
 			texpr := predScope.resolveAndRequireType(expr, types.Bool)
 			scopeCol := mb.b.addColumn(projectionScope, "", texpr)
 
@@ -975,14 +975,14 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 // computed value expression for the given table column, and caches it for
 // reuse.
 func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.Expr {
-	if mb.parsedExprs == nil {
-		mb.parsedExprs = make([]tree.Expr, mb.tab.ColumnCount())
+	if mb.parsedColExprs == nil {
+		mb.parsedColExprs = make([]tree.Expr, mb.tab.ColumnCount())
 	}
 
 	// Return expression from cache, if it was already parsed previously.
 	ord := mb.tabID.ColumnOrdinal(colID)
-	if mb.parsedExprs[ord] != nil {
-		return mb.parsedExprs[ord]
+	if mb.parsedColExprs[ord] != nil {
+		return mb.parsedColExprs[ord]
 	}
 
 	var exprStr string
@@ -1010,7 +1010,36 @@ func (mb *mutationBuilder) parseDefaultOrComputedExpr(colID opt.ColumnID) tree.E
 		panic(err)
 	}
 
-	mb.parsedExprs[ord] = expr
+	mb.parsedColExprs[ord] = expr
+	return expr
+}
+
+// parsePartialIndexPredicateExpr parses the partial index predicate for the
+// given index and caches it for reuse. This function panics if the index at the
+// given ordinal is not a partial index.
+func (mb *mutationBuilder) parsePartialIndexPredicateExpr(idx cat.IndexOrdinal) tree.Expr {
+	index := mb.tab.Index(idx)
+
+	predStr, isPartial := index.Predicate()
+	if !isPartial {
+		panic(errors.AssertionFailedf("index at ordinal %d is not a partial index", idx))
+	}
+
+	if mb.parsedIndexExprs == nil {
+		mb.parsedIndexExprs = make([]tree.Expr, mb.tab.DeletableIndexCount())
+	}
+
+	// Return expression from the cache, if it was already parsed previously.
+	if mb.parsedIndexExprs[idx] != nil {
+		return mb.parsedIndexExprs[idx]
+	}
+
+	expr, err := parser.ParseExpr(predStr)
+	if err != nil {
+		panic(err)
+	}
+
+	mb.parsedIndexExprs[idx] = expr
 	return expr
 }
 
