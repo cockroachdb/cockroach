@@ -37,6 +37,9 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 // ID is a custom type for {Database,Table}Descriptor IDs.
 type ID tree.ID
 
+// SafeValue implements the redact.SafeValue interface.
+func (ID) SafeValue() {}
+
 // InvalidID is the uninitialised descriptor id.
 const InvalidID ID = 0
 
