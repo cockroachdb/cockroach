@@ -49,6 +49,16 @@ func TestPutUserFileTable(t *testing.T) {
 	testListFiles(t, "userfile://defaultdb.public.file_list_table/listing-test/basepath",
 		security.RootUser, ie, kvDB)
 
+	t.Run("empty-qualified-table-name", func(t *testing.T) {
+		dest := cloudimpl.MakeUserFileStorageURI("", filename)
+
+		ie := s.InternalExecutor().(*sql.InternalExecutor)
+		testExportStore(t, dest, false, security.RootUser, ie, kvDB)
+
+		testListFiles(t, "userfile:///listing-test/basepath",
+			security.RootUser, ie, kvDB)
+	})
+
 	t.Run("reject-normalized-basename", func(t *testing.T) {
 		testfile := "listing-test/../basepath"
 		userfileURL := url.URL{Scheme: "userfile", Host: qualifiedTableName, Path: ""}

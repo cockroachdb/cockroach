@@ -29,7 +29,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const defaultUserfileScheme = "userfile"
+const (
+	// DefaultUserfileScheme is the default scheme used in a userfile URI.
+	DefaultUserfileScheme = "userfile"
+	// DefaultQualifiedNamePrefix is the default FQN prefix used when referencing
+	// tables in userfile.
+	DefaultQualifiedNamePrefix = "defaultdb.public.userfiles_"
+)
 
 type fileTableStorage struct {
 	fs       *filetable.FileToTableSystem
@@ -117,7 +123,7 @@ func MakeUserFileStorageURI(qualifiedTableName, filename string) string {
 
 func makeUserFileURIWithQualifiedName(qualifiedTableName, path string) string {
 	userfileURL := url.URL{
-		Scheme: defaultUserfileScheme,
+		Scheme: DefaultUserfileScheme,
 		Host:   qualifiedTableName,
 		Path:   path,
 	}
