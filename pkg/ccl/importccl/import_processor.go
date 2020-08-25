@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -135,6 +136,15 @@ func makeInputConverter(
 
 	if format := spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
+	}
+
+	if singleTable != nil {
+		indexes := singleTable.DeletableIndexes()
+		for _, idx := range indexes {
+			if idx.IsPartial() {
+				return nil, unimplemented.NewWithIssue(50225, "cannot import into table with partial indexes")
+			}
+		}
 	}
 
 	switch spec.Format.Format {

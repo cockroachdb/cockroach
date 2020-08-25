@@ -1003,6 +1003,15 @@ END;
 				return sb.String()
 			}(),
 		},
+		{
+			name: "partial index",
+			typ:  "PGDUMP",
+			data: `
+CREATE TABLE t (a INT8, b INT8);
+CREATE INDEX i ON t USING btree (a) WHERE (b > 10);
+			`,
+			err: "cannot import a table with partial indexes",
+		},
 
 		// Error
 		{

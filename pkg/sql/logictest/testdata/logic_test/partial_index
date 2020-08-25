@@ -886,6 +886,104 @@ DROP INDEX i2
 statement ok
 DELETE FROM u
 
+# Tests for ON CONFLICT DO UPDATE.
+
+# Error if no arbiter predicate is specified.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = 10
+
+# Error if the arbiter predicate does not imply the partial index predicate.
+statement error pgcode 42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < 0 DO UPDATE SET b = 10
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0
+
+# Error if the arbiter predicate does not imply the partial index predicate.
+statement error pgcode 42P10 there are multiple unique or exclusion constraints matching the ON CONFLICT specification
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b < 0 AND b > 0 DO UPDATE SET b = 10
+
+statement ok
+DROP INDEX i2
+
+# Inserting a row not contained in the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -10
+
+query II rowsort
+SELECT * FROM u
+----
+1  -1
+
+# Inserting a non-conflicting row succeeds.
+statement ok
+INSERT INTO u VALUES (1, 1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 10
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+
+# Inserting rows that aren't contained by the unique index succeeds.
+statement ok
+INSERT INTO u VALUES (1, -10), (1, -100) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -11;
+INSERT INTO u VALUES (1, -1000) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = -11;
+
+query II rowsort
+SELECT * FROM u
+----
+1  1
+1  -1
+1  -10
+1  -100
+1  -1000
+
+statement ok
+DELETE FROM u WHERE b IN (-10, -100, -1000)
+
+# Inserting one row conflicting and one non-conflicting row updates the first
+# and inserts the second.
+statement ok
+INSERT INTO u VALUES (1, 10), (3, 3) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 100
+
+query II rowsort
+SELECT * FROM u
+----
+1  100
+3  3
+1  -1
+
+# Inserting multiple rows that conflict with each other errors.
+statement error pgcode 21000 UPSERT or INSERT...ON CONFLICT command cannot affect row a second time
+INSERT INTO u VALUES (4, 4), (4, 40) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 300
+
+# Conflicting rows that satisfy the UPDATE WHERE clause should be updated. Conflicting
+# rows that don't satisfy the UPDATE WHERE clause should be ignored.
+statement ok
+INSERT INTO u VALUES (1, 11), (3, 33) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET b = 10 WHERE u.a = 1
+
+query II rowsort
+SELECT * FROM u
+----
+1  10
+3  3
+1  -1
+
+statement ok
+CREATE UNIQUE INDEX i2 ON u (a) WHERE b < 0;
+
+# There can be duplicate key errors from unique partial indexes that are not
+# arbiters.
+statement error pgcode 23505 duplicate key value \(a\)=\(1\) violates unique constraint \"i2\"
+INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 100
+
+statement ok
+DROP INDEX i2
+
+statement ok
+DELETE from u
+
 # Test partial indexes with an ENUM in the predicate.
 subtest enum
 
@@ -929,7 +1027,7 @@ SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
 
 statement ok
 UPSERT INTO enum_table VALUES
-   (1, 'foo'),
+    (1, 'foo'),
     (2, 'bar'),
     (3, 'baz')
 
