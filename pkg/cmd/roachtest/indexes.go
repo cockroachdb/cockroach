@@ -72,7 +72,7 @@ func registerIndexes(r *testRegistry) {
 }
 
 func registerIndexesBench(r *testRegistry) {
-	for i := 0; i <= 10; i++ {
+	for i := 0; i <= 100; i++ {
 		registerNIndexes(r, i)
 	}
 }
