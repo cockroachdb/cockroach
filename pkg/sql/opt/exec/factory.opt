@@ -379,6 +379,7 @@ define ShowTrace {
 define Insert {
     Input exec.Node
     Table cat.Table
+    Arbiters cat.IndexOrdinals
     InsertCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
@@ -476,6 +477,7 @@ define Update {
 define Upsert {
     Input exec.Node
     Table cat.Table
+    Arbiters cat.IndexOrdinals
     CanaryCol exec.NodeColumnOrdinal
     InsertCols exec.TableColumnOrdinalSet
     FetchCols exec.TableColumnOrdinalSet
