@@ -103,18 +103,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		sc := n.d.schemasToDelete[i]
 		schemaIDs[i] = sc.ID
 		mutDesc := sc.Desc.(*schemadesc.Mutable)
-		mutDesc.DrainingNames = append(mutDesc.DrainingNames, descpb.NameInfo{
-			ParentID:       n.db.ID,
-			ParentSchemaID: keys.RootNamespaceID,
-			Name:           mutDesc.Name,
-		})
-		n.db.Schemas[mutDesc.Name] = descpb.DatabaseDescriptor_SchemaInfo{
-			ID:      mutDesc.ID,
-			Dropped: true,
-		}
-		// Mark the descriptor as dropped.
-		mutDesc.State = descpb.SchemaDescriptor_DROP
-		if err := p.writeSchemaDesc(ctx, mutDesc); err != nil {
+		if err := p.dropSchemaImpl(ctx, n.db, mutDesc); err != nil {
 			return err
 		}
 	}
@@ -156,6 +145,30 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		}
 	}
 	return nil
+}
+
+// dropSchemaImpl performs the logic of dropping a user defined schema. It does
+// not create a job to perform the final cleanup of the schema.
+func (p *planner) dropSchemaImpl(
+	ctx context.Context, parentDB *dbdesc.Mutable, sc *schemadesc.Mutable,
+) error {
+	sc.DrainingNames = append(sc.DrainingNames, descpb.NameInfo{
+		ParentID:       parentDB.ID,
+		ParentSchemaID: keys.RootNamespaceID,
+		Name:           sc.Name,
+	})
+	// TODO (rohany): This can be removed once RESTORE installs schemas into
+	//  the parent database.
+	if parentDB.Schemas == nil {
+		parentDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
+	}
+	parentDB.Schemas[parentDB.Name] = descpb.DatabaseDescriptor_SchemaInfo{
+		ID:      parentDB.ID,
+		Dropped: true,
+	}
+	// Mark the descriptor as dropped.
+	sc.State = descpb.SchemaDescriptor_DROP
+	return p.writeSchemaDesc(ctx, sc)
 }
 
 func (p *planner) createDropSchemaJob(

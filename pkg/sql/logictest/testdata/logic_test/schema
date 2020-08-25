@@ -241,3 +241,24 @@ DROP SCHEMA scdrop1, scdrop2, scdrop3 CASCADE
 
 query T
 SELECT table_name FROM [SHOW TABLES] WHERE table_name LIKE 'scdrop%'
+
+subtest drop_database
+
+# Ensure that user defined schemas are dropped when dropping the parent database.
+statement ok
+CREATE DATABASE with_schemas;
+USE with_schemas;
+CREATE SCHEMA dropschema1;
+CREATE SCHEMA dropschema2;
+CREATE TABLE dropschema1.dropschema1_tb (x INT);
+CREATE TYPE dropschema1.dropschema1_typ AS ENUM ('schema');
+CREATE TABLE dropschema2.dropschema2_tb (y INT);
+USE test
+
+statement ok
+DROP DATABASE with_schemas CASCADE
+
+# There shouldn't be any left over namespace entries from the schemas
+# or elements within the schemas.
+query I
+SELECT id FROM system.namespace WHERE name LIKE 'dropschema%'

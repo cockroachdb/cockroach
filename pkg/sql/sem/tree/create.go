@@ -1582,11 +1582,26 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 
 // RefreshMaterializedView represents a REFRESH MATERIALIZED VIEW statement.
 type RefreshMaterializedView struct {
-	Name         *UnresolvedObjectName
-	Concurrently bool
+	Name              *UnresolvedObjectName
+	Concurrently      bool
+	RefreshDataOption RefreshDataOption
 }
 
-var _ Statement = &RefreshMaterializedView{}
+// RefreshDataOption corresponds to arguments for the REFRESH MATERIALIZED VIEW
+// statement.
+type RefreshDataOption int
+
+const (
+	// RefreshDataDefault refers to no option provided to the REFRESH MATERIALIZED
+	// VIEW statement.
+	RefreshDataDefault RefreshDataOption = iota
+	// RefreshDataWithData refers to the WITH DATA option provided to the REFRESH
+	// MATERIALIZED VIEW statement.
+	RefreshDataWithData
+	// RefreshDataClear refers to the WITH NO DATA option provided to the REFRESH
+	// MATERIALIZED VIEW statement.
+	RefreshDataClear
+)
 
 // Format implements the NodeFormatter interface.
 func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
@@ -1595,6 +1610,12 @@ func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
 		ctx.WriteString("CONCURRENTLY ")
 	}
 	ctx.FormatNode(node.Name)
+	switch node.RefreshDataOption {
+	case RefreshDataWithData:
+		ctx.WriteString(" WITH DATA")
+	case RefreshDataClear:
+		ctx.WriteString(" WITH NO DATA")
+	}
 }
 
 // CreateStats represents a CREATE STATISTICS statement.

@@ -3514,29 +3514,66 @@ project
       └── filters
            └── st_covers(c.geom:10, n.geom:16) OR (name:15 LIKE 'Upper%') [outer=(10,15,16), immutable]
 
-# We don't yet support inverted joins with semi- or anti-joins.
-opt expect=GenerateInvertedJoins
+# Semi-joins are supported by converting them to an inner join wrapped in
+# a DistinctOn and a Project.
+opt expect=(GenerateInvertedJoins,ConvertSemiToInnerJoin)
 SELECT *
 FROM nyc_census_blocks AS c
 WHERE EXISTS (
   SELECT * FROM nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n WHERE ST_Covers(c.geom, n.geom)
 )
 ----
-semi-join (cross)
+project
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
- ├── scan c
- │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
- │    ├── key: (1)
- │    └── fd: (1)-->(2-10)
- ├── scan n
- │    ├── columns: n.geom:16
- │    └── flags: force-index=nyc_neighborhoods_geo_idx
- └── filters
-      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+ └── distinct-on
+      ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+      ├── grouping columns: c.gid:1!null
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-10)
+      ├── inner-join (lookup nyc_neighborhoods)
+      │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.geom:16
+      │    ├── key columns: [13] = [13]
+      │    ├── lookup columns are key
+      │    ├── immutable
+      │    ├── fd: (1)-->(2-10)
+      │    ├── inner-join (inverted-lookup nyc_neighborhoods@nyc_neighborhoods_geo_idx)
+      │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:13!null
+      │    │    ├── inverted-expr
+      │    │    │    └── st_covers(c.geom:10, n.geom:16)
+      │    │    ├── key: (1,13)
+      │    │    ├── fd: (1)-->(2-10)
+      │    │    ├── scan c
+      │    │    │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(2-10)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+      └── aggregations
+           ├── const-agg [as=blkid:2, outer=(2)]
+           │    └── blkid:2
+           ├── const-agg [as=popn_total:3, outer=(3)]
+           │    └── popn_total:3
+           ├── const-agg [as=popn_white:4, outer=(4)]
+           │    └── popn_white:4
+           ├── const-agg [as=popn_black:5, outer=(5)]
+           │    └── popn_black:5
+           ├── const-agg [as=popn_nativ:6, outer=(6)]
+           │    └── popn_nativ:6
+           ├── const-agg [as=popn_asian:7, outer=(7)]
+           │    └── popn_asian:7
+           ├── const-agg [as=popn_other:8, outer=(8)]
+           │    └── popn_other:8
+           ├── const-agg [as=c.boroname:9, outer=(9)]
+           │    └── c.boroname:9
+           └── const-agg [as=c.geom:10, outer=(10)]
+                └── c.geom:10
 
+# We don't yet support inverted joins with left- or anti-joins.
 opt expect=GenerateInvertedJoins
 SELECT *
 FROM nyc_census_blocks AS c
@@ -3556,6 +3593,28 @@ anti-join (cross)
  ├── scan n
  │    ├── columns: n.geom:16
  │    └── flags: force-index=nyc_neighborhoods_geo_idx
+ └── filters
+      └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
+
+opt expect-not=GenerateInvertedJoins
+SELECT *
+FROM nyc_census_blocks AS c
+LEFT JOIN nyc_neighborhoods@nyc_neighborhoods_geo_idx AS n ON ST_Covers(c.geom, n.geom)
+----
+left-join (cross)
+ ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10 gid:13 boroname:14 name:15 geom:16
+ ├── immutable
+ ├── key: (1,13)
+ ├── fd: (1)-->(2-10), (13)-->(14-16)
+ ├── scan c
+ │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-10)
+ ├── scan n
+ │    ├── columns: n.gid:13!null n.boroname:14 name:15 n.geom:16
+ │    ├── flags: force-index=nyc_neighborhoods_geo_idx
+ │    ├── key: (13)
+ │    └── fd: (13)-->(14-16)
  └── filters
       └── st_covers(c.geom:10, n.geom:16) [outer=(10,16), immutable]
 
@@ -4789,6 +4848,112 @@ select
  │         └── key: (1)
  └── filters
       └── b:2 @> '{"a": 1, "c": 2}' [outer=(2), immutable]
+
+# -----------------------------------------------------
+# ConvertSemiToInnerJoin
+# -----------------------------------------------------
+
+# This rule applies when the On conditions are not equalities. For example,
+# in this test we have a Lt condition. It allows us to use a lookup join even
+# though the index is not covering.
+opt expect=ConvertSemiToInnerJoin
+SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND r < c)
+----
+project
+ ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: p:1!null q:2!null r:3!null s:4 t:5
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3-5)
+      └── inner-join (lookup pqr)
+           ├── columns: p:1!null q:2!null r:3!null s:4 t:5 a:7!null b:8!null c:9!null
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── inner-join (lookup pqr@q)
+           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
+           │    ├── key columns: [8] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── scan zz
+           │    │    ├── columns: a:7!null b:8 c:9
+           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(7-9)
+           │    └── filters (true)
+           └── filters
+                └── r:3 < c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+
+# In this test we have an Or condition.
+opt expect=ConvertSemiToInnerJoin
+SELECT * from pqr WHERE EXISTS (SELECT * FROM zz WHERE a = 0 AND q = b AND (p = a OR r = c))
+----
+project
+ ├── columns: p:1!null q:2 r:3 s:4 t:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── project
+      ├── columns: p:1!null q:2!null r:3 s:4 t:5
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3-5)
+      └── inner-join (lookup pqr)
+           ├── columns: p:1!null q:2!null r:3 s:4 t:5 a:7!null b:8!null c:9
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,7-9), (1)-->(3-5), (2)==(8), (8)==(2)
+           ├── inner-join (lookup pqr@q)
+           │    ├── columns: p:1!null q:2!null a:7!null b:8!null c:9
+           │    ├── key columns: [8] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+           │    ├── scan zz
+           │    │    ├── columns: a:7!null b:8 c:9
+           │    │    ├── constraint: /7: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(7-9)
+           │    └── filters (true)
+           └── filters
+                └── (p:1 = 0) OR (r:3 = c:9) [outer=(1,3,9)]
+
+# In this case we need to add the key back to zz since it was pruned during
+# normalization.
+opt expect=ConvertSemiToInnerJoin
+SELECT b, c from zz WHERE EXISTS (SELECT * FROM pqr WHERE p = 0 AND q = b AND (p = c OR r = c))
+----
+project
+ ├── columns: b:2 c:3
+ ├── lax-key: (2,3)
+ ├── fd: (3)~~>(2)
+ └── project
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
+      └── inner-join (lookup zz)
+           ├── columns: a:1!null b:2!null c:3!null p:5!null q:6!null r:7
+           ├── key columns: [1] = [1]
+           ├── lookup columns are key
+           ├── key: (1)
+           ├── fd: ()-->(2,5-7), (1)-->(3), (3)-->(1), (2)==(6), (6)==(2)
+           ├── inner-join (lookup zz@idx_b)
+           │    ├── columns: a:1!null b:2!null p:5!null q:6!null r:7
+           │    ├── key columns: [6] = [2]
+           │    ├── key: (1)
+           │    ├── fd: ()-->(2,5-7), (2)==(6), (6)==(2)
+           │    ├── scan pqr
+           │    │    ├── columns: p:5!null q:6 r:7
+           │    │    ├── constraint: /5: [/0 - /0]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(5-7)
+           │    └── filters (true)
+           └── filters
+                └── (c:3 = 0) OR (r:7 = c:3) [outer=(3,7), constraints=(/3: (/NULL - ])]
 
 # --------------------------------------------------
 # PushJoinIntoIndexJoin

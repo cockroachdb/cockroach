@@ -545,6 +545,9 @@ func (u *sqlSymUnion) scheduleState() tree.ScheduleState {
 func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
   return u.val.(tree.ScheduledJobExecutorType)
 }
+func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
+  return u.val.(tree.RefreshDataOption)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -974,6 +977,7 @@ func (u *sqlSymUnion) executorType() tree.ScheduledJobExecutorType {
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
 %type <empty> opt_using_clause
+%type <tree.RefreshDataOption> opt_clear_data
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
 %type <tree.SequenceOption> sequence_option_elem
@@ -2075,13 +2079,31 @@ alter_attribute_action:
 // %Help: REFRESH - recalculate a materialized view
 // %Category: Misc
 // %Text:
-// REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name
+// REFRESH MATERIALIZED VIEW [CONCURRENTLY] view_name [WITH [NO] DATA]
 refresh_stmt:
-  REFRESH MATERIALIZED VIEW opt_concurrently view_name
+  REFRESH MATERIALIZED VIEW opt_concurrently view_name opt_clear_data
   {
-    $$.val = &tree.RefreshMaterializedView{Name: $5.unresolvedObjectName(), Concurrently: $4.bool()}
+    $$.val = &tree.RefreshMaterializedView{
+      Name: $5.unresolvedObjectName(),
+      Concurrently: $4.bool(),
+      RefreshDataOption: $6.refreshDataOption(),
+    }
   }
 | REFRESH error // SHOW HELP: REFRESH
+
+opt_clear_data:
+  WITH DATA
+  {
+    $$.val = tree.RefreshDataWithData
+  }
+| WITH NO DATA
+  {
+    $$.val = tree.RefreshDataClear
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.RefreshDataDefault
+  }
 
 // %Help: BACKUP - back up data to external storage
 // %Category: CCL
