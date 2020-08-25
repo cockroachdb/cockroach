@@ -2619,7 +2619,7 @@ SELECT
 FROM geom_operators_test a
 ORDER BY a.dsc
 ----
-Empty GeometryCollection                  GeometryCollection  ST_GeometryCollection  0     0     0     0     0
+Empty GeometryCollection                  GeometryCollection  ST_GeometryCollection  2     2     0     0     0
 Empty LineString                          LineString          ST_LineString          2     2     1     0     0
 Empty Point                               Point               ST_Point               2     2     0     0     0
 Faraway point                             Point               ST_Point               2     2     0     1     1
