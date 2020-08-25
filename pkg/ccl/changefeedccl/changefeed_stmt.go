@@ -519,7 +519,7 @@ func validateChangefeedTable(
 			tableDesc.GetName(), len(families))
 	}
 
-	if tableDesc.GetState() == descpb.TableDescriptor_DROP {
+	if tableDesc.GetState() == descpb.DescriptorState_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
 	if tableDesc.GetName() != t.StatementTimeName {

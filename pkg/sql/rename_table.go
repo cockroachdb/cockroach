@@ -63,7 +63,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	if tableDesc.State != descpb.TableDescriptor_PUBLIC {
+	if tableDesc.State != descpb.DescriptorState_PUBLIC {
 		return nil, sqlerrors.NewUndefinedRelationError(&oldTn)
 	}
 

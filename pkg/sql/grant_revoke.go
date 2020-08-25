@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -38,13 +39,17 @@ import (
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	var grantOn privilege.ObjectType
-	if n.Targets.Databases != nil {
+	switch {
+	case n.Targets.Databases != nil:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnDatabase)
 		grantOn = privilege.Database
-	} else if n.Targets.Types != nil {
-		grantOn = privilege.Type
+	case n.Targets.Schemas != nil:
+		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnSchema)
+		grantOn = privilege.Schema
+	case n.Targets.Types != nil:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnType)
-	} else {
+		grantOn = privilege.Type
+	default:
 		sqltelemetry.IncIAMGrantPrivilegesCounter(sqltelemetry.OnTable)
 		grantOn = privilege.Table
 	}
@@ -75,13 +80,17 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	var grantOn privilege.ObjectType
-	if n.Targets.Databases != nil {
+	switch {
+	case n.Targets.Databases != nil:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnDatabase)
 		grantOn = privilege.Database
-	} else if n.Targets.Types != nil {
-		grantOn = privilege.Type
+	case n.Targets.Schemas != nil:
+		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnSchema)
+		grantOn = privilege.Schema
+	case n.Targets.Types != nil:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnType)
-	} else {
+		grantOn = privilege.Type
+	default:
 		sqltelemetry.IncIAMRevokePrivilegesCounter(sqltelemetry.OnTable)
 		grantOn = privilege.Table
 	}
@@ -137,7 +146,7 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
 	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptors, err = getDescriptorsFromTargetList(ctx, p, n.targets)
+		descriptors, err = getDescriptorsFromTargetListForPrivilegeChange(ctx, p, n.targets)
 	})
 	if err != nil {
 		return err
@@ -216,6 +225,14 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 		case *typedesc.Mutable:
 			err := p.writeTypeSchemaChange(ctx, d, fmt.Sprintf("updating privileges for type %d", d.ID))
 			if err != nil {
+				return err
+			}
+		case *schemadesc.Mutable:
+			if err := p.writeSchemaDescChange(
+				ctx,
+				d,
+				fmt.Sprintf("updating privileges for schema %d", d.ID),
+			); err != nil {
 				return err
 			}
 		}

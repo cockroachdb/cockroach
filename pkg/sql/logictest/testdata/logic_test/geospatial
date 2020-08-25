@@ -4095,16 +4095,6 @@ SELECT ST_Summary('SRID=4326;POINT(0 0)'::geometry)
 Point[BS]
 
 query T
-SELECT ST_Summary('POINT(0 0 0)'::geometry)
-----
-Point[B]
-
-query T
-SELECT ST_Summary('POINT(0 0 0 0)'::geometry)
-----
-Point[B]
-
-query T
 SELECT ST_Summary('MULTIPOINT(0 0)'::geometry)
 ----
 MultiPoint[B] with 1 element
@@ -4144,16 +4134,6 @@ Point[BGS]
 
 query T
 SELECT ST_Summary('SRID=4326;POINT(0 0)'::geography)
-----
-Point[BGS]
-
-query T
-SELECT ST_Summary('POINT(0 0 0)'::geography)
-----
-Point[BGS]
-
-query T
-SELECT ST_Summary('POINT(0 0 0 0)'::geography)
 ----
 Point[BGS]
 

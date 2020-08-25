@@ -174,7 +174,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			//   the view query
 			// * use AllocateIDs to give the view descriptor a primary key
 			desc.IsMaterializedView = true
-			desc.State = descpb.TableDescriptor_ADD
+			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
 			if err := desc.AllocateIDs(); err != nil {
 				return err

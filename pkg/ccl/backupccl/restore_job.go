@@ -904,7 +904,7 @@ func createImportingDescriptors(
 
 	for _, desc := range tableDescs {
 		desc.Version++
-		desc.State = descpb.TableDescriptor_OFFLINE
+		desc.State = descpb.DescriptorState_OFFLINE
 		desc.OfflineReason = "restoring"
 	}
 
@@ -1234,7 +1234,7 @@ func (r *restoreResumer) publishDescriptors(ctx context.Context) error {
 		for _, tbl := range r.tables {
 			newTableDesc := tabledesc.NewExistingMutable(*tbl.TableDesc())
 			newTableDesc.Version++
-			newTableDesc.State = descpb.TableDescriptor_PUBLIC
+			newTableDesc.State = descpb.DescriptorState_PUBLIC
 			newTableDesc.OfflineReason = ""
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
@@ -1362,7 +1362,7 @@ func (r *restoreResumer) dropDescriptors(
 		tableToDrop := tabledesc.NewExistingMutable(*tbl)
 		prev := tableToDrop.ImmutableCopy().(catalog.TableDescriptor)
 		tableToDrop.Version++
-		tableToDrop.State = descpb.TableDescriptor_DROP
+		tableToDrop.State = descpb.DescriptorState_DROP
 		err := catalogkv.RemovePublicTableNamespaceEntry(ctx, txn, keys.SystemSQLCodec, tbl.ParentID, tbl.Name)
 		if err != nil {
 			return errors.Wrap(err, "dropping tables caused by restore fail/cancel from public namespace")

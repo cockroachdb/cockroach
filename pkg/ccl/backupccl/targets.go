@@ -711,7 +711,7 @@ func fullClusterTargets(
 				}
 			} else {
 				// Add all user tables that are not in a DROP state.
-				if desc.GetState() != descpb.TableDescriptor_DROP {
+				if desc.GetState() != descpb.DescriptorState_DROP {
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			}

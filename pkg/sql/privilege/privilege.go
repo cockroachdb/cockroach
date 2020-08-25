@@ -64,7 +64,7 @@ var (
 	ReadData          = List{GRANT, SELECT}
 	ReadWriteData     = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
 	DBTablePrivileges = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
-	SchemaPrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
+	SchemaPrivileges  = List{ALL, GRANT, CREATE, USAGE}
 	TypePrivileges    = List{ALL, GRANT, USAGE}
 )
 

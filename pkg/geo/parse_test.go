@@ -240,6 +240,22 @@ func TestParseEWKT(t *testing.T) {
 			require.Equal(t, tc.expected, ret)
 		})
 	}
+
+	errorTestCases := []struct {
+		wkt         geopb.EWKT
+		expectedErr string
+	}{
+		{"POINT Z (1 2 3)", "only 2D objects are currently supported"},
+		{"POINT M (1 2 3)", "only 2D objects are currently supported"},
+		{"POINT ZM (1 2 3)", "only 2D objects are currently supported"},
+	}
+	for _, tc := range errorTestCases {
+		t.Run(string(tc.wkt), func(t *testing.T) {
+			_, err := parseEWKT(geopb.SpatialObjectType_GeometryType, tc.wkt, 0, false)
+			require.Error(t, err)
+			require.EqualError(t, err, tc.expectedErr)
+		})
+	}
 }
 
 func TestParseGeometry(t *testing.T) {

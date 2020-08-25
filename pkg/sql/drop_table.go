@@ -409,7 +409,7 @@ func (p *planner) initiateDropTable(
 		return err
 	}
 
-	tableDesc.State = descpb.TableDescriptor_DROP
+	tableDesc.State = descpb.DescriptorState_DROP
 	if drainName {
 		parentSchemaID := tableDesc.GetParentSchemaID()
 

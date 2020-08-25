@@ -225,7 +225,7 @@ func NewSequenceTableDesc(
 
 	// A sequence doesn't have dependencies and thus can be made public
 	// immediately.
-	desc.State = descpb.TableDescriptor_PUBLIC
+	desc.State = descpb.DescriptorState_PUBLIC
 
 	if err := desc.ValidateTable(); err != nil {
 		return nil, err
