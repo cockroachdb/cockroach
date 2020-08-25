@@ -40,18 +40,19 @@ func fetchPreviousBackups(
 		return nil, nil, nil
 	}
 
-	var encryption *jobspb.BackupEncryptionOptions
 	baseBackup := prevBackupURIs[0]
-	encryption, err := getEncryptionFromBase(ctx, p, makeCloudStorage, baseBackup, encryptionParams)
+	encryptionOptions, err := getEncryptionFromBase(ctx, p, makeCloudStorage, baseBackup,
+		encryptionParams)
 	if err != nil {
 		return nil, nil, err
 	}
-	prevBackups, err := getBackupManifests(ctx, p.User(), makeCloudStorage, prevBackupURIs, encryption)
+	prevBackups, err := getBackupManifests(ctx, p.User(), makeCloudStorage, prevBackupURIs,
+		encryptionOptions)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return prevBackups, encryption, nil
+	return prevBackups, encryptionOptions, nil
 }
 
 // resolveDest resolves the true destination of a backup. The backup command
@@ -189,7 +190,7 @@ func getEncryptionFromBase(
 	baseBackupURI string,
 	encryptionParams backupEncryptionParams,
 ) (*jobspb.BackupEncryptionOptions, error) {
-	var encryption *jobspb.BackupEncryptionOptions
+	var encryptionOptions *jobspb.BackupEncryptionOptions
 	if encryptionParams.encryptMode != noEncryption {
 		exportStore, err := makeCloudStorage(ctx, baseBackupURI, p.User())
 		if err != nil {
@@ -203,7 +204,7 @@ func getEncryptionFromBase(
 
 		switch encryptionParams.encryptMode {
 		case passphrase:
-			encryption = &jobspb.BackupEncryptionOptions{
+			encryptionOptions = &jobspb.BackupEncryptionOptions{
 				Mode: jobspb.EncryptionMode_Passphrase,
 				Key:  storageccl.GenerateKey(encryptionParams.encryptionPassphrase, opts.Salt),
 			}
@@ -213,12 +214,12 @@ func getEncryptionFromBase(
 			if err != nil {
 				return nil, err
 			}
-			encryption = &jobspb.BackupEncryptionOptions{
+			encryptionOptions = &jobspb.BackupEncryptionOptions{
 				Mode:    jobspb.EncryptionMode_KMS,
 				KMSInfo: defaultKMSInfo}
 		}
 	}
-	return encryption, nil
+	return encryptionOptions, nil
 }
 
 // resolveBackupCollection returns the collectionURI and chosenSuffix that we
