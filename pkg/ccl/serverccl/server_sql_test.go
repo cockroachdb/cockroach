@@ -11,6 +11,8 @@ package serverccl
 import (
 	"context"
 	"errors"
+	"io/ioutil"
+	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
@@ -86,11 +89,45 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+	_, _, err := tc.Server(0).StartTenant(base.TestTenantArgs{
 		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
 		// Configure the SQL server to access the wrong tenant keyspace.
 		TenantIDCodecOverride: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[1]),
 	})
 	require.Error(t, err)
 	require.Regexp(t, `Unauthenticated desc = requested key /Tenant/11/System/"system-version/" not fully contained in tenant keyspace /Tenant/1{0-1}`, err)
+}
+
+// TestTenantHTTP verifies that SQL tenant servers expose metrics and debugging endpoints.
+func TestTenantHTTP(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	_, httpAddr, err := tc.Server(0).StartTenant(base.TestTenantArgs{
+		TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+	})
+	require.NoError(t, err)
+	t.Run("prometheus", func(t *testing.T) {
+		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/_status/vars")
+		defer http.DefaultClient.CloseIdleConnections()
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "sql_ddl_started_count_internal")
+	})
+	t.Run("pprof", func(t *testing.T) {
+		resp, err := httputil.Get(ctx, "http://"+httpAddr+"/debug/pprof/goroutine?debug=2")
+		defer http.DefaultClient.CloseIdleConnections()
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), "goroutine")
+	})
+
 }

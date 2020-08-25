@@ -199,7 +199,7 @@ type TestServerInterface interface {
 	ReportDiagnostics(ctx context.Context)
 
 	// StartTenant spawns off tenant process connecting to this TestServer.
-	StartTenant(params base.TestTenantArgs) (pgAddr string, _ error)
+	StartTenant(params base.TestTenantArgs) (pgAddr string, httpAddr string, _ error)
 
 	// ScratchRange splits off a range suitable to be used as KV scratch space.
 	// (it doesn't overlap system spans or SQL tables).
@@ -272,7 +272,7 @@ func StartServerRaw(args base.TestServerArgs) (TestServerInterface, error) {
 // server. It uses the server's stopper to shut down automatically. However,
 // the returned DB is for the caller to close.
 func StartTenant(t testing.TB, ts TestServerInterface, params base.TestTenantArgs) *gosql.DB {
-	pgAddr, err := ts.StartTenant(params)
+	pgAddr, _, err := ts.StartTenant(params)
 	if err != nil {
 		t.Fatal(err)
 	}
