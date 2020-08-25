@@ -158,8 +158,7 @@ var forceFullBackup *scheduleRecurrence
 
 func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurrence {
 	if inc.frequency <= time.Hour {
-		// If incremental is faster than once an hour, take fulls every day,
-		// some time between midnight and 1 am.
+		// If incremental is faster than once an hour, take fulls every day.
 		return &scheduleRecurrence{
 			cron:      "@daily",
 			frequency: 24 * time.Hour,
@@ -167,8 +166,7 @@ func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurre
 	}
 
 	if inc.frequency <= 24*time.Hour {
-		// If incremental is less than a day, take full weekly;  some day
-		// between 0 and 1 am.
+		// If incremental is less than a day, take full weekly.
 		return &scheduleRecurrence{
 			cron:      "@weekly",
 			frequency: 7 * 24 * time.Hour,
@@ -220,7 +218,7 @@ func doCreateBackupSchedules(
 	}
 
 	if fullRecurrence == nil {
-		return errors.AssertionFailedf(" full backup recurrence should be set")
+		return errors.AssertionFailedf("full backup recurrence should be set")
 	}
 
 	// Prepare backup statement (full).
@@ -294,8 +292,6 @@ func doCreateBackupSchedules(
 		return err
 	}
 
-	ex := p.ExecCfg().InternalExecutor
-
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
 	// If needed, create incremental.
@@ -312,7 +308,9 @@ func doCreateBackupSchedules(
 		inc.Pause()
 		inc.SetScheduleStatus("Waiting for initial backup to complete")
 
-		if err := inc.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
+		if err := inc.Create(
+			ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+		); err != nil {
 			return err
 		}
 		if err := emitSchedule(inc, tree.AsString(backupNode), resultsCh); err != nil {
@@ -342,8 +340,9 @@ func doCreateBackupSchedules(
 		full.SetNextRun(env.Now())
 	}
 
-	// Create the schedule (we need its ID to create incremental below).
-	if err := full.Create(ctx, ex, p.ExtendedEvalContext().Txn); err != nil {
+	if err := full.Create(
+		ctx, p.ExecCfg().InternalExecutor, p.ExtendedEvalContext().Txn,
+	); err != nil {
 		return err
 	}
 	return emitSchedule(full, fullBackupStmt, resultsCh)

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -69,48 +68,6 @@ func newJobScheduler(
 }
 
 const allSchedules = 0
-
-// getFindSchedulesStatement returns SQL statement used for finding
-// scheduled jobs that should be started.
-func getFindSchedulesStatement(env scheduledjobs.JobSchedulerEnv, maxSchedules int64) string {
-	limitClause := ""
-	if maxSchedules != allSchedules {
-		limitClause = fmt.Sprintf("LIMIT %d", maxSchedules)
-	}
-
-	return fmt.Sprintf(
-		`
-SELECT
-  (SELECT count(*)
-   FROM %s J
-   WHERE
-      J.created_by_type = '%s' AND J.created_by_id = S.schedule_id AND
-      J.status NOT IN ('%s', '%s', '%s')
-  ) AS num_running, S.*
-FROM %s S
-WHERE next_run < %s
-ORDER BY random()
-%s`, env.SystemJobsTableName(), CreatedByScheduledJobs,
-		StatusSucceeded, StatusCanceled, StatusFailed,
-		env.ScheduledJobsTableName(), env.NowExpr(), limitClause)
-}
-
-// unmarshalScheduledJob is a helper to deserialize a row returned by
-// getFindSchedulesStatement() into a ScheduledJob
-func (s *jobScheduler) unmarshalScheduledJob(
-	row []tree.Datum, cols []colinfo.ResultColumn,
-) (*ScheduledJob, int64, error) {
-	j := NewScheduledJob(s.env)
-	if err := j.InitFromDatums(row[1:], cols[1:]); err != nil {
-		return nil, 0, err
-	}
-
-	if n, ok := row[0].(*tree.DInt); ok {
-		return j, int64(*n), nil
-	}
-
-	return nil, 0, errors.Newf("expected int found %T instead", row[0])
-}
 
 const recheckRunningAfter = 1 * time.Minute
 
@@ -277,14 +234,33 @@ func (s *jobScheduler) executeSchedules(
 	if err != nil {
 		return err
 	}
-
 	defer stats.updateMetrics(&s.metrics)
 
-	findSchedulesStmt := getFindSchedulesStatement(s.env, maxSchedules)
+	findSchedulesStmt := fmt.Sprintf(
+		`
+SELECT
+  S.schedule_id, S.schedule_name, S.owner, S.next_run,
+  S.schedule_expr, S.schedule_details, S.executor_type, S.execution_args,
+  (SELECT count(*)
+   FROM %s J
+   WHERE
+      J.created_by_type = '%s' AND J.created_by_id = S.schedule_id AND
+      J.status NOT IN ('%s', '%s', '%s')
+  ) AS num_running
+FROM %s S
+WHERE next_run < %s
+ORDER BY random()`, s.env.SystemJobsTableName(), CreatedByScheduledJobs,
+		StatusSucceeded, StatusCanceled, StatusFailed,
+		s.env.ScheduledJobsTableName(), s.env.NowExpr())
+
+	if maxSchedules != allSchedules {
+		findSchedulesStmt += fmt.Sprintf("LIMIT %d", maxSchedules)
+	}
+
 	rows, cols, err := s.InternalExecutor.QueryWithCols(
 		ctx, "find-scheduled-jobs",
 		txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUser},
+		sessiondata.InternalExecutorOverride{User: security.NodeUser},
 		findSchedulesStmt)
 
 	if err != nil {
@@ -292,37 +268,37 @@ func (s *jobScheduler) executeSchedules(
 	}
 
 	for _, row := range rows {
-		schedule, numRunning, err := s.unmarshalScheduledJob(row, cols)
-		if err != nil {
-			s.metrics.NumBadSchedules.Inc(1)
-			log.Errorf(ctx, "error parsing schedule: %+v", row)
-			continue
-		}
+		scheduleID := int64(tree.MustBeDInt(row[0]))
 
 		if processErr := withSavePoint(ctx, txn, func() error {
+			numScheduleCols := len(row) - 1
+			numRunning := int64(tree.MustBeDInt(row[numScheduleCols]))
+			schedule := NewScheduledJob(s.env)
+			if err := schedule.InitFromDatums(row[:numScheduleCols], cols[:numScheduleCols]); err != nil {
+				return err
+			}
 			return s.processSchedule(ctx, schedule, numRunning, stats, txn)
 		}); processErr != nil {
 			if errors.HasType(err, (*savePointError)(nil)) {
-				return errors.Wrapf(err, "savepoint error for schedule %d", schedule.ScheduleID())
+				return errors.Wrapf(err, "savepoint error for schedule %d", scheduleID)
 			}
 
 			// Failed to process schedule.
 			s.metrics.NumBadSchedules.Inc(1)
 			log.Errorf(ctx,
-				"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
+				"error processing schedule %d: %+v", scheduleID, processErr)
 
 			// Try updating schedule record to indicate schedule execution error.
 			if err := withSavePoint(ctx, txn, func() error {
-				schedule.ClearDirty() // Make sure we only update status field.
+				schedule := NewScheduledJobForID(s.env, scheduleID)
 				schedule.SetScheduleStatus("failed to create job: %s", processErr)
 				return schedule.Update(ctx, s.InternalExecutor, txn)
 			}); err != nil {
 				if errors.HasType(err, (*savePointError)(nil)) {
-					return errors.Wrapf(err,
-						"savepoint error for schedule %d", schedule.ScheduleID())
+					return errors.Wrapf(err, "savepoint error for schedule %d", scheduleID)
 				}
 				log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
-					schedule.ScheduleID(), err)
+					scheduleID, err)
 			}
 		}
 	}

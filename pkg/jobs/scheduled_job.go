@@ -76,6 +76,14 @@ func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	}
 }
 
+func NewScheduledJobForID(env scheduledjobs.JobSchedulerEnv, id int64) *ScheduledJob {
+	return &ScheduledJob{
+		env:   env,
+		rec:   scheduledJobRecord{ScheduleID: id},
+		dirty: make(map[string]struct{}),
+	}
+}
+
 // LoadScheduledJob loads scheduled job record from the database.
 func LoadScheduledJob(
 	ctx context.Context,
@@ -260,11 +268,6 @@ func (j *ScheduledJob) SetExecutionDetails(executor string, args jobspb.Executio
 	j.rec.ExecutorType = executor
 	j.rec.ExecutionArgs = args
 	j.markDirty("executor_type", "execution_args")
-}
-
-// ClearDirty clears the dirty map making this object appear as if it was just loaded.
-func (j *ScheduledJob) ClearDirty() {
-	j.dirty = make(map[string]struct{})
 }
 
 // InitFromDatums initializes this ScheduledJob object based on datums and column names.
