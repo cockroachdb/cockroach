@@ -368,13 +368,18 @@ func (expr *NumVal) ResolveAsType(
 	}
 }
 
+// intersectTypeSlices returns a slice of all the types that are in both of the
+// input slices that have the same OID.
 func intersectTypeSlices(xs, ys []*types.T) (out []*types.T) {
+	seen := make(map[oid.Oid]struct{})
 	for _, x := range xs {
 		for _, y := range ys {
-			if x == y {
+			_, ok := seen[x.Oid()]
+			if x.Oid() == y.Oid() && !ok {
 				out = append(out, x)
 			}
 		}
+		seen[x.Oid()] = struct{}{}
 	}
 	return out
 }
@@ -458,7 +463,6 @@ var (
 		types.String,
 		types.Bytes,
 		types.Bool,
-		types.Box2D,
 		types.Int,
 		types.Float,
 		types.Decimal,

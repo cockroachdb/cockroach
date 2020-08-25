@@ -1301,14 +1301,22 @@ func (s *statusServer) RaftDebug(
 	return &mu.resp, nil
 }
 
-func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
+type varsHandler struct {
+	metricSource metricMarshaler
+}
+
+func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(httputil.ContentTypeHeader, httputil.PlaintextContentType)
-	err := s.metricSource.PrintAsText(w)
+	err := h.metricSource.PrintAsText(w)
 	if err != nil {
 		log.Errorf(r.Context(), "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	telemetry.Inc(telemetryPrometheusVars)
+}
+
+func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
+	varsHandler{s.metricSource}.handleVars(w, r)
 }
 
 // Ranges returns range info for the specified node.
