@@ -25,17 +25,17 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 
 	t0 := timeutil.Unix(0, 0)
 
-	licA, _ := licenseccl.License{
+	licA, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{idA},
 		Type:              licenseccl.License_Enterprise,
 		ValidUntilUnixSec: t0.AddDate(0, 1, 0).Unix(),
-	}.Encode()
+	}).Encode()
 
-	licB, _ := licenseccl.License{
+	licB, _ := (&licenseccl.License{
 		ClusterID:         []uuid.UUID{idB},
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: t0.AddDate(0, 2, 0).Unix(),
-	}.Encode()
+	}).Encode()
 
 	st := cluster.MakeTestingClusterSettings()
 
@@ -63,7 +63,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		}
 		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "")
 		if !testutils.IsError(err, tc.err) {
-			l, _ := licenseccl.Decode(tc.lic)
+			l, _ := decode(tc.lic)
 			t.Fatalf("%d: lic %v, update by %T, checked by %s at %s, got %q", i, l, updater, tc.checkCluster, tc.checkTime, err)
 		}
 	}
@@ -80,11 +80,11 @@ func TestGetLicenseTypePresent(t *testing.T) {
 	} {
 		st := cluster.MakeTestingClusterSettings()
 		updater := st.MakeUpdater()
-		lic, _ := licenseccl.License{
+		lic, _ := (&licenseccl.License{
 			ClusterID:         []uuid.UUID{},
 			Type:              tc.licenseType,
 			ValidUntilUnixSec: 0,
-		}.Encode()
+		}).Encode()
 		if err := updater.Set("enterprise.license", lic, "s"); err != nil {
 			t.Fatal(err)
 		}
