@@ -10,6 +10,9 @@ pkg/roachpb/metadata.go | `RangeID`
 pkg/roachpb/metadata.go | `ReplicaID`
 pkg/roachpb/metadata.go | `RangeGeneration`
 pkg/roachpb/metadata.go | `ReplicaType`
+pkg/sql/catalog/descpb/structured.go | `ID`
+pkg/sql/sem/tree/table_ref.go | `ID`
+pkg/sql/sem/tree/table_ref.go | `ColumnID`
 pkg/util/hlc/timestamp.go | `Timestamp`
 pkg/util/log/redact.go | `reflect.TypeOf(true)`
 pkg/util/log/redact.go | `reflect.TypeOf(123)`
