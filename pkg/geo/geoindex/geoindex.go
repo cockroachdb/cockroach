@@ -581,7 +581,7 @@ func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr
 		if _, ok := presentCells[rootID]; !ok {
 			continue
 		}
-		expr = append(expr, generateRPExprForTree(rootID, presentCells)...)
+		expr = generateRPExprForTree(rootID, presentCells, expr)
 		numFaces++
 		if numFaces > 1 {
 			expr = append(expr, RPSetIntersection)
@@ -639,8 +639,10 @@ func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr
 // - append the intersection operator
 // - append c13
 // - append the union operator
-func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}) []RPExprElement {
-	expr := []RPExprElement{Key(rootID)}
+func generateRPExprForTree(
+	rootID s2.CellID, presentCells map[s2.CellID]struct{}, expr []RPExprElement,
+) []RPExprElement {
+	expr = append(expr, Key(rootID))
 	if rootID.IsLeaf() {
 		return expr
 	}
@@ -649,7 +651,7 @@ func generateRPExprForTree(rootID s2.CellID, presentCells map[s2.CellID]struct{}
 		if _, ok := presentCells[childCellID]; !ok {
 			continue
 		}
-		expr = append(expr, generateRPExprForTree(childCellID, presentCells)...)
+		expr = generateRPExprForTree(childCellID, presentCells, expr)
 		numChildren++
 		if numChildren > 1 {
 			expr = append(expr, RPSetIntersection)

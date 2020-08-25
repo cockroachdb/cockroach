@@ -102,20 +102,20 @@ func TestRPKeyExprToSpanExpr(t *testing.T) {
 				geoindex.Key(7),
 				geoindex.RPSetIntersection,
 			},
-			expected: "spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
-				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
-				"spans_to_read:<start:\"\\211\" end:\"\\212\" > " +
+			expected: "spans_to_read:<start:\"\\211\" end:\"\\212\" > " +
 				"spans_to_read:<start:\"\\212\" end:\"\\213\" > " +
 				"spans_to_read:<start:\"\\213\" end:\"\\214\" > " +
 				"spans_to_read:<start:\"\\214\" end:\"\\215\" > " +
+				"spans_to_read:<start:\"\\215\" end:\"\\216\" > " +
 				"spans_to_read:<start:\"\\217\" end:\"\\220\" > " +
+				"spans_to_read:<start:\"\\222\" end:\"\\223\" > " +
 				"node:<operator:SetIntersection " +
 				"left:<factored_union_spans:<start:\"\\217\" end:\"\\220\" > > " +
 				"right:<" +
-				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
-				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > " +
 				"factored_union_spans:<start:\"\\213\" end:\"\\214\" > " +
 				"factored_union_spans:<start:\"\\214\" end:\"\\215\" > " +
+				"factored_union_spans:<start:\"\\215\" end:\"\\216\" > " +
+				"factored_union_spans:<start:\"\\222\" end:\"\\223\" > " +
 				"operator:SetIntersection " +
 				"left:<factored_union_spans:<start:\"\\212\" end:\"\\213\" > > " +
 				"right:<factored_union_spans:<start:\"\\211\" end:\"\\212\" > > > > ",
