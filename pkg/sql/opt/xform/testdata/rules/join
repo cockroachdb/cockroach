@@ -3441,12 +3441,12 @@ project
       │    │    │         ├── columns: n.gid:13!null
       │    │    │         ├── inverted expression: /18
       │    │    │         │    ├── tight: false
-      │    │    │         │    └── union spans: ["\x89", "\xfd ")
+      │    │    │         │    └── union spans: ["\x89", "\xfd \x00\x00\x00\x00\x00\x00\x00")
       │    │    │         ├── key: (13)
       │    │    │         └── scan n@nyc_neighborhoods_geo_idx
       │    │    │              ├── columns: n.gid:13!null n.geom_inverted_key:18!null
       │    │    │              ├── inverted constraint: /18/13
-      │    │    │              │    └── spans: ["\x89", "\xfd ")
+      │    │    │              │    └── spans: ["\x89", "\xfd \x00\x00\x00\x00\x00\x00\x00")
       │    │    │              ├── flags: force-index=nyc_neighborhoods_geo_idx
       │    │    │              ├── key: (13)
       │    │    │              └── fd: (13)-->(18)

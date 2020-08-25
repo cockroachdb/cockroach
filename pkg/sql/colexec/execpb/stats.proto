@@ -26,8 +26,8 @@ message VectorizedStats {
   int64 num_tuples = 3;
   google.protobuf.Duration time = 4 [(gogoproto.nullable) = false,
                                   (gogoproto.stdduration) = true];
-  // stall indicates whether stall time or execution time is being tracked.
-  bool stall = 5;
+  // io indicates whether time contains IO or execution time.
+  bool io = 5 [(gogoproto.customname) = "IO"];
   int64 max_allocated_mem = 6;
   int64 max_allocated_disk = 7;
 }

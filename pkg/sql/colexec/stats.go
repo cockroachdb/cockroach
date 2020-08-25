@@ -53,14 +53,13 @@ var _ colexecbase.Operator = &VectorizedStatsCollector{}
 
 // NewVectorizedStatsCollector creates a new VectorizedStatsCollector which
 // wraps 'op' that corresponds to a component with either ProcessorID or
-// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'isStall'
-// indicates whether stall or execution time is being measured. 'stopwatch'
-// must be non-nil.
+// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'ioTime'
+// indicates whether IO time is being measured.
 func NewVectorizedStatsCollector(
 	op colexecbase.Operator,
 	id int32,
 	idTagKey string,
-	isStall bool,
+	ioTime bool,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
@@ -71,7 +70,7 @@ func NewVectorizedStatsCollector(
 	}
 	return &VectorizedStatsCollector{
 		Operator:             op,
-		VectorizedStats:      execpb.VectorizedStats{ID: id, Stall: isStall},
+		VectorizedStats:      execpb.VectorizedStats{ID: id, IO: ioTime},
 		idTagKey:             idTagKey,
 		stopwatch:            inputWatch,
 		memMonitors:          memMonitors,

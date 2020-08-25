@@ -240,9 +240,12 @@ func DecodeUint64Descending(b []byte) ([]byte, uint64, error) {
 	return leftover, ^v, err
 }
 
-const (
-	maxVarintSize = 9
-)
+// MaxVarintLen is the maximum length of a value encoded using any of:
+// - EncodeVarintAscending
+// - EncodeVarintDescending
+// - EncodeUvarintAscending
+// - EncodeUvarintDescending
+const MaxVarintLen = 9
 
 // EncodeVarintAscending encodes the int64 value using a variable length
 // (length-prefixed) representation. The length is encoded as a single
@@ -2020,9 +2023,9 @@ func UndoPrefixEnd(b []byte) (_ []byte, ok bool) {
 	return out, true
 }
 
-// NonsortingVarintMaxLen is the maximum length of an EncodeNonsortingVarint
+// MaxNonsortingVarintLen is the maximum length of an EncodeNonsortingVarint
 // encoded value.
-const NonsortingVarintMaxLen = binary.MaxVarintLen64
+const MaxNonsortingVarintLen = binary.MaxVarintLen64
 
 // EncodeNonsortingStdlibVarint encodes an int value using encoding/binary, appends it
 // to the supplied buffer, and returns the final buffer.
@@ -2043,9 +2046,9 @@ func DecodeNonsortingStdlibVarint(b []byte) (remaining []byte, length int, value
 	return b[length:], length, value, nil
 }
 
-// NonsortingUvarintMaxLen is the maximum length of an EncodeNonsortingUvarint
+// MaxNonsortingUvarintLen is the maximum length of an EncodeNonsortingUvarint
 // encoded value.
-const NonsortingUvarintMaxLen = 10
+const MaxNonsortingUvarintLen = 10
 
 // EncodeNonsortingUvarint encodes a uint64, appends it to the supplied buffer,
 // and returns the final buffer. The encoding used is similar to
