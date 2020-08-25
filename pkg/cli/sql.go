@@ -63,6 +63,7 @@ Type:
   \hf [NAME]        help on SQL built-in functions.
   \l                list all databases in the CockroachDB cluster.
   \dt               show the tables of the current schema in the current database.
+  \dT               show the user defined types of the current database.
   \du               list the users for all databases.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
 %s
@@ -1040,6 +1041,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\dt`:
 		c.concatLines = `SHOW TABLES`
+		return cliRunStatement
+
+	case `\dT`:
+		c.concatLines = `SHOW TYPES`
 		return cliRunStatement
 
 	case `\du`:
