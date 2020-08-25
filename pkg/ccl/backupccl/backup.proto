@@ -141,23 +141,6 @@ message BackupPartitionDescriptor{
 }
 
 
-// EncryptionInfo is stored IN PLAINTEXT along side collections of encrypted
-// files stored outside of cockroach, for example by BACKUP/RESTORE.
-message EncryptionInfo {
-  enum Scheme {
-    AES256GCM = 0;
-  }
-  option (gogoproto.equal) = true;
-
-  Scheme scheme = 1;
-  bytes salt = 2;
-
-  // EncryptedDataKeyByKMSMasterKeyID is a mapping from the hashed master key
-  // identifier of a KMS to the encrypted version of the DataKey obtained from
-  // that KMS.
-  map<string, bytes> encryptedDataKeyByKMSMasterKeyID = 3;
-}
-
 // In 20.2 and later, the Statistics object is stored separately from the backup manifest.
 // StatsTables is a struct containing an array of sql.stats.TableStatisticProto object so
 // that it can be easily marshaled into or unmarshaled from a file.

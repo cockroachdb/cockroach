@@ -265,7 +265,7 @@ func backup(
 
 				backupManifest.Files = checkpointFiles
 				err := writeBackupManifest(
-					ctx, settings, defaultStore, BackupManifestCheckpointName, encryption, backupManifest,
+					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
@@ -325,7 +325,7 @@ func backup(
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
 			filename := fmt.Sprintf("%s_%d_%s",
-				BackupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
+				backupPartitionDescriptorPrefix, nextPartitionedDescFilenameID, sanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
 			desc := BackupPartitionDescriptor{
@@ -347,7 +347,7 @@ func backup(
 		}
 	}
 
-	if err := writeBackupManifest(ctx, settings, defaultStore, BackupManifestName, encryption, backupManifest); err != nil {
+	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
 		return RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
@@ -367,7 +367,7 @@ func backup(
 		Statistics: tableStatistics,
 	}
 
-	if err := writeTableStatistics(ctx, defaultStore, BackupStatisticsFileName, encryption, &statsTable); err != nil {
+	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
 		return RowCount{}, err
 	}
 
@@ -420,7 +420,17 @@ func (b *backupResumer) Resume(
 	}
 	defer defaultStore.Close()
 
-	if err := createCheckpointIfNotExists(ctx, p.ExecCfg().Settings, defaultStore, details.Encryption); err != nil {
+	// EncryptionInfo is non-nil only when new encryption information has been
+	// generated during BACKUP planning.
+	if details.EncryptionInfo != nil {
+		if err := writeEncryptionInfoIfNotExists(ctx, details.EncryptionInfo,
+			defaultStore); err != nil {
+			return errors.Wrapf(err, "creating encryption info file to %s", details.URI)
+		}
+	}
+
+	if err := createCheckpointIfNotExists(ctx, p.ExecCfg().Settings, defaultStore,
+		details.EncryptionOptions); err != nil {
 		return errors.Wrapf(err, "creating checkpoint to %s", details.URI)
 	}
 
@@ -461,8 +471,8 @@ func (b *backupResumer) Resume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	if desc, err := readBackupManifest(ctx, defaultStore, BackupManifestCheckpointName,
-		details.Encryption); err == nil {
+	if desc, err := readBackupManifest(ctx, defaultStore, backupManifestCheckpointName,
+		details.EncryptionOptions); err == nil {
 		// If the checkpoint is from a different cluster, it's meaningless to us.
 		// More likely though are dummy/lock-out checkpoints with no ClusterID.
 		if desc.ClusterID.Equal(p.ExecCfg().ClusterID()) {
@@ -496,7 +506,7 @@ func (b *backupResumer) Resume(
 		&backupManifest,
 		checkpointDesc,
 		p.ExecCfg().DistSQLSrv.ExternalStorage,
-		details.Encryption,
+		details.EncryptionOptions,
 		statsCache,
 	)
 	if err != nil {
@@ -672,7 +682,7 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		return exportStore.Delete(ctx, BackupManifestCheckpointName)
+		return exportStore.Delete(ctx, backupManifestCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 	}
