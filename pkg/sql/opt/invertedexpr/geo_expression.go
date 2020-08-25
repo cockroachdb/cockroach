@@ -12,6 +12,7 @@ package invertedexpr
 
 import (
 	"math"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -81,20 +82,14 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) 
 	}
 	spansToRead := make([]InvertedSpan, 0, len(rpExpr))
 	var b []byte // avoid per-expr heap allocations
-	for _, elem := range rpExpr {
-		// The keys in the RPKeyExpr are unique.
-		if key, ok := elem.(geoindex.Key); ok {
-			var span InvertedSpan
-			span, b = geoToSpan(geoindex.KeySpan{Start: key, End: key}, b)
-			spansToRead = append(spansToRead, span)
-		}
-	}
 	var stack []*SpanExpression
 	for _, elem := range rpExpr {
 		switch e := elem.(type) {
 		case geoindex.Key:
 			var span InvertedSpan
 			span, b = geoToSpan(geoindex.KeySpan{Start: e, End: e}, b)
+			// The keys in the RPKeyExpr are unique, so simply append to spansToRead.
+			spansToRead = append(spansToRead, span)
 			stack = append(stack, &SpanExpression{
 				FactoredUnionSpans: []InvertedSpan{span},
 			})
@@ -107,24 +102,23 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) 
 			stack = stack[:len(stack)-2]
 			switch e {
 			case geoindex.RPSetIntersection:
-				node = &SpanExpression{
-					Operator: SetIntersection,
-					Left:     node0,
-					Right:    node1,
-				}
+				node = makeSpanExpression(SetIntersection, node0, node1)
 			case geoindex.RPSetUnion:
 				if node0.Operator == None {
 					node0, node1 = node1, node0
 				}
 				if node1.Operator == None {
+					// node1 can be discarded after unioning its FactoredUnionSpans.
 					node = node0
-					node.FactoredUnionSpans = append(node.FactoredUnionSpans, node1.FactoredUnionSpans...)
-				} else {
-					node = &SpanExpression{
-						Operator: SetUnion,
-						Left:     node0,
-						Right:    node1,
+					// Union into the one with the larger capacity. This optimizes
+					// the case of many unions. We will sort the spans later.
+					if cap(node.FactoredUnionSpans) < cap(node1.FactoredUnionSpans) {
+						node.FactoredUnionSpans = append(node1.FactoredUnionSpans, node.FactoredUnionSpans...)
+					} else {
+						node.FactoredUnionSpans = append(node.FactoredUnionSpans, node1.FactoredUnionSpans...)
 					}
+				} else {
+					node = makeSpanExpression(SetUnion, node0, node1)
 				}
 			}
 			stack = append(stack, node)
@@ -135,5 +129,19 @@ func GeoRPKeyExprToSpanExpr(rpExpr geoindex.RPKeyExpr) (*SpanExpression, error) 
 	}
 	spanExpr := *stack[0]
 	spanExpr.SpansToRead = spansToRead
+	sort.Sort(spanExpr.SpansToRead)
+	// Sort the FactoredUnionSpans of the root. The others are already sorted
+	// in makeSpanExpression.
+	sort.Sort(spanExpr.FactoredUnionSpans)
 	return &spanExpr, nil
+}
+
+func makeSpanExpression(op SetOperator, n0 *SpanExpression, n1 *SpanExpression) *SpanExpression {
+	sort.Sort(n0.FactoredUnionSpans)
+	sort.Sort(n1.FactoredUnionSpans)
+	return &SpanExpression{
+		Operator: op,
+		Left:     n0,
+		Right:    n1,
+	}
 }
