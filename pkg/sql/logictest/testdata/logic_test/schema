@@ -320,4 +320,35 @@ ALTER SCHEMA privs RENAME TO denied
 statement error pq: permission denied to drop schema "privs"
 DROP SCHEMA privs
 
-# TODO (rohany): Test the usage privilege here.
+# Test the usage privilege.
+user root
+
+# Create some objects in privs (testuser doesn't have USAGE yet).
+statement ok
+CREATE TABLE privs.usage_tbl (x INT);
+CREATE TYPE privs.usage_typ AS ENUM ('usage');
+
+user testuser
+
+# Both mutable and immutable access should fail with this error.
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+SELECT * FROM privs.usage_tbl
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+SELECT 'usage'::privs.usage_typ
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+ALTER TABLE privs.usage_tbl ADD COLUMN y INT DEFAULT NULL
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+CREATE INDEX ON privs.usage_tbl (x)
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+COMMENT ON TABLE privs.usage_tbl IS 'foo'
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+COMMENT ON COLUMN privs.usage_tbl.x IS 'foo'
+
+statement error pq: user testuser does not have USAGE privilege on schema privs
+ALTER TYPE privs.usage_typ ADD VALUE 'denied'

@@ -198,7 +198,7 @@ func TestClusterFlow(t *testing.T) {
 						},
 						ColumnTypes: rowenc.TwoIntCols,
 					}},
-					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc()}},
+					Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc(), MaintainOrdering: true}},
 					Post: execinfrapb.PostProcessSpec{
 						Projection:    true,
 						OutputColumns: []uint32{2},

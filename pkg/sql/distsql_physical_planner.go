@@ -1903,7 +1903,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		// Connect the streams.
 		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
 			pIdx := pIdxStart + physicalplan.ProcessorIdx(bucket)
-			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0)
+			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
 		}
 
 		// Set the new result routers.
@@ -1945,6 +1945,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Visibility:        n.table.colCfg.visibility,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		MaintainOrdering:  len(n.reqOrdering) > 0,
 		SystemColumns:     n.table.systemColumns,
 	}
 
@@ -2759,7 +2760,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	if firstNotWrapped != nil {
 		// If we found a DistSQL-plannable subtree, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
-		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0)
+		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
 	}
 	// ResultRouters gets overwritten each time we add a new PhysicalPlan. We will
 	// just have a single result router, since local processors aren't
@@ -3216,7 +3217,12 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// on a single node (which is always the case when there are mutations),
 			// we can fuse everything so there are no concurrent KV operations (see
 			// #40487, #41307).
-			p.EnsureSingleStreamPerNode()
+			//
+			// Furthermore, in order to disable auto-parallelism that could occur
+			// when merging multiple streams on the same node, we force the
+			// serialization of the merge operation (otherwise, it would be
+			// possible that we have a source of unbounded parallelism, see #51548).
+			p.EnsureSingleStreamPerNode(true /* forceSerialization */)
 
 			// UNION ALL is special: it doesn't have any required downstream
 			// processor, so its two inputs might have different post-processing

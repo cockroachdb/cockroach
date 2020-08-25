@@ -209,10 +209,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 fetched: /t/b_desc/2/2 -> NULL
 fetched: /t/b_desc/1/1 -> NULL
-fetched: /t/primary/2/b/c -> /2/2
 fetched: /t/primary/1/b/c -> /1/1
-output row: [2 2 2]
+fetched: /t/primary/2/b/c -> /2/2
 output row: [1 1 1]
+output row: [2 2 2]
 
 statement ok
 DROP table t
