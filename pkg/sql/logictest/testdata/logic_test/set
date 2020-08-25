@@ -393,3 +393,15 @@ SHOW enable_seqscan
 ----
 enable_seqscan
 on
+
+statement ok
+BEGIN
+
+statement ok
+SET TRANSACTION NOT DEFERRABLE
+
+statement error pq: unimplemented: DEFERRABLE transactions
+SET TRANSACTION DEFERRABLE
+
+statement ok
+rollback
