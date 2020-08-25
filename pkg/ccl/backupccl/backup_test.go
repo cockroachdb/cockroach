@@ -1654,6 +1654,51 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 }
 
+func TestRestoreFailCleansUpTypeBackReferences(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, _, sqlDB, dir, cleanup := BackupRestoreTestSetup(t, singleNode, 0, InitNone)
+	defer cleanup()
+
+	dir = dir + "/foo"
+
+	// Create a database with a type and table.
+	sqlDB.Exec(t, `
+SET experimental_enable_enums = true;
+CREATE DATABASE d;
+CREATE TYPE d.ty AS ENUM ('hello');
+CREATE TABLE d.tb (x d.ty);
+INSERT INTO d.tb VALUES ('hello'), ('hello');
+`)
+
+	// Backup d.tb.
+	sqlDB.Exec(t, `BACKUP TABLE d.tb TO $1`, LocalFoo)
+
+	// Drop d.tb so that it can be restored.
+	sqlDB.Exec(t, `DROP TABLE d.tb`)
+
+	// Bugger the backup by removing the SST files.
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Name() == BackupManifestName || !strings.HasSuffix(path, ".sst") {
+			return nil
+		}
+		return os.Remove(path)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// We should get an error when restoring the table.
+	sqlDB.ExpectErr(t, "sst: no such file", `RESTORE d.tb FROM $1`, LocalFoo)
+
+	// The failed restore should clean up type back references so that we are able
+	// to drop d.ty.
+	sqlDB.Exec(t, `DROP TYPE d.ty`)
+}
+
 // TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.
 func TestRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
