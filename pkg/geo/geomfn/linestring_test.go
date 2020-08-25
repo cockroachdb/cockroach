@@ -101,9 +101,81 @@ func TestSetPoint(t *testing.T) {
 			p, err := geo.NewGeometryFromGeomT(tc.point)
 			require.NoError(t, err)
 
-			wantErr := fmt.Sprintf("index %d out of range of lineString with %d coordinates", tc.index, tc.lineString.NumCoords())
+			wantErr := fmt.Sprintf("index %d out of range of LineString with %d coordinates", tc.index, tc.lineString.NumCoords())
 			_, err = SetPoint(ls, tc.index, p)
 			require.EqualError(t, err, wantErr)
+		})
+	}
+}
+
+func TestRemovePoint(t *testing.T) {
+	testCases := []struct {
+		lineString *geom.LineString
+		index      int
+		expected   *geom.LineString
+	}{
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3}),
+			index:      0,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{2, 2, 3, 3}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3}),
+			index:      1,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 3, 3}),
+		},
+		{
+			lineString: geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3}),
+			index:      2,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			require.NoError(t, err)
+
+			got, err := RemovePoint(ls, tc.index)
+			require.NoError(t, err)
+
+			want, err := geo.NewGeometryFromGeomT(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, want, got)
+			require.EqualValues(t, tc.lineString.SRID(), got.SRID())
+		})
+	}
+
+	errTestCases := []struct {
+		lineString  *geom.LineString
+		index       int
+		expectedErr string
+	}{
+		{
+			lineString:  geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3}),
+			index:       3,
+			expectedErr: "index 3 out of range of LineString with 3 coordinates",
+		},
+		{
+			lineString:  geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3}),
+			index:       -1,
+			expectedErr: "index -1 out of range of LineString with 3 coordinates",
+		},
+		{
+			lineString:  geom.NewLineStringFlat(geom.XY, []float64{1, 1, 2, 2}),
+			index:       1,
+			expectedErr: "cannot remove a point from a LineString with only two Points",
+		},
+	}
+
+	for i, tc := range errTestCases {
+		t.Run(fmt.Sprintf("error-%d", i), func(t *testing.T) {
+			ls, err := geo.NewGeometryFromGeomT(tc.lineString)
+			require.NoError(t, err)
+
+			_, err = RemovePoint(ls, tc.index)
+			require.EqualError(t, err, tc.expectedErr)
 		})
 	}
 }
