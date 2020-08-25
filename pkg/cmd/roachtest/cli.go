@@ -28,7 +28,14 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 
 	lastWords := func(s string) []string {
 		var result []string
-		for _, line := range strings.Split(s, "\n") {
+		lines := strings.Split(s, "\n")
+		// v20.1 introduces a deprecation notice for --insecure. Skip over it.
+		// TODO(knz): Remove this when --insecure is dropped.
+		// See: https://github.com/cockroachdb/cockroach/issues/53404
+		if len(lines) > 0 && strings.HasPrefix(lines[0], "Flag --insecure has been deprecated") {
+			lines = lines[2:]
+		}
+		for _, line := range lines {
 			words := strings.Fields(line)
 			if n := len(words); n > 0 {
 				result = append(result, words[n-2]+" "+words[n-1])

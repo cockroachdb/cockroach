@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -346,10 +347,6 @@ func init() {
 		varFlag(f, addrSetter{&serverSQLAdvertiseAddr, &serverSQLAdvertisePort}, cliflags.SQLAdvertiseAddr)
 		varFlag(f, addrSetter{&serverHTTPAddr, &serverHTTPPort}, cliflags.ListenHTTPAddr)
 		stringFlag(f, &serverSocketDir, cliflags.SocketDir)
-		// --socket is deprecated as of 20.1.
-		// TODO(knz): remove in 20.2.
-		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket)
-		_ = f.MarkDeprecated(cliflags.Socket.Name, "use the --socket-dir and --listen-addr flags instead")
 		boolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
 		// Backward-compatibility flags.
@@ -394,6 +391,8 @@ func init() {
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Enable/disable various external storage endpoints.
 		boolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
@@ -559,6 +558,8 @@ func init() {
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		boolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir)
@@ -739,6 +740,8 @@ func init() {
 		varFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
 		varFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 		boolFlag(f, &demoCtx.insecure, cliflags.ClientInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
 		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
 		// Mark the --global flag as hidden until we investigate it more.
 		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
@@ -803,6 +806,9 @@ func init() {
 		// (which is a PreRun for this command):
 		_ = extraServerFlagInit // guru assignment
 		boolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name, "it will be removed in a subsequent release.\n"+
+			"For details, see: "+unimplemented.MakeURL(53404))
+
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		varFlag(f, addrSetter{&serverSQLAddr, &serverSQLPort}, cliflags.ListenSQLAddr)
@@ -925,14 +931,12 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	// Construct the socket name, if requested. The flags may not be defined for
 	// `cmd` so be cognizant of that.
 	//
-	// If --socket (DEPRECATED) was set, then serverCfg.SocketFile is
-	// already set and we don't want to change it.
-	// However, if --socket-dir is set, then we'll use that.
+	// If --socket-dir is set, then we'll use that.
 	// There are two cases:
 	// 1. --socket-dir is set and is empty; in this case the user is telling us
 	//    "disable the socket".
 	// 2. is set and non-empty. Then it should be used as specified.
-	if !changed(fs, cliflags.Socket.Name) && changed(fs, cliflags.SocketDir.Name) {
+	if changed(fs, cliflags.SocketDir.Name) {
 		if serverSocketDir == "" {
 			serverCfg.SocketFile = ""
 		} else {
