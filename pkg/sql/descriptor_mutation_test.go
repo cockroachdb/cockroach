@@ -1198,7 +1198,7 @@ func TestAddingFKs(t *testing.T) {
 	// Step the referencing table back to the ADD state.
 	ordersDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "orders")
-	ordersDesc.State = descpb.TableDescriptor_ADD
+	ordersDesc.State = descpb.DescriptorState_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
 		context.Background(),

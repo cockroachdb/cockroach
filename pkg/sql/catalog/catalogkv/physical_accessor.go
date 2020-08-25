@@ -285,11 +285,11 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	case catalog.TableDescriptor:
 		// We have a descriptor, allow it to be in the PUBLIC or ADD state. Possibly
 		// OFFLINE if the relevant flag is set.
-		acceptableStates := map[descpb.TableDescriptor_State]bool{
-			descpb.TableDescriptor_ADD:     true,
-			descpb.TableDescriptor_PUBLIC:  true,
-			descpb.TableDescriptor_OFFLINE: flags.IncludeOffline,
-			descpb.TableDescriptor_DROP:    flags.IncludeDropped,
+		acceptableStates := map[descpb.DescriptorState]bool{
+			descpb.DescriptorState_ADD:     true,
+			descpb.DescriptorState_PUBLIC:  true,
+			descpb.DescriptorState_OFFLINE: flags.IncludeOffline,
+			descpb.DescriptorState_DROP:    flags.IncludeDropped,
 		}
 		if acceptableStates[desc.GetState()] {
 			// Immediately after a RENAME an old name still points to the

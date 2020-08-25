@@ -113,7 +113,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 			Dropped: true,
 		}
 		// Mark the descriptor as dropped.
-		mutDesc.State = descpb.SchemaDescriptor_DROP
+		mutDesc.State = descpb.DescriptorState_DROP
 		if err := p.writeSchemaDesc(ctx, mutDesc); err != nil {
 			return err
 		}

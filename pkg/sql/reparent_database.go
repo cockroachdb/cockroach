@@ -257,7 +257,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		ParentSchemaID: keys.RootNamespaceID,
 		Name:           n.db.Name,
 	})
-	n.db.State = descpb.DatabaseDescriptor_DROP
+	n.db.State = descpb.DescriptorState_DROP
 	if err := p.writeDatabaseChangeToBatch(ctx, n.db, b); err != nil {
 		return err
 	}

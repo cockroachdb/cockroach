@@ -229,7 +229,7 @@ func (p *planner) dropTypeImpl(
 	})
 
 	// Actually mark the type as dropped.
-	typeDesc.State = descpb.TypeDescriptor_DROP
+	typeDesc.State = descpb.DescriptorState_DROP
 	if queueJob {
 		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
 	}
