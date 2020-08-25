@@ -493,6 +493,9 @@ func readPostgresStmt(
 		// ignore txns.
 	case *tree.SetVar, *tree.Insert, *tree.CopyFrom, copyData, *tree.Delete:
 		// ignore SETs and DMLs.
+	case *tree.Analyze:
+		// ANALYZE is syntatictic sugar for CreateStatistics. It can be ignored because
+		// the auto stats stuff will pick up the changes and run if needed.
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
@@ -841,7 +844,7 @@ func (m *pgDumpReader) readFile(
 			default:
 				return errors.Errorf("unsupported function: %s", funcName)
 			}
-		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction:
+		case *tree.SetVar, *tree.BeginTransaction, *tree.CommitTransaction, *tree.Analyze:
 			// ignored.
 		case *tree.CreateTable, *tree.AlterTable, *tree.CreateIndex, *tree.CreateSequence:
 			// handled during schema extraction.
