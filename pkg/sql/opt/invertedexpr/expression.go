@@ -178,6 +178,20 @@ func formatSpan(span InvertedSpan) string {
 		strconv.Quote(string(end)), spanEndOpenOrClosed)
 }
 
+// Len implements sort.Interface.
+func (is InvertedSpans) Len() int { return len(is) }
+
+// Less implements sort.Interface, when InvertedSpans is known to contain
+// non-overlapping spans.
+func (is InvertedSpans) Less(i, j int) bool {
+	return bytes.Compare(is[i].Start, is[j].Start) < 0
+}
+
+// Swap implements the sort.Interface.
+func (is InvertedSpans) Swap(i, j int) {
+	is[i], is[j] = is[j], is[i]
+}
+
 // InvertedExpression is the interface representing an expression or sub-expression
 // to be evaluated on the inverted index. Any implementation can be used in the
 // builder functions And() and Or(), but in practice there are two useful
