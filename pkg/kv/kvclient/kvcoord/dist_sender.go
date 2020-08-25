@@ -796,7 +796,7 @@ func (ds *DistSender) Send(
 // batch and its composite request methods.
 func (ds *DistSender) incrementBatchCounters(ba *roachpb.BatchRequest) {
 	ds.metrics.BatchCount.Inc(1)
-	for _, ru := range ba.Requests {
+	for _, ru := range ba.Requests[:1] {
 		m := ru.GetInner().Method()
 		ds.metrics.MethodCounts[m].Inc(1)
 	}

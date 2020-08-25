@@ -321,7 +321,8 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 
 	h.mu.Lock()
 	if err != nil {
-		log.Fatalf(ctx, "XXX: error! %s", err.Error())
+		log.Warningf(ctx, "XXX: error! %s", err.Error())
+		return false
 	}
 
 	// If the txn is no longer pending, ignore the result of the heartbeat
