@@ -17,6 +17,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -263,6 +265,12 @@ func changefeedPlanHook(
 		}
 
 		settings := p.ExecCfg().Settings
+		// Changefeeds are based on the Rangefeed abstraction, which requires the
+		// `kv.rangefeed.enabled` setting to be true.
+		if !kvserver.RangefeedEnabled.Get(&settings.SV) {
+			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
+				base.DocsURL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+		}
 		if err := utilccl.CheckEnterpriseEnabled(
 			settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "CHANGEFEED",
 		); err != nil {
