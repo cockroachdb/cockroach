@@ -307,6 +307,7 @@ func registerJobsMixedVersions(r *testRegistry) {
 		// is to to test the state transitions of jobs from paused to resumed and
 		// vice versa in order to detect regressions in the work done for 20.1.
 		MinVersion: "v20.1.0",
+		Skip:       "https://github.com/cockroachdb/cockroach/issues/51699",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			predV, err := PredecessorVersion(r.buildVersion)

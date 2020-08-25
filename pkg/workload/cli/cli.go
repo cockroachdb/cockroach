@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -73,7 +74,11 @@ func HandleErrs(
 	return func(cmd *cobra.Command, args []string) {
 		err := f(cmd, args)
 		if err != nil {
+			hint := errors.FlattenHints(err)
 			cmd.Println("Error:", err.Error())
+			if hint != "" {
+				cmd.Println("Hint:", hint)
+			}
 			os.Exit(1)
 		}
 	}

@@ -1119,6 +1119,17 @@ public greeting2  hello
 public int        Z|S of int
 public notbad     dup|DUP
 
+query TTT
+SHOW TYPES
+----
+public as_bytes   bytes
+public dbs        postgres|mysql|spanner|cockroach
+public farewell   bye|seeya
+public greeting   hello|howdy|hi
+public greeting2  hello
+public int        Z|S of int
+public notbad     dup|DUP
+
 statement ok
 SET experimental_enable_user_defined_schemas = true;
 CREATE SCHEMA uds;
