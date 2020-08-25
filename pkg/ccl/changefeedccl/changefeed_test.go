@@ -1751,7 +1751,7 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `rangefeeds require the kv.rangefeed.enabled setting`,
 		`EXPERIMENTAL CHANGEFEED FOR rangefeed_off`,
 	)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled TO DEFAULT`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	sqlDB.ExpectErr(
 		t, `unknown format: nope`,
