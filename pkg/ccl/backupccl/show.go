@@ -297,7 +297,7 @@ func backupShowerDefault(
 					}
 				}
 				for _, t := range manifest.Tenants {
-					rows = append(rows, tree.Datums{
+					row := tree.Datums{
 						tree.NewDString("TENANT"),
 						tree.NewDString(roachpb.MakeTenantID(t.ID).String()),
 						start,
@@ -305,7 +305,14 @@ func backupShowerDefault(
 						tree.DNull,
 						tree.DNull,
 						tree.DNull,
-					})
+					}
+					if showSchemas {
+						row = append(row, tree.DNull)
+					}
+					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
+						row = append(row, tree.DNull)
+					}
+					rows = append(rows, row)
 				}
 			}
 			return rows, nil

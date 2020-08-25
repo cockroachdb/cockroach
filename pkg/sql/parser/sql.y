@@ -651,7 +651,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
-%token <str> TRUNCATE TRUSTED TYPE
+%token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
@@ -860,6 +860,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
+%type <tree.Statement> show_types_stmt
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
@@ -4172,8 +4173,8 @@ zone_value:
 // SHOW CREATE, SHOW DATABASES, SHOW ENUMS, SHOW HISTOGRAM, SHOW INDEXES, SHOW
 // PARTITIONS, SHOW JOBS, SHOW QUERIES, SHOW RANGE, SHOW RANGES,
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
-// SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE SHOW TRANSACTION, SHOW USERS,
-// SHOW LAST QUERY STATISTICS, SHOW SCHEDULES
+// SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION, SHOW TYPES,
+// SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4182,6 +4183,7 @@ show_stmt:
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
 | show_enums_stmt           // EXTEND WITH HELP: SHOW ENUMS
+| show_types_stmt           // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
@@ -4437,7 +4439,7 @@ show_databases_stmt:
   }
 | SHOW DATABASES error // SHOW HELP: SHOW DATABASES
 
-// %Help: SHOW ENUMS - list defined enums
+// %Help: SHOW ENUMS - list enums
 // %Category: Misc
 // %Text: SHOW ENUMS
 show_enums_stmt:
@@ -4446,6 +4448,16 @@ show_enums_stmt:
     $$.val = &tree.ShowEnums{}
   }
 | SHOW ENUMS error // SHOW HELP: SHOW ENUMS
+
+// %Help: SHOW TYPES - list user defined types
+// %Category: Misc
+// %Text: SHOW TYPES
+show_types_stmt:
+  SHOW TYPES
+  {
+    $$.val = &tree.ShowTypes{}
+  }
+| SHOW TYPES error // SHOW HELP: SHOW TYPES
 
 // %Help: SHOW GRANTS - list grants
 // %Category: Priv
@@ -11530,6 +11542,7 @@ unreserved_keyword:
 | TRUNCATE
 | TRUSTED
 | TYPE
+| TYPES
 | THROTTLING
 | UNBOUNDED
 | UNCOMMITTED
