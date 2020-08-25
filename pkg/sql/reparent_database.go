@@ -262,6 +262,11 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Update the new parent database with the new schema map.
+	if err := p.writeDatabaseChangeToBatch(ctx, n.newParent, b); err != nil {
+		return err
+	}
+
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
