@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq"
 	"golang.org/x/exp/rand"
@@ -39,9 +40,14 @@ func registerEngineSwitch(r *testRegistry) {
 
 		loadDuration := " --duration=" + (time.Duration(numIters) * stageDuration).String()
 
+		var deprecatedWorkloadsStr string
+		if !t.buildVersion.AtLeast(version.MustParse("v20.2.0")) {
+			deprecatedWorkloadsStr += " --deprecated-fk-indexes"
+		}
+
 		workloads := []string{
 			// Currently tpcc is the only one with CheckConsistency. We can add more later.
-			"./workload run tpcc --tolerate-errors --wait=false --drop --init --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
+			"./workload run tpcc --tolerate-errors --wait=false --drop --init" + deprecatedWorkloadsStr + " --warehouses=1 " + loadDuration + " {pgurl:1-%d}",
 		}
 		checkWorkloads := []string{
 			"./workload check tpcc --warehouses=1 --expensive-checks=true {pgurl:1}",
