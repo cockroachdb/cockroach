@@ -43,6 +43,13 @@ type Descriptor interface {
 	GetParentID() descpb.ID
 	GetParentSchemaID() descpb.ID
 
+	// IsUncommittedVersion returns true if this descriptor represent a version
+	// which is not the currently committed version. Implementations may return
+	// false negatives here in cases where a descriptor may have crossed a
+	// serialization boundary. In particular, this can occur during execution on
+	// remote nodes as well as during some scenarios in schema changes.
+	IsUncommittedVersion() bool
+
 	// Metadata for descriptor leasing.
 	GetVersion() descpb.DescriptorVersion
 	GetModificationTime() hlc.Timestamp
