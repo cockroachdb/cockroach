@@ -2128,8 +2128,9 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	}
 
 	invertedJoinerSpec := execinfrapb.InvertedJoinerSpec{
-		Table: *n.table.desc.TableDesc(),
-		Type:  n.joinType,
+		Table:            *n.table.desc.TableDesc(),
+		Type:             n.joinType,
+		MaintainOrdering: len(n.reqOrdering) > 0,
 	}
 	invertedJoinerSpec.IndexIdx, err = getIndexIdx(n.table.index, n.table.desc)
 	if err != nil {

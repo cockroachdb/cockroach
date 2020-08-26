@@ -120,6 +120,11 @@ func init() {
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
 		buildProvidedOrdering: lookupJoinBuildProvided,
 	}
+	funcMap[opt.InvertedJoinOp] = funcs{
+		canProvideOrdering:    invertedJoinCanProvideOrdering,
+		buildChildReqOrdering: invertedJoinBuildChildReqOrdering,
+		buildProvidedOrdering: invertedJoinBuildProvided,
+	}
 	funcMap[opt.OrdinalityOp] = funcs{
 		canProvideOrdering:    ordinalityCanProvideOrdering,
 		buildChildReqOrdering: ordinalityBuildChildReqOrdering,
