@@ -1732,6 +1732,7 @@ const (
 	compSignatureWithSubOpFmt = "<%s> %s %s <%s>"
 	compExprsFmt              = "%s %s %s: %v"
 	compExprsWithSubOpFmt     = "%s %s %s %s: %v"
+	invalidCompErrFmt         = "invalid comparison between different %s types: %s"
 	unsupportedCompErrFmt     = "unsupported comparison operator: %s"
 	unsupportedUnaryOpErrFmt  = "unsupported unary operator: %s"
 	unsupportedBinaryOpErrFmt = "unsupported binary operator: %s"
@@ -2019,6 +2020,13 @@ func typeCheckComparisonOp(
 	if len(fns) != 1 || typeMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || typeMismatch {
+			// For some typeMismatch errors, we want to emit a more specific error
+			// message than "unknown comparison". In particular, comparison between
+			// two different enum types is invalid, rather than just unsupported.
+			if typeMismatch && leftFamily == types.EnumFamily && rightFamily == types.EnumFamily {
+				return nil, nil, nil, false,
+					pgerror.Newf(pgcode.InvalidParameterValue, invalidCompErrFmt, "enum", sig)
+			}
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
