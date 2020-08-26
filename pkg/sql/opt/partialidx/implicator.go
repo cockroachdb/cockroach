@@ -178,7 +178,7 @@ func (im *Implicator) FiltersImplyPredicate(
 	// filters and predicate. Use exactMatches to keep track of expressions in
 	// filters that exactly matches expressions in pred, so that the can be
 	// removed from the remaining filters.
-	exactMatches := make(map[opt.Expr]struct{})
+	exactMatches := make(exprSet)
 	if im.scalarExprImpliesPredicate(&filters, &pred, exactMatches) {
 		remainingFilters = im.simplifyFiltersExpr(filters, exactMatches)
 		return remainingFilters, true
@@ -254,14 +254,12 @@ func (im *Implicator) filtersImplyPredicateFastPath(
 // Also note that exactMatches is optional, and nil can be passed when it is not
 // necessary to keep track of exactly matching expressions.
 func (im *Implicator) scalarExprImpliesPredicate(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 
 	// If the expressions are an exact match, then e implies pred.
 	if e == pred {
-		if exactMatches != nil {
-			exactMatches[e] = struct{}{}
-		}
+		exactMatches.add(e)
 		return true
 	}
 
@@ -287,7 +285,7 @@ func (im *Implicator) scalarExprImpliesPredicate(
 // filtersExprImpliesPredicate returns true if the FiltersExpr e implies the
 // ScalarExpr pred.
 func (im *Implicator) filtersExprImpliesPredicate(
-	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e *memo.FiltersExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.FiltersExpr:
@@ -351,7 +349,7 @@ func (im *Implicator) filtersExprImpliesPredicate(
 // passed to filtersExprImpliesPredicate to prevent duplicating logic for both
 // types of conjunctions.
 func (im *Implicator) andExprImpliesPredicate(
-	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e *memo.AndExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	f := make(memo.FiltersExpr, 2)
 	f[0] = memo.FiltersItem{Condition: e.Left}
@@ -419,7 +417,7 @@ func (im *Implicator) orExprImpliesPredicate(e *memo.OrExpr, pred opt.ScalarExpr
 // ScalarExpr pred. The atom e cannot be an AndExpr, OrExpr, RangeExpr, or
 // FiltersExpr.
 func (im *Implicator) atomImpliesPredicate(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	switch pt := pred.(type) {
 	case *memo.FiltersExpr:
@@ -463,7 +461,7 @@ func (im *Implicator) atomImpliesPredicate(
 // if one expression contains another, handling many types of expressions
 // including comparison operators, IN operators, and tuples.
 func (im *Implicator) atomImpliesAtom(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) bool {
 	// Check for containment of comparison expressions with two variables, like
 	// a = b.
@@ -527,11 +525,10 @@ func (im *Implicator) atomImpliesAtom(
 		// they are semantically equivalent because there are no integers
 		// between 17 and 18. Therefore, there is no need to apply (a > 17) as a
 		// filter after the partial index scan.
-		if exactMatches != nil &&
-			eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
-			eConstraint.Contains(im.evalCtx, predConstraint) {
-			exactMatches[e] = struct{}{}
-		}
+		exactMatches.addIf(e, func() bool {
+			return eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
+				eConstraint.Contains(im.evalCtx, predConstraint)
+		})
 		return true
 	}
 
@@ -548,7 +545,7 @@ func (im *Implicator) atomImpliesAtom(
 // values of a and b that satisfy the first expression also satisfy the second
 // expression.
 func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
-	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
+	e opt.ScalarExpr, pred opt.ScalarExpr, exactMatches exprSet,
 ) (containment bool, ok bool) {
 	if !isTwoVarComparison(e) || !isTwoVarComparison(pred) {
 		return false, false
@@ -609,9 +606,9 @@ func (im *Implicator) twoVarComparisonImpliesTwoVarComparison(
 		// pred's operator, then e is an exact match to pred and it should be
 		// removed from the remaining filters. For example, (a > b) and
 		// (b < a) both individually imply (a > b) with no remaining filters.
-		if exactMatches != nil && (e.Op() == pred.Op() || commutedOp(e.Op()) == pred.Op()) {
-			exactMatches[e] = struct{}{}
-		}
+		exactMatches.addIf(e, func() bool {
+			return e.Op() == pred.Op() || commutedOp(e.Op()) == pred.Op()
+		})
 		return true, true
 	}
 
@@ -658,14 +655,14 @@ func (im *Implicator) warmCache(filters memo.FiltersExpr) {
 // is omitted from the returned FiltersItem. If not, the FiltersItem is
 // recursively searched. See simplifyScalarExpr for more details.
 func (im *Implicator) simplifyFiltersExpr(
-	e memo.FiltersExpr, exactMatches map[opt.Expr]struct{},
+	e memo.FiltersExpr, exactMatches exprSet,
 ) memo.FiltersExpr {
 	filters := make(memo.FiltersExpr, 0, len(e))
 
 	for i := range e {
 		// If an entire FiltersItem exists in exactMatches, don't add it to the
 		// output filters.
-		if _, ok := exactMatches[e[i].Condition]; ok {
+		if exactMatches.contains(e[i].Condition) {
 			continue
 		}
 
@@ -691,9 +688,7 @@ func (im *Implicator) simplifyFiltersExpr(
 //
 // Also note that we do not attempt to traverse OrExprs. See
 // FiltersImplyPredicate (rule #3) for more details.
-func (im *Implicator) simplifyScalarExpr(
-	e opt.ScalarExpr, exactMatches map[opt.Expr]struct{},
-) opt.ScalarExpr {
+func (im *Implicator) simplifyScalarExpr(e opt.ScalarExpr, exactMatches exprSet) opt.ScalarExpr {
 
 	switch t := e.(type) {
 	case *memo.RangeExpr:
@@ -701,8 +696,8 @@ func (im *Implicator) simplifyScalarExpr(
 		return im.f.ConstructRange(and)
 
 	case *memo.AndExpr:
-		_, leftIsExactMatch := exactMatches[t.Left]
-		_, rightIsExactMatch := exactMatches[t.Right]
+		leftIsExactMatch := exactMatches.contains(t.Left)
+		rightIsExactMatch := exactMatches.contains(t.Right)
 		if leftIsExactMatch && rightIsExactMatch {
 			return memo.TrueSingleton
 		}
@@ -757,4 +752,36 @@ func isTwoVarComparison(e opt.ScalarExpr) bool {
 	return (op == opt.EqOp || op == opt.LtOp || op == opt.GtOp || op == opt.LeOp || op == opt.GeOp || op == opt.NeOp) &&
 		e.Child(0).Op() == opt.VariableOp &&
 		e.Child(1).Op() == opt.VariableOp
+}
+
+// exprSet represents a set of opt.Expr. It prevents nil pointer exceptions when
+// tracking exact expression matches during implication. The nil value is passed
+// in several places to avoid adding child expressions to the exact matches set,
+// such as when traversing an OrExpr.
+type exprSet map[opt.Expr]struct{}
+
+// add adds an expression to the set if the set is non-nil.
+func (s exprSet) add(e opt.Expr) {
+	if s != nil {
+		s[e] = struct{}{}
+	}
+}
+
+// addIf adds an expression to the set if the set is non-nil and the given
+// function returns true. addIf short-circuits and does not call the function if
+// the set is nil.
+func (s exprSet) addIf(e opt.Expr, fn func() bool) {
+	if s != nil && fn() {
+		s[e] = struct{}{}
+	}
+}
+
+// contains returns true if the set is non-nil and the given expression exists
+// in the set.
+func (s exprSet) contains(e opt.Expr) bool {
+	if s != nil {
+		_, ok := s[e]
+		return ok
+	}
+	return false
 }
