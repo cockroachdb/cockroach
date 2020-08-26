@@ -18,55 +18,55 @@ import (
 
 // Scale returns a modified Geometry whose coordinates are multiplied by the factors.
 // If there are missing dimensions in factors, the corresponding dimensions are not scaled.
-func Scale(geometry *geo.Geometry, factors []float64) (*geo.Geometry, error) {
+func Scale(geometry geo.Geometry, factors []float64) (geo.Geometry, error) {
 	if geometry.Empty() {
 		return geometry, nil
 	}
 
 	g, err := geometry.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	g, err = scale(g, factors, nil)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
-	return geo.NewGeometryFromGeomT(g)
+	return geo.MakeGeometryFromGeomT(g)
 }
 
 // ScaleRelativeToOrigin returns a modified Geometry whose coordinates are multiplied by the factors relative to the origin
 func ScaleRelativeToOrigin(
-	geometry *geo.Geometry, factor *geo.Geometry, origin *geo.Geometry,
-) (*geo.Geometry, error) {
+	geometry geo.Geometry, factor geo.Geometry, origin geo.Geometry,
+) (geo.Geometry, error) {
 	if geometry.Empty() {
 		return geometry, nil
 	}
 
 	g, err := geometry.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	factorG, err := factor.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	_, ok := factorG.(*geom.Point)
 	if !ok {
-		return nil, errors.Newf("the scaling factor must be a Point")
+		return geo.Geometry{}, errors.Newf("the scaling factor must be a Point")
 	}
 
 	originG, err := origin.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	_, ok = originG.(*geom.Point)
 	if !ok {
-		return nil, errors.Newf("the false origin must be a Point")
+		return geo.Geometry{}, errors.Newf("the false origin must be a Point")
 	}
 
 	if factorG.Stride() != originG.Stride() {
@@ -74,15 +74,15 @@ func ScaleRelativeToOrigin(
 			Got:  factorG.Stride(),
 			Want: originG.Stride(),
 		}
-		return nil, errors.Wrap(err, "number of dimensions for the scaling factor and origin must be equal")
+		return geo.Geometry{}, errors.Wrap(err, "number of dimensions for the scaling factor and origin must be equal")
 	}
 
 	g, err = scale(g, factorG.FlatCoords(), originG)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
-	return geo.NewGeometryFromGeomT(g)
+	return geo.MakeGeometryFromGeomT(g)
 }
 
 func scale(g geom.T, factors []float64, origin geom.T) (geom.T, error) {

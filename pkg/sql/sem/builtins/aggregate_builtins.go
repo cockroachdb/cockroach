@@ -651,7 +651,7 @@ func (agg *stMakeLineAgg) Result() (tree.Datum, error) {
 	if len(agg.flatCoords) == 0 {
 		return tree.DNull, nil
 	}
-	g, err := geo.NewGeometryFromGeomT(geom.NewLineStringFlat(agg.layout, agg.flatCoords))
+	g, err := geo.MakeGeometryFromGeomT(geom.NewLineStringFlat(agg.layout, agg.flatCoords))
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +695,7 @@ func (agg *stUnionAgg) Add(_ context.Context, firstArg tree.Datum, otherArgs ...
 		if err != nil {
 			return err
 		}
-		return geo.NewMismatchingSRIDsError(geomArg.Geometry, c)
+		return geo.NewMismatchingSRIDsError(geomArg.Geometry.SpatialObject(), c.SpatialObject())
 	}
 	var err error
 	// TODO(#geo):We are allocating a slice for the result each time we

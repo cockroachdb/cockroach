@@ -35,27 +35,27 @@ import (
 // actual projection in the Spherical surface, which causes a small inaccuracies.
 // This inaccuracy will eventually grow if there is a substantial
 // number of a triangle with a larger area.
-func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.Geography, error) {
+func Centroid(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (geo.Geography, error) {
 	geomRepr, err := g.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 	if geomRepr.Empty() {
-		return geo.NewGeographyFromGeomT(geom.NewGeometryCollection().SetSRID(geomRepr.SRID()))
+		return geo.MakeGeographyFromGeomT(geom.NewGeometryCollection().SetSRID(geomRepr.SRID()))
 	}
 	switch geomRepr.(type) {
 	case *geom.Point, *geom.LineString, *geom.Polygon, *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon:
 	default:
-		return nil, errors.Newf("unhandled geography type %s", g.ShapeType().String())
+		return geo.Geography{}, errors.Newf("unhandled geography type %s", g.ShapeType().String())
 	}
 
 	regions, err := geo.S2RegionsFromGeomT(geomRepr, geo.EmptyBehaviorOmit)
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 	spheroid, err := g.Spheroid()
 	if err != nil {
-		return nil, err
+		return geo.Geography{}, err
 	}
 
 	// localWeightedCentroids is the collection of all the centroid corresponds to
@@ -118,5 +118,5 @@ func Centroid(g *geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (*geo.G
 	}
 	latLng := s2.LatLngFromPoint(s2.Point{Vector: centroidVector.Normalize()})
 	centroid := geom.NewPointFlat(geom.XY, []float64{latLng.Lng.Degrees(), latLng.Lat.Degrees()}).SetSRID(int(g.SRID()))
-	return geo.NewGeographyFromGeomT(centroid)
+	return geo.MakeGeographyFromGeomT(centroid)
 }

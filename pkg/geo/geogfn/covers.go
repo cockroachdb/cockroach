@@ -39,15 +39,15 @@ import (
 //       'multipolygon(((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0)), ((1.0 0.0, 2.0 0.0, 2.0 1.0, 1.0 1.0, 1.0 0.0)))',
 //       'linestring(0.0 0.0, 2.0 0.0)'::geography
 //     );
-func Covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+func Covers(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(a, b)
 }
 
 // covers is the internal calculation for Covers.
-func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
+func covers(a geo.Geography, b geo.Geography) (bool, error) {
 	// Rect "contains" is a version of covers.
 	if !a.BoundingRect().Contains(b.BoundingRect()) {
 		return false, nil
@@ -92,9 +92,9 @@ func covers(a *geo.Geography, b *geo.Geography) (bool, error) {
 
 // CoveredBy returns whether geography A is covered by geography B.
 // See Covers for limitations.
-func CoveredBy(a *geo.Geography, b *geo.Geography) (bool, error) {
+func CoveredBy(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(b, a)
 }

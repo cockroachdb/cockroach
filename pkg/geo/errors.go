@@ -13,18 +13,19 @@ package geo
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/errors"
 )
 
 // NewMismatchingSRIDsError returns the error message for SRIDs of GeospatialTypes
 // a and b being a mismatch.
-func NewMismatchingSRIDsError(a GeospatialType, b GeospatialType) error {
+func NewMismatchingSRIDsError(a geopb.SpatialObject, b geopb.SpatialObject) error {
 	return errors.Newf(
 		"operation on mixed SRIDs forbidden: (%s, %d) != (%s, %d)",
-		a.ShapeType(),
-		a.SRID(),
-		b.ShapeType(),
-		b.SRID(),
+		a.ShapeType,
+		a.SRID,
+		b.ShapeType,
+		b.SRID,
 	)
 }
 

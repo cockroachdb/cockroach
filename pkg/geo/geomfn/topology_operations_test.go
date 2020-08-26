@@ -134,9 +134,9 @@ func TestPointOnSurface(t *testing.T) {
 
 func TestIntersection(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
-		expected *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
+		expected geo.Geometry
 	}{
 		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))")},
 		{rightRect, rightRectPoint, rightRectPoint},
@@ -159,9 +159,9 @@ func TestIntersection(t *testing.T) {
 
 func TestUnion(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
-		expected *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
+		expected geo.Geometry
 	}{
 		{rightRect, rightRect, geo.MustParseGeometry("POLYGON ((1 0, 0 0, 0 1, 1 1, 1 0))")},
 		{rightRect, rightRectPoint, geo.MustParseGeometry("POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))")},
@@ -185,13 +185,13 @@ func TestUnion(t *testing.T) {
 
 func TestSharedPaths(t *testing.T) {
 	type args struct {
-		a *geo.Geometry
-		b *geo.Geometry
+		a geo.Geometry
+		b geo.Geometry
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    *geo.Geometry
+		want    geo.Geometry
 		wantErr error
 	}{
 		{
@@ -220,7 +220,6 @@ func TestSharedPaths(t *testing.T) {
 				a: geo.MustParseGeometry("MULTIPOINT((0 0), (3 2))"),
 				b: geo.MustParseGeometry("MULTIPOINT((0 1), (1 2))"),
 			},
-			want:    nil,
 			wantErr: errors.New("geos error: IllegalArgumentException: Geometry is not lineal"),
 		},
 		{

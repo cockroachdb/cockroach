@@ -184,7 +184,7 @@ func RandomGeomT(
 }
 
 // RandomGeometry generates a random Geometry with the given SRID.
-func RandomGeometry(rng *rand.Rand, srid geopb.SRID) *geo.Geometry {
+func RandomGeometry(rng *rand.Rand, srid geopb.SRID) geo.Geometry {
 	minX, maxX := -math.MaxFloat32, math.MaxFloat32
 	minY, maxY := -math.MaxFloat32, math.MaxFloat32
 	proj, ok := geoprojbase.Projections[srid]
@@ -192,7 +192,7 @@ func RandomGeometry(rng *rand.Rand, srid geopb.SRID) *geo.Geometry {
 		minX, maxX = proj.Bounds.MinX, proj.Bounds.MaxX
 		minY, maxY = proj.Bounds.MinY, proj.Bounds.MaxY
 	}
-	ret, err := geo.NewGeometryFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
+	ret, err := geo.MakeGeometryFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
 	if err != nil {
 		panic(err)
 	}
@@ -200,11 +200,11 @@ func RandomGeometry(rng *rand.Rand, srid geopb.SRID) *geo.Geometry {
 }
 
 // RandomGeography generates a random Geometry with the given SRID.
-func RandomGeography(rng *rand.Rand, srid geopb.SRID) *geo.Geography {
+func RandomGeography(rng *rand.Rand, srid geopb.SRID) geo.Geography {
 	// TODO(otan): generate geographies that traverse latitude/longitude boundaries.
 	minX, maxX := -180.0, 180.0
 	minY, maxY := -90.0, 90.0
-	ret, err := geo.NewGeographyFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
+	ret, err := geo.MakeGeographyFromGeomT(RandomGeomT(rng, minX, maxX, minY, maxY, srid))
 	if err != nil {
 		panic(err)
 	}

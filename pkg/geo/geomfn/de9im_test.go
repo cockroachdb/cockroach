@@ -20,8 +20,8 @@ import (
 
 func TestRelate(t *testing.T) {
 	testCases := []struct {
-		a        *geo.Geometry
-		b        *geo.Geometry
+		a        geo.Geometry
+		b        geo.Geometry
 		expected string
 	}{
 		{leftRect, rightRect, "FF2F11212"},

@@ -17,18 +17,18 @@ import (
 )
 
 // Translate returns a modified Geometry whose coordinates are incremented or decremented by the deltas.
-func Translate(geometry *geo.Geometry, deltas []float64) (*geo.Geometry, error) {
+func Translate(geometry geo.Geometry, deltas []float64) (geo.Geometry, error) {
 	g, err := geometry.AsGeomT()
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
 	g, err = translate(g, deltas)
 	if err != nil {
-		return nil, err
+		return geo.Geometry{}, err
 	}
 
-	return geo.NewGeometryFromGeomT(g)
+	return geo.MakeGeometryFromGeomT(g)
 }
 
 func translate(g geom.T, deltas []float64) (geom.T, error) {

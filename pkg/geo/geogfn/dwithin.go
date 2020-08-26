@@ -21,14 +21,14 @@ import (
 // equivalent to Distance(a, b) <= d. Otherwise, DWithin is instead equivalent
 // to Distance(a, b) < d.
 func DWithin(
-	a *geo.Geography,
-	b *geo.Geography,
+	a geo.Geography,
+	b geo.Geography,
 	distance float64,
 	useSphereOrSpheroid UseSphereOrSpheroid,
 	exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if distance < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")

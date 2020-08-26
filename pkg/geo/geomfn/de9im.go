@@ -18,17 +18,17 @@ import (
 )
 
 // Relate returns the DE-9IM relation between A and B.
-func Relate(a *geo.Geometry, b *geo.Geometry) (string, error) {
+func Relate(a geo.Geometry, b geo.Geometry) (string, error) {
 	if a.SRID() != b.SRID() {
-		return "", geo.NewMismatchingSRIDsError(a, b)
+		return "", geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return geos.Relate(a.EWKB(), b.EWKB())
 }
 
 // RelatePattern returns whether the DE-9IM relation between A and B matches.
-func RelatePattern(a *geo.Geometry, b *geo.Geometry, pattern string) (bool, error) {
+func RelatePattern(a geo.Geometry, b geo.Geometry, pattern string) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(a, b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return geos.RelatePattern(a.EWKB(), b.EWKB(), pattern)
 }
