@@ -295,6 +295,82 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	require.Error(t, context.Canceled, err)
 }
 
+// TestHttpExceedMaxRetries ensures that we return an error once we exceed the
+// MaxRetries. Previously, we had a bug where we would only return the error in
+// the case of a context cancellation but would swallow exceeded max retry
+// errors.
+func TestHttpExceedMaxRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	data := []byte("to serve, or not to serve.  c'est la question")
+
+	defer func(opts retry.Options) {
+		cloudimpl.HTTPRetryOptions = opts
+	}(cloudimpl.HTTPRetryOptions)
+
+	cloudimpl.HTTPRetryOptions.InitialBackoff = 1 * time.Microsecond
+	cloudimpl.HTTPRetryOptions.MaxBackoff = 10 * time.Millisecond
+	cloudimpl.HTTPRetryOptions.MaxRetries = 1
+
+	t.Run(fmt.Sprintf("read"), func(t *testing.T) {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start, err := rangeStart(r.Header.Get("Range"))
+			if start < 0 || start >= len(data) {
+				t.Errorf("invalid start offset %d in range header %s",
+					start, r.Header.Get("Range"))
+			}
+			end := len(data)
+
+			w.Header().Add("Accept-Ranges", "bytes")
+			w.Header().Add("Content-Length", strconv.Itoa(len(data)-start))
+
+			if start > 0 {
+				w.Header().Add(
+					"Content-Range",
+					fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+			}
+
+			if err == nil {
+				_, err = w.Write(data[start:end])
+			}
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}))
+
+		// Start antagonist function that aggressively closes client connections.
+		ctx, cancelAntagonist := context.WithCancel(context.Background())
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					s.CloseClientConnections()
+				}
+			}
+		})
+
+		store, err := cloudimpl.MakeHTTPStorage(s.URL, testSettings, base.ExternalIODirConfig{})
+		require.NoError(t, err)
+
+		// Cleanup.
+		defer func() {
+			s.Close()
+			if store != nil {
+				require.NoError(t, store.Close())
+			}
+			cancelAntagonist()
+			_ = g.Wait()
+		}()
+
+		// Read the file and ensure that an error is returned after max retry
+		// attempts are exceeded.
+		_, err = store.ReadFile(ctx, "/something")
+		require.Error(t, err)
+	})
+}
+
 func TestCanDisableHttp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	conf := base.ExternalIODirConfig{
