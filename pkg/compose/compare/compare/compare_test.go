@@ -94,6 +94,7 @@ func TestCompare(t *testing.T) {
 						mutations.ColumnFamilyMutator,
 						mutations.StatisticsMutator,
 						mutations.IndexStoringMutator,
+						mutations.PartialIndexMutator,
 					},
 				},
 			},
