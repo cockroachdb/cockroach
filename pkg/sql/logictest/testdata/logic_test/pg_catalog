@@ -283,9 +283,9 @@ query TTTTBBBB colnames
 SELECT * FROM constraint_db.pg_catalog.pg_tables WHERE schemaname = 'public'
 ----
 schemaname  tablename  tableowner  tablespace  hasindexes  hasrules  hastriggers  rowsecurity
-public      t1         NULL        NULL        true        false     false        false
-public      t2         NULL        NULL        true        false     false        false
-public      t3         NULL        NULL        true        false     false        false
+public      t1         root        NULL        true        false     false        false
+public      t2         root        NULL        true        false     false        false
+public      t3         root        NULL        true        false     false        false
 
 query TB colnames
 SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
@@ -310,7 +310,7 @@ query TTTT colnames
 SELECT * FROM pg_catalog.pg_views
 ----
 schemaname  viewname  viewowner  definition
-public      v1        NULL       SELECT p, a, b, c FROM constraint_db.public.t1
+public      v1        root       SELECT p, a, b, c FROM constraint_db.public.t1
 
 ## pg_catalog.pg_matviews
 
@@ -321,7 +321,7 @@ query TTTTBBT colnames
 SELECT * FROM pg_catalog.pg_matviews
 ----
 schemaname  matviewname  matviewowner  tablespace  hasindexes  ispopulated  definition
-public      mv1          NULL          NULL        false       true         SELECT 1
+public      mv1          root          NULL        false       true         SELECT 1
 
 ## pg_catalog.pg_class
 
@@ -331,20 +331,20 @@ FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname       relnamespace  reltype  reloftype  relowner  relam       relfilenode  reltablespace
-55          t1            2332901747    0        0          NULL      2631952481  0            0
-450499963   primary       2332901747    0        0          NULL      2631952481  0            0
-450499960   t1_a_key      2332901747    0        0          NULL      2631952481  0            0
-450499961   index_key     2332901747    0        0          NULL      2631952481  0            0
-56          t2            2332901747    0        0          NULL      2631952481  0            0
-2315049508  primary       2332901747    0        0          NULL      2631952481  0            0
-2315049511  t2_t1_id_idx  2332901747    0        0          NULL      2631952481  0            0
-57          t3            2332901747    0        0          NULL      2631952481  0            0
-969972501   primary       2332901747    0        0          NULL      2631952481  0            0
-969972502   t3_a_b_idx    2332901747    0        0          NULL      2631952481  0            0
-58          v1            2332901747    0        0          NULL      0           0            0
-59          mv1           2332901747    0        0          NULL      0           0            0
-3660126519  primary       2332901747    0        0          NULL      2631952481  0            0
+oid         relname       relnamespace  reltype  reloftype  relowner    relam       relfilenode  reltablespace
+55          t1            2332901747    0        0          1546506610  2631952481  0            0
+450499963   primary       2332901747    0        0          1546506610  2631952481  0            0
+450499960   t1_a_key      2332901747    0        0          1546506610  2631952481  0            0
+450499961   index_key     2332901747    0        0          1546506610  2631952481  0            0
+56          t2            2332901747    0        0          1546506610  2631952481  0            0
+2315049508  primary       2332901747    0        0          1546506610  2631952481  0            0
+2315049511  t2_t1_id_idx  2332901747    0        0          1546506610  2631952481  0            0
+57          t3            2332901747    0        0          1546506610  2631952481  0            0
+969972501   primary       2332901747    0        0          1546506610  2631952481  0            0
+969972502   t3_a_b_idx    2332901747    0        0          1546506610  2631952481  0            0
+58          v1            2332901747    0        0          1546506610  0           0            0
+59          mv1           2332901747    0        0          1546506610  0           0            0
+3660126519  primary       2332901747    0        0          1546506610  2631952481  0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -1002,86 +1002,86 @@ SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 ORDER BY oid
 ----
-oid     typname        typnamespace  typowner  typlen  typbyval  typtype
-16      bool           1307062959    NULL      1       true      b
-17      bytea          1307062959    NULL      -1      false     b
-18      char           1307062959    NULL      1       true      b
-19      name           1307062959    NULL      -1      false     b
-20      int8           1307062959    NULL      8       true      b
-21      int2           1307062959    NULL      2       true      b
-22      int2vector     1307062959    NULL      -1      false     b
-23      int4           1307062959    NULL      4       true      b
-24      regproc        1307062959    NULL      8       true      b
-25      text           1307062959    NULL      -1      false     b
-26      oid            1307062959    NULL      8       true      b
-30      oidvector      1307062959    NULL      -1      false     b
-700     float4         1307062959    NULL      4       true      b
-701     float8         1307062959    NULL      8       true      b
-705     unknown        1307062959    NULL      0       true      b
-869     inet           1307062959    NULL      24      true      b
-1000    _bool          1307062959    NULL      -1      false     b
-1001    _bytea         1307062959    NULL      -1      false     b
-1002    _char          1307062959    NULL      -1      false     b
-1003    _name          1307062959    NULL      -1      false     b
-1005    _int2          1307062959    NULL      -1      false     b
-1006    _int2vector    1307062959    NULL      -1      false     b
-1007    _int4          1307062959    NULL      -1      false     b
-1008    _regproc       1307062959    NULL      -1      false     b
-1009    _text          1307062959    NULL      -1      false     b
-1013    _oidvector     1307062959    NULL      -1      false     b
-1014    _bpchar        1307062959    NULL      -1      false     b
-1015    _varchar       1307062959    NULL      -1      false     b
-1016    _int8          1307062959    NULL      -1      false     b
-1021    _float4        1307062959    NULL      -1      false     b
-1022    _float8        1307062959    NULL      -1      false     b
-1028    _oid           1307062959    NULL      -1      false     b
-1041    _inet          1307062959    NULL      -1      false     b
-1042    bpchar         1307062959    NULL      -1      false     b
-1043    varchar        1307062959    NULL      -1      false     b
-1082    date           1307062959    NULL      16      true      b
-1083    time           1307062959    NULL      8       true      b
-1114    timestamp      1307062959    NULL      24      true      b
-1115    _timestamp     1307062959    NULL      -1      false     b
-1182    _date          1307062959    NULL      -1      false     b
-1183    _time          1307062959    NULL      -1      false     b
-1184    timestamptz    1307062959    NULL      24      true      b
-1185    _timestamptz   1307062959    NULL      -1      false     b
-1186    interval       1307062959    NULL      24      true      b
-1187    _interval      1307062959    NULL      -1      false     b
-1231    _numeric       1307062959    NULL      -1      false     b
-1266    timetz         1307062959    NULL      16      true      b
-1270    _timetz        1307062959    NULL      -1      false     b
-1560    bit            1307062959    NULL      -1      false     b
-1561    _bit           1307062959    NULL      -1      false     b
-1562    varbit         1307062959    NULL      -1      false     b
-1563    _varbit        1307062959    NULL      -1      false     b
-1700    numeric        1307062959    NULL      -1      false     b
-2202    regprocedure   1307062959    NULL      8       true      b
-2205    regclass       1307062959    NULL      8       true      b
-2206    regtype        1307062959    NULL      8       true      b
-2207    _regprocedure  1307062959    NULL      -1      false     b
-2210    _regclass      1307062959    NULL      -1      false     b
-2211    _regtype       1307062959    NULL      -1      false     b
-2249    record         1307062959    NULL      0       true      p
-2277    anyarray       1307062959    NULL      -1      false     p
-2283    anyelement     1307062959    NULL      -1      false     p
-2287    _record        1307062959    NULL      -1      false     b
-2950    uuid           1307062959    NULL      16      true      b
-2951    _uuid          1307062959    NULL      -1      false     b
-3802    jsonb          1307062959    NULL      -1      false     b
-3807    _jsonb         1307062959    NULL      -1      false     b
-4089    regnamespace   1307062959    NULL      8       true      b
-4090    _regnamespace  1307062959    NULL      -1      false     b
-90000   geometry       1307062959    NULL      -1      false     b
-90001   _geometry      1307062959    NULL      -1      false     b
-90002   geography      1307062959    NULL      -1      false     b
-90003   _geography     1307062959    NULL      -1      false     b
-90004   box2d          1307062959    NULL      32      true      b
-90005   _box2d         1307062959    NULL      -1      false     b
-100065  newtype1       2332901747    NULL      -1      false     e
-100066  _newtype1      2332901747    NULL      -1      false     b
-100067  newtype2       2332901747    NULL      -1      false     e
-100068  _newtype2      2332901747    NULL      -1      false     b
+oid     typname        typnamespace  typowner    typlen  typbyval  typtype
+16      bool           1307062959    NULL        1       true      b
+17      bytea          1307062959    NULL        -1      false     b
+18      char           1307062959    NULL        1       true      b
+19      name           1307062959    NULL        -1      false     b
+20      int8           1307062959    NULL        8       true      b
+21      int2           1307062959    NULL        2       true      b
+22      int2vector     1307062959    NULL        -1      false     b
+23      int4           1307062959    NULL        4       true      b
+24      regproc        1307062959    NULL        8       true      b
+25      text           1307062959    NULL        -1      false     b
+26      oid            1307062959    NULL        8       true      b
+30      oidvector      1307062959    NULL        -1      false     b
+700     float4         1307062959    NULL        4       true      b
+701     float8         1307062959    NULL        8       true      b
+705     unknown        1307062959    NULL        0       true      b
+869     inet           1307062959    NULL        24      true      b
+1000    _bool          1307062959    NULL        -1      false     b
+1001    _bytea         1307062959    NULL        -1      false     b
+1002    _char          1307062959    NULL        -1      false     b
+1003    _name          1307062959    NULL        -1      false     b
+1005    _int2          1307062959    NULL        -1      false     b
+1006    _int2vector    1307062959    NULL        -1      false     b
+1007    _int4          1307062959    NULL        -1      false     b
+1008    _regproc       1307062959    NULL        -1      false     b
+1009    _text          1307062959    NULL        -1      false     b
+1013    _oidvector     1307062959    NULL        -1      false     b
+1014    _bpchar        1307062959    NULL        -1      false     b
+1015    _varchar       1307062959    NULL        -1      false     b
+1016    _int8          1307062959    NULL        -1      false     b
+1021    _float4        1307062959    NULL        -1      false     b
+1022    _float8        1307062959    NULL        -1      false     b
+1028    _oid           1307062959    NULL        -1      false     b
+1041    _inet          1307062959    NULL        -1      false     b
+1042    bpchar         1307062959    NULL        -1      false     b
+1043    varchar        1307062959    NULL        -1      false     b
+1082    date           1307062959    NULL        16      true      b
+1083    time           1307062959    NULL        8       true      b
+1114    timestamp      1307062959    NULL        24      true      b
+1115    _timestamp     1307062959    NULL        -1      false     b
+1182    _date          1307062959    NULL        -1      false     b
+1183    _time          1307062959    NULL        -1      false     b
+1184    timestamptz    1307062959    NULL        24      true      b
+1185    _timestamptz   1307062959    NULL        -1      false     b
+1186    interval       1307062959    NULL        24      true      b
+1187    _interval      1307062959    NULL        -1      false     b
+1231    _numeric       1307062959    NULL        -1      false     b
+1266    timetz         1307062959    NULL        16      true      b
+1270    _timetz        1307062959    NULL        -1      false     b
+1560    bit            1307062959    NULL        -1      false     b
+1561    _bit           1307062959    NULL        -1      false     b
+1562    varbit         1307062959    NULL        -1      false     b
+1563    _varbit        1307062959    NULL        -1      false     b
+1700    numeric        1307062959    NULL        -1      false     b
+2202    regprocedure   1307062959    NULL        8       true      b
+2205    regclass       1307062959    NULL        8       true      b
+2206    regtype        1307062959    NULL        8       true      b
+2207    _regprocedure  1307062959    NULL        -1      false     b
+2210    _regclass      1307062959    NULL        -1      false     b
+2211    _regtype       1307062959    NULL        -1      false     b
+2249    record         1307062959    NULL        0       true      p
+2277    anyarray       1307062959    NULL        -1      false     p
+2283    anyelement     1307062959    NULL        -1      false     p
+2287    _record        1307062959    NULL        -1      false     b
+2950    uuid           1307062959    NULL        16      true      b
+2951    _uuid          1307062959    NULL        -1      false     b
+3802    jsonb          1307062959    NULL        -1      false     b
+3807    _jsonb         1307062959    NULL        -1      false     b
+4089    regnamespace   1307062959    NULL        8       true      b
+4090    _regnamespace  1307062959    NULL        -1      false     b
+90000   geometry       1307062959    NULL        -1      false     b
+90001   _geometry      1307062959    NULL        -1      false     b
+90002   geography      1307062959    NULL        -1      false     b
+90003   _geography     1307062959    NULL        -1      false     b
+90004   box2d          1307062959    NULL        32      true      b
+90005   _box2d         1307062959    NULL        -1      false     b
+100065  newtype1       2332901747    1546506610  -1      false     e
+100066  _newtype1      2332901747    1546506610  -1      false     b
+100067  newtype2       2332901747    1546506610  -1      false     e
+100068  _newtype2      2332901747    1546506610  -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -1453,8 +1453,8 @@ SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 WHERE oid = 100065
 ----
-oid     typname   typnamespace  typowner  typlen  typbyval  typtype
-100065  newtype1  2332901747    NULL      -1      false     e
+oid     typname   typnamespace  typowner    typlen  typbyval  typtype
+100065  newtype1  2332901747    1546506610  -1      false     e
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype

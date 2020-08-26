@@ -547,13 +547,9 @@ func MustGetSchemaDescByID(
 	return sc, nil
 }
 
-// GetDatabaseDescriptorsFromIDs returns the database descriptors from an input
-// set of database IDs. It will return an error if any one of the IDs is not a
-// database. It attempts to perform this operation in a single request,
-// rather than making a round trip for each ID.
-func GetDatabaseDescriptorsFromIDs(
+func getDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
-) ([]*dbdesc.Immutable, error) {
+) ([]catalog.Descriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
 		key := catalogkeys.MakeDescMetadataKey(codec, id)
@@ -562,7 +558,7 @@ func GetDatabaseDescriptorsFromIDs(
 	if err := txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	results := make([]*dbdesc.Immutable, 0, len(ids))
+	results := make([]catalog.Descriptor, 0, len(ids))
 	for i := range b.Results {
 		result := &b.Results[i]
 		if result.Err != nil {
@@ -579,20 +575,61 @@ func GetDatabaseDescriptorsFromIDs(
 		if err := result.Rows[0].ValueProto(desc); err != nil {
 			return nil, err
 		}
-		if desc.GetUnion() == nil {
+		catalogDesc, err := unwrapDescriptor(ctx, nil /* descGetter */, result.Rows[0].Value.Timestamp, desc)
+		if err != nil {
+			return nil, err
+		}
+		if catalogDesc == nil {
 			return nil, catalog.ErrDescriptorNotFound
 		}
-		db := desc.GetDatabase()
-		if db == nil {
-			return nil, errors.AssertionFailedf(
-				"%q is not a database",
-				desc.String(),
-			)
-		}
-		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, result.Rows[0].Value.Timestamp)
-		results = append(results, dbdesc.NewImmutable(*db))
+		results = append(results, catalogDesc)
 	}
 	return results, nil
+}
+
+// GetDatabaseDescriptorsFromIDs returns the database descriptors from an input
+// set of database IDs. It will return an error if any one of the IDs is not a
+// database. It attempts to perform this operation in a single request,
+// rather than making a round trip for each ID.
+func GetDatabaseDescriptorsFromIDs(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+) ([]*dbdesc.Immutable, error) {
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]*dbdesc.Immutable, len(descs))
+	for i := range descs {
+		desc := descs[i]
+		db, ok := desc.(*dbdesc.Immutable)
+		if !ok {
+			return nil, errors.AssertionFailedf("%q is not a database", desc.GetName())
+		}
+		res[i] = db
+	}
+	return res, nil
+}
+
+// GetSchemaDescriptorsFromIDs returns the schema descriptors from an input
+// list of schema IDs. It will return an error if any one of the IDs is not
+// a schema.
+func GetSchemaDescriptorsFromIDs(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+) ([]*schemadesc.Immutable, error) {
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]*schemadesc.Immutable, len(descs))
+	for i := range descs {
+		desc := descs[i]
+		schema, ok := desc.(*schemadesc.Immutable)
+		if !ok {
+			return nil, errors.AssertionFailedf("%q is not a schema", desc.GetName())
+		}
+		res[i] = schema
+	}
+	return res, nil
 }
 
 // ConditionalGetTableDescFromTxn validates that the supplied TableDescriptor
