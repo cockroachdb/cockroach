@@ -13,13 +13,36 @@ This RFC proposes a means of creating a CRDB single or multi-node cluster runnin
 
 Certificates and their management have traditionally been major sources of toil and confusion for system administrators and users across all sectors that depend upon them for trust. Our current user story for CockroachDB does not stand out against this tradition.
 
-After reviewing the existing CockroachDB trust mechanisms, it seems that effort and complexity of certificate management drives users to test and prototype in `--insecure` rather than the default (secure) state. Our getting started guide highlights this well as the "insecure" guide (https://www.cockroachlabs.com/docs/v20.1/start-a-local-cluster.html) starts with `cockroach start` whereas the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) has four complex certificate generation steps before the user may even start their cluster.
+After reviewing the existing CockroachDB trust mechanisms, it seems that effort and complexity of certificate management drives users to test and prototype with the `--insecure` flag rather than the default (secure) state. Our "Getting Started" guide highlights this well as the "insecure" guide (https://www.cockroachlabs.com/docs/v20.1/start-a-local-cluster.html) starts with `cockroach start` whereas the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secure-a-cluster.html) has four complex certificate generation steps before the user may even start their cluster.
 
-In addition, the functional security gap between default and "insecure" mode is not well presented ([TBD], [TBD]) and has resulted in unpleasant user surprises.
+In addition, the functional security gap between default and "insecure" mode is not well presented ([https://github.com/cockroachdb/cockroach/issues/53404], [https://github.com/cockroachdb/cockroach/issues/44842], [https://github.com/cockroachdb/cockroach/issues/16188#issuecomment-571191964], [https://github.com/cockroachdb/cockroach/issues/49532], [https://github.com/cockroachdb/cockroach/issues/49918]) and has resulted in unpleasant user surprises.
 
 This RFC supports an approach where an operator would be able to start a CockroachDB cluster in secure mode and have it "just work" without worrying about certificates. This is expected to decrease usage of the `--insecure' flag (which we can measure internally against our own engineering teams) resulting in a smoother and more secure experience for all CockroachDB users.
 
 It will also help with orchestration in both our customers deployments and our own SaaS offering.
+
+## Goals
+
+### 0 Support for multiple deployment patterns
+All subsequent goals are expected to be met for manual, kubernetes, and CLI launchable configurations. We should avoid solutions that create UX regressions when compared to the existing `--insecure` configurations of these wherever possible.
+
+### 1 Initial startup path
+Create a process by which _n_ nodes may be started in a secure fashion. This means that:
+* All nodes have distinct node-to-node trust based on a node CA
+* Nodes rely on a distinct user CA for access to the cluster
+* Node user-facing services have a distinct CA
+* A valid administrative certificate (traditionally "root" in CockroachDB) has been emitted
+* A valid user certificate may optionally be emitted
+
+### 2 Add/Remove nodes
+Support secure and atomic add/remove operations for exising clusters.
+
+### 3 Adding new regions
+Enable manual and k8s users to add new regions (collections of nodes) to an existing cluster
+
+## Non-Goals
+
+We do not seek to remove the "init container" but anticipate the changes this RFC will require may not be compatible with its existing function.
 
 # Guide-level explanation
 
@@ -29,9 +52,47 @@ Borrowing from the "secure" guide (https://www.cockroachlabs.com/docs/v20.1/secu
 
 This removes the _requirement_ that operators manage inter-node certificates themselves. They may still do so if they have functional or business needs that do not permit this pattern. This will also help with orchestration as any node may then be used to create a `join-token` for another node providing the same high availability as any other CockroachDB feature. The ability to create these tokens can be gated behind the same permissions as those used to add and remove nodes to existing clusters.
 
-This addresses the deployment challenge where some CAs demand issued certificates match fully qualified domain names ([TBD]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
+This addresses the deployment challenge where some CAs demand issued certificates match fully qualified domain names ([https://aws.amazon.com/certificate-manager/faqs/?nc=sn&loc=5#ACM_Public_Certificates]) for internode TLS; removing the need to have internode certificates signed by globally trusted Certificate Authorities and reducing the blast damage of a compromised CockroachDB certificate.
 
 Existing roachers deploying with the default secure mode will find that they have fewer steps to get to a running cluster. Roachers who have relied on `--insecure` to avoid the hassle of managing certificates when testing will now be able to test with the system in a secure state by default with minor adjustment to their workflow.
+
+It may also be worth adding a startup option that generates a non-`root` _user_ and _generated password_ to facilitate local testing and development.
+
+## Starting a Cluster
+Starting a cluster has two tasks in addition to starting the base nodes.
+* Generating and propagating cluster trust primitives
+* Providing means to access the new cluster 
+
+Below are two potential solutions:
+
+### First Node
+One potential solution is to expect that there will always be a "first" node that will generate all initial trust primitives (including the initial admin certificate) and then expose an API or SQL call that faciliates creation of `join-token`s.
+
+It seems that this can be accomodated in the k8s setting by starting the first node as one "set", then following with the remaining _n - 1_ nodes after requesting `join-token`s from that first node. This approach may result in challenges when this node fails and restarts or is replaced. We attempt to address these in the reference-level explanation below.
+
+### Leader-of-n Nodes
+Another solution would be to use a CLI tool to create a set of _n_ initial join tokens where one such token designates a `leader` that would self-initialize its trust primitives and then process all other nodes' join requests. Tokens would be passed to the nodes on first launch and would be ignored on subsequent node restarts.
+
+In this case, the `leader` node would write the initial administrative certificate to a specified path or location (such as a k8s secret store).
+
+## Adding/Removing Nodes
+
+It is expected that the manual and kubernetes node add processes should be as similar as possible to reduce complexity.
+
+### Adding - Manual/Operator Case
+The operator connects to an existing node and requests a `join-token`. This `join-token` is then supplied as a launch flag for a new node when it is started. The token is consumed during the enrollment process.
+
+### Adding - Kubernetes
+The kubernetes operator makes a request of any existing node for the `join-token`(s) needed to add nodes, then supplies those as launch arguments to the new containers.
+
+### Removing - Manual/Operator Case
+[TBD]
+
+### Removing - Kubernetes
+[TBD]
+
+## Adding New Regions
+[TBD]
 
 # Reference-level explanation
 
@@ -130,7 +191,7 @@ other active RFCs.
 This appraoch removes certificate management of cluster internal interfaces from the operator. It cleanly separates the trust relationships for application internal communications from external user and administrative interface greatly enhancing security boundaries. It removes almost all existing friction for experimenting and testing with a secure cluster reducing dependence on insecure configurations. It simplifies the documentation and user story to achieve a more secure configuration.
 
 Other patterns are being pursued to address or work around the challenges of our existing certificate story:
-- A custom kubernetes operator([TBD]) is being constructed to aid with certificate management and pod deployment.
+- A custom kubernetes operator([https://github.com/cockroachdb/cockroach-operator]) is being constructed to aid with certificate management and pod deployment.
 - The docs team has invested heavily in attempting to improve the documentation around our use of certificates with some success.
 
 Niether of these approach the gap between enterprises with well developed certificate management infrastructures and independent developers. Enterprises are generally willing to work through a hardening guide to deploy a production system. Independent developers tend to want the thing to "just work."
