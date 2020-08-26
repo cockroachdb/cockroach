@@ -1093,9 +1093,11 @@ func checkDatumTypeFitsColumnType(col *cat.Column, typ *types.T) {
 	}
 
 	colName := string(col.ColName())
-	panic(pgerror.Newf(pgcode.DatatypeMismatch,
+	err := pgerror.Newf(pgcode.DatatypeMismatch,
 		"value type %s doesn't match type %s of column %q",
-		typ, col.DatumType(), tree.ErrNameString(colName)))
+		typ, col.DatumType(), tree.ErrNameString(colName))
+	err = errors.WithHint(err, "you will need to rewrite or cast the expression")
+	panic(err)
 }
 
 // partialIndexCount returns the number of public, write-only, and delete-only
