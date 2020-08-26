@@ -57,7 +57,7 @@ func PointOnSurface(g geo.Geometry) (geo.Geometry, error) {
 // Intersection returns the geometries of intersection between A and B.
 func Intersection(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(&a, &b)
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	retEWKB, err := geos.Intersection(a.EWKB(), b.EWKB())
 	if err != nil {
@@ -69,7 +69,7 @@ func Intersection(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 // Union returns the geometries of intersection between A and B.
 func Union(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(&a, &b)
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	retEWKB, err := geos.Union(a.EWKB(), b.EWKB())
 	if err != nil {
@@ -81,7 +81,7 @@ func Union(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 // SharedPaths Returns a geometry collection containing paths shared by the two input geometries.
 func SharedPaths(a geo.Geometry, b geo.Geometry) (geo.Geometry, error) {
 	if a.SRID() != b.SRID() {
-		return geo.Geometry{}, geo.NewMismatchingSRIDsError(&a, &b)
+		return geo.Geometry{}, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	paths, err := geos.SharedPaths(a.EWKB(), b.EWKB())
 	if err != nil {

@@ -28,7 +28,7 @@ func DWithin(
 	exclusivity geo.FnExclusivity,
 ) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	if distance < 0 {
 		return false, errors.Newf("dwithin distance cannot be less than zero")

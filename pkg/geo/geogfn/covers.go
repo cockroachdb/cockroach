@@ -41,7 +41,7 @@ import (
 //     );
 func Covers(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(a, b)
 }
@@ -94,7 +94,7 @@ func covers(a geo.Geography, b geo.Geography) (bool, error) {
 // See Covers for limitations.
 func CoveredBy(a geo.Geography, b geo.Geography) (bool, error) {
 	if a.SRID() != b.SRID() {
-		return false, geo.NewMismatchingSRIDsError(&a, &b)
+		return false, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 	return covers(b, a)
 }

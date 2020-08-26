@@ -33,7 +33,7 @@ func Distance(
 	a geo.Geography, b geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
 	if a.SRID() != b.SRID() {
-		return 0, geo.NewMismatchingSRIDsError(&a, &b)
+		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
 
 	aRegions, err := a.AsS2(geo.EmptyBehaviorError)
