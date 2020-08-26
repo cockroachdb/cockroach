@@ -175,20 +175,20 @@ func TestTenantRateLimiter(t *testing.T) {
 	// the tenant range.
 	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
 	cfg := tenantrate.LimitConfigsFromSettings(s.ClusterSettings())
-	for i := 0; i < int(cfg.Requests.Burst); i++ {
+	for i := 0; i < int(cfg.WriteRequests.Burst); i++ {
 		require.NoError(t, db.Put(ctx, mkKey(), 0))
 	}
 	// Now ensure that in the same instant the write QPS limit does affect the
 	// tenant. Issuing up to the burst limit of requests can happen without
 	// blocking.
-	for i := 0; i < int(cfg.Requests.Burst); i++ {
+	for i := 0; i < int(cfg.WriteRequests.Burst); i++ {
 		require.NoError(t, db.Put(tenantCtx, mkKey(), 0))
 	}
 	// Attempt to issue another request, make sure that it gets blocked by
 	// observing a timer.
 	errCh := make(chan error, 1)
 	go func() { errCh <- db.Put(tenantCtx, mkKey(), 0) }()
-	expectedTimer := t0.Add(time.Duration(float64(1/cfg.Requests.Rate) * float64(time.Second)))
+	expectedTimer := t0.Add(time.Duration(float64(1/cfg.WriteRequests.Rate) * float64(time.Second)))
 	testutils.SucceedsSoon(t, func() error {
 		timers := timeSource.Timers()
 		if len(timers) != 1 {
@@ -213,18 +213,18 @@ func TestTenantRateLimiter(t *testing.T) {
 		return string(read)
 	}
 	makeMetricStr := func(expCount int64) string {
-		const tenantMetricStr = `kv_tenant_rate_limit_requests_admitted{store="1",tenant_id="10"}`
+		const tenantMetricStr = `kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="10"}`
 		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
 	}
 
 	// Ensure that the metric for the admitted requests is equal to the number of
 	// requests which we've admitted.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst))
+	require.Contains(t, getMetrics(), makeMetricStr(cfg.WriteRequests.Burst))
 
 	// Allow the blocked request to proceed.
 	timeSource.Advance(time.Second)
 	require.NoError(t, <-errCh)
 
 	// Ensure that it is now reflected in the metrics.
-	require.Contains(t, getMetrics(), makeMetricStr(cfg.Requests.Burst+1))
+	require.Contains(t, getMetrics(), makeMetricStr(cfg.WriteRequests.Burst+1))
 }
