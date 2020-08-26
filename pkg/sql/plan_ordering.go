@@ -80,6 +80,8 @@ func planReqOrdering(plan planNode) ReqOrdering {
 		return n.ordering
 	case *lookupJoinNode:
 		return n.reqOrdering
+	case *invertedJoinNode:
+		return n.reqOrdering
 	case *zigzagJoinNode:
 		return n.reqOrdering
 	}

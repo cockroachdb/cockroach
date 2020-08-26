@@ -737,9 +737,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	index cat.Index,
 	lookupCols exec.TableColumnOrdinalSet,
 	onCond tree.TypedExpr,
-	// The OutputOrdering is ignored since the inverted join always maintains
-	// the ordering of the input rows.
-	_ exec.OutputOrdering,
+	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -761,6 +759,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 		table:        tableScan,
 		joinType:     joinType,
 		invertedExpr: invertedExpr,
+		reqOrdering:  ReqOrdering(reqOrdering),
 	}
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
