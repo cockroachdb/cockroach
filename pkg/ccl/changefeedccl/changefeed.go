@@ -54,13 +54,16 @@ type emitEntry struct {
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
+	ctx context.Context,
 	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	db *kv.DB,
 	leaseMgr *lease.Manager,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (kvfeed.Event, error),
 ) func(context.Context) ([]emitEntry, error) {
 	_, withDiff := details.Opts[changefeedbase.OptDiff]
-	rfCache := newRowFetcherCache(codec, leaseMgr)
+	rfCache := newRowFetcherCache(ctx, codec, settings, leaseMgr, db)
 
 	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(
