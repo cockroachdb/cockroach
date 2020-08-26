@@ -1775,6 +1775,23 @@ Flags shown square brackets after the geometry type have the following meaning:
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_points": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				points, err := geomfn.Points(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(points), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns all coordinates in the given Geometry as a multipoint, including duplicates.",
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_exteriorring": makeBuiltin(
 		defProps(),
 		geometryOverload1(
