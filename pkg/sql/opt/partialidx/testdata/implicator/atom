@@ -64,7 +64,7 @@ predtest vars=(bool)
 @1 = true
 ----
 true
-└── remaining filters: @1
+└── remaining filters: none
 
 predtest vars=(bool)
 @1
@@ -72,7 +72,7 @@ predtest vars=(bool)
 @1 IN (true)
 ----
 true
-└── remaining filters: @1
+└── remaining filters: none
 
 predtest vars=(bool)
 NOT @1
@@ -178,6 +178,14 @@ predtest vars=(int)
 ----
 true
 └── remaining filters: @1 > 10
+
+predtest vars=(int)
+@1 > 17
+=>
+@1 >= 18
+----
+true
+└── remaining filters: none
 
 predtest vars=(int, int)
 @1 > @2
