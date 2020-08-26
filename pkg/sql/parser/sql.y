@@ -413,6 +413,9 @@ func (u *sqlSymUnion) userPriority() tree.UserPriority {
 func (u *sqlSymUnion) readWriteMode() tree.ReadWriteMode {
     return u.val.(tree.ReadWriteMode)
 }
+func (u *sqlSymUnion) deferrableMode() tree.DeferrableMode {
+    return u.val.(tree.DeferrableMode)
+}
 func (u *sqlSymUnion) idxElem() tree.IndexElem {
     return u.val.(tree.IndexElem)
 }
@@ -915,6 +918,7 @@ func (u *sqlSymUnion) refreshDataOption() tree.RefreshDataOption {
 %type <tree.IsolationLevel> transaction_iso_level
 %type <tree.UserPriority> transaction_user_priority
 %type <tree.ReadWriteMode> transaction_read_mode
+%type <tree.DeferrableMode> transaction_deferrable_mode
 
 %type <str> name opt_name opt_name_parens
 %type <str> privilege savepoint_name
@@ -3973,6 +3977,8 @@ set_session_stmt:
 // Transaction parameters:
 //    ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
+//    AS OF SYSTEM TIME <expr>
+//    [NOT] DEFERRABLE
 //
 // %SeeAlso: SHOW TRANSACTION, SET SESSION,
 // WEBDOCS/set-transaction.html
@@ -7124,6 +7130,10 @@ transaction_mode:
   {
     $$.val = tree.TransactionModes{AsOf: $1.asOfClause()}
   }
+| transaction_deferrable_mode
+  {
+    $$.val = tree.TransactionModes{Deferrable: $1.deferrableMode()}
+  }
 
 transaction_user_priority:
   PRIORITY user_priority
@@ -7145,6 +7155,16 @@ transaction_read_mode:
 | READ WRITE
   {
     $$.val = tree.ReadWrite
+  }
+
+transaction_deferrable_mode:
+  DEFERRABLE
+  {
+    $$.val = tree.Deferrable
+  }
+| NOT DEFERRABLE
+  {
+    $$.val = tree.NotDeferrable
   }
 
 // %Help: CREATE DATABASE - create a new database

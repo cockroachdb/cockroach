@@ -1477,6 +1477,7 @@ transaction_mode ::=
 	transaction_user_priority
 	| transaction_read_mode
 	| as_of_clause
+	| transaction_deferrable_mode
 
 opt_comma ::=
 	','
@@ -1966,6 +1967,10 @@ transaction_user_priority ::=
 transaction_read_mode ::=
 	'READ' 'ONLY'
 	| 'READ' 'WRITE'
+
+transaction_deferrable_mode ::=
+	'DEFERRABLE'
+	| 'NOT' 'DEFERRABLE'
 
 alter_table_cmds ::=
 	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*

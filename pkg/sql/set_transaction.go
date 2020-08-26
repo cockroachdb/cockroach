@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -28,6 +29,9 @@ func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (p
 			return nil, err
 		}
 		p.semaCtx.AsOfTimestamp = &asOfTs
+	}
+	if n.Modes.Deferrable == tree.Deferrable {
+		return nil, unimplemented.NewWithIssue(53432, "DEFERRABLE transactions")
 	}
 
 	if err := p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes, asOfTs); err != nil {
