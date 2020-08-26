@@ -1489,10 +1489,12 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		ex.phaseTimes[sessionEndExecTransaction] = timeutil.Now()
 		ex.recordTransaction(ev, implicit, txnStart)
 		ex.extraTxnState.transactionStatementIDs = nil
+		ex.extraTxnState.numRows = 0
 	}
 	onTxnRestart = func() {
 		ex.phaseTimes[sessionMostRecentStartExecTransaction] = timeutil.Now()
 		ex.extraTxnState.transactionStatementIDs = nil
+		ex.extraTxnState.numRows = 0
 	}
 	return onTxnFinish, onTxnRestart
 }
@@ -1526,5 +1528,6 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 		txnServiceLat,
 		txnRetryLat,
 		commitLat,
+		ex.extraTxnState.numRows,
 	)
 }

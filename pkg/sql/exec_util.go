@@ -2250,9 +2250,10 @@ func (s *sqlStatsCollector) recordTransaction(
 	serviceLat time.Duration,
 	retryLat time.Duration,
 	commitLat time.Duration,
+	numRows int,
 ) {
 	s.appStats.recordTransactionCounts(txnTimeSec, ev, implicit)
-	s.appStats.recordTransaction(key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat)
+	s.appStats.recordTransaction(key, int64(retryCount), statementIDs, serviceLat, retryLat, commitLat, numRows)
 }
 
 func (s *sqlStatsCollector) reset(sqlStats *sqlStats, appStats *appStats, phaseTimes *phaseTimes) {

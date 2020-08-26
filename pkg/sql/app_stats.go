@@ -385,6 +385,7 @@ func (a *appStats) recordTransaction(
 	serviceLat time.Duration,
 	retryLat time.Duration,
 	commitLat time.Duration,
+	numRows int,
 ) {
 	if !txnStatsEnable.Get(&a.st.SV) {
 		return
@@ -405,6 +406,7 @@ func (a *appStats) recordTransaction(
 
 	s.mu.data.Count++
 
+	s.mu.data.NumRows.Record(s.mu.data.Count, float64(numRows))
 	s.mu.data.ServiceLat.Record(s.mu.data.Count, serviceLat.Seconds())
 	s.mu.data.RetryLat.Record(s.mu.data.Count, retryLat.Seconds())
 	s.mu.data.CommitLat.Record(s.mu.data.Count, commitLat.Seconds())

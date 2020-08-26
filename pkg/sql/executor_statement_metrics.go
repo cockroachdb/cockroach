@@ -187,6 +187,7 @@ func (ex *connExecutor) recordStatementSummary(
 	// as well.
 	ex.extraTxnState.transactionStatementIDs = append(
 		ex.extraTxnState.transactionStatementIDs, stmtID)
+	ex.extraTxnState.numRows += rowsAffected
 
 	if log.V(2) {
 		// ages since significant epochs

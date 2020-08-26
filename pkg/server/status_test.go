@@ -1569,30 +1569,34 @@ func TestStatusAPITransactions(t *testing.T) {
 		fingerprinted string
 		count         int
 		shouldRetry   bool
+		numRows       int
 	}
 
 	testCases := []testCase{
-		{query: `CREATE DATABASE roachblog`, count: 1},
-		{query: `SET database = roachblog`, count: 1},
-		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1},
+		{query: `CREATE DATABASE roachblog`, count: 1, numRows: 0},
+		{query: `SET database = roachblog`, count: 1, numRows: 0},
+		{query: `CREATE TABLE posts (id INT8 PRIMARY KEY, body STRING)`, count: 1, numRows: 0},
 		{
 			query:         `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
 			count:         1,
+			numRows:       1,
 		},
-		{query: `SELECT * FROM posts`, count: 2},
-		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3},
+		{query: `SELECT * FROM posts`, count: 2, numRows: 1},
+		{query: `BEGIN; SELECT * FROM posts; SELECT * FROM posts; COMMIT`, count: 3, numRows: 2},
 		{
 			query:         `BEGIN; SELECT crdb_internal.force_retry('2s'); SELECT * FROM posts; COMMIT;`,
 			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
 			shouldRetry:   true,
 			count:         1,
+			numRows:       2,
 		},
 		{
 			query:         `BEGIN; SELECT crdb_internal.force_retry('5s'); SELECT * FROM posts; COMMIT;`,
 			fingerprinted: `BEGIN; SELECT crdb_internal.force_retry(_); SELECT * FROM posts; COMMIT;`,
 			shouldRetry:   true,
 			count:         1,
+			numRows:       2,
 		},
 	}
 
@@ -1653,6 +1657,10 @@ func TestStatusAPITransactions(t *testing.T) {
 		}
 		if respTransaction.StatsData.Stats.ServiceLat.Mean <= 0 {
 			t.Fatalf("app: %s, unexpected mean for service latency\n", appName)
+		}
+		if respTransaction.StatsData.Stats.NumRows.Mean != float64(tc.numRows) {
+			t.Fatalf("app: %s, unexpected number of rows observed. expected: %d, got %d\n",
+				appName, tc.numRows, int(respTransaction.StatsData.Stats.NumRows.Mean))
 		}
 	}
 
