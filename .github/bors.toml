@@ -2,7 +2,7 @@
 
 # List of commit statuses that must pass on the merge commit before it is
 # pushed to master.
-status = ["GitHub CI (Cockroach)"]
+status = ["Essential CI (Cockroach)"]
 
 # List of commit statuses that must not be failing on the PR commit when it is
 # r+-ed. If it's still in progress (for e.g. if CI is still running), bors will
