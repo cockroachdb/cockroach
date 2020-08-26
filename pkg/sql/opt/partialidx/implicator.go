@@ -176,7 +176,7 @@ func (im *Implicator) FiltersImplyPredicate(
 
 	// If no exact match was found, recursively check the sub-expressions of the
 	// filters and predicate. Use exactMatches to keep track of expressions in
-	// filters that exactly matches expressions in pred, so that the can be
+	// filters that exactly match expressions in pred, so that they can be
 	// removed from the remaining filters.
 	exactMatches := make(map[opt.Expr]struct{})
 	if im.scalarExprImpliesPredicate(&filters, &pred, exactMatches) {
@@ -456,7 +456,7 @@ func (im *Implicator) atomImpliesPredicate(
 }
 
 // atomImpliesAtom returns true if the predicate atom expression, pred, contains
-// atom expression a, meaning that all values for variables in which e evaluates
+// atom expression e, meaning that all values for variables in which e evaluates
 // to true, pred also evaluates to true.
 //
 // Constraints are used to prove containment because they make it easy to assess
@@ -512,7 +512,30 @@ func (im *Implicator) atomImpliesAtom(
 		return false
 	}
 
-	return predConstraint.Contains(im.evalCtx, eConstraint)
+	// If predConstraint contains eConstraint, then eConstraint implies
+	// predConstraint.
+	if predConstraint.Contains(im.evalCtx, eConstraint) {
+		// If the constraints contain each other, then they are semantically
+		// equal and the filter atom can be removed from the remaining filters.
+		// For example:
+		//
+		//   (a::INT > 17)
+		//   =>
+		//   (a::INT >= 18)
+		//
+		// (a > 17) is not the same expression as (a >= 18) syntactically, but
+		// they are semantically equivalent because there are no integers
+		// between 17 and 18. Therefore, there is no need to apply (a > 17) as a
+		// filter after the partial index scan.
+		if exactMatches != nil &&
+			eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
+			eConstraint.Contains(im.evalCtx, predConstraint) {
+			exactMatches[e] = struct{}{}
+		}
+		return true
+	}
+
+	return false
 }
 
 // twoVarComparisonImpliesTwoVarComparison returns true if pred contains e,
