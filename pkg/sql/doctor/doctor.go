@@ -16,11 +16,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -32,8 +35,21 @@ type DescriptorTableRow struct {
 	ModTime   hlc.Timestamp
 }
 
-// NewDescGetter creates a sqlbase.MapProtoGetter from a descriptor table.
-func NewDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
+type DescriptorTable []DescriptorTableRow
+
+// NamespaceTableRow represents a namespace entry from table system.namespace.
+type NamespaceTableRow struct {
+	descpb.NameInfo
+	ID int64
+}
+
+type NamespaceTable []NamespaceTableRow
+
+// namespaceReverseMap is the inverse of the namespace map stored in table
+// `system.namespace`.
+type namespaceReverseMap map[int64][]descpb.NameInfo
+
+func newDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
 	pg := catalog.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
@@ -46,32 +62,140 @@ func NewDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
 	return pg, nil
 }
 
+func newNamespaceMap(rows []NamespaceTableRow) namespaceReverseMap {
+	res := make(namespaceReverseMap)
+	for _, r := range rows {
+		l, ok := res[r.ID]
+		if !ok {
+			res[r.ID] = []descpb.NameInfo{r.NameInfo}
+		} else {
+			res[r.ID] = append(l, r.NameInfo)
+		}
+	}
+	return res
+}
+
 // Examine runs a suite of consistency checks over the descriptor table.
-func Examine(descTable []DescriptorTableRow, verbose bool, stdout io.Writer) (ok bool, err error) {
-	fmt.Fprintf(stdout, "Examining %d descriptors...\n", len(descTable))
-	descGetter, err := NewDescGetter(descTable)
+func Examine(
+	descTable DescriptorTable, namespaceTable NamespaceTable, verbose bool, stdout io.Writer,
+) (ok bool, err error) {
+	fmt.Fprintf(
+		stdout, "Examining %d descriptors and %d namespace entries...\n",
+		len(descTable), len(namespaceTable))
+	descGetter, err := newDescGetter(descTable)
 	if err != nil {
 		return false, err
 	}
+	nMap := newNamespaceMap(namespaceTable)
+
 	var problemsFound bool
 	for _, row := range descTable {
-		table, isTable := descGetter[descpb.ID(row.ID)].(catalog.TableDescriptor)
-		if !isTable {
-			// So far we only examine table descriptors. We may add checks for other
-			// descriptors in later versions.
-			continue
+		desc, ok := descGetter[descpb.ID(row.ID)]
+		if !ok {
+			// This should never happen as ids are parsed and inserted from descTable.
+			log.Fatalf(context.Background(), "Descriptor id %d not found", row.ID)
 		}
-		if int64(table.GetID()) != row.ID {
-			fmt.Fprintf(stdout, "Table %3d: different id in the descriptor: %d", row.ID, table.GetID())
+
+		if int64(desc.GetID()) != row.ID {
+			fmt.Fprint(stdout, reportMsg(desc, "different id in descriptor table: %d", row.ID))
 			problemsFound = true
 			continue
 		}
-		if err := table.Validate(context.Background(), descGetter); err != nil {
+
+		_, parentExists := descGetter[desc.GetParentID()]
+		_, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
+		switch desc.(type) {
+		case catalog.TableDescriptor:
+			table, _ := descGetter[descpb.ID(row.ID)].(catalog.TableDescriptor)
+			if err := table.Validate(context.Background(), descGetter); err != nil {
+				problemsFound = true
+				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
+			}
+			// Table has been already validated.
+			parentExists = true
+			parentSchemaExists = true
+		case catalog.SchemaDescriptor:
+			// parent schema id is always 0.
+			parentSchemaExists = true
+		}
+		if desc.GetParentID() != 0 && !parentExists {
 			problemsFound = true
-			fmt.Fprintf(stdout, "Table %3d: %s\n", table.GetID(), err)
-		} else if verbose {
-			fmt.Fprintf(stdout, "Table %3d: validated\n", table.GetID())
+			fmt.Fprint(stdout, reportMsg(desc, "invalid parent id"))
+		}
+		if desc.GetParentSchemaID() != 0 &&
+			desc.GetParentSchemaID() != keys.PublicSchemaID &&
+			!parentSchemaExists {
+			problemsFound = true
+			fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id"))
+		}
+
+		// Process namespace entries pointing to this descriptor.
+		names, ok := nMap[row.ID]
+		if !ok {
+			if !desc.Dropped() {
+				fmt.Fprint(stdout, reportMsg(desc, "not being dropped but no namespace entry found"))
+				problemsFound = true
+			}
+			continue
+		}
+		// We delete all pointed descriptors to leave what is missing in the
+		// descriptor table.
+		delete(nMap, row.ID)
+
+		var found bool
+		for _, n := range names {
+			if n.Name == desc.GetName() &&
+				n.ParentSchemaID == desc.GetParentSchemaID() &&
+				n.ParentID == desc.GetParentID() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Fprint(stdout, reportMsg(desc, "could not find name in namespace table"))
+			problemsFound = true
+			continue
+		}
+		if verbose {
+			fmt.Fprint(stdout, reportMsg(desc, "processed"))
 		}
 	}
+
+	// Now go over all namespace entries that don't point to descriptors in the
+	// descriptor table.
+	for id, ni := range nMap {
+		if id == keys.PublicSchemaID {
+			continue
+		}
+		if descpb.ID(id) == descpb.InvalidID {
+			fmt.Fprintf(stdout, "Row(s) %+v: NULL value found\n", ni)
+			problemsFound = true
+			continue
+		}
+		if strings.HasPrefix(ni[0].Name, "pg_temp_") {
+			// Temporary schemas have namespace entries but not descriptors.
+			continue
+		}
+		fmt.Fprintf(
+			stdout, "Descriptor %d: has namespace row(s) %+v but no descriptor\n", id, ni)
+		problemsFound = true
+	}
 	return !problemsFound, nil
+}
+
+func reportMsg(desc catalog.Descriptor, format string, args ...interface{}) string {
+	var header string
+	switch desc.(type) {
+	case catalog.TypeDescriptor:
+		header = "    Type"
+	case catalog.TableDescriptor:
+		header = "   Table"
+	case catalog.SchemaDescriptor:
+		header = "  Schema"
+	case catalog.DatabaseDescriptor:
+		header = "Database"
+	}
+	return fmt.Sprintf("%s %3d: ParentID %3d, ParentSchemaID %2d, Name '%s': ",
+		header, desc.GetID(), desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()) +
+		fmt.Sprintf(format, args...) + "\n"
 }
