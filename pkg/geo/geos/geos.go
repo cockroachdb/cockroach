@@ -170,12 +170,14 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 	var err error
 	for _, dir := range dirs {
 		var ret *C.CR_GEOS
-		errStr := C.CR_GEOS_Init(
-			goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeoscFileName)))),
-			goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeosFileName)))),
-			&ret,
+		newErr := statusToError(
+			C.CR_GEOS_Init(
+				goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeoscFileName)))),
+				goToCSlice([]byte(filepath.Join(dir, getLibraryExt(libgeosFileName)))),
+				&ret,
+			),
 		)
-		if errStr.data == nil {
+		if newErr == nil {
 			return ret, dir, nil
 		}
 		err = errors.CombineErrors(
@@ -183,7 +185,7 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 			errors.Newf(
 				"geos: cannot load GEOS from dir %q: %s",
 				dir,
-				string(cSliceToUnsafeGoBytes(errStr)),
+				newErr,
 			),
 		)
 	}
@@ -204,13 +206,9 @@ func goToCSlice(b []byte) C.CR_GEOS_Slice {
 	}
 }
 
-// c{String,Slice}ToUnsafeGoBytes convert a CR_GEOS_{String,Slice} to a Go
+// cStringToUnsafeGoBytes convert a CR_GEOS_String to a Go
 // byte slice that refer to the underlying C memory.
 func cStringToUnsafeGoBytes(s C.CR_GEOS_String) []byte {
-	return cToUnsafeGoBytes(s.data, s.len)
-}
-
-func cSliceToUnsafeGoBytes(s C.CR_GEOS_Slice) []byte {
 	return cToUnsafeGoBytes(s.data, s.len)
 }
 
