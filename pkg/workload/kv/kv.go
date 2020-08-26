@@ -13,6 +13,7 @@ package kv
 import (
 	"context"
 	"crypto/sha1"
+	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -73,6 +74,7 @@ type kv struct {
 	secondaryIndex                       bool
 	shards                               int
 	targetCompressionRatio               float64
+	enum                                 bool
 }
 
 func init() {
@@ -129,6 +131,8 @@ var kvMeta = workload.Meta{
 			`Number of shards to create on the primary key.`)
 		g.flags.Float64Var(&g.targetCompressionRatio, `target-compression-ratio`, 1.0,
 			`Target compression ratio for data blocks. Must be >= 1.0`)
+		g.flags.BoolVar(&g.enum, `enum`, false,
+			`Inject an enum column and use it`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -143,6 +147,16 @@ func (w *kv) Flags() workload.Flags { return w.flags }
 // Hooks implements the Hookser interface.
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
+		PostLoad: func(db *gosql.DB) error {
+			if !w.enum {
+				return nil
+			}
+			_, err := db.Exec(`
+SET experimental_enable_enums = true;
+CREATE TYPE enum_type AS ENUM ('v');
+ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
+			return err
+		},
 		Validate: func() error {
 			if w.maxBlockSizeBytes < w.minBlockSizeBytes {
 				return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
@@ -245,6 +259,14 @@ func (w *kv) Ops(
 	var buf strings.Builder
 	if w.shards == 0 {
 		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+		for i := 0; i < w.batchSize; i++ {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, `$%d`, i+1)
+		}
+	} else if w.enum {
+		buf.WriteString(`SELECT k, v, e FROM kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
