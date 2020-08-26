@@ -206,23 +206,30 @@ func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	user := "testuser"
-	if _, err := db.Exec("CREATE USER $1 VIEWACTIVITY", user); err != nil {
+	stmts := `
+CREATE USER testuser VIEWACTIVITY;
+CREATE USER testadmin;
+GRANT admin TO testadmin`
+	if _, err := db.Exec(stmts); err != nil {
 		t.Fatal(err)
 	}
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
 	for _, tc := range []struct {
+		user        string
 		option      string
 		expected    bool
 		expectedErr string
 	}{
-		{roleoption.VIEWACTIVITY.String(), true, ""},
-		{roleoption.CREATEROLE.String(), false, ""},
-		{"nonexistent", false, "unrecognized role option"},
+		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
+		{"testuser", roleoption.CREATEROLE.String(), false, ""},
+		{"testuser", "nonexistent", false, "unrecognized role option"},
+		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
+		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
+		{"testadmin", "nonexistent", false, "unrecognized role option"},
 	} {
 		rows, cols, err := ie.QueryWithCols(ctx, "test", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: user},
+			sessiondata.InternalExecutorOverride{User: tc.user},
 			"SELECT crdb_internal.has_role_option($1)", tc.option)
 		if tc.expectedErr != "" {
 			if !testutils.IsError(err, tc.expectedErr) {
@@ -236,7 +243,7 @@ func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
 		hasRoleOption := bool(*rows[0][0].(*tree.DBool))
 		if hasRoleOption != tc.expected {
 			t.Fatalf(
-				"expected %q has_role_option('%s') %v, got %v", user, "VIEWACTIVITY", tc.expected,
+				"expected %q has_role_option('%s') %v, got %v", tc.user, tc.option, tc.expected,
 				hasRoleOption)
 		}
 	}

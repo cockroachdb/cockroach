@@ -27,11 +27,11 @@ CREATE ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-myrole    NOLOGIN                  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+myrole    NOLOGIN  {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -57,11 +57,11 @@ DROP ROLE admin, myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-myrole    NOLOGIN                  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+myrole    NOLOGIN  {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 DROP ROLE myrole
@@ -69,10 +69,10 @@ DROP ROLE myrole
 query TTT colnames
 SHOW ROLES
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement error pq: role/user myrole does not exist
 DROP ROLE myrole
@@ -104,10 +104,10 @@ DROP ROLE rolea, roleb
 query TTT colnames
 SHOW ROLES
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 CREATE USER testuser2
@@ -449,13 +449,13 @@ roled  testuser false
 query TTT
 SHOW ROLES
 ----
-admin      CREATELOGIN, CREATEROLE  {}
-roleb      NOLOGIN                  {}
-roled      NOLOGIN                  {}
-rolee      NOLOGIN                  {}
-root       CREATELOGIN, CREATEROLE  {admin}
-testuser   ·                        {roled}
-testuser2  ·                        {}
+admin      ·        {}
+roleb      NOLOGIN  {}
+roled      NOLOGIN  {}
+rolee      NOLOGIN  {}
+root       ·        {admin}
+testuser   ·        {roled}
+testuser2  ·        {}
 
 statement ok
 DROP ROLE roleb
@@ -1023,10 +1023,6 @@ CREATE ROLE rolewithlogin LOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin  CREATELOGIN  NULL
-admin  CREATEROLE   NULL
-root   CREATELOGIN  NULL
-root   CREATEROLE   NULL
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
@@ -1034,11 +1030,7 @@ CREATE ROLE rolewithnologin NOLOGIN
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATELOGIN  NULL
-admin            CREATEROLE   NULL
-rolewithnologin  NOLOGIN      NULL
-root             CREATELOGIN  NULL
-root             CREATEROLE   NULL
+rolewithnologin  NOLOGIN  NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
@@ -1046,12 +1038,8 @@ ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATELOGIN  NULL
-admin            CREATEROLE   NULL
 rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
 rolewithnologin  NOLOGIN      NULL
-root             CREATELOGIN  NULL
-root             CREATEROLE   NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
@@ -1059,12 +1047,8 @@ ALTER ROLE rolewithlogin VALID UNTIL NULL
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATELOGIN  NULL
-admin            CREATEROLE   NULL
 rolewithlogin    VALID UNTIL  NULL
 rolewithnologin  NOLOGIN      NULL
-root             CREATELOGIN  NULL
-root             CREATEROLE   NULL
 
 statement ok
 DROP ROLE rolewithlogin
@@ -1072,11 +1056,7 @@ DROP ROLE rolewithlogin
 query TTT
 SELECT * FROM system.role_options
 ----
-admin            CREATELOGIN  NULL
-admin            CREATEROLE   NULL
-rolewithnologin  NOLOGIN      NULL
-root             CREATELOGIN  NULL
-root             CREATEROLE   NULL
+rolewithnologin  NOLOGIN  NULL
 
 statement error pq: conflicting role options
 CREATE ROLE thisshouldntwork LOGIN NOLOGIN

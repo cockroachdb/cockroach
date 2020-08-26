@@ -4,11 +4,11 @@ CREATE USER user1
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user1     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement ok
 DROP USER user1
@@ -16,10 +16,10 @@ DROP USER user1
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 CREATE USER user1
@@ -27,11 +27,11 @@ CREATE USER user1
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user1     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement ok
 DROP USER USEr1
@@ -39,10 +39,10 @@ DROP USER USEr1
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement error user user1 does not exist
 DROP USER user1
@@ -74,14 +74,14 @@ CREATE USER user4
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user1     ·                        {}
-user2     ·                        {}
-user3     ·                        {}
-user4     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+user2     ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement ok
 DROP USER user1,user2
@@ -89,12 +89,12 @@ DROP USER user1,user2
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user3     ·                        {}
-user4     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement error user user1 does not exist
 DROP USER user1,user3
@@ -102,12 +102,12 @@ DROP USER user1,user3
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
-user3     ·                        {}
-user4     ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement ok
 CREATE USER user1
@@ -135,10 +135,10 @@ PREPARE du AS DROP USER $1;
 query TTT colnames
 SHOW USERS
 ----
-username  options                  member_of
-admin     CREATELOGIN, CREATEROLE  {}
-root      CREATELOGIN, CREATEROLE  {admin}
-testuser  ·                        {}
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 user testuser
 
