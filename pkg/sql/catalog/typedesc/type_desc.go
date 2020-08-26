@@ -513,9 +513,7 @@ func HydrateTypesInTableDescriptor(
 			if err != nil {
 				return err
 			}
-			// TODO (rohany): This should be a noop if the hydrated type
-			//  information present in the descriptor has the same version as
-			//  the resolved type descriptor we found here.
+			// Note that this will no-op if the type is already hydrated.
 			if err := typDesc.HydrateTypeInfoWithName(ctx, col.Type, &name, res); err != nil {
 				return err
 			}
@@ -541,9 +539,15 @@ func HydrateTypesInTableDescriptor(
 // HydrateTypeInfoWithName fills in user defined type metadata for
 // a type and also sets the name in the metadata to the passed in name.
 // This is used when hydrating a type with a known qualified name.
+//
+// Note that if the passed type is already hydrated, regardless of the version
+// with which it has been hydrated, this is a no-op.
 func (desc *Immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
+	if typ.IsHydrated() {
+		return nil
+	}
 	typ.TypeMeta.Name = &types.UserDefinedTypeName{
 		Catalog:        name.Catalog(),
 		ExplicitSchema: name.ExplicitSchema,
