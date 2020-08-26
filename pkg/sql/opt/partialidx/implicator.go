@@ -512,6 +512,30 @@ func (im *Implicator) atomImpliesAtom(
 		return false
 	}
 
+	// If predConstraint contains eConstraint, then eConstraint implies
+	// predConstraint.
+	if predConstraint.Contains(im.evalCtx, eConstraint) {
+		// If the constraints contain each other, then they are semantically
+		// equal and the filter atom can be removed from the remaining filters.
+		// For example:
+		//
+		//   (a::INT > 17)
+		//   =>
+		//   (a::INT >= 18)
+		//
+		// (a > 17) is not the same expression as (a >= 18) syntactically, but
+		// they are semantically equivalent because there are no integers
+		// between 17 and 18. Therefore, there is no need to apply (a > 17) as a
+		// filter after the partial index scan.
+		if exactMatches != nil &&
+			eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
+			eConstraint.Contains(im.evalCtx, predConstraint) {
+			exactMatches[e] = struct{}{}
+		}
+		return true
+	}
+
+	return false
 	return predConstraint.Contains(im.evalCtx, eConstraint)
 }
 
