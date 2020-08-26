@@ -12,12 +12,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,6 +38,9 @@ type rowFetcherCache struct {
 	leaseMgr *lease.Manager
 	fetchers map[idVersion]*row.Fetcher
 
+	collection *descs.Collection
+	db         *kv.DB
+
 	a rowenc.DatumAlloc
 }
 
@@ -41,11 +49,20 @@ type idVersion struct {
 	version descpb.DescriptorVersion
 }
 
-func newRowFetcherCache(codec keys.SQLCodec, leaseMgr *lease.Manager) *rowFetcherCache {
+func newRowFetcherCache(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	leaseMgr *lease.Manager,
+	hydratedTables *hydratedtables.Cache,
+	db *kv.DB,
+) *rowFetcherCache {
 	return &rowFetcherCache{
-		codec:    codec,
-		leaseMgr: leaseMgr,
-		fetchers: make(map[idVersion]*row.Fetcher),
+		codec:      codec,
+		leaseMgr:   leaseMgr,
+		collection: descs.NewCollection(ctx, settings, leaseMgr, hydratedTables),
+		db:         db,
+		fetchers:   make(map[idVersion]*row.Fetcher),
 	}
 }
 
@@ -62,20 +79,25 @@ func (c *rowFetcherCache) TableDescForKey(
 		if err != nil {
 			return nil, err
 		}
-		// No caching of these are attempted, since the lease manager does its
-		// own caching.
-		desc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
-		if err != nil {
+
+		// Retrieve the target TableDesc. We open a txn here, but only because
+		// the descs.Collection needs one. Internally, the descs.Collection just
+		// uses the txn to grab a read timestamp, which we set to ts here.
+		if err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetFixedTimestamp(ctx, ts)
+			var err error
+			// No caching of these are attempted, since the lease manager does its
+			// own caching.
+			tableDesc, err = c.collection.GetTableVersionByID(ctx, txn, tableID, tree.ObjectLookupFlagsWithRequired())
+			return err
+		}); err != nil {
 			// Manager can return all kinds of errors during chaos, but based on
 			// its usage, none of them should ever be terminal.
 			return nil, MarkRetryableError(err)
 		}
-		tableDesc = desc.(*tabledesc.Immutable)
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.
-		if err := c.leaseMgr.Release(tableDesc); err != nil {
-			return nil, err
-		}
+		c.collection.ReleaseAll(ctx)
 
 		// Skip over the column data.
 		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
@@ -100,7 +122,13 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	tableDesc *tabledesc.Immutable,
 ) (*row.Fetcher, error) {
 	idVer := idVersion{id: tableDesc.ID, version: tableDesc.Version}
-	if rf, ok := c.fetchers[idVer]; ok {
+	// Ensure that all user defined types are up to date with the cached
+	// version and the desired version to use the cache. It is safe to use
+	// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
+	// guaranteed that the tables have the same version. Additionally, these
+	// fetchers are always initialized with a single tabledesc.Immutable.
+	if rf, ok := c.fetchers[idVer]; ok &&
+		tableDesc.UserDefinedTypeColsHaveSameVersion(rf.GetTables()[0].(*tabledesc.Immutable)) {
 		return rf, nil
 	}
 	// TODO(dan): Allow for decoding a subset of the columns.
