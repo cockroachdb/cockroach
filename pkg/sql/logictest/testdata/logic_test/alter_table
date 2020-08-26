@@ -978,8 +978,8 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK  CHECK ((a < 100))  true
-t  check_a1  CHECK  CHECK ((a < 16))   false
+t  check_a   CHECK  CHECK ((a < 100))           true
+t  check_a1  CHECK  CHECK ((a < 16)) NOT VALID  false
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -1201,7 +1201,7 @@ SHOW CREATE t2
 t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1223,7 +1223,7 @@ SHOW CREATE t2
 t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     FAMILY "primary" (y, rowid, x)
 )
 
@@ -1248,7 +1248,7 @@ SHOW CREATE t2
 t2  CREATE TABLE public.t2 (
     y INT8 NULL,
     x INT8 NULL,
-    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x),
+    CONSTRAINT fk_x_ref_t1 FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
     INDEX t2_x_idx (x ASC),
     FAMILY "primary" (y, rowid, x)
 )

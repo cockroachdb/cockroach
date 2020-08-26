@@ -2213,17 +2213,21 @@ CREATE TABLE test.pg_constraintdef_test (
   d string,
   UNIQUE INDEX (a) WHERE d = 'foo',
   FOREIGN KEY(a) REFERENCES test.pg_indexdef_test(a) ON DELETE CASCADE
-)
+);
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT c CHECK (c > 0) NOT VALID;
+ALTER TABLE test.pg_constraintdef_test ADD CONSTRAINT fk FOREIGN KEY (c) REFERENCES test.pg_indexdef_test(a) NOT VALID;
 
 query T rowsort
 SELECT pg_catalog.pg_get_constraintdef(oid)
 FROM pg_catalog.pg_constraint
 WHERE conrelid='pg_constraintdef_test'::regclass
 ----
+FOREIGN KEY (c) REFERENCES pg_indexdef_test(a) NOT VALID
+CHECK ((c > a))
+CHECK ((c > 0)) NOT VALID
 UNIQUE (b ASC)
 UNIQUE (a ASC) WHERE (d = 'foo'::STRING)
 FOREIGN KEY (a) REFERENCES pg_indexdef_test(a) ON DELETE CASCADE
-CHECK ((c > a))
 
 # These functions always return NULL since we don't support comments on vtable columns and databases.
 query TT
