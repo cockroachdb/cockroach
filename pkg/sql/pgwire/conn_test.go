@@ -318,7 +318,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, err
 	}
 
-	var buf pgwirebase.ReadBuffer
+	buf := pgwirebase.MakeReadBuffer()
 	_, err = buf.ReadUntypedMsg(conn)
 	if err != nil {
 		return nil, err

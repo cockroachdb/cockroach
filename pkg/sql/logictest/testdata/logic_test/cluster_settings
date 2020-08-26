@@ -15,3 +15,9 @@ SET CLUSTER SETTING sql.log.slow_query.latency_threshold = 'true'
 
 statement error pq: invalid cluster setting argument type
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = true
+
+statement error buffer message size must be at least 16 kB
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '1b'
+
+statement ok
+SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '64MB'

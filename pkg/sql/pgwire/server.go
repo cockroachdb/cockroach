@@ -267,7 +267,7 @@ func MakeServer(
 
 // Match returns true if rd appears to be a Postgres connection.
 func Match(rd io.Reader) bool {
-	var buf pgwirebase.ReadBuffer
+	buf := pgwirebase.MakeReadBuffer()
 	_, err := buf.ReadUntypedMsg(rd)
 	if err != nil {
 		return false
@@ -795,6 +795,9 @@ func (s *Server) readVersion(
 	conn io.Reader,
 ) (version uint32, buf pgwirebase.ReadBuffer, err error) {
 	var n int
+	buf = pgwirebase.MakeReadBuffer(
+		pgwirebase.ReadBufferOptionWithClusterSettings(&s.execCfg.Settings.SV),
+	)
 	n, err = buf.ReadUntypedMsg(conn)
 	if err != nil {
 		return

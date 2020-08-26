@@ -472,7 +472,8 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	}
 	wbuf.writeBinaryDatum(context.Background(), expected, nil /* sessionLoc */, nil /* t */)
 
-	rbuf := pgwirebase.ReadBuffer{Msg: wbuf.wrapped.Bytes()}
+	rbuf := pgwirebase.MakeReadBuffer()
+	rbuf.Msg = wbuf.wrapped.Bytes()
 
 	plen, err := rbuf.GetUint32()
 	if err != nil {
