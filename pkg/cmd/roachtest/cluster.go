@@ -1488,12 +1488,28 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 
 	// Don't hang forever if we can't fetch the logs.
 	return contextutil.RunWithTimeout(ctx, "fetch logs", 2*time.Minute, func(ctx context.Context) error {
-		path := filepath.Join(c.t.ArtifactsDir(), "logs")
+		path := filepath.Join(c.t.ArtifactsDir(), "logs", "unredacted")
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
 
-		return execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
+		if err := execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */); err != nil {
+			log.Infof(ctx, "failed to fetch logs: %v", err)
+			if ctx.Err() != nil {
+				return err
+			}
+		}
+
+		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
+			log.Infof(ctx, "failed to redact logs: %v", err)
+			if ctx.Err() != nil {
+				return err
+			}
+		}
+
+		return execCmd(
+			ctx, c.l, roachprod, "get", c.name, "logs/redacted/combined.log" /* src */, filepath.Join(c.t.ArtifactsDir(), "logs/cockroach.log"),
+		)
 	})
 }
 
