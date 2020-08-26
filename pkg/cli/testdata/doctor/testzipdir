@@ -1,11 +1,12 @@
 doctor zipdir
 ----
 debug doctor zipdir testdata/doctor/debugzip
-Examining 38 descriptors...
-Table  53: parentID 52 does not exist
-Table  54: parentID 52 does not exist
-Table  55: parentID 52 does not exist
-Table  56: parentID 52 does not exist
-Table  57: parentID 52 does not exist
-Table  58: parentID 52 does not exist
+Examining 38 descriptors and 43 namespace entries...
+   Table  53: ParentID  52, ParentSchemaID 29, Name 'users': parentID 52 does not exist
+   Table  54: ParentID  52, ParentSchemaID 29, Name 'vehicles': parentID 52 does not exist
+   Table  55: ParentID  52, ParentSchemaID 29, Name 'rides': parentID 52 does not exist
+   Table  56: ParentID  52, ParentSchemaID 29, Name 'vehicle_location_histories': parentID 52 does not exist
+   Table  57: ParentID  52, ParentSchemaID 29, Name 'promo_codes': parentID 52 does not exist
+   Table  58: ParentID  52, ParentSchemaID 29, Name 'user_promo_codes': parentID 52 does not exist
+Descriptor 52: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:movr}] but no descriptor
 ERROR: validation failed
