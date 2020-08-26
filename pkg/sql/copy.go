@@ -185,8 +185,9 @@ func (c *copyMachine) run(ctx context.Context) error {
 	}
 
 	// Read from the connection until we see an ClientMsgCopyDone.
-	readBuf := pgwirebase.ReadBuffer{}
-
+	readBuf := pgwirebase.MakeReadBuffer(
+		pgwirebase.ReadBufferOptionWithClusterSettings(&c.p.execCfg.Settings.SV),
+	)
 Loop:
 	for {
 		typ, _, err := readBuf.ReadTypedMsg(c.conn.Rd())
