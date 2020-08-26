@@ -176,10 +176,12 @@
 <tr><td><a href="int.html">int</a> <code><</code> <a href="decimal.html">decimal</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="int.html">int</a> <code><</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code><</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code><</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code><</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>oid <code><</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code><</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -237,10 +239,12 @@
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="decimal.html">decimal</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="int.html">int</a> <code><=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code><=</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code><=</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code><=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>oid <code><=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code><=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code><=</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -297,10 +301,12 @@
 <tr><td><a href="int.html">int</a> <code>=</code> <a href="decimal.html">decimal</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>=</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="int.html">int</a> <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code>=</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>=</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>=</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>oid <code>=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>=</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -411,10 +417,12 @@
 <tr><td><a href="int.html">int</a> <code>IS NOT DISTINCT FROM</code> <a href="decimal.html">decimal</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>IS NOT DISTINCT FROM</code> <a href="float.html">float</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int</a> <code>IS NOT DISTINCT FROM</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="int.html">int</a> <code>IS NOT DISTINCT FROM</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="int.html">int[]</a> <code>IS NOT DISTINCT FROM</code> <a href="int.html">int[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>IS NOT DISTINCT FROM</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval[]</a> <code>IS NOT DISTINCT FROM</code> <a href="interval.html">interval[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>IS NOT DISTINCT FROM</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>oid <code>IS NOT DISTINCT FROM</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IS NOT DISTINCT FROM</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>IS NOT DISTINCT FROM</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>

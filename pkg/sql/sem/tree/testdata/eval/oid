@@ -12,3 +12,18 @@ eval
 3:::REGCLASS
 ----
 3
+
+eval
+1:::OID = 1:::INT
+----
+true
+
+eval
+1:::OID < 2:::INT2
+----
+true
+
+eval
+1:::OID >= 3:::INT
+----
+false
